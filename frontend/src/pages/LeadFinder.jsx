@@ -968,8 +968,8 @@ function PowerModeButton() {
       <div className="powermode-right" style={{ textAlign: 'right', zIndex: 1 }}>
         {!isDone && (
           <>
-            <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'rgba(255,255,255,0.65)' }}>15 keywords in parallel</p>
-            <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'rgba(255,255,255,0.65)', marginTop: 2 }}>50–150 leads in ~60s</p>
+            <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'rgba(255,255,255,0.65)' }}>38 keywords in parallel</p>
+            <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'rgba(255,255,255,0.65)', marginTop: 2 }}>500+ leads in ~3-5 min</p>
           </>
         )}
       </div>

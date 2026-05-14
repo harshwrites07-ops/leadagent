@@ -30,15 +30,30 @@ const powermodeState = {
 };
 
 const POWERMODE_KEYWORDS = [
-  'fitness coach', 'personal finance', 'real estate investing',
-  'online business', 'entrepreneurship', 'life coach',
-  'digital marketing', 'investing for beginners', 'make money online',
-  'productivity', 'weight loss', 'business coach',
-  'stock market', 'passive income', 'self improvement',
+  // Business & Entrepreneurship
+  'business coach YouTube', 'entrepreneur channel', 'agency owner YouTube', 'online business tips', 'startup founder vlog',
+  // Finance & Investing
+  'personal finance channel', 'stock market investing', 'passive income ideas', 'financial freedom YouTube', 'investing for beginners',
+  // Real Estate
+  'real estate investing', 'real estate agent YouTube', 'property investor channel', 'house flipping channel', 'realtor YouTube',
+  // Fitness & Health
+  'online fitness coach', 'personal trainer YouTube', 'nutrition coach YouTube', 'weight loss channel', 'gym owner channel',
+  // Coaching & Self-Help
+  'life coach YouTube', 'mindset coach channel', 'productivity YouTube', 'self improvement channel', 'motivation speaker YouTube',
+  // SaaS & Tech
+  'SaaS founder YouTube', 'tech founder vlog', 'software demo channel', 'B2B marketing YouTube', 'digital marketing agency',
+  // Education & Courses
+  'course creator YouTube', 'online educator channel', 'skills trainer YouTube', 'eLearning channel', 'teach online YouTube',
+  // Law & Professional
+  'lawyer YouTube channel', 'attorney tips YouTube', 'law firm channel', 'legal education YouTube',
+  // Health & Wellness
+  'doctor YouTube channel', 'therapist channel', 'wellness coach YouTube', 'mental health YouTube',
+  // Podcasts & Media
+  'podcast YouTube channel', 'video podcast channel', 'interview show YouTube',
 ];
 
 const LEAD_INSERT_SQL = `
-  INSERT OR REPLACE INTO leads
+  INSERT OR IGNORE INTO leads
     (platform, channel_id, channel_name, channel_handle, subscriber_count, total_videos,
      avg_views, avg_likes, avg_comments, engagement_rate, upload_frequency_days,
      last_upload_date, channel_description, channel_tags, recent_videos, most_viewed_video,
@@ -126,7 +141,7 @@ router.post('/powermode/start', asyncHandler(async (req, res) => {
       powermodeState.currentKeywords = batch;
 
       const results = await Promise.allSettled(
-        batch.map(kw => searchChannels({ keyword: kw, minSubs: 10000, maxSubs: 500000, maxResults: 10, emailOnly: true }))
+        batch.map(kw => searchChannels({ keyword: kw, minSubs: 10000, maxSubs: 500000, maxResults: 20, emailOnly: true }))
       );
 
       powermodeState.keywordsDone += batch.length;
