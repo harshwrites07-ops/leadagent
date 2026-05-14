@@ -1,0 +1,20 @@
+{
+  "name": "contentcrafterzz-outreach-os",
+  "version": "1.0.0",
+  "description": "ContentCrafterzz Outreach OS — Full-stack lead generation & outreach tool for video editing agencies",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently --names \"API,UI\" --prefix-colors \"cyan,magenta\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install",
+    "start": "node backend/server.js",
+    "build": "cd frontend && npm install && npm run build",
+    "start:dev": "concurrently --names \"API,UI\" --prefix-colors \"cyan,magenta\" \"npm run start:backend\" \"npm run start:frontend\"",
+    "start:backend": "cd backend && npm start",
+    "start:frontend": "cd frontend && npm run preview"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
