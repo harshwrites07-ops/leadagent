@@ -141,7 +141,7 @@ router.post('/powermode/start', asyncHandler(async (req, res) => {
       powermodeState.currentKeywords = batch;
 
       const results = await Promise.allSettled(
-        batch.map(kw => searchChannels({ keyword: kw, minSubs: 10000, maxSubs: 500000, maxResults: 20, emailOnly: true }))
+        batch.map(kw => searchChannels({ keyword: kw, minSubs: 10000, maxSubs: 500000, maxResults: 20, emailOnly: false }))
       );
 
       powermodeState.keywordsDone += batch.length;

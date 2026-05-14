@@ -178,7 +178,7 @@ cron.schedule('*/15 * * * *', async () => {
       minSubs: 5000,
       maxSubs: 500000,
       maxResults: 30,
-      emailOnly: true,
+      emailOnly: false,
     });
 
     if (!leads.length) {
