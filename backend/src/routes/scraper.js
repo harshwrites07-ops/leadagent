@@ -119,9 +119,17 @@ router.get('/hunt/status', asyncHandler(async (req, res) => {
   res.json(huntState);
 }));
 
+// Rotate through countries so each PowerMode run finds fresh channels
+const POWERMODE_COUNTRIES = ['US', 'GB', 'CA', 'AU', 'IN', 'SG', 'AE', 'ZA', null];
+let pmCountryIdx = 0;
+
 // POST /api/scraper/powermode/start
 router.post('/powermode/start', asyncHandler(async (req, res) => {
   if (powermodeState.running) return res.json({ status: 'already_running', ...powermodeState });
+
+  // Pick next country in rotation
+  const country = POWERMODE_COUNTRIES[pmCountryIdx % POWERMODE_COUNTRIES.length];
+  pmCountryIdx++;
 
   Object.assign(powermodeState, {
     running: true, startedAt: new Date().toISOString(),
@@ -129,10 +137,10 @@ router.post('/powermode/start', asyncHandler(async (req, res) => {
     keywordsTotal: POWERMODE_KEYWORDS.length,
     keywordsDone: 0, currentKeywords: [],
     recentLeads: [], stats: { hot: 0, warm: 0, cold: 0, withEmail: 0 },
-    stopped: false, error: null,
+    stopped: false, error: null, country: country || 'Global',
   });
 
-  res.json({ status: 'started' });
+  res.json({ status: 'started', country: country || 'Global' });
 
   ;(async () => {
     const db = getDb();
@@ -144,7 +152,7 @@ router.post('/powermode/start', asyncHandler(async (req, res) => {
       powermodeState.currentKeywords = batch;
 
       const results = await Promise.allSettled(
-        batch.map(kw => searchChannels({ keyword: kw, minSubs: 10000, maxSubs: 500000, maxResults: 20, emailOnly: false }))
+        batch.map(kw => searchChannels({ keyword: kw, minSubs: 10000, maxSubs: 500000, maxResults: 20, emailOnly: false, country }))
       );
 
       powermodeState.keywordsDone += batch.length;
