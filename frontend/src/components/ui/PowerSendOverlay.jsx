@@ -3,6 +3,7 @@ import { Zap, X, Loader } from 'lucide-react';
 
 export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 100 }) {
   const [phase, setPhase] = useState('confirm');
+  const [count, setCount] = useState(leadIds ? leadIds.length : maxLeads);
   const [stats, setStats] = useState({ studied: 0, generated: 0, sent: 0, failed: 0, total: 0 });
   const [feed, setFeed] = useState([]);
   const feedRef = useRef(null);
@@ -21,13 +22,13 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
 
   const startPowerSend = async () => {
     setPhase('running');
-    addFeed('start', `Starting power send for ${leadIds ? leadIds.length : maxLeads} leads...`);
+    addFeed('start', `Starting power send for ${leadIds ? leadIds.length : count} leads...`);
 
     try {
       const response = await fetch('/api/pitches/power-send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lead_ids: leadIds || null, max_leads: maxLeads }),
+        body: JSON.stringify({ lead_ids: leadIds || null, max_leads: count }),
       });
 
       if (!response.ok) {
@@ -116,14 +117,58 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
         {phase === 'confirm' && (
           <div style={{ padding: 28, display: 'flex', flexDirection: 'column', gap: 20 }}>
             <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.75, margin: 0 }}>
-              Auto-select top <strong style={{ color: 'var(--accent-primary)' }}>{leadIds ? leadIds.length : maxLeads} leads</strong>, generate hyper-personalized pitches with <strong style={{ color: '#7B61FF' }}>Prahvi AI</strong>, and send via 4-account rotation — all in one shot.
+              Generate hyper-personalized pitches with <strong style={{ color: '#7B61FF' }}>Prahvi AI</strong> and send via 4-account rotation — all in one shot.
             </p>
+
+            {/* Count selector */}
+            {!leadIds && (
+              <div style={{ background: 'var(--bg-card)', border: '1px solid rgba(255,69,0,0.25)', borderRadius: 10, padding: '16px 18px' }}>
+                <p style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.14em', marginBottom: 10 }}>HOW MANY EMAILS TO SEND?</p>
+                {/* Quick presets */}
+                <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                  {[10, 25, 50, 100, 200, 500].map(n => (
+                    <button
+                      key={n}
+                      onClick={() => setCount(n)}
+                      style={{
+                        flex: 1, padding: '7px 0', borderRadius: 7, fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                        background: count === n ? 'var(--gradient-orange)' : 'var(--bg-elevated)',
+                        border: count === n ? 'none' : '1px solid var(--border-default)',
+                        color: count === n ? '#fff' : 'var(--text-secondary)',
+                        boxShadow: count === n ? '0 0 14px rgba(255,69,0,0.35)' : 'none',
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+                {/* Custom number input */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Custom:</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={600}
+                    value={count}
+                    onChange={e => setCount(Math.min(600, Math.max(1, parseInt(e.target.value) || 1)))}
+                    style={{
+                      flex: 1, background: 'var(--bg-elevated)', border: '1px solid var(--border-default)',
+                      borderRadius: 7, padding: '7px 12px', color: 'var(--text-primary)', fontSize: 14,
+                      fontWeight: 700, outline: 'none', textAlign: 'center',
+                    }}
+                  />
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>max 600</span>
+                </div>
+              </div>
+            )}
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               {[
-                ['Leads targeted', leadIds ? `${leadIds.length} selected` : `Top ${maxLeads} HOT leads`],
+                ['Leads targeted', leadIds ? `${leadIds.length} selected` : `Top ${count} HOT leads`],
                 ['AI persona', 'Prahvi (Gemini Flash)'],
                 ['Sending accounts', '4 × 150/day = 600/day'],
-                ['Est. time', `~${Math.ceil((leadIds?.length || maxLeads) * 0.35)} mins`],
+                ['Est. time', `~${Math.ceil((leadIds?.length || count) * 0.35)} mins`],
               ].map(([label, val]) => (
                 <div key={label} style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '12px 16px' }}>
                   <p style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: 4 }}>{label.toUpperCase()}</p>
@@ -136,7 +181,7 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
                 Cancel
               </button>
               <button onClick={startPowerSend} style={{ flex: 2, padding: '12px', borderRadius: 8, cursor: 'pointer', background: 'var(--gradient-orange)', color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 0 24px rgba(255,69,0,0.35)' }}>
-                <Zap size={16} /> Fire Power Email
+                <Zap size={16} /> Fire {count} Emails
               </button>
             </div>
           </div>
