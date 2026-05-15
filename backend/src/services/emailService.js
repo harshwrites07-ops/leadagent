@@ -132,7 +132,9 @@ async function sendEmail({ to, subject, body, leadId, followUpNumber = 0 }) {
   const fromName = inbox.from_name || 'ContentCrafterzz';
   const fromEmail = inbox.email;
 
-  const trackingPixel = `<img src="${appUrl.replace('5173', '3001')}/api/track/open/${trackingId}" width="1" height="1" style="display:none" />`;
+  // Use APP_URL (public domain) so recipients can actually hit the tracking endpoint
+  const publicUrl = process.env.APP_URL || appUrl.replace('5173', '3001');
+  const trackingPixel = `<img src="${publicUrl}/api/track/open/${trackingId}" width="1" height="1" style="display:none" />`;
   const htmlBody = body.replace(/\n/g, '<br>') + trackingPixel;
 
   const t = getTransporterForInbox(inbox);
@@ -240,6 +242,7 @@ async function checkReplies() {
           host: 'imap.gmail.com',
           port: 993,
           tls: true,
+          tlsOptions: { rejectUnauthorized: false },
           authTimeout: 10000,
         },
       };

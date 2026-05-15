@@ -21,6 +21,9 @@ const { startQueueProcessor } = require('./src/services/schedulerService');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Trust Cloudflare proxy so rate limiter doesn't choke on X-Forwarded-For
+app.set('trust proxy', 1);
+
 // Init DB immediately
 getDb();
 
