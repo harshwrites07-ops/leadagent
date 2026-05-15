@@ -98,7 +98,10 @@ router.post('/hunt', asyncHandler(async (req, res) => {
         const leads = await searchChannelsMulti(batch, { minSubs: 5000, maxSubs: 500000, maxResults: Math.min(remaining, 50), emailOnly: true });
         huntState.found += leads.length;
         for (const lead of leads) {
-          try { insert.run({ ...lead, niche }); huntState.saved++; remaining--; } catch {}
+          try {
+            const r = insert.run({ ...lead, niche });
+            if (r.changes > 0) { huntState.saved++; remaining--; }
+          } catch {}
         }
         if (leads.length > 0) logActivity('niche_hunt', `Hunt[${niche}]: +${leads.length} leads saved`, null);
       } catch (e) {
@@ -165,7 +168,10 @@ router.post('/powermode/start', asyncHandler(async (req, res) => {
           });
           if (powermodeState.recentLeads.length > 30) powermodeState.recentLeads.pop();
 
-          try { insert.run({ ...lead, niche: 'powermode' }); powermodeState.saved++; } catch {}
+          try {
+            const r = insert.run({ ...lead, niche: 'powermode' });
+            if (r.changes > 0) powermodeState.saved++;
+          } catch {}
         }
       }
     }
