@@ -129,37 +129,59 @@ async function checkAiAvailability() {
   return { ok: false, error: 'No AI API key configured. Add Gemini or Anthropic key in Settings.' };
 }
 
-// ─── Business context ─────────────────────────────────────────────────────────
-const BUSINESS_PROFILE = `
+// ─── ContentCrafterzz Email Intelligence ──────────────────────────────────────
+const CONTENTCRAFTERZZ_INTELLIGENCE = `
 AGENCY: ContentCrafterzz — Premium YouTube Video Editing Agency
-WHAT WE SELL: Retention-optimized video editing. We fix viewer dropout and help creators upload consistently.
-PHILOSOPHY: Every frame matters. Every second counts. Retention is the metric that matters most.
+SENDER NAME: Prahvi (always sign first name only — never "Prathvi", never "ContentCrafterzz" as signature)
 
-PRICING:
-- Starter: $499/mo — 4 videos, basic color, 2 revisions
-- Growth: $999/mo — 8 videos + 16 reels, unlimited revisions, dedicated editor (MOST POPULAR)
-- Scale: $1,999/mo — unlimited, same-day, team of 3 editors, weekly strategy calls
-- Trial: $29 one-time first video OR free first edit (zero risk)
+CORE PHILOSOPHY:
+Every creator is a completely different psychological profile.
+The email must be reverse-engineered from WHO THEY ARE — not who we are.
+Three things drive every pitch: their PSYCHOLOGY, their BOTTLENECK, their AMBITION.
+The goal of email #1 is ONE thing: GET A REPLY. Not sell. Not pitch. Just reply.
 
-TURNAROUND: Standard 5-7d | Growth 48-72h | Scale 24h same-day
-
-IDEAL CLIENT: YouTube creators 10K–500K subs, getting 30-60% retention (we improve to 65%+), uploading inconsistently
-
-PROOF POINTS (use exactly these):
+PROOF POINTS (use ONE when relevant — never in follow-up #1):
 - "Finance creator (50K subs): views up 40% in 8 weeks after editing consistency"
 - "Fitness coach (120K subs): retention 42%→68%, landed sponsorship in 6 months"
 - "Podcast (30K listeners): converted to YouTube Shorts, hit 50K YouTube subs in 4 months"
 
-EMAIL RULES — ABSOLUTE:
-Subject (8 words max): Reference channel name, upload gap, or specific video. No generic subjects.
-Opening: MUST reference their exact video title OR exact sub count OR exact days since upload. Prove you studied them.
-Pain: Name their exact problem using their real numbers. Make them think "how did they know?"
-Proof: ONE case study from the list above.
-Offer: $29 trial edit or free first video — zero risk, easy yes.
-CTA: ONE ask — "Reply with your best video" OR "Want us to edit one free?"
-Length: Under 150 words.
-BANNED: "I hope this finds you well" | "I came across" | "I wanted to reach out" | "touch base" | "circle back" | "synergy" | any generic opener
+PSYCHOLOGICAL PROFILES — match tone to creator type:
+PROFESSIONAL/MEDIA (1M+ subs, team ops): Direct, data-driven. They think in scale and reliability.
+SOLO CREATIVE/FILMMAKER: Dry, intellectual. They think in craft and storytelling integrity.
+CULTURE-NATIVE/COMMUNITY: Warm, peer-level. They think in community and culture fit.
+GEN Z/ENTERTAINMENT: Energetic, personality-led. They think in virality and creative fit.
+CEO/FOUNDER/BUSINESS: Sharp, ROI-focused. They think in business impact and leverage.
+CREATOR IN PAIN (views dropping): Expert, diagnostic. Lead with "I know what's happening" — highest reply rate.
+SMALL/GROWING (under 100K): Direct, data-aware, fellow-creator energy. Reference their view-to-sub ratio.
+
+GOLDEN RULES — NEVER BREAK:
+1. Cold email body: MAX 150 WORDS. Hard limit. Count every word.
+2. Subject: under 8 words, hyper-specific to THEIR channel
+3. Opening: reference their EXACT video title, EXACT metric, or EXACT days since upload — never generic flattery
+4. End with a QUESTION (not a CTA directive). Questions get replies. CTAs get ignored.
+5. Sign off: Prahvi (first name only — nothing else)
+6. No links, no pricing, no dollar amounts, no plan names in first email
+7. NEVER say: "I hope this finds you well" | "I came across your channel" | "I wanted to reach out" | "We specialize in" | "Amazing content" | "touch base" | "circle back" | "leverage" | "synergy" | "game-changer" | "I noticed" | "exciting opportunity"
+8. Match tone to their psychological profile — never one-size-fits-all
+9. Every follow-up: DIFFERENT angle. Never repeat previous email.
+10. QUALITY GATE: Score 1-10 internally. Under 8 = rewrite before responding.
+
+SUBJECT LINE FORMULAS (pick the best fit):
+TYPE 1 — SPECIFIC METRIC: "[exact number] + [specific problem]" e.g. "89 days between uploads"
+TYPE 2 — CURIOSITY: "I think I know what's happening" (use for declining channels)
+TYPE 3 — CONTRAST: "[best video views] vs [recent video views]" (show the gap)
+TYPE 4 — THEIR LANGUAGE: Mirror a phrase from their bio or description back at them
+NEVER: "Quick question" | "Following up" | "Re: Your Channel" | "Video Editing Services"
+
+PAIN POINT → ANGLE MAPPING:
+Inconsistent uploads (2+ week gaps) → "editing is the bottleneck"
+Low views vs high subs → "retention optimization"
+Fast growth + basic editing → "capitalize on momentum before it plateaus"
+High quality + low growth → "algorithm consistency"
+Creator confused by declining views → "I think I know what's happening"
 `.trim();
+
+const BUSINESS_PROFILE = CONTENTCRAFTERZZ_INTELLIGENCE;
 
 function buildAgencyContext() {
   const name = getSetting('your_name') || 'the founder';
@@ -179,42 +201,49 @@ async function generateFullPitch(lead) {
     : null;
   const ctx = buildAgencyContext();
 
-  const prompt = `You are writing a cold outreach email on behalf of Prathvi, founder of ContentCrafterzz (a YouTube video editing agency). Write like a real human texting — not a marketer, not a salesperson.
+  // Detect psychological profile from channel data
+  const subsCount = lead.subscriber_count || 0;
+  let psychProfile = 'SMALL/GROWING';
+  if (subsCount >= 1000000) psychProfile = 'PROFESSIONAL/MEDIA';
+  else if (subsCount >= 500000) psychProfile = 'CEO/FOUNDER/BUSINESS';
+  else if (subsCount >= 100000) psychProfile = 'SOLO CREATIVE/FILMMAKER';
+  else if ((lead.niche || '').match(/fitness|gym|health|wellness/i)) psychProfile = 'FITNESS/WELLNESS CREATOR';
+  else if ((lead.niche || '').match(/finance|invest|crypto|money/i)) psychProfile = 'FINANCE/INVESTING CREATOR';
+  else if ((lead.niche || '').match(/business|entrepreneur|startup|agency|saas/i)) psychProfile = 'CEO/FOUNDER/BUSINESS';
+  else if ((lead.niche || '').match(/gaming|entertainment|comedy|vlog/i)) psychProfile = 'GEN Z/ENTERTAINMENT';
+  const viewDrop = recentVideos.length >= 2 && recentVideos[0]?.views < (lead.avg_views || 0) * 0.5;
+  if (viewDrop) psychProfile = 'CREATOR IN PAIN';
+
+  const prompt = `You are Prahvi, writing a cold outreach email on behalf of ContentCrafterzz (a YouTube video editing agency).
+
+${CONTENTCRAFTERZZ_INTELLIGENCE}
 
 CHANNEL DATA:
-Name: ${lead.channel_name} | ${(lead.subscriber_count || 0).toLocaleString()} subs
+Name: ${lead.channel_name} | ${subsCount.toLocaleString()} subs | Niche: ${lead.niche || 'general'}
 Avg views: ${(lead.avg_views || 0).toLocaleString()} | Engagement: ${lead.engagement_rate || 0}%
-Upload gap: ${daysSince !== null ? `${daysSince} days since last upload (normally uploads every ${lead.upload_frequency_days || '?'} days)` : `uploads every ${lead.upload_frequency_days || '?'} days`}
+Upload gap: ${daysSince !== null ? `${daysSince} days since last upload (normally every ${lead.upload_frequency_days || '?'} days)` : `uploads every ${lead.upload_frequency_days || '?'} days`}
 Recent videos: ${recentVideos.slice(0, 3).map(v => `"${v.title}" (${(v.views || 0).toLocaleString()} views)`).join(' | ') || 'N/A'}
-Issues: ${painPoints.map(p => p.label).join(', ') || 'inconsistent uploads, retention drop'}
-Niche: ${lead.niche || 'general'}
+Issues detected: ${painPoints.map(p => p.label).join(', ') || 'inconsistent uploads'}
+Psychological profile: ${psychProfile}
 
-PROOF POINTS (use ONE if relevant):
-- "Finance creator (50K subs): views up 40% in 8 weeks"
-- "Fitness coach (120K subs): retention 42%→68%, landed sponsorship"
-- "Podcast (30K listeners): hit 50K YouTube subs in 4 months"
+TASK: Write a cold email for this creator. Follow ALL golden rules above.
 
-HARD RULES — ZERO EXCEPTIONS:
-1. UNDER 100 WORDS TOTAL in the email body. Count every word. If over 100, rewrite shorter.
-2. First line must reference their EXACT video title OR exact days since upload OR exact sub count — no paraphrasing.
-3. Name their specific problem with real numbers from the data above.
-4. ONE CTA only: "reply if you want me to take a look" OR "want me to send over an example?"
-5. ALWAYS sign off as exactly:
-   Prathvi
-   ContentCrafterzz
-6. NEVER mention: pricing, plan names, "free edit", "free trial", "$29", "Starter", "Growth", "Scale", any dollar amount
-7. NEVER use: "I hope", "I came across", "I wanted to reach out", "touch base", "circle back", "I noticed", "I was browsing", "leverage", "synergy", "game-changer", "exciting opportunity"
-8. NO salesy language. Sound like a person, not a brand.
-9. Subject line under 8 words — specific to their channel/video/gap.
-10. QUALITY GATE: Score 1-10 internally. Under 7 = rewrite before responding. Return only the 7+ version.
+CRITICAL REQUIREMENTS:
+1. Under 150 words in the body. Count every word.
+2. First line: reference their EXACT video title OR exact ${daysSince !== null ? `${daysSince} days` : 'upload gap'} OR exact sub count. Prove you studied them.
+3. End with ONE QUESTION (not a directive CTA). A question gets a reply.
+4. Sign off: Prahvi (first name only — nothing after it)
+5. No pricing, no plan names, no dollar amounts
+6. Tone must match their psychological profile: ${psychProfile}
+7. QUALITY GATE: score 1-10 internally. Under 8 = rewrite. Return only 8+ version.
 
 Return ONLY valid JSON (no markdown, no backticks):
 {
   "key_insight": "the single most specific thing about this channel you used",
   "custom_offer": "one line describing what you'd help them with — no prices",
-  "email_subject": "subject under 8 words",
-  "email_body": "email body UNDER 100 WORDS, signed Prathvi\\nContentCrafterzz",
-  "subject_variants": ["curiosity variant", "result variant", "personal variant"],
+  "email_subject": "subject under 8 words — hyper-specific to THEIR channel",
+  "email_body": "email body under 150 words ending with a question, signed Prahvi",
+  "subject_variants": ["specific metric variant", "curiosity variant", "contrast variant"],
   "score": <number 1-10>
 }`;
 
@@ -243,7 +272,7 @@ Return ONLY valid JSON (no markdown, no backticks):
     }
 
     const parsed = parsePitchResponse(text, lead);
-    if (attempt === 0 && parsed.score && parsed.score < 7) {
+    if (attempt === 0 && parsed.score && parsed.score < 8) {
       console.log(`[Prahvi] Score ${parsed.score}/10 for ${lead.channel_name}, regenerating...`);
       continue;
     }
@@ -328,23 +357,31 @@ async function generateColdEmail(lead, deepStudy, offer) {
   const daysSince = lead.last_upload_date
     ? Math.floor((Date.now() - new Date(lead.last_upload_date)) / 86400000) : null;
 
-  const prompt = `Write a ContentCrafterzz cold email. So specific the creator thinks "how did they know that about my channel?"
+  const prompt = `You are Prahvi from ContentCrafterzz. Write a cold email so specific the creator thinks "how did they know?"
 
-${buildAgencyContext()}
+${CONTENTCRAFTERZZ_INTELLIGENCE}
 
-CREATOR: ${lead.channel_name} (${(lead.subscriber_count || 0).toLocaleString()} subs) | ${(lead.avg_views || 0).toLocaleString()} avg views | ${lead.engagement_rate || 0}% engagement
+CREATOR: ${lead.channel_name} (${(lead.subscriber_count || 0).toLocaleString()} subs)
+Avg views: ${(lead.avg_views || 0).toLocaleString()} | Engagement: ${lead.engagement_rate || 0}%
 Upload gap: ${daysSince !== null ? `${daysSince} days since last upload` : `every ${lead.upload_frequency_days || '?'} days`}
 Most recent video: "${recentVideos[0]?.title || 'N/A'}" (${(recentVideos[0]?.views || 0).toLocaleString()} views)
 Pain points: ${painPoints.map(p => p.label).join(', ')}
 Deep study: ${deepStudy}
-Custom offer: ${offer}
+
+REQUIREMENTS:
+- Under 150 words
+- Opening: reference their EXACT video title or gap or sub count
+- End with ONE question
+- Sign: Prahvi (first name only)
+- No pricing, no dollar amounts
+- Score 8+ internally or rewrite
 
 Return ONLY:
 SUBJECT: [subject under 8 words]
 ---
-[email body under 150 words]`;
+[email body under 150 words ending with a question, signed Prahvi]`;
 
-  return complete(prompt, 'Elite cold email copywriter. Emails get 5%+ reply rates because they are devastatingly specific.', 1000);
+  return complete(prompt, 'Elite cold email copywriter. 5%+ reply rates. Every email ends with a question, never a directive.', 1000);
 }
 
 async function generateRedditDM(lead, deepStudy) {
@@ -420,12 +457,38 @@ SUBJECT: [subject]
 }
 
 async function generateFollowUp(lead, originalEmail, followUpNumber) {
+  // Exact 5-step system per ContentCrafterzz training
   const stepConfig = [
-    { angle: 'new insight', instruction: `Point out ONE specific thing about their latest video or upload pattern they probably haven't considered. No pitch — just a genuine observation. MAX 45 WORDS.`, maxWords: 45 },
-    { angle: 'social proof', instruction: `Drop ONE case study result relevant to their niche. Make it feel like you just remembered it and wanted to share. MAX 40 WORDS.`, maxWords: 40 },
-    { angle: 'genuine check-in', instruction: `2 sentences. Just checking if they got the email. Zero selling. Sound human. MAX 30 WORDS.`, maxWords: 30 },
-    { angle: 'last try', instruction: `Honest last attempt. Slightly vulnerable. Acknowledge you've reached out a few times. No desperation — just real. MAX 25 WORDS.`, maxWords: 25 },
-    { angle: 'close the loop', instruction: `Graceful exit. Leave the door permanently open. No hard feelings, no guilt. MAX 20 WORDS.`, maxWords: 20 },
+    {
+      angle: 'free value — shift angle completely',
+      instruction: `Shift angle completely. Do NOT repeat the pitch. Give something genuinely free with no ask: a specific retention insight about their content, a real video idea tailored to them, OR a tactical observation about their best vs recent video performance. This PROVES skill without claiming it. End with a soft question if anything. MAX 50 WORDS.`,
+      maxWords: 50,
+      hasCTA: false,
+    },
+    {
+      angle: 'pure value — timely insight, no ask',
+      instruction: `Give a genuine insight about their content format, a trending topic in their niche they haven't covered, OR an algorithm insight specific to their content type. Reference something timely if possible. ZERO pitch. ZERO ask. Just pure value. The insight should make them think "this person actually knows their stuff." MAX 45 WORDS.`,
+      maxWords: 45,
+      hasCTA: false,
+    },
+    {
+      angle: 'social proof — specific and relevant',
+      instruction: `ONE specific result from a creator in a SIMILAR situation to theirs. Make it relevant to their exact problem. NOT generic "we helped creators grow" — be specific: "helped a [their niche] creator go from [X problem] to [Y result]." End with a soft question. MAX 40 WORDS.`,
+      maxWords: 40,
+      hasCTA: true,
+    },
+    {
+      angle: 'genuine mild urgency',
+      instruction: `Real, not fake urgency. Something like "Taking on 2 more creators this month" or "had a slot open up." Never fake countdown timers or artificial scarcity. Warm, honest, one ask. MAX 30 WORDS.`,
+      maxWords: 30,
+      hasCTA: true,
+    },
+    {
+      angle: 'close the loop — final',
+      instruction: `"Closing the loop" email — one of the highest reply-rate emails in cold outreach. People don't like unresolved open loops. Gracefully close the file. "Closing your file for now — if timing changes, you know where to find us." Warm, no pressure, leaves door permanently open. Mirror their language/energy if possible. NO ask. MAX 25 WORDS in body.`,
+      maxWords: 25,
+      hasCTA: false,
+    },
   ];
 
   const step = stepConfig[Math.min(followUpNumber - 1, 4)];
@@ -433,25 +496,34 @@ async function generateFollowUp(lead, originalEmail, followUpNumber) {
   const daysSince = lead.last_upload_date
     ? Math.floor((Date.now() - new Date(lead.last_upload_date)) / 86400000) : null;
 
-  const prompt = `Write follow-up #${followUpNumber} for ${lead.channel_name} (${(lead.subscriber_count || 0).toLocaleString()} subs).
-Angle: ${step.angle}
+  const prompt = `You are Prahvi from ContentCrafterzz. Write follow-up #${followUpNumber}/5 for ${lead.channel_name}.
 
-Channel data: ${daysSince !== null ? `${daysSince} days since last upload` : `uploads every ${lead.upload_frequency_days || '?'} days`}
-Latest video: "${recentVideos[0]?.title || 'N/A'}"
-Niche: ${lead.niche || 'general'}
+${CONTENTCRAFTERZZ_INTELLIGENCE}
+
+CHANNEL:
+Name: ${lead.channel_name} | ${(lead.subscriber_count || 0).toLocaleString()} subs | Niche: ${lead.niche || 'general'}
+Upload: ${daysSince !== null ? `${daysSince} days since last upload` : `every ${lead.upload_frequency_days || '?'} days`}
+Latest video: "${recentVideos[0]?.title || 'N/A'}" (${(recentVideos[0]?.views || 0).toLocaleString()} views)
+Avg views: ${(lead.avg_views || 0).toLocaleString()}
+
+FOLLOW-UP #${followUpNumber} STRATEGY: ${step.angle}
 
 INSTRUCTION: ${step.instruction}
 
-HARD RULES (non-negotiable):
-1. UNDER ${step.maxWords} WORDS TOTAL in the body
-2. No pricing, no plan names, no "free edit", no dollar amounts
-3. No salesy language — sound like a human
-4. Sign off EXACTLY as: Prathvi\\nContentCrafterzz
-5. ONE CTA max — or no CTA (step ${followUpNumber >= 3 ? 'needs none' : '"reply if you want"'})
+HARD RULES:
+1. Under ${step.maxWords} words in the body. Hard limit.
+2. NEVER repeat anything from the original email
+3. NEVER mention pricing, plan names, or dollar amounts
+4. NEVER sound desperate or salesy
+5. Sign off: Prahvi (first name only — nothing else)
+6. ${step.hasCTA ? 'End with ONE soft question' : 'No CTA — let the value speak'}
+7. This is follow-up ${followUpNumber} — the tone should ${followUpNumber <= 2 ? 'lead with giving, not asking' : followUpNumber <= 4 ? 'be warm but slightly more direct' : 'be graceful, final, zero pressure'}
 
-Return: SUBJECT: [subject under 6 words]\\n---\\n[body]`;
+Return: SUBJECT: [subject under 6 words — different from all previous]
+---
+[body]`;
 
-  return complete(prompt, undefined, 600);
+  return complete(prompt, undefined, 700);
 }
 
 async function analyzeChannelDeep(channelData) {
@@ -493,22 +565,39 @@ async function generateAnalyzerEmail(channelData, deepStudy) {
   const daysSince = channelData.last_upload_date
     ? Math.floor((Date.now() - new Date(channelData.last_upload_date)) / 86400000) : null;
 
-  const prompt = `Write a ContentCrafterzz cold outreach email. So specific the creator thinks "how did they know?"
+  const subs = channelData.subscriber_count || 0;
+  let psychProfile = 'SMALL/GROWING';
+  if (subs >= 1000000) psychProfile = 'PROFESSIONAL/MEDIA';
+  else if (subs >= 500000) psychProfile = 'CEO/FOUNDER/BUSINESS';
+  else if (subs >= 100000) psychProfile = 'SOLO CREATIVE/FILMMAKER';
+  const viewDrop = recentVideos.length >= 2 && recentVideos[0]?.views < (channelData.avg_views || 0) * 0.5;
+  if (viewDrop) psychProfile = 'CREATOR IN PAIN';
 
-${buildAgencyContext()}
+  const prompt = `You are Prahvi from ContentCrafterzz. Write a cold outreach email so specific the creator thinks "how did they know?"
 
-CHANNEL: ${channelData.channel_name} | ${(channelData.subscriber_count || 0).toLocaleString()} subs
+${CONTENTCRAFTERZZ_INTELLIGENCE}
+
+CHANNEL: ${channelData.channel_name} | ${subs.toLocaleString()} subs
 Avg views: ${(channelData.avg_views || 0).toLocaleString()} | Engagement: ${channelData.engagement_rate || 0}%
 Upload gap: ${daysSince !== null ? `${daysSince} days since last upload` : `every ${channelData.upload_frequency_days || '?'} days`}
-Most recent video: "${recentVideos[0]?.title || 'N/A'}" (${(recentVideos[0]?.views || 0).toLocaleString()} views)
+Recent videos: ${recentVideos.slice(0, 3).map(v => `"${v.title}" (${(v.views || 0).toLocaleString()} views)`).join(' | ') || 'N/A'}
 Deep analysis: ${deepStudy}
+Psychological profile: ${psychProfile}
+
+REQUIREMENTS:
+- Under 150 words in the body
+- Opening line: reference EXACT video title or EXACT upload gap or EXACT sub count
+- End with ONE question (not a directive)
+- Sign: Prahvi (first name only)
+- No pricing, no dollar amounts
+- Score 8+ internally or rewrite
 
 Return ONLY:
-SUBJECT: [subject under 8 words]
+SUBJECT: [subject under 8 words — hyper-specific]
 ---
-[email body under 150 words]`;
+[email body under 150 words ending with a question, signed Prahvi]`;
 
-  return complete(prompt, 'Elite outreach copywriter. Emails get 5%+ reply rates. Devastatingly specific.', 1200);
+  return complete(prompt, 'Elite outreach copywriter. 5%+ reply rates. Devastatingly specific. Every email ends with a question.', 1200);
 }
 
 async function generateAnalyzerDM(channelData, deepStudy) {
