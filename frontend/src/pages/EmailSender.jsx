@@ -5,10 +5,11 @@ import toast from 'react-hot-toast';
 import {
   Mail, MailOpen, Send, Inbox, AlertCircle, CheckCircle, Clock,
   X, Play, Pause, RefreshCw, ExternalLink, ChevronDown, Reply,
-  Loader, GripVertical, Eye, EyeOff, Settings, Zap,
+  Loader, GripVertical, Eye, EyeOff, Settings, Zap, ShieldAlert,
 } from 'lucide-react';
 import PowerSendOverlay from '../components/ui/PowerSendOverlay';
 import PowerFollowUpOverlay from '../components/ui/PowerFollowUpOverlay';
+import SpamMonitorPanel from '../components/ui/SpamMonitorPanel';
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor,
   useSensor, useSensors,
@@ -195,6 +196,7 @@ export default function EmailSender() {
 
   const [showPowerOverlay, setShowPowerOverlay] = useState(false);
   const [showFollowUpOverlay, setShowFollowUpOverlay] = useState(false);
+  const [showSpamPanel, setShowSpamPanel] = useState(false);
 
   // Stats
   const [stats, setStats] = useState(null);
@@ -367,6 +369,12 @@ export default function EmailSender() {
         <div className="flex items-center gap-3">
           <button onClick={() => { fetchStats(); fetchQueue(); }} className="btn btn-ghost flex items-center gap-2">
             <RefreshCw size={15} /> Refresh
+          </button>
+          <button
+            onClick={() => setShowSpamPanel(true)}
+            className="btn btn-secondary flex items-center gap-2 text-sm"
+          >
+            <ShieldAlert size={15} className="text-amber-400" /> Spam Monitor
           </button>
           <button
             onClick={() => setShowFollowUpOverlay(true)}
@@ -584,6 +592,9 @@ export default function EmailSender() {
       )}
       {showFollowUpOverlay && (
         <PowerFollowUpOverlay onClose={() => { setShowFollowUpOverlay(false); fetchStats(); fetchQueue(); }} />
+      )}
+      {showSpamPanel && (
+        <SpamMonitorPanel onClose={() => setShowSpamPanel(false)} />
       )}
     </div>
   );

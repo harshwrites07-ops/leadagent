@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { getDb, getSetting, logActivity } = require('../models/database');
 const { asyncHandler } = require('../middleware/errorHandler');
-const { sendEmail, testSmtp, resetTransporter } = require('../services/emailService');
+const { sendEmail, testSmtp, resetTransporter, checkSpamFolders, getInboxes } = require('../services/emailService');
 
 // GET /api/emails — list all emails
 router.get('/', asyncHandler(async (req, res) => {
@@ -222,6 +222,78 @@ router.post('/test-smtp', asyncHandler(async (req, res) => {
   const result = await testSmtp(req.body);
   if (result.ok) resetTransporter();
   res.json(result);
+}));
+
+// GET /api/emails/spam-report
+// Returns: per-inbox bounce-back detections + DB-level spam risk indicators
+router.get('/spam-report', asyncHandler(async (req, res) => {
+  const db = getDb();
+  const inboxes = getInboxes();
+
+  // DB stats per inbox
+  const perInbox = inboxes.map(inbox => {
+    const sent = db.prepare(`SELECT COUNT(*) as c FROM emails WHERE from_email=? AND DATE(sent_at) >= DATE('now','-30 days')`).get(inbox.email);
+    const bounced = db.prepare(`SELECT COUNT(*) as c FROM emails WHERE from_email=? AND status='bounced' AND DATE(sent_at) >= DATE('now','-30 days')`).get(inbox.email);
+    const opened = db.prepare(`SELECT COUNT(*) as c FROM emails WHERE from_email=? AND (status='opened' OR opened_at IS NOT NULL) AND DATE(sent_at) >= DATE('now','-30 days')`).get(inbox.email);
+    const sentCount = sent?.c || 0;
+    const bouncedCount = bounced?.c || 0;
+    const openedCount = opened?.c || 0;
+    const bounceRate = sentCount > 0 ? parseFloat(((bouncedCount / sentCount) * 100).toFixed(1)) : 0;
+    const openRate = sentCount > 0 ? parseFloat(((openedCount / sentCount) * 100).toFixed(1)) : 0;
+    const health = bounceRate > 5 ? 'danger' : bounceRate > 2 ? 'warning' : 'good';
+    return { email: inbox.email, sentCount, bouncedCount, openedCount, bounceRate, openRate, health };
+  });
+
+  // Emails likely in spam: sent > 5 days ago, never opened, never replied
+  const likelySpam = db.prepare(`
+    SELECT e.id, e.subject, e.sent_at, e.from_email, l.channel_name, l.email as to_email,
+           CAST((julianday('now') - julianday(e.sent_at)) AS INTEGER) as days_since
+    FROM emails e
+    LEFT JOIN leads l ON l.id = e.lead_id
+    WHERE e.status = 'sent'
+      AND e.opened_at IS NULL
+      AND e.sent_at < datetime('now', '-5 days')
+    ORDER BY e.sent_at DESC
+    LIMIT 50
+  `).all();
+
+  // Recent bounces from DB
+  const recentBounces = db.prepare(`
+    SELECT e.id, e.subject, e.sent_at, e.from_email, l.channel_name, l.email as to_email
+    FROM emails e
+    LEFT JOIN leads l ON l.id = e.lead_id
+    WHERE e.status = 'bounced'
+    ORDER BY e.sent_at DESC
+    LIMIT 20
+  `).all();
+
+  // Overall risk score
+  const totalSent = perInbox.reduce((s, i) => s + i.sentCount, 0);
+  const totalBounced = perInbox.reduce((s, i) => s + i.bouncedCount, 0);
+  const overallBounceRate = totalSent > 0 ? (totalBounced / totalSent) * 100 : 0;
+  const overallRisk = overallBounceRate > 5 ? 'high' : overallBounceRate > 2 ? 'medium' : likelySpam.length > 20 ? 'medium' : 'low';
+
+  // Run IMAP check in parallel — don't block if it fails
+  let imapResults = [];
+  try {
+    imapResults = await Promise.race([
+      checkSpamFolders(),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 20000)),
+    ]);
+  } catch (e) {
+    imapResults = inboxes.map(i => ({ email: i.email, bounceEmails: [], spamCount: 0, error: e.message }));
+  }
+
+  res.json({
+    success: true,
+    overallRisk,
+    overallBounceRate: parseFloat(overallBounceRate.toFixed(1)),
+    perInbox,
+    likelySpam,
+    recentBounces,
+    imapResults,
+    generatedAt: new Date().toISOString(),
+  });
 }));
 
 module.exports = router;

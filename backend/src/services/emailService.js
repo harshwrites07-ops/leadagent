@@ -282,4 +282,80 @@ async function checkReplies() {
   return { repliesFound: totalReplies };
 }
 
-module.exports = { sendEmail, processQueue, testSmtp, resetTransporter, checkReplies, getInboxes };
+// ── Spam folder & bounce detector ─────────────────────────────────────────────
+// Checks each inbox for Mailer-Daemon bounce-backs (delivery failures/spam rejections)
+async function checkSpamFolders() {
+  const imapSimple = require('imap-simple');
+  const inboxes = getInboxes();
+  const results = [];
+
+  for (const inbox of inboxes) {
+    const report = {
+      email: inbox.email,
+      bounceEmails: [],    // Mailer-Daemon failures found in INBOX
+      spamCount: 0,        // Emails in [Gmail]/Spam
+      error: null,
+    };
+
+    try {
+      const config = {
+        imap: {
+          user: inbox.email,
+          password: inbox.pass,
+          host: 'imap.gmail.com',
+          port: 993,
+          tls: true,
+          tlsOptions: { rejectUnauthorized: false },
+          authTimeout: 12000,
+        },
+      };
+
+      const connection = await imapSimple.connect(config);
+
+      // 1. Check INBOX for Mailer-Daemon bounce-backs
+      await connection.openBox('INBOX');
+      const since = new Date();
+      since.setDate(since.getDate() - 30);
+
+      const bounces = await connection.search(
+        [['SINCE', since.toDateString()], ['OR',
+          ['FROM', 'mailer-daemon'],
+          ['FROM', 'postmaster'],
+        ]],
+        { bodies: ['HEADER'], markSeen: false }
+      );
+
+      for (const msg of bounces) {
+        const header = msg.parts.find(p => p.which === 'HEADER')?.body || {};
+        const subject = header.subject?.[0] || '';
+        const from = header.from?.[0] || '';
+        const date = header.date?.[0] || '';
+        // Extract original recipient from subject line if possible
+        const toMatch = subject.match(/(?:delivery|failure|undeliverable|returned).{0,30}?([\w.+-]+@[\w.-]+)/i);
+        report.bounceEmails.push({
+          from: from.substring(0, 80),
+          subject: subject.substring(0, 120),
+          date,
+          originalRecipient: toMatch?.[1] || null,
+        });
+      }
+
+      // 2. Count emails in our own Spam folder
+      try {
+        await connection.openBox('[Gmail]/Spam');
+        const spamMsgs = await connection.search(['ALL'], { bodies: [], markSeen: false });
+        report.spamCount = spamMsgs.length;
+      } catch {}
+
+      connection.end();
+    } catch (e) {
+      report.error = e.message;
+    }
+
+    results.push(report);
+  }
+
+  return results;
+}
+
+module.exports = { sendEmail, processQueue, testSmtp, resetTransporter, checkReplies, getInboxes, checkSpamFolders };
