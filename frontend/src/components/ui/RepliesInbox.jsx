@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, MessageSquare, RefreshCw, Mail, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, MessageSquare, RefreshCw, Mail, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
 import api, { formatDate } from '../../utils/api';
 
 function ReplyCard({ reply }) {
@@ -33,6 +33,17 @@ function ReplyCard({ reply }) {
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <span className="text-xs text-slate-500">{reply.replied_at ? formatDate(reply.replied_at) : '—'}</span>
+          <a
+            href={`https://mail.google.com/mail/?authuser=${encodeURIComponent(reply.from_email || '')}&shva=1#search/from%3A${encodeURIComponent(reply.reply_from || reply.lead_email || '')}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()}
+            className="flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-md transition-colors flex-shrink-0"
+            style={{ background: 'rgba(255,69,0,0.15)', color: '#fb923c', border: '1px solid rgba(255,69,0,0.3)' }}
+            title={`Open in Gmail (${reply.from_email})`}
+          >
+            <ExternalLink size={11} /> Open
+          </a>
           {hasContent && (
             expanded ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />
           )}
