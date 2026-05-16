@@ -266,28 +266,10 @@ async function checkReplies() {
         const fromEmail = from.match(/<(.+)>/)?.[1] || from.trim();
         const replySubject = header?.subject?.[0] || '';
 
-        // Extract plain text — keep everything, just strip heavy quoted blocks
+        // Parse MIME body — extract plain text from multipart or raw body
         let replyBody = '';
         if (textPart?.body) {
-          const raw = textPart.body;
-          // Strip base64 junk if it snuck in
-          const lines = raw.split('\n');
-          const clean = [];
-          let quoteBlock = 0;
-          for (const line of lines) {
-            const trimmed = line.trim();
-            // Skip quoted lines (>) and "On ... wrote:" headers
-            if (trimmed.startsWith('>')) { quoteBlock++; continue; }
-            if (/^On .{10,120} wrote:$/.test(trimmed)) continue;
-            if (trimmed === '--' || trimmed === '---') break; // email signature separator
-            quoteBlock = 0;
-            clean.push(line);
-          }
-          replyBody = clean.join('\n').trim().substring(0, 3000);
-          // If result looks like base64/garbage, fall back to raw truncated
-          if (replyBody.length < 5 || /^[A-Za-z0-9+/]{60,}$/.test(replyBody.replace(/\s/g, ''))) {
-            replyBody = raw.replace(/[^\x20-\x7E\n\r]/g, '').trim().substring(0, 3000);
-          }
+          replyBody = parseMimeBody(textPart.body);
         }
 
         const lead = db.prepare(`SELECT * FROM leads WHERE email = ?`).get(fromEmail);
@@ -321,6 +303,65 @@ async function checkReplies() {
   }
 
   return { repliesFound: totalReplies };
+}
+
+// ── MIME body parser — extracts readable plain text from raw MIME ─────────────
+function parseMimeBody(raw) {
+  if (!raw) return '';
+
+  // Decode quoted-printable (=XX hex sequences and soft line breaks)
+  function decodeQP(str) {
+    return str.replace(/=\r?\n/g, '').replace(/=([0-9A-Fa-f]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+  }
+
+  // Strip HTML tags to plain text
+  function stripHtml(html) {
+    return html
+      .replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>/gi, '\n').replace(/<\/div>/gi, '\n')
+      .replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').replace(/&#39;/g, "'")
+      .replace(/&quot;/g, '"').replace(/\n{3,}/g, '\n\n').trim();
+  }
+
+  // Strip quoted reply lines (>, "On ... wrote:")
+  function stripQuotes(text) {
+    return text.split('\n')
+      .filter(l => !l.trimStart().startsWith('>') && !/^On .{10,200} wrote:/.test(l.trim()))
+      .join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
+
+  let result = '';
+
+  if (raw.includes('Content-Type:')) {
+    // Multipart MIME — try text/plain first
+    const plainMatch = raw.match(/Content-Type:\s*text\/plain[^\n]*\n((?:[A-Za-z-]+:[^\n]*\n)*)\n([\s\S]*?)(?=\n--|\n\r\n--|$)/i);
+    if (plainMatch) {
+      const encoding = plainMatch[1].match(/Content-Transfer-Encoding:\s*(\S+)/i)?.[1]?.toLowerCase();
+      let body = plainMatch[2];
+      if (encoding === 'quoted-printable') body = decodeQP(body);
+      else if (encoding === 'base64') { try { body = Buffer.from(body.replace(/\s/g, ''), 'base64').toString('utf8'); } catch {} }
+      result = stripQuotes(body);
+    }
+
+    // Fallback: try text/html
+    if (!result) {
+      const htmlMatch = raw.match(/Content-Type:\s*text\/html[^\n]*\n((?:[A-Za-z-]+:[^\n]*\n)*)\n([\s\S]*?)(?=\n--|\n\r\n--|$)/i);
+      if (htmlMatch) {
+        const encoding = htmlMatch[1].match(/Content-Transfer-Encoding:\s*(\S+)/i)?.[1]?.toLowerCase();
+        let body = htmlMatch[2];
+        if (encoding === 'quoted-printable') body = decodeQP(body);
+        else if (encoding === 'base64') { try { body = Buffer.from(body.replace(/\s/g, ''), 'base64').toString('utf8'); } catch {} }
+        result = stripQuotes(stripHtml(body));
+      }
+    }
+  }
+
+  // Not multipart — treat as raw plain text
+  if (!result) {
+    result = stripQuotes(raw.replace(/[^\x09\x0A\x0D\x20-\x7E]/g, ' ').trim());
+  }
+
+  return result.substring(0, 3000) || '(empty reply)';
 }
 
 // ── Spam folder & bounce detector ─────────────────────────────────────────────
