@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, MessageSquare, RefreshCw, Mail, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, MessageSquare, RefreshCw, Mail, ChevronDown, ChevronUp } from 'lucide-react';
 import api, { formatDate } from '../../utils/api';
 
 function ReplyCard({ reply }) {
@@ -51,15 +51,25 @@ function ReplyCard({ reply }) {
           >
             <div className="px-4 pb-4">
               {/* Their reply */}
-              <div className="bg-dark-600 rounded-lg p-3 mb-3 border-l-2 border-purple-500">
-                <p className="text-xs text-purple-400 font-semibold mb-2 uppercase tracking-wider">Their Reply</p>
-                <p className="text-sm text-slate-200 whitespace-pre-wrap leading-relaxed">{reply.reply_body}</p>
+              <div className="rounded-lg border border-purple-500/40 overflow-hidden mb-3">
+                <div className="bg-purple-500/15 px-4 py-2 flex items-center gap-2">
+                  <MessageSquare size={13} className="text-purple-400" />
+                  <span className="text-xs text-purple-300 font-bold uppercase tracking-wider">Their Reply</span>
+                  {reply.reply_from && <span className="text-xs text-slate-400 ml-auto">{reply.reply_from}</span>}
+                </div>
+                <div className="bg-dark-600 p-4 max-h-64 overflow-y-auto">
+                  <p className="text-sm text-white whitespace-pre-wrap leading-relaxed">{reply.reply_body}</p>
+                </div>
               </div>
               {/* Original email we sent */}
-              <div className="bg-dark-800 rounded-lg p-3 border-l-2 border-dark-500">
-                <p className="text-xs text-slate-500 font-semibold mb-2 uppercase tracking-wider">Your Original Email</p>
-                <p className="text-xs text-slate-400 mb-1 font-medium">Subject: {reply.subject}</p>
-                <p className="text-sm text-slate-400 whitespace-pre-wrap leading-relaxed">{reply.body}</p>
+              <div className="rounded-lg border border-dark-500 overflow-hidden">
+                <div className="bg-dark-700 px-4 py-2">
+                  <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Your Original Email — </span>
+                  <span className="text-xs text-slate-400">{reply.subject}</span>
+                </div>
+                <div className="bg-dark-800 p-4 max-h-48 overflow-y-auto">
+                  <p className="text-sm text-slate-400 whitespace-pre-wrap leading-relaxed">{reply.body}</p>
+                </div>
               </div>
             </div>
           </motion.div>

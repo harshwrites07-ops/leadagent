@@ -266,15 +266,28 @@ async function checkReplies() {
         const fromEmail = from.match(/<(.+)>/)?.[1] || from.trim();
         const replySubject = header?.subject?.[0] || '';
 
-        // Extract plain text from body (strip quoted text after first ">" line)
+        // Extract plain text — keep everything, just strip heavy quoted blocks
         let replyBody = '';
         if (textPart?.body) {
-          replyBody = textPart.body
-            .split('\n')
-            .filter(line => !line.startsWith('>') && !line.startsWith('On ') && line.trim() !== '--')
-            .join('\n')
-            .trim()
-            .substring(0, 2000);
+          const raw = textPart.body;
+          // Strip base64 junk if it snuck in
+          const lines = raw.split('\n');
+          const clean = [];
+          let quoteBlock = 0;
+          for (const line of lines) {
+            const trimmed = line.trim();
+            // Skip quoted lines (>) and "On ... wrote:" headers
+            if (trimmed.startsWith('>')) { quoteBlock++; continue; }
+            if (/^On .{10,120} wrote:$/.test(trimmed)) continue;
+            if (trimmed === '--' || trimmed === '---') break; // email signature separator
+            quoteBlock = 0;
+            clean.push(line);
+          }
+          replyBody = clean.join('\n').trim().substring(0, 3000);
+          // If result looks like base64/garbage, fall back to raw truncated
+          if (replyBody.length < 5 || /^[A-Za-z0-9+/]{60,}$/.test(replyBody.replace(/\s/g, ''))) {
+            replyBody = raw.replace(/[^\x20-\x7E\n\r]/g, '').trim().substring(0, 3000);
+          }
         }
 
         const lead = db.prepare(`SELECT * FROM leads WHERE email = ?`).get(fromEmail);
