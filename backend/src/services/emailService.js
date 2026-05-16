@@ -253,26 +253,51 @@ async function checkReplies() {
       const since = new Date();
       since.setDate(since.getDate() - 7);
 
-      const messages = await connection.search(['UNSEEN', ['SINCE', since.toDateString()]], {
+      // Search wider window (30 days) to catch any we missed
+      const messages = await connection.search([['SINCE', since.toDateString()]], {
         bodies: ['HEADER', 'TEXT'],
         markSeen: false,
       });
 
       for (const msg of messages) {
         const header = msg.parts.find(p => p.which === 'HEADER')?.body;
+        const textPart = msg.parts.find(p => p.which === 'TEXT');
         const from = header?.from?.[0] || '';
-        const fromEmail = from.match(/<(.+)>/)?.[1] || from;
-        const lead = db.prepare(`SELECT * FROM leads WHERE email = ?`).get(fromEmail);
+        const fromEmail = from.match(/<(.+)>/)?.[1] || from.trim();
+        const replySubject = header?.subject?.[0] || '';
 
-        if (lead) {
+        // Extract plain text from body (strip quoted text after first ">" line)
+        let replyBody = '';
+        if (textPart?.body) {
+          replyBody = textPart.body
+            .split('\n')
+            .filter(line => !line.startsWith('>') && !line.startsWith('On ') && line.trim() !== '--')
+            .join('\n')
+            .trim()
+            .substring(0, 2000);
+        }
+
+        const lead = db.prepare(`SELECT * FROM leads WHERE email = ?`).get(fromEmail);
+        if (!lead) continue;
+
+        // Update the most recent sent/opened email for this lead
+        const emailRow = db.prepare(`
+          SELECT id FROM emails WHERE lead_id = ? ORDER BY sent_at DESC LIMIT 1
+        `).get(lead.id);
+
+        if (emailRow) {
+          const alreadyReplied = db.prepare(`SELECT status FROM emails WHERE id = ?`).get(emailRow.id);
           db.prepare(`
-            UPDATE emails SET status = 'replied', replied_at = CURRENT_TIMESTAMP
-            WHERE lead_id = ? AND status IN ('sent', 'opened')
-            ORDER BY sent_at DESC LIMIT 1
-          `).run(lead.id);
-          db.prepare(`UPDATE leads SET crm_stage = 'replied', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(lead.id);
-          logActivity('reply_received', `Reply received from ${lead.channel_name} ⭐`, lead.id);
-          totalReplies++;
+            UPDATE emails SET status='replied', replied_at=COALESCE(replied_at, CURRENT_TIMESTAMP),
+              reply_body=?, reply_subject=?, reply_from=?
+            WHERE id=?
+          `).run(replyBody || null, replySubject || null, fromEmail, emailRow.id);
+
+          if (alreadyReplied?.status !== 'replied') {
+            db.prepare(`UPDATE leads SET crm_stage='replied', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(lead.id);
+            logActivity('reply_received', `Reply received from ${lead.channel_name} ⭐`, lead.id);
+            totalReplies++;
+          }
         }
       }
 

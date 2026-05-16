@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { getDb, getSetting, logActivity } = require('../models/database');
 const { asyncHandler } = require('../middleware/errorHandler');
-const { sendEmail, testSmtp, resetTransporter, checkSpamFolders, getInboxes } = require('../services/emailService');
+const { sendEmail, testSmtp, resetTransporter, checkSpamFolders, getInboxes, checkReplies } = require('../services/emailService');
 
 // GET /api/emails — list all emails
 router.get('/', asyncHandler(async (req, res) => {
@@ -222,6 +222,37 @@ router.post('/test-smtp', asyncHandler(async (req, res) => {
   const result = await testSmtp(req.body);
   if (result.ok) resetTransporter();
   res.json(result);
+}));
+
+// GET /api/emails/replies — all replied emails with their reply content
+router.get('/replies', asyncHandler(async (req, res) => {
+  const db = getDb();
+  const replies = db.prepare(`
+    SELECT e.id, e.subject, e.body, e.sent_at, e.replied_at, e.from_email,
+           e.reply_body, e.reply_subject, e.reply_from,
+           l.channel_name, l.email as lead_email, l.thumbnail_url, l.subscriber_count, l.niche
+    FROM emails e
+    LEFT JOIN leads l ON l.id = e.lead_id
+    WHERE e.status = 'replied'
+    ORDER BY e.replied_at DESC
+  `).all();
+  res.json({ success: true, replies, count: replies.length });
+}));
+
+// POST /api/emails/replies/fetch — trigger IMAP check and return fresh replies
+router.post('/replies/fetch', asyncHandler(async (req, res) => {
+  const result = await checkReplies();
+  const db = getDb();
+  const replies = db.prepare(`
+    SELECT e.id, e.subject, e.body, e.sent_at, e.replied_at, e.from_email,
+           e.reply_body, e.reply_subject, e.reply_from,
+           l.channel_name, l.email as lead_email, l.thumbnail_url, l.subscriber_count, l.niche
+    FROM emails e
+    LEFT JOIN leads l ON l.id = e.lead_id
+    WHERE e.status = 'replied'
+    ORDER BY e.replied_at DESC
+  `).all();
+  res.json({ success: true, newReplies: result.repliesFound, replies, count: replies.length });
 }));
 
 // GET /api/emails/spam-report

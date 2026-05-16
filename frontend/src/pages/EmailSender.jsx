@@ -5,11 +5,12 @@ import toast from 'react-hot-toast';
 import {
   Mail, MailOpen, Send, Inbox, AlertCircle, CheckCircle, Clock,
   X, Play, Pause, RefreshCw, ExternalLink, ChevronDown, Reply,
-  Loader, GripVertical, Eye, EyeOff, Settings, Zap, ShieldAlert,
+  Loader, GripVertical, Eye, EyeOff, Settings, Zap, ShieldAlert, MessageSquare,
 } from 'lucide-react';
 import PowerSendOverlay from '../components/ui/PowerSendOverlay';
 import PowerFollowUpOverlay from '../components/ui/PowerFollowUpOverlay';
 import SpamMonitorPanel from '../components/ui/SpamMonitorPanel';
+import RepliesInbox from '../components/ui/RepliesInbox';
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor,
   useSensor, useSensors,
@@ -197,6 +198,7 @@ export default function EmailSender() {
   const [showPowerOverlay, setShowPowerOverlay] = useState(false);
   const [showFollowUpOverlay, setShowFollowUpOverlay] = useState(false);
   const [showSpamPanel, setShowSpamPanel] = useState(false);
+  const [showReplies, setShowReplies] = useState(false);
 
   // Stats
   const [stats, setStats] = useState(null);
@@ -369,6 +371,13 @@ export default function EmailSender() {
         <div className="flex items-center gap-3">
           <button onClick={() => { fetchStats(); fetchQueue(); }} className="btn btn-ghost flex items-center gap-2">
             <RefreshCw size={15} /> Refresh
+          </button>
+          <button
+            onClick={() => setShowReplies(true)}
+            className="btn btn-secondary flex items-center gap-2 text-sm"
+            style={{ borderColor: 'rgba(124,58,237,0.4)', color: '#a78bfa' }}
+          >
+            <MessageSquare size={15} /> View Replies
           </button>
           <button
             onClick={() => setShowSpamPanel(true)}
@@ -595,6 +604,9 @@ export default function EmailSender() {
       )}
       {showSpamPanel && (
         <SpamMonitorPanel onClose={() => setShowSpamPanel(false)} />
+      )}
+      {showReplies && (
+        <RepliesInbox onClose={() => setShowReplies(false)} />
       )}
     </div>
   );

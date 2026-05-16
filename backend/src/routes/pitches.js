@@ -194,6 +194,11 @@ router.post('/power-send', aiLimiter, async (req, res) => {
     }
   };
 
+  // Heartbeat every 20s — keeps Cloudflare from killing the SSE connection (524 timeout)
+  const heartbeat = setInterval(() => {
+    if (!closed) { try { res.write(': heartbeat\n\n'); } catch {} }
+  }, 20000);
+
   try {
     const db = getDb();
     const { sendEmail } = require('../services/emailService');
@@ -276,6 +281,7 @@ router.post('/power-send', aiLimiter, async (req, res) => {
   } catch (err) {
     emit('error', { message: err.message });
   } finally {
+    clearInterval(heartbeat);
     res.end();
   }
 });
