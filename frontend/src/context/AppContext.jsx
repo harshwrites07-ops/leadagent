@@ -33,7 +33,10 @@ export function AppProvider({ children }) {
       const res = await api.get('/settings');
       setSettings(res.data.settings || {});
     } catch (e) {
-      console.error('Settings load error:', e.message);
+      // 403 is expected for non-admin users — settings table is admin-only
+      if (e.response?.status !== 403) {
+        console.error('Settings load error:', e.message);
+      }
     }
   }, []);
 

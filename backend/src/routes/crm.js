@@ -10,8 +10,8 @@ router.get('/', asyncHandler(async (req, res) => {
   const db = getDb();
   const { search, temperature, platform } = req.query;
 
-  let where = ['1=1'];
-  const params = [];
+  let where = ['l.user_id = ?'];
+  const params = [req.user.id];
 
   if (search) { where.push('(l.channel_name LIKE ? OR l.email LIKE ?)'); params.push(`%${search}%`, `%${search}%`); }
   if (temperature) { where.push('l.temperature = ?'); params.push(temperature); }
@@ -34,9 +34,10 @@ router.get('/pipeline-value', asyncHandler(async (req, res) => {
   const db = getDb();
   const avgDeal = parseInt(getSetting('average_deal_value') || '1000');
 
-  const callBooked = db.prepare(`SELECT COUNT(*) as count FROM leads WHERE crm_stage = 'call_booked'`).get();
-  const closedWon = db.prepare(`SELECT COUNT(*) as count FROM leads WHERE crm_stage = 'closed_won'`).get();
-  const replied = db.prepare(`SELECT COUNT(*) as count FROM leads WHERE crm_stage = 'replied'`).get();
+  const uid = req.user.id;
+  const callBooked = db.prepare(`SELECT COUNT(*) as count FROM leads WHERE crm_stage = 'call_booked' AND user_id = ?`).get(uid);
+  const closedWon = db.prepare(`SELECT COUNT(*) as count FROM leads WHERE crm_stage = 'closed_won' AND user_id = ?`).get(uid);
+  const replied = db.prepare(`SELECT COUNT(*) as count FROM leads WHERE crm_stage = 'replied' AND user_id = ?`).get(uid);
 
   res.json({
     success: true,
@@ -59,7 +60,7 @@ router.put('/:leadId/stage', asyncHandler(async (req, res) => {
   }
 
   const db = getDb();
-  const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(req.params.leadId);
+  const lead = db.prepare('SELECT * FROM leads WHERE id = ? AND user_id = ?').get(req.params.leadId, req.user.id);
   if (!lead) return res.status(404).json({ success: false, error: 'Lead not found' });
 
   db.prepare(`UPDATE leads SET crm_stage = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(stage, lead.id);
@@ -116,7 +117,7 @@ router.delete('/bulk', asyncHandler(async (req, res) => {
 
   const db = getDb();
   const placeholders = ids.map(() => '?').join(',');
-  db.prepare(`DELETE FROM leads WHERE id IN (${placeholders})`).run(...ids);
+  db.prepare(`DELETE FROM leads WHERE id IN (${placeholders}) AND user_id = ?`).run(...ids, req.user.id);
   res.json({ success: true, deleted: ids.length });
 }));
 

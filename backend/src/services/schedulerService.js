@@ -1,6 +1,6 @@
 const cron = require('node-cron');
 const { getSetting, getDb, logActivity } = require('../models/database');
-const { processQueue, checkReplies } = require('./emailService');
+const { processQueue, checkReplies, checkSpamFolders, getInboxes } = require('./emailService');
 const { generateFollowUp } = require('./claudeService');
 const { searchChannelsMulti } = require('./youtubeService');
 
@@ -87,16 +87,50 @@ cron.schedule('*/15 * * * *', async () => {
   }
 });
 
+// ── Bounce detector — every 30 minutes ───────────────────────────────────────
+
+cron.schedule('*/30 * * * *', async () => {
+  try {
+    const results = await checkSpamFolders();
+    const newlyMarked = results.reduce((s, r) => s + (r.newlyMarked || 0), 0);
+    if (newlyMarked > 0) {
+      console.log(`[Scheduler] Bounce check: marked ${newlyMarked} new invalid leads`);
+    }
+  } catch (e) {
+    console.error('[Scheduler] Bounce check error:', e.message);
+  }
+});
+
 // ── Follow-up generator — every hour (5-step Day 3/6/9/12/15 system) ─────────
 
 cron.schedule('0 * * * *', async () => {
   const autoFollowup = getSetting('auto_followup');
   if (autoFollowup !== 'true') return;
+  if (getSetting('queue_paused') === '1') return;
 
   const db = getDb();
+
+  // Respect the same daily send limit as processQueue
+  const perInboxLimit = parseInt(getSetting('daily_send_limit') || '50');
+  const allInboxes = getInboxes();
+  const totalDailyLimit = perInboxLimit * Math.max(allInboxes.length, 1);
+  const todaySent = db.prepare(`SELECT COUNT(*) as c FROM emails WHERE DATE(sent_at)=DATE('now') AND status='sent'`).get();
+  if (todaySent.c >= totalDailyLimit) {
+    console.log(`[Scheduler] Follow-up skipped: daily limit reached (${todaySent.c}/${totalDailyLimit})`);
+    return;
+  }
+
+  // Stop if 7-day bounce rate is too high
+  const recent = db.prepare(`SELECT COUNT(*) as total, SUM(CASE WHEN status='bounced' THEN 1 ELSE 0 END) as bounced FROM emails WHERE sent_at > datetime('now','-7 days')`).get();
+  if (recent.total > 20 && (recent.bounced / recent.total) * 100 > 5) {
+    console.log(`[Scheduler] Follow-up skipped: 7-day bounce rate too high`);
+    return;
+  }
+
   const { sendEmail } = require('./emailService');
 
   // Leads that are emailed, have last_contacted_date, follow_up_count < 5, and 3+ days have passed
+  // CRITICAL: skip email_invalid leads — they bounce and damage domain reputation
   const leads = db.prepare(`
     SELECT l.*, p.cold_email as original_email
     FROM leads l
@@ -106,6 +140,7 @@ cron.schedule('0 * * * *', async () => {
       AND l.follow_up_count < 5
       AND l.last_contacted_date IS NOT NULL
       AND l.email IS NOT NULL AND l.email != ''
+      AND (l.email_invalid IS NULL OR l.email_invalid = 0)
       AND julianday('now') - julianday(l.last_contacted_date) >= 3
     ORDER BY l.lead_score DESC
     LIMIT 50
@@ -135,12 +170,16 @@ cron.schedule('0 * * * *', async () => {
       const subject = subjectMatch[1].trim();
       const body = bodyMatch[1].trim();
 
-      const qr = db.prepare(`INSERT INTO email_queue (lead_id,subject,body,status,priority) VALUES (?,?,?,'pending',?)`).run(lead.id, subject, body, nextStep);
-      db.prepare(`UPDATE email_queue SET status='sending' WHERE id=?`).run(qr.lastInsertRowid);
+      const qr = db.prepare(`INSERT INTO email_queue (lead_id,subject,body,status,priority) VALUES (?,?,?,'sending',?)`).run(lead.id, subject, body, nextStep);
 
-      await sendEmail({ to: lead.email, subject, body, leadId: lead.id });
+      try {
+        await sendEmail({ to: lead.email, subject, body, leadId: lead.id });
+        db.prepare(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP WHERE id=?`).run(qr.lastInsertRowid);
+      } catch (sendErr) {
+        db.prepare(`UPDATE email_queue SET status='failed' WHERE id=?`).run(qr.lastInsertRowid);
+        throw sendErr;
+      }
 
-      db.prepare(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP WHERE id=?`).run(qr.lastInsertRowid);
       db.prepare(`UPDATE leads SET follow_up_count=?, last_contacted_date=date('now'), updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(nextStep, lead.id);
 
       if (nextStep >= 5) {

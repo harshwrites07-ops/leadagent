@@ -41,7 +41,7 @@ function savePitch(db, leadId, { email_subject, email_body, deep_study, custom_o
 // ─── Single pitch (fast path) ─────────────────────────────────────────────────
 router.post('/generate/:leadId', aiLimiter, asyncHandler(async (req, res) => {
   const db = getDb();
-  const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(req.params.leadId);
+  const lead = db.prepare('SELECT * FROM leads WHERE id = ? AND user_id = ?').get(req.params.leadId, req.user.id);
   if (!lead) return res.status(404).json({ success: false, error: 'Lead not found' });
 
   db.prepare(`UPDATE leads SET crm_stage='studying', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(lead.id);
@@ -97,7 +97,7 @@ router.post('/bulk-generate', aiLimiter, asyncHandler(async (req, res) => {
     const batch = ids.slice(i, i + CONCURRENCY);
     const batchResults = await Promise.allSettled(
       batch.map(async id => {
-        const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(id);
+        const lead = db.prepare('SELECT * FROM leads WHERE id = ? AND user_id = ?').get(id, req.user.id);
         if (!lead) return { id, success: false, error: 'Not found' };
         db.prepare(`UPDATE leads SET crm_stage='studying', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(id);
         const result = await claude.generateFullPitch(lead);
@@ -135,7 +135,7 @@ router.post('/generate-and-send', aiLimiter, asyncHandler(async (req, res) => {
     const batch = ids.slice(i, i + CONCURRENCY);
     const batchResults = await Promise.allSettled(
       batch.map(async id => {
-        const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(id);
+        const lead = db.prepare('SELECT * FROM leads WHERE id = ? AND user_id = ?').get(id, req.user.id);
         if (!lead) return { id, success: false, error: 'Not found' };
         if (!lead.email) return { id, success: false, error: 'No email', channel_name: lead.channel_name };
 
@@ -176,85 +176,131 @@ router.post('/generate-and-send', aiLimiter, asyncHandler(async (req, res) => {
   res.json({ success: true, results, sent, total: results.length });
 }));
 
-// ─── Power Send — SSE streaming bulk generate + send ─────────────────────────
-// Auto-picks HOT leads (or uses lead_ids) and streams progress via SSE
-router.post('/power-send', aiLimiter, async (req, res) => {
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no');
-  res.flushHeaders();
+// ─── Power Send — Background Job System ──────────────────────────────────────
+// Jobs run entirely on the server. Browser can be closed — job keeps going.
 
-  let closed = false;
-  req.on('close', () => { closed = true; });
+const activeJobs = new Map(); // jobId → { stopped: false }
 
-  const emit = (event, data) => {
-    if (!closed) {
-      try { res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); } catch {}
+function jobLog(db, jobId, type, message) {
+  try {
+    const row = db.prepare('SELECT log FROM power_send_jobs WHERE id=?').get(jobId);
+    if (!row) return;
+    const log = JSON.parse(row.log || '[]');
+    log.unshift({ type, message, time: new Date().toISOString() });
+    if (log.length > 80) log.length = 80;
+    db.prepare('UPDATE power_send_jobs SET log=? WHERE id=?').run(JSON.stringify(log), jobId);
+  } catch {}
+}
+
+function jobUpdate(db, jobId, fields) {
+  try {
+    const keys = Object.keys(fields);
+    const sql = `UPDATE power_send_jobs SET ${keys.map(k => `${k}=@${k}`).join(', ')} WHERE id=@id`;
+    db.prepare(sql).run({ ...fields, id: jobId });
+  } catch {}
+}
+
+async function runPowerSendJob(jobId, { lead_ids, max_leads = 100, per_account_limit = 0, gap_seconds = 0, skip_inboxes = [], _userId }) {
+  const db = getDb();
+  const { sendEmail, getInboxes } = require('../services/emailService');
+  const ctx = activeJobs.get(jobId) || { stopped: false };
+
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const withTimeout = (promise, ms, label) => Promise.race([
+    promise,
+    new Promise((_, rej) => setTimeout(() => rej(new Error(`Timeout after ${ms / 1000}s for ${label}`)), ms)),
+  ]);
+  const isNetworkError = e => /ENOTFOUND|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN/i.test(e?.message || '');
+  const withRetry = async (fn, label, retries = 3) => {
+    for (let i = 0; i < retries; i++) {
+      try { return await fn(); }
+      catch (e) {
+        if (isNetworkError(e) && i < retries - 1) {
+          jobLog(db, jobId, 'waiting', `Network error, retrying in 30s... (${i + 1}/${retries - 1})`);
+          await sleep(30000);
+        } else throw e;
+      }
     }
   };
 
-  // Heartbeat every 20s — keeps Cloudflare from killing the SSE connection (524 timeout)
-  const heartbeat = setInterval(() => {
-    if (!closed) { try { res.write(': heartbeat\n\n'); } catch {} }
-  }, 20000);
+  const runCounts = {};
+  const getSkipInboxes = () => {
+    const limitSkips = per_account_limit > 0
+      ? Object.entries(runCounts).filter(([, c]) => c >= per_account_limit).map(([e]) => e)
+      : [];
+    return [...new Set([...skip_inboxes, ...limitSkips])];
+  };
 
   try {
-    const db = getDb();
-    const { sendEmail } = require('../services/emailService');
-    const { lead_ids, max_leads = 100 } = req.body;
-
+    const userFilter = _userId ? `AND user_id = ${_userId}` : '';
     let leads;
     if (lead_ids && lead_ids.length > 0) {
       leads = lead_ids.slice(0, max_leads)
-        .map(id => db.prepare('SELECT * FROM leads WHERE id = ?').get(id))
-        .filter(Boolean)
-        .filter(l => l.email);
+        .map(id => db.prepare(`SELECT * FROM leads WHERE id=? ${userFilter}`).get(id))
+        .filter(Boolean).filter(l => l.email);
     } else {
       leads = db.prepare(`
-        SELECT l.* FROM leads l
-        WHERE l.email IS NOT NULL AND l.email != ''
-          AND l.temperature = 'hot'
-          AND l.crm_stage NOT IN ('emailed','opened','replied','call_booked','closed_won','closed_lost')
-        ORDER BY l.subscriber_count DESC
-        LIMIT ?
+        SELECT * FROM leads
+        WHERE email IS NOT NULL AND email != ''
+          AND (email_invalid IS NULL OR email_invalid = 0)
+          AND temperature = 'hot'
+          AND crm_stage NOT IN ('emailed','opened','replied','call_booked','closed_won','closed_lost')
+          ${userFilter}
+        ORDER BY subscriber_count DESC LIMIT ?
       `).all(max_leads);
 
       if (leads.length < max_leads) {
         const needed = max_leads - leads.length;
         const hotIds = leads.map(l => l.id);
         const warm = db.prepare(`
-          SELECT l.* FROM leads l
-          WHERE l.email IS NOT NULL AND l.email != ''
-            AND l.temperature = 'warm'
-            AND l.crm_stage NOT IN ('emailed','opened','replied','call_booked','closed_won','closed_lost')
-            ${hotIds.length ? `AND l.id NOT IN (${hotIds.map(() => '?').join(',')})` : ''}
-          ORDER BY l.subscriber_count DESC
-          LIMIT ?
+          SELECT * FROM leads
+          WHERE email IS NOT NULL AND email != ''
+            AND (email_invalid IS NULL OR email_invalid = 0)
+            AND temperature = 'warm'
+            AND crm_stage NOT IN ('emailed','opened','replied','call_booked','closed_won','closed_lost')
+            ${hotIds.length ? `AND id NOT IN (${hotIds.map(() => '?').join(',')})` : ''}
+            ${userFilter}
+          ORDER BY subscriber_count DESC LIMIT ?
         `).all(...hotIds, needed);
         leads.push(...warm);
       }
     }
 
-    emit('start', { total: leads.length });
+    if (per_account_limit > 0) {
+      const maxTotal = per_account_limit * (getInboxes().length || 1);
+      if (leads.length > maxTotal) leads = leads.slice(0, maxTotal);
+    }
+
+    jobUpdate(db, jobId, { total: leads.length });
+    jobLog(db, jobId, 'start', `Job started — ${leads.length} leads queued`);
 
     const stats = { studied: 0, generated: 0, sent: 0, failed: 0 };
-    const CONCURRENCY = 3;
+    const CONCURRENCY = gap_seconds > 0 ? 1 : 3;
 
     for (let i = 0; i < leads.length; i += CONCURRENCY) {
-      if (closed) break;
+      if (ctx.stopped) break;
+
+      if (per_account_limit > 0 && getSkipInboxes().length >= getInboxes().length) {
+        jobLog(db, jobId, 'info', 'Per-account limit reached — job complete');
+        break;
+      }
+
       const batch = leads.slice(i, i + CONCURRENCY);
 
       await Promise.allSettled(batch.map(async lead => {
-        if (closed) return;
+        if (ctx.stopped) return;
         try {
-          emit('progress', { type: 'studying', channel: lead.channel_name, id: lead.id, stats: { ...stats } });
+          jobLog(db, jobId, 'studying', `Studying ${lead.channel_name}...`);
           db.prepare(`UPDATE leads SET crm_stage='studying', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(lead.id);
 
-          const result = await claude.generateFullPitch(lead);
+          const result = await withRetry(
+            () => withTimeout(claude.generateFullPitch(lead), 90000, lead.channel_name),
+            lead.channel_name
+          );
           stats.studied++;
           stats.generated++;
-          emit('progress', { type: 'generated', channel: lead.channel_name, id: lead.id, stats: { ...stats } });
+          jobUpdate(db, jobId, { studied: stats.studied, generated: stats.generated });
+          jobLog(db, jobId, 'generated', `Pitch ready for ${lead.channel_name}`);
 
           savePitch(db, lead.id, {
             email_subject: result.email_subject,
@@ -264,27 +310,102 @@ router.post('/power-send', aiLimiter, async (req, res) => {
             subject_variants: result.subject_variants,
           });
 
-          const sent = await sendEmail({ to: lead.email, subject: result.email_subject, body: result.email_body, leadId: lead.id });
+          const sentResult = await withRetry(
+            () => sendEmail({ to: lead.email, subject: result.email_subject, body: result.email_body, leadId: lead.id, skipInboxes: getSkipInboxes() }),
+            lead.channel_name
+          );
+          if (sentResult.fromEmail) runCounts[sentResult.fromEmail] = (runCounts[sentResult.fromEmail] || 0) + 1;
+
           db.prepare(`UPDATE leads SET crm_stage='emailed', last_contacted_date=date('now'), follow_up_count=0, follow_up_status='active', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(lead.id);
           logActivity('email_sent', `Email sent to ${lead.channel_name}`, lead.id);
           stats.sent++;
-          emit('progress', { type: 'sent', channel: lead.channel_name, email: lead.email, id: lead.id, stats: { ...stats } });
+          jobUpdate(db, jobId, { sent: stats.sent });
+          jobLog(db, jobId, 'sent', `Sent to ${lead.channel_name} (${lead.email})`);
+
+          if (gap_seconds > 0 && !ctx.stopped) {
+            jobLog(db, jobId, 'waiting', `Waiting ${gap_seconds}s before next email...`);
+            await sleep(gap_seconds * 1000);
+          }
         } catch (err) {
           stats.failed++;
-          emit('progress', { type: 'failed', channel: lead.channel_name, error: err.message?.substring(0, 100), id: lead.id, stats: { ...stats } });
+          jobUpdate(db, jobId, { failed: stats.failed });
+          jobLog(db, jobId, 'failed', `Failed: ${lead.channel_name} — ${err.message?.substring(0, 100)}`);
           try { db.prepare(`UPDATE leads SET crm_stage='pitch_ready', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(lead.id); } catch {}
         }
       }));
     }
 
-    emit('done', { ...stats, total: leads.length });
+    const finalStatus = ctx.stopped ? 'stopped' : 'done';
+    jobUpdate(db, jobId, { status: finalStatus, completed_at: new Date().toISOString() });
+    jobLog(db, jobId, 'done', `Complete! ${stats.sent} sent, ${stats.failed} failed out of ${leads.length}.`);
+    logActivity('powermode', `Power Send done: ${stats.sent} emails sent`, null);
   } catch (err) {
-    emit('error', { message: err.message });
+    jobUpdate(db, jobId, { status: 'error', completed_at: new Date().toISOString() });
+    jobLog(db, jobId, 'failed', `Job crashed: ${err.message}`);
   } finally {
-    clearInterval(heartbeat);
-    res.end();
+    activeJobs.delete(jobId);
   }
-});
+}
+
+// POST /api/pitches/power-send — start background job, returns job_id immediately
+router.post('/power-send', aiLimiter, asyncHandler(async (req, res) => {
+  const db = getDb();
+
+  // Only one active job at a time per user
+  const existing = db.prepare(`SELECT id FROM power_send_jobs WHERE status='running' AND user_id=? LIMIT 1`).get(req.user.id);
+  if (existing) return res.json({ success: true, job_id: existing.id, status: 'already_running' });
+
+  const settings = { ...req.body, _userId: req.user.id };
+  const { lastInsertRowid } = db.prepare(`
+    INSERT INTO power_send_jobs (user_id, status, settings) VALUES (?, 'running', ?)
+  `).run(req.user.id, JSON.stringify(req.body));
+
+  const jobId = Number(lastInsertRowid);
+  activeJobs.set(jobId, { stopped: false });
+
+  // Fire and forget — runs completely independently of this HTTP request
+  runPowerSendJob(jobId, settings).catch(() => {});
+
+  res.json({ success: true, job_id: jobId, status: 'started' });
+}));
+
+// GET /api/pitches/power-send/active — returns running job, or interrupted job from last 30 min
+router.get('/power-send/active', asyncHandler(async (req, res) => {
+  const db = getDb();
+  const job = db.prepare(`
+    SELECT * FROM power_send_jobs
+    WHERE user_id = ?
+      AND (status = 'running'
+        OR (status = 'interrupted' AND started_at > datetime('now', '-30 minutes')))
+    ORDER BY id DESC LIMIT 1
+  `).get(req.user.id);
+  res.json({ success: true, job: job || null });
+}));
+
+// POST /api/pitches/power-send/:jobId/dismiss — clear interrupted job so overlay resets
+router.post('/power-send/:jobId/dismiss', asyncHandler(async (req, res) => {
+  const db = getDb();
+  db.prepare(`UPDATE power_send_jobs SET status='done', completed_at=COALESCE(completed_at,CURRENT_TIMESTAMP) WHERE id=? AND status='interrupted'`).run(req.params.jobId);
+  res.json({ success: true });
+}));
+
+// GET /api/pitches/power-send/:jobId — job status + log
+router.get('/power-send/:jobId', asyncHandler(async (req, res) => {
+  const db = getDb();
+  const job = db.prepare(`SELECT * FROM power_send_jobs WHERE id=?`).get(req.params.jobId);
+  if (!job) return res.status(404).json({ success: false, error: 'Job not found' });
+  res.json({ success: true, job });
+}));
+
+// POST /api/pitches/power-send/:jobId/stop — stop a running job
+router.post('/power-send/:jobId/stop', asyncHandler(async (req, res) => {
+  const jobId = parseInt(req.params.jobId);
+  const ctx = activeJobs.get(jobId);
+  if (ctx) ctx.stopped = true;
+  const db = getDb();
+  db.prepare(`UPDATE power_send_jobs SET status='stopped', completed_at=CURRENT_TIMESTAMP WHERE id=? AND status='running'`).run(jobId);
+  res.json({ success: true });
+}));
 
 // ─── Get pitch ────────────────────────────────────────────────────────────────
 router.get('/:leadId', asyncHandler(async (req, res) => {

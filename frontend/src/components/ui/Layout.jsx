@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Search, Wand2, Mail, Kanban, BarChart3,
   Settings, ChevronLeft, ChevronRight, ScanSearch,
+  LogOut, User, Shield, ChevronDown,
 } from 'lucide-react';
 import AssistantChat from './AssistantChat';
 import api from '../../utils/api';
+import { useAuth } from '../../context/AuthContext';
 
 const navItems = [
   { path: '/',          icon: LayoutDashboard, label: 'Dashboard',    tag: 'DASH' },
@@ -40,6 +42,94 @@ function useIsMobile() {
 
 export { useIsMobile };
 
+function UserMenu({ user, logout }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const handler = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const initials = user?.full_name ? user.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : '?';
+  const planColors = { free: '#888', starter: '#4A9EFF', growth: '#00E5A0', agency: '#FF4500' };
+  const planColor = planColors[user?.plan] || '#888';
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button onClick={() => setOpen(o => !o)} style={{
+        display: 'flex', alignItems: 'center', gap: 7,
+        background: open ? 'rgba(255,69,0,0.08)' : 'transparent',
+        border: '1px solid ' + (open ? 'rgba(255,69,0,0.2)' : 'var(--border-subtle)'),
+        borderRadius: 8, padding: '5px 10px', cursor: 'pointer', transition: 'all 0.15s',
+      }}>
+        {user?.profile_picture ? (
+          <img src={user.profile_picture} alt="" style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} />
+        ) : (
+          <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--gradient-orange)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, color: '#fff', fontFamily: 'var(--font-heading)', flexShrink: 0 }}>
+            {initials}
+          </div>
+        )}
+        <div style={{ textAlign: 'left', lineHeight: 1.2, display: window.innerWidth < 480 ? 'none' : 'block' }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-primary)', maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.full_name || user?.email?.split('@')[0] || 'User'}</div>
+          <div style={{ fontSize: 9, fontWeight: 700, color: planColor, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>{user?.plan || 'free'}</div>
+        </div>
+        <ChevronDown size={12} style={{ color: 'var(--text-muted)', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 6px)', right: 0,
+          background: 'var(--bg-surface)', border: '1px solid var(--border-strong)',
+          borderRadius: 10, padding: '4px', width: 180, zIndex: 1000,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+        }}>
+          <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border-subtle)', marginBottom: 4 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.full_name || 'User'}</div>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.email}</div>
+          </div>
+          {[
+            { label: 'Profile & Settings', icon: User, action: () => { navigate('/settings'); setOpen(false); } },
+            ...(user?.is_admin ? [
+              { label: 'Admin Panel', icon: Shield, action: () => { navigate('/admin'); setOpen(false); } },
+              { label: 'Admin Settings', icon: Shield, action: () => { navigate('/admin/settings'); setOpen(false); } },
+            ] : []),
+          ].map(item => (
+            <button key={item.label} onClick={item.action} style={{
+              width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+              padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer',
+              color: 'var(--text-secondary)', fontSize: 12, fontWeight: 500, borderRadius: 6,
+              textAlign: 'left', fontFamily: 'var(--font-body)',
+            }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'none'}
+            >
+              <item.icon size={13} />
+              {item.label}
+            </button>
+          ))}
+          <div style={{ borderTop: '1px solid var(--border-subtle)', marginTop: 4, paddingTop: 4 }}>
+            <button onClick={logout} style={{
+              width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+              padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer',
+              color: '#FF4444', fontSize: 12, fontWeight: 600, borderRadius: 6,
+              textAlign: 'left', fontFamily: 'var(--font-body)',
+            }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,68,68,0.08)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'none'}
+            >
+              <LogOut size={13} />
+              Sign Out
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Layout({ children }) {
   const [collapsed, setCollapsed] = useState(false);
   const [time, setTime] = useState('');
@@ -47,6 +137,7 @@ export default function Layout({ children }) {
   const isMobile = useIsMobile();
   const location = useLocation();
   const currentPage = navItems.find(n => n.path === location.pathname)?.label || 'ContentCrafterzz';
+  const { user, logout } = useAuth();
 
   useEffect(() => {
     const fetchStatus = async () => {
@@ -212,6 +303,7 @@ export default function Layout({ children }) {
               <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--accent-primary)', boxShadow: '0 0 6px rgba(255,69,0,0.8)', display: 'inline-block', animation: 'statusPulse 2s ease-in-out infinite' }} />
               LIVE
             </div>
+            {user && <UserMenu user={user} logout={logout} />}
           </div>
         </header>
 

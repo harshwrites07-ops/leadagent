@@ -32,24 +32,35 @@ const powermodeState = {
 const POWERMODE_KEYWORDS = [
   // Business & Entrepreneurship
   'business coach YouTube', 'entrepreneur channel', 'agency owner YouTube', 'online business tips', 'startup founder vlog',
+  'dropshipping YouTube', 'ecommerce YouTube', 'Amazon FBA channel', 'freelancer YouTube', 'side hustle channel',
+  'make money online YouTube', 'digital marketing YouTube', 'email marketing YouTube', 'SEO YouTube channel',
   // Finance & Investing
   'personal finance channel', 'stock market investing', 'passive income ideas', 'financial freedom YouTube', 'investing for beginners',
+  'dividend investing YouTube', 'options trading YouTube', 'budgeting YouTube', 'credit repair YouTube', 'forex trading channel',
   // Real Estate
   'real estate investing', 'real estate agent YouTube', 'property investor channel', 'house flipping channel', 'realtor YouTube',
+  'Airbnb investing YouTube', 'wholesaling real estate YouTube', 'commercial real estate YouTube',
   // Fitness & Health
   'online fitness coach', 'personal trainer YouTube', 'nutrition coach YouTube', 'weight loss channel', 'gym owner channel',
+  'yoga YouTube channel', 'CrossFit YouTube', 'bodybuilding channel', 'home workout YouTube', 'running coach YouTube',
   // Coaching & Self-Help
   'life coach YouTube', 'mindset coach channel', 'productivity YouTube', 'self improvement channel', 'motivation speaker YouTube',
+  'dating coach YouTube', 'relationship advice YouTube', 'confidence coach YouTube', 'career coach YouTube',
   // SaaS & Tech
   'SaaS founder YouTube', 'tech founder vlog', 'software demo channel', 'B2B marketing YouTube', 'digital marketing agency',
+  'AI tools YouTube', 'no code YouTube', 'automation YouTube channel', 'web design YouTube',
   // Education & Courses
   'course creator YouTube', 'online educator channel', 'skills trainer YouTube', 'eLearning channel', 'teach online YouTube',
+  'Udemy instructor YouTube', 'tutoring YouTube channel', 'exam prep YouTube', 'coding bootcamp YouTube',
   // Law & Professional
   'lawyer YouTube channel', 'attorney tips YouTube', 'law firm channel', 'legal education YouTube',
+  'immigration lawyer YouTube', 'estate planning YouTube', 'business law YouTube',
   // Health & Wellness
   'doctor YouTube channel', 'therapist channel', 'wellness coach YouTube', 'mental health YouTube',
+  'naturopath YouTube', 'chiropractor YouTube', 'dietitian channel', 'holistic health YouTube',
   // Podcasts & Media
   'podcast YouTube channel', 'video podcast channel', 'interview show YouTube',
+  'talk show YouTube', 'business podcast YouTube', 'finance podcast YouTube',
 ];
 
 const LEAD_INSERT_SQL = `
@@ -152,7 +163,7 @@ router.post('/powermode/start', asyncHandler(async (req, res) => {
       powermodeState.currentKeywords = batch;
 
       const results = await Promise.allSettled(
-        batch.map(kw => searchChannels({ keyword: kw, minSubs: 10000, maxSubs: 500000, maxResults: 20, emailOnly: false, country }))
+        batch.map(kw => searchChannels({ keyword: kw, minSubs: 5000, maxSubs: 500000, maxResults: 50, emailOnly: false, country }))
       );
 
       powermodeState.keywordsDone += batch.length;

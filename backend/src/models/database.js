@@ -136,12 +136,169 @@ function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_email_queue_status ON email_queue(status);
   `);
 
+  // Background send jobs table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS power_send_jobs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      status TEXT DEFAULT 'running',
+      total INTEGER DEFAULT 0,
+      studied INTEGER DEFAULT 0,
+      generated INTEGER DEFAULT 0,
+      sent INTEGER DEFAULT 0,
+      failed INTEGER DEFAULT 0,
+      settings TEXT DEFAULT '{}',
+      log TEXT DEFAULT '[]',
+      started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      completed_at DATETIME
+    )
+  `);
+
+  // ── Auth tables ────────────────────────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT UNIQUE NOT NULL,
+      password TEXT,
+      phone_number TEXT UNIQUE,
+      phone_verified INTEGER DEFAULT 0,
+      email_verified INTEGER DEFAULT 0,
+      google_id TEXT UNIQUE,
+      full_name TEXT NOT NULL DEFAULT '',
+      agency_name TEXT DEFAULT '',
+      role TEXT DEFAULT 'Video Editor',
+      plan TEXT DEFAULT 'free',
+      plan_status TEXT DEFAULT 'active',
+      leads_used_this_month INTEGER DEFAULT 0,
+      emails_used_this_month INTEGER DEFAULT 0,
+      usage_reset_date TEXT DEFAULT (date('now','start of month','+1 month')),
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      last_login DATETIME,
+      profile_picture TEXT,
+      onboarding_completed INTEGER DEFAULT 0,
+      is_admin INTEGER DEFAULT 0,
+      login_attempts INTEGER DEFAULT 0,
+      lockout_until DATETIME,
+      target_niches TEXT DEFAULT '[]',
+      target_platforms TEXT DEFAULT '[]',
+      portfolio_url TEXT DEFAULT '',
+      daily_email_limit INTEGER DEFAULT 50,
+      auto_find_leads INTEGER DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS otp_codes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      code TEXT NOT NULL,
+      type TEXT NOT NULL,
+      expires_at DATETIME NOT NULL,
+      used INTEGER DEFAULT 0,
+      attempts INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      session_id TEXT PRIMARY KEY,
+      data TEXT NOT NULL,
+      expires_at DATETIME NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      token TEXT UNIQUE NOT NULL,
+      expires_at DATETIME NOT NULL,
+      used INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+  `);
+
+  // Gmail OAuth accounts per user
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS gmail_accounts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      email TEXT NOT NULL,
+      access_token TEXT NOT NULL,
+      refresh_token TEXT,
+      token_expiry INTEGER,
+      status TEXT DEFAULT 'active',
+      emails_sent_today INTEGER DEFAULT 0,
+      last_reset_date TEXT DEFAULT (date('now')),
+      connected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, email)
+    )
+  `);
+
   // Migrations — safe to run on existing DBs
   try { db.exec(`ALTER TABLE emails ADD COLUMN from_email TEXT`); } catch {}
   try { db.exec(`ALTER TABLE leads ADD COLUMN follow_up_count INTEGER DEFAULT 0`); } catch {}
   try { db.exec(`ALTER TABLE leads ADD COLUMN last_contacted_date TEXT`); } catch {}
   try { db.exec(`ALTER TABLE leads ADD COLUMN next_follow_up_date TEXT`); } catch {}
   try { db.exec(`ALTER TABLE leads ADD COLUMN follow_up_status TEXT DEFAULT 'active'`); } catch {}
+  try { db.exec(`ALTER TABLE leads ADD COLUMN email_invalid INTEGER DEFAULT 0`); } catch {}
+  try { db.exec(`ALTER TABLE leads ADD COLUMN bounce_reason TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE emails ADD COLUMN reply_body TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE emails ADD COLUMN reply_subject TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE emails ADD COLUMN reply_from TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE emails ADD COLUMN my_reply_body TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE emails ADD COLUMN my_reply_sent_at TEXT`); } catch {}
+  // Mark obviously invalid emails in existing data
+  try {
+    db.exec(`UPDATE leads SET email_invalid=1 WHERE email IS NOT NULL AND (
+      email NOT LIKE '%@%.%' OR
+      LENGTH(TRIM(SUBSTR(email,1,INSTR(email,'@')-1))) < 2 OR
+      INSTR(email,'@') = 0 OR
+      LENGTH(email) < 6
+    ) AND email_invalid = 0`);
+  } catch {}
+
+  // User preference columns (multi-user settings per user)
+  try { db.exec(`ALTER TABLE users ADD COLUMN email_tone TEXT DEFAULT 'casual'`); } catch {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN outreach_goal TEXT DEFAULT 'get_reply'`); } catch {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN min_email_delay INTEGER DEFAULT 45`); } catch {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN max_email_delay INTEGER DEFAULT 120`); } catch {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN followups_enabled INTEGER DEFAULT 1`); } catch {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN max_followups INTEGER DEFAULT 3`); } catch {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN followup_delay_days INTEGER DEFAULT 3`); } catch {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN best_result TEXT DEFAULT ''`); } catch {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN pricing_range TEXT DEFAULT '$500-$2000/month'`); } catch {}
+
+  // ── user_id migrations — add to all data tables ───────────────────────────
+  try { db.exec(`ALTER TABLE leads ADD COLUMN user_id INTEGER REFERENCES users(id)`); } catch {}
+  try { db.exec(`ALTER TABLE emails ADD COLUMN user_id INTEGER REFERENCES users(id)`); } catch {}
+  try { db.exec(`ALTER TABLE email_queue ADD COLUMN user_id INTEGER REFERENCES users(id)`); } catch {}
+  try { db.exec(`ALTER TABLE pitches ADD COLUMN user_id INTEGER REFERENCES users(id)`); } catch {}
+  try { db.exec(`ALTER TABLE activities ADD COLUMN user_id INTEGER REFERENCES users(id)`); } catch {}
+  try { db.exec(`ALTER TABLE notes ADD COLUMN user_id INTEGER REFERENCES users(id)`); } catch {}
+  try { db.exec(`ALTER TABLE power_send_jobs ADD COLUMN user_id INTEGER REFERENCES users(id)`); } catch {}
+
+  // Bootstrap: create the owner/admin user (id=1) and assign all existing orphaned rows to them
+  const ownerEmail = process.env.ADMIN_EMAIL || process.env.OWNER_EMAIL || 'admin@quelro.com';
+  const existingOwner = db.prepare(`SELECT id FROM users WHERE id=1`).get();
+  if (!existingOwner) {
+    // Create default admin — password is set via /auth/setup on first visit, or ADMIN_PASSWORD env var
+    const bcrypt = require('bcryptjs');
+    const rawPass = process.env.ADMIN_PASSWORD || 'changeme123';
+    const hashed = bcrypt.hashSync(rawPass, 12);
+    db.prepare(`
+      INSERT OR IGNORE INTO users (id, email, password, full_name, email_verified, is_admin, plan, onboarding_completed)
+      VALUES (1, ?, ?, 'Admin', 1, 1, 'agency', 1)
+    `).run(ownerEmail, hashed);
+    console.log(`[DB] Created admin user: ${ownerEmail} (set ADMIN_EMAIL + ADMIN_PASSWORD in .env)`);
+  }
+
+  // Assign all orphaned rows (user_id IS NULL) to admin user 1
+  try { db.exec(`UPDATE leads SET user_id=1 WHERE user_id IS NULL`); } catch {}
+  try { db.exec(`UPDATE emails SET user_id=1 WHERE user_id IS NULL`); } catch {}
+  try { db.exec(`UPDATE email_queue SET user_id=1 WHERE user_id IS NULL`); } catch {}
+  try { db.exec(`UPDATE pitches SET user_id=1 WHERE user_id IS NULL`); } catch {}
+  try { db.exec(`UPDATE activities SET user_id=1 WHERE user_id IS NULL`); } catch {}
+  try { db.exec(`UPDATE notes SET user_id=1 WHERE user_id IS NULL`); } catch {}
+  try { db.exec(`UPDATE power_send_jobs SET user_id=1 WHERE user_id IS NULL`); } catch {}
 
   // Unique indexes — prevent duplicate leads
   try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_channel_id_uniq ON leads(channel_id) WHERE channel_id IS NOT NULL AND channel_id != ''`); } catch {}
@@ -197,6 +354,59 @@ function initSchema() {
   }
 }
 
+function getUserById(id) {
+  const db = getDb();
+  return db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+}
+
+function getUserByEmail(email) {
+  const db = getDb();
+  return db.prepare('SELECT * FROM users WHERE LOWER(email) = LOWER(?)').get(email);
+}
+
+// express-session store backed by the existing better-sqlite3 connection
+class BetterSQLiteStore {
+  constructor(expressSession) {
+    const Store = expressSession.Store;
+    class _Store extends Store {
+      constructor() {
+        super();
+        setInterval(() => {
+          try { getDb().prepare("DELETE FROM sessions WHERE expires_at < datetime('now')").run(); } catch {}
+        }, 15 * 60 * 1000);
+      }
+      get(sid, cb) {
+        try {
+          const row = getDb().prepare("SELECT data FROM sessions WHERE session_id=? AND expires_at > datetime('now')").get(sid);
+          cb(null, row ? JSON.parse(row.data) : null);
+        } catch (e) { cb(e); }
+      }
+      set(sid, sess, cb) {
+        try {
+          const exp = sess.cookie?.expires
+            ? new Date(sess.cookie.expires).toISOString()
+            : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+          getDb().prepare(`INSERT OR REPLACE INTO sessions (session_id,data,expires_at,created_at) VALUES (?,?,?,CURRENT_TIMESTAMP)`).run(sid, JSON.stringify(sess), exp);
+          cb(null);
+        } catch (e) { cb(e); }
+      }
+      destroy(sid, cb) {
+        try { getDb().prepare('DELETE FROM sessions WHERE session_id=?').run(sid); cb(null); } catch (e) { cb(e); }
+      }
+      touch(sid, sess, cb) {
+        try {
+          const exp = sess.cookie?.expires
+            ? new Date(sess.cookie.expires).toISOString()
+            : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+          getDb().prepare('UPDATE sessions SET expires_at=? WHERE session_id=?').run(exp, sid);
+          cb(null);
+        } catch (e) { cb(e); }
+      }
+    }
+    return new _Store();
+  }
+}
+
 function getSetting(key) {
   const db = getDb();
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
@@ -215,4 +425,4 @@ function logActivity(type, message, leadId = null, metadata = {}) {
     .run(type, message, leadId, JSON.stringify(metadata));
 }
 
-module.exports = { getDb, getSetting, setSetting, logActivity };
+module.exports = { getDb, getSetting, setSetting, logActivity, getUserById, getUserByEmail, BetterSQLiteStore };

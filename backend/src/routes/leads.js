@@ -55,8 +55,8 @@ router.get('/', asyncHandler(async (req, res) => {
     sort = 'created_at', order = 'desc', page = 1, limit = 50
   } = req.query;
 
-  let where = ['1=1'];
-  const params = [];
+  let where = ['user_id = ?'];
+  const params = [req.user.id];
 
   if (platform) { where.push('platform = ?'); params.push(platform); }
   if (temperature) { where.push('temperature = ?'); params.push(temperature); }
@@ -84,7 +84,7 @@ router.get('/', asyncHandler(async (req, res) => {
 // GET /api/leads/:id
 router.get('/:id', asyncHandler(async (req, res) => {
   const db = getDb();
-  const lead = parseLead(db.prepare('SELECT * FROM leads WHERE id = ?').get(req.params.id));
+  const lead = parseLead(db.prepare('SELECT * FROM leads WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id));
   if (!lead) return res.status(404).json({ success: false, error: 'Lead not found' });
 
   const pitch = db.prepare('SELECT * FROM pitches WHERE lead_id = ?').get(lead.id);
@@ -109,14 +109,14 @@ router.post('/', asyncHandler(async (req, res) => {
 
   const stmt = db.prepare(`
     INSERT INTO leads (
-      platform, channel_id, channel_name, channel_handle, subscriber_count, total_videos,
+      user_id, platform, channel_id, channel_name, channel_handle, subscriber_count, total_videos,
       avg_views, avg_likes, avg_comments, engagement_rate, upload_frequency_days,
       last_upload_date, channel_description, channel_tags, recent_videos, most_viewed_video,
       country, email, website, social_links, pain_points, lead_score, temperature,
       crm_stage, niche, reddit_username, reddit_post_title, reddit_post_content,
       reddit_subreddit, thumbnail_url
     ) VALUES (
-      @platform, @channel_id, @channel_name, @channel_handle, @subscriber_count, @total_videos,
+      @user_id, @platform, @channel_id, @channel_name, @channel_handle, @subscriber_count, @total_videos,
       @avg_views, @avg_likes, @avg_comments, @engagement_rate, @upload_frequency_days,
       @last_upload_date, @channel_description, @channel_tags, @recent_videos, @most_viewed_video,
       @country, @email, @website, @social_links, @pain_points, @lead_score, @temperature,
@@ -126,6 +126,7 @@ router.post('/', asyncHandler(async (req, res) => {
   `);
 
   const result = stmt.run({
+    user_id: req.user.id,
     platform: data.platform || 'youtube',
     channel_id: data.channel_id || null,
     channel_name: data.channel_name,
@@ -166,7 +167,7 @@ router.post('/', asyncHandler(async (req, res) => {
 // PUT /api/leads/:id
 router.put('/:id', asyncHandler(async (req, res) => {
   const db = getDb();
-  const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(req.params.id);
+  const lead = db.prepare('SELECT * FROM leads WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
   if (!lead) return res.status(404).json({ success: false, error: 'Lead not found' });
 
   const allowed = ['channel_name', 'email', 'website', 'niche', 'crm_stage', 'temperature', 'lead_score', 'channel_description'];
@@ -193,7 +194,7 @@ router.put('/:id', asyncHandler(async (req, res) => {
 // DELETE /api/leads/:id
 router.delete('/:id', asyncHandler(async (req, res) => {
   const db = getDb();
-  db.prepare('DELETE FROM leads WHERE id = ?').run(req.params.id);
+  db.prepare('DELETE FROM leads WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id);
   res.json({ success: true });
 }));
 
@@ -237,13 +238,13 @@ router.post('/scrape/youtube', scrapeLimiter, asyncHandler(async (req, res) => {
 
     const stmt = db.prepare(`
       INSERT INTO leads (
-        platform, channel_id, channel_name, channel_handle, subscriber_count, total_videos,
+        user_id, platform, channel_id, channel_name, channel_handle, subscriber_count, total_videos,
         avg_views, avg_likes, avg_comments, engagement_rate, upload_frequency_days,
         last_upload_date, channel_description, channel_tags, recent_videos, most_viewed_video,
         country, email, website, social_links, pain_points, lead_score, temperature,
         niche, thumbnail_url
       ) VALUES (
-        @platform, @channel_id, @channel_name, @channel_handle, @subscriber_count, @total_videos,
+        @user_id, @platform, @channel_id, @channel_name, @channel_handle, @subscriber_count, @total_videos,
         @avg_views, @avg_likes, @avg_comments, @engagement_rate, @upload_frequency_days,
         @last_upload_date, @channel_description, @channel_tags, @recent_videos, @most_viewed_video,
         @country, @email, @website, @social_links, @pain_points, @lead_score, @temperature,
@@ -251,7 +252,7 @@ router.post('/scrape/youtube', scrapeLimiter, asyncHandler(async (req, res) => {
       )
     `);
 
-    const r = stmt.run({ ...ch, niche: keyword });
+    const r = stmt.run({ ...ch, niche: keyword, user_id: req.user.id });
     ch.id = r.lastInsertRowid;
     results.push(ch);
     added++;
@@ -280,15 +281,16 @@ router.post('/scrape/reddit', scrapeLimiter, asyncHandler(async (req, res) => {
 
     const stmt = db.prepare(`
       INSERT INTO leads (
-        platform, channel_name, reddit_username, reddit_post_title, reddit_post_content,
+        user_id, platform, channel_name, reddit_username, reddit_post_title, reddit_post_content,
         reddit_subreddit, channel_id, email, website, pain_points, lead_score, temperature
       ) VALUES (
-        @platform, @channel_name, @reddit_username, @reddit_post_title, @reddit_post_content,
+        @user_id, @platform, @channel_name, @reddit_username, @reddit_post_title, @reddit_post_content,
         @reddit_subreddit, @channel_id, @email, @website, @pain_points, @lead_score, @temperature
       )
     `);
 
     const r = stmt.run({
+      user_id: req.user.id,
       platform: 'reddit',
       channel_name: post.channel_name,
       reddit_username: post.reddit_username,
@@ -322,7 +324,7 @@ router.post('/bulk-action', asyncHandler(async (req, res) => {
 
   if (action === 'delete') {
     const placeholders = ids.map(() => '?').join(',');
-    db.prepare(`DELETE FROM leads WHERE id IN (${placeholders})`).run(...ids);
+    db.prepare(`DELETE FROM leads WHERE id IN (${placeholders}) AND user_id = ?`).run(...ids, req.user.id);
     return res.json({ success: true, affected: ids.length });
   }
 
@@ -330,7 +332,7 @@ router.post('/bulk-action', asyncHandler(async (req, res) => {
     const { stage } = req.body;
     if (!stage) return res.status(400).json({ success: false, error: 'stage required for move_stage' });
     const placeholders = ids.map(() => '?').join(',');
-    db.prepare(`UPDATE leads SET crm_stage = ?, updated_at = CURRENT_TIMESTAMP WHERE id IN (${placeholders})`).run(stage, ...ids);
+    db.prepare(`UPDATE leads SET crm_stage = ?, updated_at = CURRENT_TIMESTAMP WHERE id IN (${placeholders}) AND user_id = ?`).run(stage, ...ids, req.user.id);
     return res.json({ success: true, affected: ids.length });
   }
 
@@ -340,7 +342,7 @@ router.post('/bulk-action', asyncHandler(async (req, res) => {
 // GET /api/leads/export/csv
 router.get('/export/csv', asyncHandler(async (req, res) => {
   const db = getDb();
-  const leads = db.prepare('SELECT * FROM leads ORDER BY created_at DESC').all();
+  const leads = db.prepare('SELECT * FROM leads WHERE user_id = ? ORDER BY created_at DESC').all(req.user.id);
 
   const headers = ['id', 'channel_name', 'platform', 'subscriber_count', 'avg_views', 'engagement_rate',
     'temperature', 'lead_score', 'email', 'website', 'crm_stage', 'niche', 'country', 'created_at'];

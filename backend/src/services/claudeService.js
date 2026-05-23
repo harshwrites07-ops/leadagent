@@ -256,18 +256,27 @@ Return ONLY valid JSON (no markdown, no backticks):
     return parsePitchResponse(text, lead);
   }
 
-  // Up to 2 attempts — retry if score < 7 on first attempt
+  // Up to 2 attempts — retry if score < 8 on first attempt
+  // Once Gemini quota hits, use Claude directly for retries too (skip wasted second Gemini call)
+  let useClaudeDirect = false;
   for (let attempt = 0; attempt < 2; attempt++) {
     let text;
-    try {
-      text = await completeWithGemini(prompt, '', 1400, key, FAST_MODEL);
-    } catch (geminiErr) {
-      if (isQuotaError(geminiErr)) {
-        const anthropicKey = getAnthropicKey();
-        if (anthropicKey) text = await completeWithClaude(prompt, '', 1400, anthropicKey);
-        else throw new Error('Gemini quota exceeded and no Claude fallback key configured');
-      } else {
-        throw geminiErr;
+    if (useClaudeDirect) {
+      const anthropicKey = getAnthropicKey();
+      if (!anthropicKey) throw new Error('Gemini quota exceeded and no Claude fallback key configured');
+      text = await completeWithClaude(prompt, '', 1400, anthropicKey);
+    } else {
+      try {
+        text = await completeWithGemini(prompt, '', 1400, key, FAST_MODEL);
+      } catch (geminiErr) {
+        if (isQuotaError(geminiErr)) {
+          useClaudeDirect = true;
+          const anthropicKey = getAnthropicKey();
+          if (anthropicKey) text = await completeWithClaude(prompt, '', 1400, anthropicKey);
+          else throw new Error('Gemini quota exceeded and no Claude fallback key configured');
+        } else {
+          throw geminiErr;
+        }
       }
     }
 
@@ -279,7 +288,6 @@ Return ONLY valid JSON (no markdown, no backticks):
     return parsed;
   }
 
-  // Shouldn't reach here, but satisfy linter
   throw new Error('generateFullPitch exhausted retries');
 }
 

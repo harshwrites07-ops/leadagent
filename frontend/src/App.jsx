@@ -1,6 +1,7 @@
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout from './components/ui/Layout';
 import Dashboard from './pages/Dashboard';
 import LeadFinder from './pages/LeadFinder';
@@ -10,23 +11,105 @@ import CRM from './pages/CRM';
 import Analytics from './pages/Analytics';
 import Settings from './pages/Settings';
 import ChannelAnalyzer from './pages/ChannelAnalyzer';
+import Login from './pages/Login';
+import Signup from './pages/Signup';
+import PhoneLogin from './pages/PhoneLogin';
+import Verify from './pages/Verify';
+import Onboarding from './pages/Onboarding';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
+import Admin from './pages/Admin';
+import AdminSettings from './pages/AdminSettings';
+import VerifyEmail from './pages/VerifyEmail';
+
+const AUTH_ROUTES = ['/login', '/signup', '/phone-login', '/verify', '/forgot-password', '/reset-password'];
+
+function ProtectedRoute({ children }) {
+  const { user, loading } = useAuth();
+  const location = useLocation();
+
+  if (loading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-base)' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 9, background: 'var(--gradient-orange)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 20px rgba(255,69,0,0.35)' }}>
+            <span style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 900, color: '#fff' }}>CC</span>
+          </div>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.14em', color: 'var(--text-muted)' }}>LOADING...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
+  if (!user.onboarding_completed && location.pathname !== '/onboarding') {
+    return <Navigate to="/onboarding" replace />;
+  }
+  return children;
+}
+
+function PublicRoute({ children }) {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (user) return <Navigate to="/" replace />;
+  return children;
+}
+
+function AppRoutes() {
+  return (
+    <Routes>
+      {/* Public auth routes */}
+      <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+      <Route path="/signup" element={<PublicRoute><Signup /></PublicRoute>} />
+      <Route path="/phone-login" element={<PublicRoute><PhoneLogin /></PublicRoute>} />
+      <Route path="/forgot-password" element={<PublicRoute><ForgotPassword /></PublicRoute>} />
+      <Route path="/reset-password" element={<PublicRoute><ResetPassword /></PublicRoute>} />
+      <Route path="/verify" element={<Verify />} />
+      <Route path="/verify-email" element={<VerifyEmail />} />
+
+      {/* Onboarding — requires auth but not completed onboarding */}
+      <Route path="/onboarding" element={
+        <ProtectedAllowOnboarding><Onboarding /></ProtectedAllowOnboarding>
+      } />
+
+      {/* Protected app routes */}
+      <Route path="/*" element={
+        <ProtectedRoute>
+          <AppProvider>
+            <Layout>
+              <Routes>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/leads" element={<LeadFinder />} />
+                <Route path="/analyzer" element={<ChannelAnalyzer />} />
+                <Route path="/pitch/:leadId?" element={<PitchGenerator />} />
+                <Route path="/email" element={<EmailSender />} />
+                <Route path="/crm" element={<CRM />} />
+                <Route path="/analytics" element={<Analytics />} />
+                <Route path="/settings" element={<Settings />} />
+                <Route path="/admin" element={<Admin />} />
+                <Route path="/admin/settings" element={<AdminSettings />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </Layout>
+          </AppProvider>
+        </ProtectedRoute>
+      } />
+    </Routes>
+  );
+}
+
+// Allows authed users who haven't completed onboarding
+function ProtectedAllowOnboarding({ children }) {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (!user) return <Navigate to="/login" replace />;
+  return children;
+}
 
 export default function App() {
   return (
-    <AppProvider>
-      <Layout>
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/leads" element={<LeadFinder />} />
-          <Route path="/analyzer" element={<ChannelAnalyzer />} />
-          <Route path="/pitch/:leadId?" element={<PitchGenerator />} />
-          <Route path="/email" element={<EmailSender />} />
-          <Route path="/crm" element={<CRM />} />
-          <Route path="/analytics" element={<Analytics />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Layout>
-    </AppProvider>
+    <AuthProvider>
+      <AppRoutes />
+    </AuthProvider>
   );
 }

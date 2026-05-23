@@ -12,11 +12,15 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const compression = require('compression');
+const session = require('express-session');
+const passport = require('passport');
+const { Strategy: GoogleStrategy } = require('passport-google-oauth20');
 
 const { apiLimiter } = require('./src/middleware/rateLimiter');
 const { errorHandler } = require('./src/middleware/errorHandler');
-const { getDb } = require('./src/models/database');
+const { getDb, getUserById, getUserByEmail, BetterSQLiteStore } = require('./src/models/database');
 const { startQueueProcessor } = require('./src/services/schedulerService');
+const { requireAuth } = require('./src/middleware/requireAuth');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -31,33 +35,127 @@ getDb();
 const FRONTEND_DIST = path.join(__dirname, '../frontend/dist');
 const isProd = process.env.NODE_ENV === 'production' || require('fs').existsSync(FRONTEND_DIST + '/index.html');
 
-app.use(compression());
+app.use(compression({
+  filter: (req, res) => {
+    // Never compress SSE streams — compression buffers them and breaks streaming
+    if (req.headers.accept === 'text/event-stream') return false;
+    return compression.filter(req, res);
+  },
+}));
 app.use(cors({
-  origin: isProd ? '*' : (process.env.FRONTEND_URL || 'http://localhost:5173'),
+  origin: isProd ? (process.env.FRONTEND_URL || true) : (process.env.FRONTEND_URL || 'http://localhost:5173'),
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// Session middleware
+// Use RAILWAY_STATIC_URL (or FORCE_HTTPS=true) to detect actual HTTPS deployment.
+// NODE_ENV=production alone is not enough — local dev can have NODE_ENV=production.
+const isHttps = !!(process.env.RAILWAY_STATIC_URL || process.env.FORCE_HTTPS === 'true');
+const sessionStore = new BetterSQLiteStore(session);
+app.use(session({
+  store: sessionStore,
+  secret: process.env.SESSION_SECRET || 'dev-secret-change-in-production',
+  resave: false,
+  saveUninitialized: false,
+  name: 'ccz.sid',
+  cookie: {
+    httpOnly: true,
+    secure: isHttps,
+    sameSite: isHttps ? 'none' : 'lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  },
+}));
+
+// Passport
+passport.serializeUser((user, done) => done(null, user.id));
+passport.deserializeUser((id, done) => {
+  try { done(null, getUserById(id) || false); } catch (e) { done(e); }
+});
+
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  const appUrl = process.env.APP_URL || `http://localhost:${PORT}`;
+  passport.use(new GoogleStrategy({
+    clientID: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    callbackURL: `${appUrl}/api/auth/google/callback`,
+  }, async (accessToken, refreshToken, profile, done) => {
+    try {
+      const db = getDb();
+      const email = profile.emails?.[0]?.value;
+      if (!email) return done(new Error('No email from Google'));
+
+      let user = getUserByEmail(email);
+      if (user) {
+        if (!user.google_id) {
+          db.prepare(`UPDATE users SET google_id=?, last_login=CURRENT_TIMESTAMP WHERE id=?`).run(profile.id, user.id);
+        } else {
+          db.prepare(`UPDATE users SET last_login=CURRENT_TIMESTAMP WHERE id=?`).run(user.id);
+        }
+        return done(null, getUserById(user.id));
+      }
+      // New user via Google
+      const result = db.prepare(`
+        INSERT INTO users (email, google_id, full_name, email_verified, profile_picture, plan)
+        VALUES (?, ?, ?, 1, ?, 'free')
+      `).run(email, profile.id, profile.displayName || email.split('@')[0], profile.photos?.[0]?.value || null);
+      done(null, getUserById(result.lastInsertRowid));
+    } catch (e) { done(e); }
+  }));
+}
+
+app.use(passport.initialize());
+app.use(passport.session());
+
 app.use('/api', apiLimiter);
 
-// Tracking pixel route (before auth)
+// Tracking pixel route (public — no auth needed)
 const emailsRouter = require('./src/routes/emails');
 app.get('/api/track/open/:trackingId', (req, res, next) => {
   req.url = `/track/open/${req.params.trackingId}`;
   emailsRouter(req, res, next);
 });
 
-// Routes
-app.use('/api/leads', require('./src/routes/leads'));
-app.use('/api/pitches', require('./src/routes/pitches'));
-app.use('/api/emails', emailsRouter);
-app.use('/api/crm', require('./src/routes/crm'));
-app.use('/api/analytics', require('./src/routes/analytics'));
-app.use('/api/settings', require('./src/routes/settings'));
-app.use('/api/scraper', require('./src/routes/scraper'));
-app.use('/api/analyzer', require('./src/routes/analyzer'));
-app.use('/api/assistant', require('./src/routes/assistant'));
-app.use('/api/followups', require('./src/routes/followups'));
+// Public auth routes (no requireAuth)
+app.use('/api/auth', require('./src/routes/auth'));
+
+// Google OAuth flow routes
+app.get('/api/auth/google', (req, res, next) => {
+  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+    return res.redirect('/login?error=google_not_configured');
+  }
+  passport.authenticate('google', { scope: ['profile', 'email'] })(req, res, next);
+});
+app.get('/api/auth/google/callback',
+  passport.authenticate('google', { failureRedirect: '/login?error=google_failed' }),
+  (req, res) => {
+    req.session.userId = req.user.id;
+    req.session.save(() => {
+      const user = req.user;
+      if (!user.onboarding_completed) return res.redirect('/onboarding');
+      res.redirect('/');
+    });
+  }
+);
+
+// Health check (public)
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '1.0.0' });
+});
+
+// Protected API routes
+app.use('/api/leads', requireAuth, require('./src/routes/leads'));
+app.use('/api/pitches', requireAuth, require('./src/routes/pitches'));
+app.use('/api/emails', requireAuth, emailsRouter);
+app.use('/api/crm', requireAuth, require('./src/routes/crm'));
+app.use('/api/analytics', requireAuth, require('./src/routes/analytics'));
+app.use('/api/settings', requireAuth, require('./src/routes/settings'));
+app.use('/api/gmail', require('./src/routes/gmail'));
+app.use('/api/scraper', requireAuth, require('./src/routes/scraper'));
+app.use('/api/analyzer', requireAuth, require('./src/routes/analyzer'));
+app.use('/api/assistant', requireAuth, require('./src/routes/assistant'));
+app.use('/api/followups', requireAuth, require('./src/routes/followups'));
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -103,6 +201,18 @@ app.listen(PORT, '0.0.0.0', () => {
 
   startQueueProcessor();
   console.log('   Email queue processor started');
+
+  // Mark any jobs that were 'running' before this boot as interrupted
+  // (they died when the server restarted — their async runners are gone)
+  try {
+    const db = getDb();
+    const stale = db.prepare(`UPDATE power_send_jobs SET status='interrupted', completed_at=CURRENT_TIMESTAMP WHERE status='running'`).run();
+    if (stale.changes > 0) console.log(`   Marked ${stale.changes} interrupted job(s) from previous session`);
+
+    // Clean email_queue items stuck in 'sending' — they'll never complete after a restart
+    const stuckQueue = db.prepare(`UPDATE email_queue SET status='failed' WHERE status='sending'`).run();
+    if (stuckQueue.changes > 0) console.log(`   Cleared ${stuckQueue.changes} stuck queue item(s) from previous session`);
+  } catch {}
 
   // Self-ping every 14 minutes to prevent Railway sleep
   if (process.env.NODE_ENV === 'production' || process.env.SELF_PING === 'true') {

@@ -288,8 +288,22 @@ async function buildChannelProfile(ch, earlyEmail = null) {
 // ─── Utilities ─────────────────────────────────────────────────────────────────
 
 function extractEmail(text) {
-  const match = text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
-  return match ? match[0] : null;
+  // Match all emails in text, then pick the cleanest one
+  const all = [...text.matchAll(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g)].map(m => m[0]);
+  for (const raw of all) {
+    // Strip known garbage prefixes that creep in from surrounding text
+    // e.g. "ninfo@..." (letter+lowercase), "CONTACT-foo@...", "-foo@..."
+    let email = raw;
+    email = email.replace(/^[^a-zA-Z0-9]+/, '');            // strip leading non-alphanumeric
+    email = email.replace(/^[A-Z]{2,}-/i, '');              // strip ALL-CAPS- prefix like CONTACT-, EMAIL-
+    // If starts with single lowercase letter + capital (scraping artifact: "nFoo@" → "foo@")
+    if (/^[a-z][A-Z]/.test(email)) email = email.slice(1);
+    // Validate the cleaned result
+    if (/^[a-zA-Z0-9][a-zA-Z0-9._%+\-]{1,}@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/.test(email)) {
+      return email.toLowerCase();
+    }
+  }
+  return null;
 }
 
 const SYSTEM_DOMAINS = ['youtube.com', 'google.com', 'googlemail.com', 'googleapis.com', 'gstatic.com', 'ggpht.com', 'ytimg.com', 'sentry.io'];

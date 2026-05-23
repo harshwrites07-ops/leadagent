@@ -5,6 +5,58 @@ const { v4: uuidv4 } = require('uuid');
 const transporters = new Map();
 let roundRobinIdx = 0;
 
+function isValidEmailFormat(email) {
+  if (!email || typeof email !== 'string') return false;
+  const e = email.trim();
+  const atIdx = e.indexOf('@');
+  if (atIdx < 2) return false; // local part must be >= 2 chars — rejects 'n@...'
+  const domain = e.substring(atIdx + 1);
+  if (!domain.includes('.')) return false;
+  const tld = domain.split('.').pop();
+  if (tld.length < 2) return false;
+  return /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/.test(e);
+}
+
+// MX record validation cache — prevents sending to domains with no mail server
+const mxCache = new Map();
+const MX_CACHE_TTL_VALID = 24 * 60 * 60 * 1000;
+const MX_CACHE_TTL_FAIL  =  1 * 60 * 60 * 1000;
+
+async function hasMxRecord(domain) {
+  const now = Date.now();
+  const cached = mxCache.get(domain);
+  if (cached) {
+    const ttl = cached.valid ? MX_CACHE_TTL_VALID : MX_CACHE_TTL_FAIL;
+    if (now - cached.checkedAt < ttl) return cached.valid;
+  }
+  const dns = require('dns').promises;
+  const withTimeout = (p) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(Object.assign(new Error('timeout'), { code: 'ETIMEOUT' })), 5000))]);
+  try {
+    const records = await withTimeout(dns.resolveMx(domain));
+    const valid = Array.isArray(records) && records.length > 0;
+    mxCache.set(domain, { valid, checkedAt: now });
+    return valid;
+  } catch (mxErr) {
+    const code = mxErr.code || '';
+    if (code === 'ENOTFOUND' || code === 'ENODATA') {
+      mxCache.set(domain, { valid: false, checkedAt: now });
+      return false;
+    }
+    // resolveMx() fails on Windows with ECONNREFUSED — fall back to A-record existence check
+    try {
+      await withTimeout(dns.lookup(domain));
+      mxCache.set(domain, { valid: true, checkedAt: now });
+      return true;
+    } catch (lookupErr) {
+      if ((lookupErr.code || '') === 'ENOTFOUND') {
+        mxCache.set(domain, { valid: false, checkedAt: now });
+        return false;
+      }
+      return true; // Can't determine — allow send rather than block
+    }
+  }
+}
+
 // Returns all configured inboxes — env vars take priority over DB
 function getInboxes() {
   const inboxes = [];
@@ -77,10 +129,13 @@ function resetTransporter() {
   transporters.clear();
 }
 
-// Round-robin selection, skips inboxes over daily limit
-async function selectInbox(db) {
-  const inboxes = getInboxes();
-  if (inboxes.length === 0) throw new Error('SMTP not configured — add SMTP_USER_1/SMTP_PASS_1 to .env or configure in Settings');
+// Round-robin selection, skips inboxes over daily limit or in skipInboxes list
+async function selectInbox(db, skipInboxes = []) {
+  const allInboxes = getInboxes();
+  if (allInboxes.length === 0) throw new Error('SMTP not configured — add SMTP_USER_1/SMTP_PASS_1 to .env or configure in Settings');
+
+  const inboxes = skipInboxes.length ? allInboxes.filter(i => !skipInboxes.includes(i.email)) : allInboxes;
+  if (inboxes.length === 0) throw new Error('per_account_limit reached for all inboxes in this run');
 
   const perInboxLimit = parseInt(getSetting('daily_send_limit') || '150');
 
@@ -123,33 +178,89 @@ async function testSmtp(config) {
   }
 }
 
-async function sendEmail({ to, subject, body, leadId, followUpNumber = 0 }) {
+async function sendEmail({ to, subject, body, leadId, followUpNumber = 0, skipInboxes = [], userId = null }) {
   const db = getDb();
+
+  if (!isValidEmailFormat(to)) {
+    if (leadId) {
+      db.prepare(`UPDATE leads SET email_invalid=1, bounce_reason='invalid_format', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(leadId);
+    }
+    throw new Error(`Invalid email address skipped: ${to}`);
+  }
+
+  // MX record check
+  const emailDomain = to.split('@')[1]?.toLowerCase();
+  if (emailDomain) {
+    const mxOk = await hasMxRecord(emailDomain);
+    if (!mxOk) {
+      if (leadId) {
+        db.prepare(`UPDATE leads SET email_invalid=1, bounce_reason='no_mx_record', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(leadId);
+      }
+      throw new Error(`Domain ${emailDomain} has no MX record — email would bounce`);
+    }
+  }
+
   const trackingId = uuidv4();
-  const appUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-
-  const inbox = await selectInbox(db);
-  const fromName = inbox.from_name || 'ContentCrafterzz';
-  const fromEmail = inbox.email;
-
-  // Use APP_URL (public domain) so recipients can actually hit the tracking endpoint
-  const publicUrl = process.env.APP_URL || appUrl.replace('5173', '3001');
+  const publicUrl = process.env.APP_URL || 'http://localhost:3001';
   const trackingPixel = `<img src="${publicUrl}/api/track/open/${trackingId}" width="1" height="1" style="display:none" />`;
   const htmlBody = body.replace(/\n/g, '<br>') + trackingPixel;
 
+  let fromEmail;
+  let messageId;
+
+  // Try Gmail OAuth first if user has connected accounts
+  if (userId) {
+    try {
+      const { pickAccountForUser, sendViaGmail } = require('./gmailService');
+      const gmailAccount = pickAccountForUser(userId);
+      if (gmailAccount) {
+        await sendViaGmail(gmailAccount, { to, subject, htmlBody, fromName: 'ContentCrafterzz' });
+        fromEmail = gmailAccount.email;
+        messageId = `gmail-${trackingId}`;
+
+        const emailRecord = db.prepare(`
+          INSERT INTO emails (lead_id, subject, body, status, sent_at, tracking_id, follow_up_number, from_email, user_id)
+          VALUES (?, ?, ?, 'sent', CURRENT_TIMESTAMP, ?, ?, ?, ?)
+        `).run(leadId, subject, body, trackingId, followUpNumber, fromEmail, userId);
+
+        logActivity('email_sent', `Email sent to lead #${leadId} via Gmail (${fromEmail})`, leadId, { subject });
+        return { emailId: emailRecord.lastInsertRowid, trackingId, messageId, fromEmail };
+      }
+    } catch (gmailErr) {
+      console.warn('[Email] Gmail send failed, falling back to SMTP:', gmailErr.message);
+    }
+  }
+
+  // Fall back to SMTP
+  const inbox = await selectInbox(db, skipInboxes);
+  fromEmail = inbox.email;
+  const fromName = inbox.from_name || 'ContentCrafterzz';
+
   const t = getTransporterForInbox(inbox);
-  const info = await t.sendMail({
-    from: `"${fromName}" <${fromEmail}>`,
-    to,
-    subject,
-    text: body,
-    html: htmlBody,
-  });
+  let info;
+  try {
+    info = await t.sendMail({
+      from: `"${fromName}" <${fromEmail}>`,
+      to,
+      subject,
+      text: body,
+      html: htmlBody,
+    });
+  } catch (smtpErr) {
+    const code = smtpErr.responseCode || smtpErr.code || 0;
+    const msg = (smtpErr.message || '').toLowerCase();
+    const isHardBounce = code >= 500 || /user.*not.*found|no.*such.*user|does.*not.*exist|invalid.*address|mailbox.*unavailable|address.*rejected/i.test(msg);
+    if (isHardBounce && leadId) {
+      db.prepare(`UPDATE leads SET email_invalid=1, bounce_reason='hard_bounce', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(leadId);
+      db.prepare(`INSERT INTO emails (lead_id, subject, body, status, sent_at, tracking_id, follow_up_number, from_email, bounce_reason, user_id) VALUES (?, ?, ?, 'bounced', CURRENT_TIMESTAMP, ?, ?, ?, 'hard_bounce', ?)`).run(leadId, subject, body, trackingId, followUpNumber, fromEmail, userId);
+    }
+    throw smtpErr;
+  }
 
   const emailRecord = db.prepare(`
-    INSERT INTO emails (lead_id, subject, body, status, sent_at, tracking_id, follow_up_number, from_email)
-    VALUES (?, ?, ?, 'sent', CURRENT_TIMESTAMP, ?, ?, ?)
-  `).run(leadId, subject, body, trackingId, followUpNumber, fromEmail);
+    INSERT INTO emails (lead_id, subject, body, status, sent_at, tracking_id, follow_up_number, from_email, user_id)
+    VALUES (?, ?, ?, 'sent', CURRENT_TIMESTAMP, ?, ?, ?, ?)
+  `).run(leadId, subject, body, trackingId, followUpNumber, fromEmail, userId);
 
   logActivity('email_sent', `Email sent to lead #${leadId} via ${fromEmail}`, leadId, { subject, messageId: info.messageId });
 
@@ -158,6 +269,7 @@ async function sendEmail({ to, subject, body, leadId, followUpNumber = 0 }) {
 
 async function processQueue() {
   const db = getDb();
+  if (getSetting('queue_paused') === '1') return { processed: 0, reason: 'Queue paused' };
   const perInboxLimit = parseInt(getSetting('daily_send_limit') || '150');
   const inboxes = getInboxes();
   const totalLimit = perInboxLimit * Math.max(inboxes.length, 1);
@@ -184,11 +296,12 @@ async function processQueue() {
   }
 
   const item = db.prepare(`
-    SELECT eq.*, l.email, l.channel_name
+    SELECT eq.*, l.email, l.channel_name, l.email_invalid
     FROM email_queue eq
     JOIN leads l ON l.id = eq.lead_id
     WHERE eq.status = 'pending'
     AND (eq.scheduled_at IS NULL OR eq.scheduled_at <= CURRENT_TIMESTAMP)
+    AND (l.email_invalid IS NULL OR l.email_invalid = 0)
     ORDER BY eq.priority DESC, eq.created_at ASC
     LIMIT 1
   `).get();
@@ -208,6 +321,7 @@ async function processQueue() {
       subject: item.subject,
       body: item.body,
       leadId: item.lead_id,
+      userId: item.user_id || null,
     });
 
     db.prepare(`UPDATE email_queue SET status = 'sent', sent_at = CURRENT_TIMESTAMP, email_id = ? WHERE id = ?`)
@@ -306,76 +420,180 @@ async function checkReplies() {
 }
 
 // ── MIME body parser — extracts readable plain text from raw MIME ─────────────
+function decodeQP(str) {
+  return str.replace(/=\r?\n/g, '').replace(/=([0-9A-Fa-f]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+}
+
+function stripHtml(html) {
+  return html
+    .replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>/gi, '\n').replace(/<\/div>/gi, '\n')
+    .replace(/<blockquote[^>]*>[\s\S]*?<\/blockquote>/gi, '')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ').replace(/&#39;/g, "'").replace(/&quot;/g, '"')
+    .replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function stripQuotes(text) {
+  const lines = text.split('\n');
+  const out = [];
+  for (const line of lines) {
+    const t = line.trimStart();
+    if (t.startsWith('>')) continue;
+    if (/^On .{10,200}(wrote|said):/i.test(t)) break;
+    if (/^-{3,}\s*(Original|Forwarded)/i.test(t)) break;
+    out.push(line);
+  }
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function extractPartBody(part) {
+  const sep = part.includes('\r\n\r\n') ? '\r\n\r\n' : '\n\n';
+  const sepIdx = part.indexOf(sep);
+  if (sepIdx === -1) return null;
+  const headers = part.substring(0, sepIdx);
+  let body = part.substring(sepIdx + sep.length);
+  const encoding = headers.match(/Content-Transfer-Encoding:\s*(\S+)/i)?.[1]?.toLowerCase();
+  if (encoding === 'quoted-printable') body = decodeQP(body);
+  else if (encoding === 'base64') { try { body = Buffer.from(body.replace(/\s/g, ''), 'base64').toString('utf8'); } catch {} }
+  return { headers, body };
+}
+
 function parseMimeBody(raw) {
   if (!raw) return '';
 
-  // Decode quoted-printable (=XX hex sequences and soft line breaks)
-  function decodeQP(str) {
-    return str.replace(/=\r?\n/g, '').replace(/=([0-9A-Fa-f]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
-  }
-
-  // Strip HTML tags to plain text
-  function stripHtml(html) {
-    return html
-      .replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>/gi, '\n').replace(/<\/div>/gi, '\n')
-      .replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').replace(/&#39;/g, "'")
-      .replace(/&quot;/g, '"').replace(/\n{3,}/g, '\n\n').trim();
-  }
-
-  // Strip quoted reply lines (>, "On ... wrote:")
-  function stripQuotes(text) {
-    return text.split('\n')
-      .filter(l => !l.trimStart().startsWith('>') && !/^On .{10,200} wrote:/.test(l.trim()))
-      .join('\n').replace(/\n{3,}/g, '\n\n').trim();
-  }
-
-  let result = '';
-
-  if (raw.includes('Content-Type:')) {
-    // Multipart MIME — try text/plain first
-    const plainMatch = raw.match(/Content-Type:\s*text\/plain[^\n]*\n((?:[A-Za-z-]+:[^\n]*\n)*)\n([\s\S]*?)(?=\n--|\n\r\n--|$)/i);
-    if (plainMatch) {
-      const encoding = plainMatch[1].match(/Content-Transfer-Encoding:\s*(\S+)/i)?.[1]?.toLowerCase();
-      let body = plainMatch[2];
-      if (encoding === 'quoted-printable') body = decodeQP(body);
-      else if (encoding === 'base64') { try { body = Buffer.from(body.replace(/\s/g, ''), 'base64').toString('utf8'); } catch {} }
-      result = stripQuotes(body);
-    }
-
-    // Fallback: try text/html
-    if (!result) {
-      const htmlMatch = raw.match(/Content-Type:\s*text\/html[^\n]*\n((?:[A-Za-z-]+:[^\n]*\n)*)\n([\s\S]*?)(?=\n--|\n\r\n--|$)/i);
-      if (htmlMatch) {
-        const encoding = htmlMatch[1].match(/Content-Transfer-Encoding:\s*(\S+)/i)?.[1]?.toLowerCase();
-        let body = htmlMatch[2];
-        if (encoding === 'quoted-printable') body = decodeQP(body);
-        else if (encoding === 'base64') { try { body = Buffer.from(body.replace(/\s/g, ''), 'base64').toString('utf8'); } catch {} }
-        result = stripQuotes(stripHtml(body));
+  // Try boundary-based splitting first (most reliable)
+  const boundaryMatch = raw.match(/boundary="?([^"\r\n;]+)"?/i);
+  if (boundaryMatch) {
+    const b = boundaryMatch[1].trim();
+    const escaped = b.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const parts = raw.split(new RegExp(`--${escaped}(?:--)?\\r?\\n?`));
+    let plainText = '', htmlText = '';
+    for (const part of parts) {
+      if (/Content-Type:\s*text\/plain/i.test(part) && !plainText) {
+        const r = extractPartBody(part);
+        if (r) plainText = stripQuotes(r.body.trim());
+      }
+      if (/Content-Type:\s*text\/html/i.test(part) && !htmlText) {
+        const r = extractPartBody(part);
+        if (r) htmlText = stripQuotes(stripHtml(r.body));
       }
     }
+    const result = plainText || htmlText;
+    if (result && result.length > 3) return result.substring(0, 3000);
   }
 
-  // Not multipart — treat as raw plain text
-  if (!result) {
-    result = stripQuotes(raw.replace(/[^\x09\x0A\x0D\x20-\x7E]/g, ' ').trim());
+  // Single-part MIME with headers
+  if (raw.includes('Content-Type:')) {
+    const r = extractPartBody(raw);
+    if (r) {
+      const isHtml = /Content-Type:\s*text\/html/i.test(r.headers);
+      const cleaned = stripQuotes(isHtml ? stripHtml(r.body) : r.body.trim());
+      if (cleaned && cleaned.length > 3) return cleaned.substring(0, 3000);
+    }
   }
 
-  return result.substring(0, 3000) || '(empty reply)';
+  // Last resort: strip MIME noise and return what's left
+  let text = raw;
+  text = text.replace(/^--[a-zA-Z0-9_\-]+\r?$/gm, '');
+  text = text.replace(/^[A-Za-z-]+:\s*.+\r?$/gm, '');
+  text = text.replace(/<img[^>]*>/gi, '');
+  text = decodeQP(text);
+  if (text.includes('<')) text = stripHtml(text);
+  text = stripQuotes(text.replace(/\n{3,}/g, '\n\n').trim());
+  return text.substring(0, 3000) || '(empty reply)';
+}
+
+// Apply to already-stored bodies that may be raw or partially-parsed MIME
+function ensureClean(text) {
+  if (!text) return text;
+
+  // Full MIME with boundary declaration — parse properly
+  if (/boundary="/i.test(text)) return parseMimeBody(text);
+
+  // Body starts with a MIME boundary line (imap-simple returns raw multipart body)
+  // Infer the boundary from line 1 and inject a fake header so parseMimeBody can split it
+  const firstLine = text.split(/\r?\n/)[0];
+  if (/^--[a-zA-Z0-9_\-\.]{10,}$/.test(firstLine)) {
+    const boundary = firstLine.substring(2);
+    const fakeMime = `Content-Type: multipart/alternative; boundary="${boundary}"\r\n\r\n${text}`;
+    return parseMimeBody(fakeMime);
+  }
+
+  // Partially-parsed: MIME boundary embedded mid-text — chop at it
+  const mimeIdx = text.search(/^--[a-zA-Z0-9]{10,}\s*$/m);
+  if (mimeIdx > 0) text = text.substring(0, mimeIdx);
+
+  // Strip quoted original (everything from "On Mon/Tue/..." or "On ... wrote:" onward)
+  const lines = text.split('\n');
+  const out = [];
+  for (const line of lines) {
+    const t = line.trimStart();
+    if (t.startsWith('>')) continue;
+    if (/^On .{10,200}(wrote|said):/i.test(t)) break;
+    if (/^On (Mon|Tue|Wed|Thu|Fri|Sat|Sun)[,\s]/i.test(t)) break;
+    if (/^-{3,}\s*(Original|Forwarded)/i.test(t)) break;
+    out.push(line);
+  }
+  text = out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+
+  if (text.includes('<')) text = stripHtml(text);
+
+  return text || '(empty reply)';
 }
 
 // ── Spam folder & bounce detector ─────────────────────────────────────────────
 // Checks each inbox for Mailer-Daemon bounce-backs (delivery failures/spam rejections)
+// rawBody = full MIME text body (before parsing) so DSN headers are searchable
+function extractBouncedAddress(subject, parsedBody, rawBody) {
+  const allText = [(parsedBody || ''), (rawBody || ''), (subject || '')].join('\n');
+
+  // DSN machine-readable format (highest reliability) — present in raw MIME before parsing
+  const dsnMatch = allText.match(/(?:Final|Original)-Recipient:\s*[^;]*;\s*([\w.+\-]{2,}@[\w.\-]+\.[a-zA-Z]{2,})/i);
+  if (dsnMatch) return dsnMatch[1].toLowerCase();
+
+  // Gmail human-readable: "message to X", "delivered to X", "delivery to X"
+  const toMatch = allText.match(/(?:message to|deliver(?:ed|y) to|address:?)\s+([\w.+\-]{2,}@[\w.\-]+\.[a-zA-Z]{2,})/i);
+  if (toMatch) return toMatch[1].toLowerCase();
+
+  // Gmail "Delivery to the following recipient failed permanently:\n\n   user@domain.com"
+  const recipientBlock = allText.match(/(?:following recipient[^:]*failed|failed permanently)[:\s\n]+([\w.+\-]{2,}@[\w.\-]+\.[a-zA-Z]{2,})/i);
+  if (recipientBlock) return recipientBlock[1].toLowerCase();
+
+  // Standalone email on its own line in the parsed body (common in Gmail DSNs)
+  const standaloneMatch = (parsedBody || '').match(/^\s*([\w.+\-]{2,}@[\w.\-]+\.[a-zA-Z]{2,})\s*$/m);
+  if (standaloneMatch) return standaloneMatch[1].toLowerCase();
+
+  // Subject: "Message not delivered to X" or "Undelivered mail to X"
+  if (subject) {
+    const subjectMatch = subject.match(/(?:message to|undelivered.*?to|delivery.*?to)\s+([\w.+\-]{2,}@[\w.\-]+\.[a-zA-Z]{2,})/i);
+    if (subjectMatch) return subjectMatch[1].toLowerCase();
+  }
+
+  // Last resort: any non-own-domain, non-system email in the combined text
+  const ownDomain = '@quelro.com';
+  const allEmails = [...allText.matchAll(/([\w.+\-]{2,}@[\w.\-]+\.[a-zA-Z]{2,})/g)].map(m => m[1].toLowerCase());
+  return allEmails.find(e =>
+    !e.includes(ownDomain) &&
+    !e.includes('google') &&
+    !e.includes('mailer') &&
+    !e.includes('noreply') &&
+    !e.includes('postmaster') &&
+    !e.includes('bounce')
+  ) || null;
+}
+
 async function checkSpamFolders() {
   const imapSimple = require('imap-simple');
   const inboxes = getInboxes();
-  const results = [];
+  const db = getDb();
 
-  for (const inbox of inboxes) {
+  const checkOneInbox = async (inbox) => {
     const report = {
       email: inbox.email,
-      bounceEmails: [],    // Mailer-Daemon failures found in INBOX
-      spamCount: 0,        // Emails in [Gmail]/Spam
+      bounceEmails: [],
+      newlyMarked: 0,
+      spamCount: 0,
       error: null,
     };
 
@@ -388,7 +606,7 @@ async function checkSpamFolders() {
           port: 993,
           tls: true,
           tlsOptions: { rejectUnauthorized: false },
-          authTimeout: 12000,
+          authTimeout: 15000,
         },
       };
 
@@ -404,21 +622,45 @@ async function checkSpamFolders() {
           ['FROM', 'mailer-daemon'],
           ['FROM', 'postmaster'],
         ]],
-        { bodies: ['HEADER'], markSeen: false }
+        { bodies: ['HEADER', 'TEXT'], markSeen: false }
       );
 
       for (const msg of bounces) {
         const header = msg.parts.find(p => p.which === 'HEADER')?.body || {};
+        const textPart = msg.parts.find(p => p.which === 'TEXT');
         const subject = header.subject?.[0] || '';
         const from = header.from?.[0] || '';
         const date = header.date?.[0] || '';
-        // Extract original recipient from subject line if possible
-        const toMatch = subject.match(/(?:delivery|failure|undeliverable|returned).{0,30}?([\w.+-]+@[\w.-]+)/i);
+        const rawBody = textPart?.body || '';
+        const parsedBody = rawBody ? parseMimeBody(rawBody) : '';
+
+        const bouncedEmail = extractBouncedAddress(subject, parsedBody, rawBody);
+
+        let matched = false;
+        let alreadyInvalid = false;
+        if (bouncedEmail && isValidEmailFormat(bouncedEmail)) {
+          const bouncedLead = db.prepare(`SELECT id, email_invalid FROM leads WHERE LOWER(email) = LOWER(?)`).get(bouncedEmail);
+          if (bouncedLead) {
+            matched = true;
+            alreadyInvalid = !!bouncedLead.email_invalid;
+            if (!alreadyInvalid) {
+              const isSoft = /temporary|retry|delayed/i.test(subject + parsedBody);
+              const reason = isSoft ? 'soft_bounce' : 'hard_bounce';
+              db.prepare(`UPDATE leads SET email_invalid=1, bounce_reason=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(reason, bouncedLead.id);
+              db.prepare(`UPDATE emails SET status='bounced', bounce_reason=? WHERE lead_id=? AND status='sent' ORDER BY sent_at DESC LIMIT 1`).run(reason, bouncedLead.id);
+              logActivity('bounce_detected', `Bounce: ${bouncedEmail} (${reason})`, bouncedLead.id);
+              report.newlyMarked++;
+            }
+          }
+        }
+
         report.bounceEmails.push({
           from: from.substring(0, 80),
           subject: subject.substring(0, 120),
           date,
-          originalRecipient: toMatch?.[1] || null,
+          extractedEmail: bouncedEmail || null,
+          matched,
+          alreadyInvalid,
         });
       }
 
@@ -434,10 +676,83 @@ async function checkSpamFolders() {
       report.error = e.message;
     }
 
-    results.push(report);
+    return report;
+  };
+
+  // Check all inboxes in parallel — total time = slowest inbox, not sum of all
+  const settled = await Promise.allSettled(inboxes.map(checkOneInbox));
+  return settled.map((r, i) =>
+    r.status === 'fulfilled'
+      ? r.value
+      : { email: inboxes[i].email, bounceEmails: [], newlyMarked: 0, spamCount: 0, error: r.reason?.message || 'Unknown error' }
+  );
+}
+
+async function sendReply({ to, fromEmail, subject, body, emailId }) {
+  const inboxes = getInboxes();
+  const inbox = inboxes.find(i => i.email === fromEmail);
+  if (!inbox) throw new Error(`Inbox not configured for ${fromEmail} — check your SMTP settings`);
+
+  const t = getTransporterForInbox(inbox);
+  const fromName = inbox.from_name || 'ContentCrafterzz';
+
+  const info = await t.sendMail({
+    from: `"${fromName}" <${fromEmail}>`,
+    to,
+    subject,
+    text: body,
+    html: body.replace(/\n/g, '<br>'),
+  });
+
+  if (emailId) {
+    const db = getDb();
+    db.prepare(`UPDATE emails SET my_reply_body=?, my_reply_sent_at=CURRENT_TIMESTAMP WHERE id=?`).run(body, emailId);
   }
 
+  return { messageId: info.messageId, fromEmail };
+}
+
+async function checkDeliverability() {
+  const dns = require('dns').promises;
+  const inboxes = getInboxes();
+  const domains = [...new Set(inboxes.map(i => i.email.split('@')[1]).filter(Boolean))];
+  const results = [];
+
+  for (const domain of domains) {
+    const r = { domain, spf: null, dmarc: null, issues: [] };
+
+    try {
+      const txt = await dns.resolveTxt(domain);
+      const spf = txt.map(t => t.join('')).find(t => t.startsWith('v=spf1'));
+      if (spf) {
+        r.spf = { found: true, record: spf, hasGoogle: spf.includes('_spf.google.com') };
+        if (!spf.includes('_spf.google.com')) r.issues.push(`SPF exists but missing Google: add "include:_spf.google.com"`);
+      } else {
+        r.spf = { found: false };
+        r.issues.push(`No SPF record → add TXT on ${domain}: v=spf1 include:_spf.google.com ~all`);
+      }
+    } catch {
+      r.spf = { found: false };
+      r.issues.push(`SPF lookup failed for ${domain}`);
+    }
+
+    try {
+      const txt = await dns.resolveTxt(`_dmarc.${domain}`);
+      const dmarc = txt.map(t => t.join('')).find(t => t.startsWith('v=DMARC1'));
+      if (dmarc) {
+        r.dmarc = { found: true, record: dmarc };
+      } else {
+        r.dmarc = { found: false };
+        r.issues.push(`No DMARC record → add TXT on _dmarc.${domain}: v=DMARC1; p=none; rua=mailto:postmaster@${domain}`);
+      }
+    } catch {
+      r.dmarc = { found: false };
+      r.issues.push(`No DMARC record → add TXT on _dmarc.${domain}: v=DMARC1; p=none; rua=mailto:postmaster@${domain}`);
+    }
+
+    results.push(r);
+  }
   return results;
 }
 
-module.exports = { sendEmail, processQueue, testSmtp, resetTransporter, checkReplies, getInboxes, checkSpamFolders };
+module.exports = { sendEmail, sendReply, processQueue, testSmtp, resetTransporter, checkReplies, getInboxes, checkSpamFolders, checkDeliverability, isValidEmailFormat, ensureClean, hasMxRecord };

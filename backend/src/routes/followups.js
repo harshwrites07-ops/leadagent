@@ -8,25 +8,28 @@ const { sendEmail } = require('../services/emailService');
 // GET /api/followups/pending — count leads due for follow-up
 router.get('/pending', asyncHandler(async (req, res) => {
   const db = getDb();
+  const uid = req.user.id;
   const due = db.prepare(`
     SELECT COUNT(*) as count FROM leads
-    WHERE crm_stage = 'emailed'
+    WHERE user_id = ?
+      AND crm_stage = 'emailed'
       AND follow_up_status = 'active'
       AND follow_up_count < 5
       AND last_contacted_date IS NOT NULL
       AND email IS NOT NULL AND email != ''
       AND julianday('now') - julianday(last_contacted_date) >= 3
-  `).get();
+  `).get(uid);
 
   const breakdown = db.prepare(`
     SELECT follow_up_count, COUNT(*) as n FROM leads
-    WHERE crm_stage = 'emailed'
+    WHERE user_id = ?
+      AND crm_stage = 'emailed'
       AND follow_up_status = 'active'
       AND follow_up_count < 5
       AND last_contacted_date IS NOT NULL
       AND email IS NOT NULL AND email != ''
     GROUP BY follow_up_count
-  `).all();
+  `).all(uid);
 
   res.json({ success: true, due: due.count, breakdown });
 }));
@@ -56,7 +59,8 @@ router.post('/send-all', async (req, res) => {
       SELECT l.*, p.cold_email as original_email
       FROM leads l
       LEFT JOIN pitches p ON p.lead_id = l.id
-      WHERE l.crm_stage = 'emailed'
+      WHERE l.user_id = ?
+        AND l.crm_stage = 'emailed'
         AND l.follow_up_status = 'active'
         AND l.follow_up_count < 5
         AND l.last_contacted_date IS NOT NULL
@@ -64,7 +68,7 @@ router.post('/send-all', async (req, res) => {
         AND julianday('now') - julianday(l.last_contacted_date) >= 3
       ORDER BY l.lead_score DESC
       LIMIT ?
-    `).all(max_leads);
+    `).all(req.user.id, max_leads);
 
     emit('start', { total: leads.length });
 
@@ -126,14 +130,14 @@ router.post('/send-all', async (req, res) => {
 // POST /api/followups/pause/:leadId — stop follow-ups for a lead
 router.post('/pause/:leadId', asyncHandler(async (req, res) => {
   const db = getDb();
-  db.prepare(`UPDATE leads SET follow_up_status='paused', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(req.params.leadId);
+  db.prepare(`UPDATE leads SET follow_up_status='paused', updated_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=?`).run(req.params.leadId, req.user.id);
   res.json({ success: true });
 }));
 
 // POST /api/followups/resume/:leadId — resume follow-ups for a lead
 router.post('/resume/:leadId', asyncHandler(async (req, res) => {
   const db = getDb();
-  db.prepare(`UPDATE leads SET follow_up_status='active', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(req.params.leadId);
+  db.prepare(`UPDATE leads SET follow_up_status='active', updated_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=?`).run(req.params.leadId, req.user.id);
   res.json({ success: true });
 }));
 

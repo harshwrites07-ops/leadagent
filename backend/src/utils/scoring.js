@@ -45,8 +45,8 @@ function scoreLeadFromReddit(data) {
 }
 
 function getTemperature(score) {
-  if (score >= 70) return 'hot';
-  if (score >= 40) return 'warm';
+  if (score >= 60) return 'hot';
+  if (score >= 35) return 'warm';
   return 'cold';
 }
 

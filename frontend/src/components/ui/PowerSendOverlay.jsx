@@ -1,93 +1,186 @@
 import { useState, useEffect, useRef } from 'react';
-import { Zap, X, Loader } from 'lucide-react';
+import { Zap, X, Loader, ChevronDown, ChevronUp, Square } from 'lucide-react';
+
+const GAP_PRESETS = [
+  { label: 'No gap', secs: 0 },
+  { label: '1 min', secs: 60 },
+  { label: '2 min', secs: 120 },
+  { label: '5 min', secs: 300 },
+  { label: '10 min', secs: 600 },
+  { label: '15 min', secs: 900 },
+  { label: '30 min', secs: 1800 },
+  { label: '1 hour', secs: 3600 },
+];
+
+const INBOX_COUNT = 4;
+
+const WARMUP_STAGES = [
+  { maxDays: 7,    perInbox: 20,  gap: 300, label: 'Week 1 — Warming',  color: '#00B8D4', desc: '20/inbox · 5 min gap' },
+  { maxDays: 14,   perInbox: 30,  gap: 180, label: 'Week 2 — Building', color: '#7B61FF', desc: '30/inbox · 3 min gap' },
+  { maxDays: 21,   perInbox: 40,  gap: 120, label: 'Week 3 — Growing',  color: '#F5A623', desc: '40/inbox · 2 min gap' },
+  { maxDays: 30,   perInbox: 60,  gap: 60,  label: 'Month 1 — Strong',  color: '#FF6B35', desc: '60/inbox · 1 min gap' },
+  { maxDays: 60,   perInbox: 100, gap: 30,  label: 'Month 2 — Trusted', color: '#00C853', desc: '100/inbox · 30s gap'  },
+  { maxDays: 9999, perInbox: 150, gap: 0,   label: 'Established',       color: '#00E5A0', desc: '150/inbox · no gap'   },
+];
+
+function getWarmupStage(firstSentDate) {
+  if (!firstSentDate) return WARMUP_STAGES[0];
+  const days = Math.floor((Date.now() - new Date(firstSentDate)) / 86400000);
+  return WARMUP_STAGES.find(s => days <= s.maxDays) || WARMUP_STAGES[WARMUP_STAGES.length - 1];
+}
+
+const DOT_COLORS = { start: '#00B8D4', studying: '#7B61FF', generated: '#F5A623', sent: '#00E5A0', failed: '#FF4444', done: '#00E5A0', waiting: '#FF9500', info: '#888' };
+
+function FeedItem({ item }) {
+  const color = item.type === 'failed' ? '#FF6666' : item.type === 'sent' || item.type === 'done' ? '#00E5A0' : item.type === 'waiting' ? '#FF9500' : 'var(--text-secondary)';
+  const time = new Date(item.time).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, minHeight: 18 }}>
+      <div style={{ width: 5, height: 5, borderRadius: '50%', background: DOT_COLORS[item.type] || '#555', marginTop: 5, flexShrink: 0 }} />
+      <span style={{ flex: 1, fontSize: 11, fontFamily: 'var(--font-mono)', color, lineHeight: 1.5, wordBreak: 'break-all' }}>{item.message}</span>
+      <span style={{ fontSize: 9, color: 'var(--text-muted)', flexShrink: 0, fontFamily: 'var(--font-mono)' }}>{time}</span>
+    </div>
+  );
+}
 
 export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 100 }) {
-  const [phase, setPhase] = useState('confirm');
+  const [phase, setPhase] = useState('confirm');  // confirm | running | done
   const [count, setCount] = useState(leadIds ? leadIds.length : maxLeads);
+  const [perAccountLimit, setPerAccountLimit] = useState(0);
+  const [gapSeconds, setGapSeconds] = useState(0);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [warmup, setWarmup] = useState(null);
+  const [sentToday, setSentToday] = useState(0);
+  const [jobId, setJobId] = useState(null);
   const [stats, setStats] = useState({ studied: 0, generated: 0, sent: 0, failed: 0, total: 0 });
   const [feed, setFeed] = useState([]);
+  const [inboxes, setInboxes] = useState([]);
+  const [skipInboxes, setSkipInboxes] = useState([]);
+  const pollRef = useRef(null);
   const feedRef = useRef(null);
-  const readerRef = useRef(null);
 
+  // Load warmup stage + check for an already-running job when overlay opens
   useEffect(() => {
-    return () => {
-      // Cancel the stream if component unmounts while running
-      try { readerRef.current?.cancel(); } catch {}
-    };
+    fetch('/api/emails/stats').then(r => r.json()).then(data => {
+      setWarmup(getWarmupStage(data.first_sent_date));
+      setSentToday(data.sent_today || 0);
+    }).catch(() => {});
+
+    fetch('/api/emails/inboxes').then(r => r.json()).then(data => {
+      if (data.inboxes) setInboxes(data.inboxes);
+    }).catch(() => {});
+
+    fetch('/api/pitches/power-send/active').then(r => r.json()).then(data => {
+      if (data.job) {
+        setJobId(data.job.id);
+        const s = data.job.status;
+        setPhase(s === 'running' ? 'running' : 'done');
+        syncJobState(data.job);
+        if (s === 'running') startPolling(data.job.id);
+      }
+    }).catch(() => {});
   }, []);
 
-  const addFeed = (type, message) => {
-    setFeed(prev => [{ type, message, time: new Date() }, ...prev].slice(0, 60));
+  // Cleanup poll on unmount
+  useEffect(() => () => clearInterval(pollRef.current), []);
+
+  function syncJobState(job) {
+    setStats({
+      studied: job.studied || 0,
+      generated: job.generated || 0,
+      sent: job.sent || 0,
+      failed: job.failed || 0,
+      total: job.total || 0,
+    });
+    try { setFeed(JSON.parse(job.log || '[]')); } catch {}
+  }
+
+  function startPolling(id) {
+    clearInterval(pollRef.current);
+    pollRef.current = setInterval(async () => {
+      try {
+        const data = await fetch(`/api/pitches/power-send/${id}`).then(r => r.json());
+        if (!data.job) return;
+        syncJobState(data.job);
+        if (data.job.status !== 'running') {
+          clearInterval(pollRef.current);
+          setPhase(data.job.status === 'interrupted' ? 'interrupted' : 'done');
+        }
+      } catch {}
+    }, 2000);
+  }
+
+  const activeInboxCount = (inboxes.length || INBOX_COUNT) - skipInboxes.length;
+  const effectiveCount = perAccountLimit > 0
+    ? Math.min(leadIds ? leadIds.length : count, perAccountLimit * activeInboxCount)
+    : (leadIds ? leadIds.length : count);
+
+  const estMins = Math.ceil(effectiveCount * (21 + gapSeconds) / 60);
+
+  const applySafeDefaults = () => {
+    if (!warmup) return;
+    setPerAccountLimit(warmup.perInbox);
+    setGapSeconds(warmup.gap);
+    setShowAdvanced(true);
   };
 
   const startPowerSend = async () => {
-    setPhase('running');
-    addFeed('start', `Starting power send for ${leadIds ? leadIds.length : count} leads...`);
-
     try {
-      const response = await fetch('/api/pitches/power-send', {
+      const data = await fetch('/api/pitches/power-send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lead_ids: leadIds || null, max_leads: count }),
-      });
+        body: JSON.stringify({
+          lead_ids: leadIds || null,
+          max_leads: effectiveCount,
+          per_account_limit: perAccountLimit,
+          gap_seconds: gapSeconds,
+          skip_inboxes: skipInboxes,
+        }),
+      }).then(r => r.json());
 
-      if (!response.ok) {
-        throw new Error(`Server error ${response.status}`);
-      }
-
-      const reader = response.body.getReader();
-      readerRef.current = reader;
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const messages = buffer.split('\n\n');
-        buffer = messages.pop() ?? '';
-
-        for (const message of messages) {
-          if (!message.trim()) continue;
-          let eventName = '';
-          let eventData = '';
-          for (const line of message.split('\n')) {
-            if (line.startsWith('event: ')) eventName = line.slice(7).trim();
-            else if (line.startsWith('data: ')) eventData = line.slice(6).trim();
-          }
-          if (!eventData) continue;
-
-          try {
-            const parsed = JSON.parse(eventData);
-            if (eventName === 'start') {
-              setStats(s => ({ ...s, total: parsed.total }));
-            } else if (eventName === 'progress') {
-              if (parsed.stats) setStats(s => ({ ...s, ...parsed.stats }));
-              const labels = { studying: `Studying ${parsed.channel}...`, generated: `Pitch ready for ${parsed.channel}`, sent: `Sent to ${parsed.channel} (${parsed.email || ''})`, failed: `Failed: ${parsed.channel} — ${parsed.error || ''}` };
-              addFeed(parsed.type, labels[parsed.type] || parsed.type);
-            } else if (eventName === 'done') {
-              setStats(parsed);
-              setPhase('done');
-              addFeed('done', `Complete! ${parsed.sent} sent, ${parsed.failed} failed out of ${parsed.total}.`);
-            } else if (eventName === 'error') {
-              addFeed('failed', `Error: ${parsed.message}`);
-              setPhase('done');
-            }
-          } catch {}
-        }
-      }
-
-      if (phase !== 'done') setPhase('done');
+      if (!data.success) throw new Error(data.error || 'Failed to start');
+      setJobId(data.job_id);
+      setPhase('running');
+      startPolling(data.job_id);
     } catch (err) {
-      addFeed('failed', `Connection error: ${err.message}`);
-      setPhase('done');
+      alert(`Failed to start: ${err.message}`);
     }
   };
 
-  useEffect(() => {
-    if (feedRef.current) feedRef.current.scrollTop = 0;
-  }, [feed]);
+  const stopJob = async () => {
+    if (!jobId) return;
+    await fetch(`/api/pitches/power-send/${jobId}/stop`, { method: 'POST' }).catch(() => {});
+    clearInterval(pollRef.current);
+    setPhase('done');
+  };
+
+  const dismissInterrupted = async () => {
+    if (jobId) await fetch(`/api/pitches/power-send/${jobId}/dismiss`, { method: 'POST' }).catch(() => {});
+    onClose();
+  };
+
+  const resumeJob = async () => {
+    if (!jobId) return;
+    try {
+      // Dismiss old interrupted job, then start fresh with same settings but no gap
+      await fetch(`/api/pitches/power-send/${jobId}/dismiss`, { method: 'POST' }).catch(() => {});
+      const jobData = await fetch(`/api/pitches/power-send/${jobId}`).then(r => r.json());
+      const settings = { ...JSON.parse(jobData.job?.settings || '{}'), gap_seconds: 0 };
+      const data = await fetch('/api/pitches/power-send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings),
+      }).then(r => r.json());
+      if (!data.success) throw new Error(data.error);
+      setJobId(data.job_id);
+      setStats({ studied: 0, generated: 0, sent: 0, failed: 0, total: 0 });
+      setFeed([]);
+      setPhase('running');
+      startPolling(data.job_id);
+    } catch (err) {
+      alert(`Resume failed: ${err.message}`);
+    }
+  };
 
   const pct = stats.total > 0 ? Math.round(((stats.sent + stats.failed) / stats.total) * 100) : 0;
 
@@ -106,69 +199,131 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
               <p style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--accent-primary)', letterSpacing: '0.18em', marginTop: 2 }}>AI-POWERED BULK OUTREACH</p>
             </div>
           </div>
-          {phase !== 'running' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {phase === 'running' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(0,229,160,0.1)', border: '1px solid rgba(0,229,160,0.3)', borderRadius: 6, padding: '4px 10px' }}>
+                <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#00E5A0', animation: 'pulse 1.5s infinite' }} />
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: '#00E5A0', letterSpacing: '0.1em' }}>RUNNING IN BACKGROUND</span>
+              </div>
+            )}
             <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }}>
               <X size={18} />
             </button>
-          )}
+          </div>
         </div>
 
         {/* Confirm phase */}
         {phase === 'confirm' && (
           <div style={{ padding: 28, display: 'flex', flexDirection: 'column', gap: 20 }}>
             <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.75, margin: 0 }}>
-              Generate hyper-personalized pitches with <strong style={{ color: '#7B61FF' }}>Prahvi AI</strong> and send via 4-account rotation — all in one shot.
+              Generate hyper-personalized pitches with <strong style={{ color: '#7B61FF' }}>Prahvi AI</strong> and send via 4-account rotation. <strong style={{ color: 'var(--text-primary)' }}>Runs in background — close this window anytime.</strong>
             </p>
+
+            {/* Warmup banner */}
+            {warmup && (
+              <div style={{ background: 'rgba(0,229,160,0.06)', border: '1px solid rgba(0,229,160,0.25)', borderRadius: 10, padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: warmup.color, boxShadow: `0 0 6px ${warmup.color}` }} />
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: warmup.color, letterSpacing: '0.12em' }}>{warmup.label.toUpperCase()}</span>
+                  </div>
+                  <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>
+                    Safe max: <strong style={{ color: 'var(--text-primary)' }}>{warmup.perInbox * INBOX_COUNT}/day</strong>
+                    <span style={{ color: 'var(--text-muted)', margin: '0 6px' }}>·</span>
+                    {warmup.desc}
+                    {sentToday > 0 && <span style={{ color: 'var(--text-muted)', marginLeft: 8 }}>({sentToday} sent today)</span>}
+                  </p>
+                </div>
+                <button onClick={applySafeDefaults} style={{ padding: '8px 14px', borderRadius: 7, background: 'rgba(0,229,160,0.15)', border: '1px solid rgba(0,229,160,0.35)', color: '#00E5A0', fontSize: 11, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'var(--font-mono)', letterSpacing: '0.06em' }}>
+                  APPLY SAFE MAX
+                </button>
+              </div>
+            )}
 
             {/* Count selector */}
             {!leadIds && (
               <div style={{ background: 'var(--bg-card)', border: '1px solid rgba(255,69,0,0.25)', borderRadius: 10, padding: '16px 18px' }}>
                 <p style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.14em', marginBottom: 10 }}>HOW MANY EMAILS TO SEND?</p>
-                {/* Quick presets */}
                 <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
                   {[10, 25, 50, 100, 200, 500].map(n => (
-                    <button
-                      key={n}
-                      onClick={() => setCount(n)}
-                      style={{
-                        flex: 1, padding: '7px 0', borderRadius: 7, fontSize: 13, fontWeight: 700, cursor: 'pointer',
-                        background: count === n ? 'var(--gradient-orange)' : 'var(--bg-elevated)',
-                        border: count === n ? 'none' : '1px solid var(--border-default)',
-                        color: count === n ? '#fff' : 'var(--text-secondary)',
-                        boxShadow: count === n ? '0 0 14px rgba(255,69,0,0.35)' : 'none',
-                        transition: 'all 0.15s',
-                      }}
-                    >
+                    <button key={n} onClick={() => setCount(n)} style={{ flex: 1, padding: '7px 0', borderRadius: 7, fontSize: 13, fontWeight: 700, cursor: 'pointer', background: count === n ? 'var(--gradient-orange)' : 'var(--bg-elevated)', border: count === n ? 'none' : '1px solid var(--border-default)', color: count === n ? '#fff' : 'var(--text-secondary)', boxShadow: count === n ? '0 0 14px rgba(255,69,0,0.35)' : 'none', transition: 'all 0.15s' }}>
                       {n}
                     </button>
                   ))}
                 </div>
-                {/* Custom number input */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Custom:</span>
-                  <input
-                    type="number"
-                    min={1}
-                    max={600}
-                    value={count}
-                    onChange={e => setCount(Math.min(600, Math.max(1, parseInt(e.target.value) || 1)))}
-                    style={{
-                      flex: 1, background: 'var(--bg-elevated)', border: '1px solid var(--border-default)',
-                      borderRadius: 7, padding: '7px 12px', color: 'var(--text-primary)', fontSize: 14,
-                      fontWeight: 700, outline: 'none', textAlign: 'center',
-                    }}
-                  />
+                  <input type="number" min={1} max={600} value={count} onChange={e => setCount(Math.min(600, Math.max(1, parseInt(e.target.value) || 1)))} style={{ flex: 1, background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 7, padding: '7px 12px', color: 'var(--text-primary)', fontSize: 14, fontWeight: 700, outline: 'none', textAlign: 'center' }} />
                   <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>max 600</span>
                 </div>
               </div>
             )}
 
+            {/* Delivery Controls */}
+            <div style={{ border: '1px solid rgba(255,69,0,0.2)', borderRadius: 10, overflow: 'hidden' }}>
+              <button onClick={() => setShowAdvanced(v => !v)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 18px', background: 'rgba(255,69,0,0.05)', border: 'none', cursor: 'pointer' }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.14em', color: 'var(--accent-primary)' }}>DELIVERY CONTROLS</span>
+                {showAdvanced ? <ChevronUp size={14} color="var(--text-muted)" /> : <ChevronDown size={14} color="var(--text-muted)" />}
+              </button>
+              {showAdvanced && (
+                <div style={{ padding: '16px 18px', background: 'var(--bg-card)', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <div>
+                    <p style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.12em', marginBottom: 8 }}>MAX EMAILS PER INBOX (0 = UNLIMITED)</p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <input type="number" min={0} max={150} value={perAccountLimit} onChange={e => setPerAccountLimit(Math.max(0, parseInt(e.target.value) || 0))} style={{ width: 80, background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 7, padding: '8px 12px', color: 'var(--text-primary)', fontSize: 14, fontWeight: 700, outline: 'none', textAlign: 'center' }} />
+                      {perAccountLimit > 0
+                        ? <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{activeInboxCount} × {perAccountLimit} = <strong style={{ color: 'var(--accent-primary)' }}>{activeInboxCount * perAccountLimit} total max</strong></span>
+                        : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No per-inbox limit</span>}
+                    </div>
+                  </div>
+                  <div>
+                    <p style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.12em', marginBottom: 8 }}>GAP BETWEEN EMAILS</p>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {GAP_PRESETS.map(({ label, secs }) => (
+                        <button key={secs} onClick={() => setGapSeconds(secs)} style={{ padding: '6px 12px', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer', background: gapSeconds === secs ? 'var(--gradient-orange)' : 'var(--bg-elevated)', border: gapSeconds === secs ? 'none' : '1px solid var(--border-default)', color: gapSeconds === secs ? '#fff' : 'var(--text-secondary)', boxShadow: gapSeconds === secs ? '0 0 10px rgba(255,69,0,0.3)' : 'none' }}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {inboxes.length > 0 && (
+                    <div>
+                      <p style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.12em', marginBottom: 8 }}>SENDING INBOXES (UNCHECK TO SKIP)</p>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {inboxes.map(inbox => {
+                          const skipped = skipInboxes.includes(inbox.email);
+                          const riskColor = inbox.bounceRate >= 8 ? '#FF4444' : inbox.bounceRate >= 4 ? '#FF9500' : '#00E5A0';
+                          const toggle = () => setSkipInboxes(prev =>
+                            prev.includes(inbox.email) ? prev.filter(e => e !== inbox.email) : [...prev, inbox.email]
+                          );
+                          return (
+                            <div key={inbox.email} onClick={toggle} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 7, cursor: 'pointer', background: skipped ? 'rgba(255,68,68,0.06)' : 'var(--bg-elevated)', border: `1px solid ${skipped ? 'rgba(255,68,68,0.25)' : 'var(--border-default)'}`, opacity: skipped ? 0.6 : 1, transition: 'all 0.15s' }}>
+                              <div style={{ width: 16, height: 16, borderRadius: 4, border: `2px solid ${skipped ? '#666' : 'var(--accent-primary)'}`, background: skipped ? 'transparent' : 'var(--accent-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                {!skipped && <span style={{ color: '#fff', fontSize: 10, lineHeight: 1 }}>✓</span>}
+                              </div>
+                              <span style={{ flex: 1, fontSize: 12, color: skipped ? 'var(--text-muted)' : 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{inbox.email}</span>
+                              {inbox.sentCount > 0 && (
+                                <span style={{ fontSize: 10, color: riskColor, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                                  {inbox.bounceRate}% bounce
+                                  {inbox.bounceRate >= 8 && <span style={{ marginLeft: 4 }}>⚠</span>}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               {[
-                ['Leads targeted', leadIds ? `${leadIds.length} selected` : `Top ${count} HOT leads`],
+                ['Leads targeted', leadIds ? `${leadIds.length} selected` : perAccountLimit > 0 ? `${effectiveCount} (capped)` : `Top ${count} HOT leads`],
                 ['AI persona', 'Prahvi (Gemini Flash)'],
-                ['Sending accounts', '4 × 150/day = 600/day'],
-                ['Est. time', `~${Math.ceil((leadIds?.length || count) * 0.35)} mins`],
+                ['Sending accounts', `${activeInboxCount}/${inboxes.length || INBOX_COUNT} inboxes active`],
+                ['Est. time', `~${estMins} min${estMins !== 1 ? 's' : ''}`],
               ].map(([label, val]) => (
                 <div key={label} style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '12px 16px' }}>
                   <p style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: 4 }}>{label.toUpperCase()}</p>
@@ -176,12 +331,33 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
                 </div>
               ))}
             </div>
+
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={onClose} style={{ flex: 1, padding: '12px', borderRadius: 8, cursor: 'pointer', background: 'transparent', border: '1px solid var(--border-default)', color: 'var(--text-secondary)', fontSize: 13 }}>
                 Cancel
               </button>
               <button onClick={startPowerSend} style={{ flex: 2, padding: '12px', borderRadius: 8, cursor: 'pointer', background: 'var(--gradient-orange)', color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 0 24px rgba(255,69,0,0.35)' }}>
-                <Zap size={16} /> Fire {count} Emails
+                <Zap size={16} /> Fire {effectiveCount} Emails
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Interrupted phase */}
+        {phase === 'interrupted' && (
+          <div style={{ padding: 28, display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center', textAlign: 'center' }}>
+            <div style={{ width: 48, height: 48, borderRadius: 12, background: 'rgba(255,165,0,0.15)', border: '1px solid rgba(255,165,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>⚡</div>
+            <div>
+              <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 6px' }}>Job Interrupted</p>
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 }}>
+                The server restarted while the job was running.<br />
+                <strong style={{ color: '#00E5A0' }}>{stats.sent} emails were already sent</strong> — they won't be re-sent.
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: 10, width: '100%' }}>
+              <button onClick={dismissInterrupted} style={{ flex: 1, padding: '12px', borderRadius: 8, cursor: 'pointer', background: 'transparent', border: '1px solid var(--border-default)', color: 'var(--text-secondary)', fontSize: 13 }}>Close</button>
+              <button onClick={resumeJob} style={{ flex: 2, padding: '12px', borderRadius: 8, cursor: 'pointer', background: 'var(--gradient-orange)', color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 0 20px rgba(255,69,0,0.3)' }}>
+                <Zap size={16} /> Resume Remaining
               </button>
             </div>
           </div>
@@ -190,13 +366,14 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
         {/* Running / Done phase */}
         {(phase === 'running' || phase === 'done') && (
           <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+
             {/* Counters */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
               {[
-                { label: 'STUDIED', val: stats.studied, color: '#00B8D4' },
+                { label: 'STUDIED',   val: stats.studied,   color: '#00B8D4' },
                 { label: 'GENERATED', val: stats.generated, color: '#7B61FF' },
-                { label: 'SENT', val: stats.sent, color: '#00E5A0' },
-                { label: 'FAILED', val: stats.failed, color: '#FF4444' },
+                { label: 'SENT',      val: stats.sent,      color: '#00E5A0' },
+                { label: 'FAILED',    val: stats.failed,    color: '#FF4444' },
               ].map(({ label, val, color }) => (
                 <div key={label} style={{ background: 'var(--bg-card)', border: `1px solid ${color}30`, borderRadius: 8, padding: '14px 0', textAlign: 'center' }}>
                   <p style={{ fontFamily: 'var(--font-mono)', fontSize: 30, fontWeight: 700, color, lineHeight: 1, margin: 0 }}>{val}</p>
@@ -216,23 +393,25 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
             )}
 
             {/* Live feed */}
-            <div ref={feedRef} style={{ height: 180, overflowY: 'auto', background: 'var(--bg-card)', borderRadius: 8, border: '1px solid var(--border-subtle)', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <div ref={feedRef} style={{ height: 200, overflowY: 'auto', background: 'var(--bg-card)', borderRadius: 8, border: '1px solid var(--border-subtle)', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 3 }}>
               {feed.length === 0 && phase === 'running' && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)', fontSize: 12 }}>
-                  <Loader size={12} style={{ animation: 'spin 1s linear infinite' }} /> Connecting to server...
+                  <Loader size={12} style={{ animation: 'spin 1s linear infinite' }} /> Starting job...
                 </div>
               )}
-              {feed.map((item, i) => {
-                const dotColors = { start: '#00B8D4', studying: '#7B61FF', generated: '#F5A623', sent: '#00E5A0', failed: '#FF4444', done: '#00E5A0' };
-                return (
-                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, minHeight: 18 }}>
-                    <div style={{ width: 5, height: 5, borderRadius: '50%', background: dotColors[item.type] || '#555', marginTop: 5, flexShrink: 0 }} />
-                    <span style={{ flex: 1, fontSize: 11, fontFamily: 'var(--font-mono)', color: item.type === 'failed' ? '#FF6666' : item.type === 'sent' || item.type === 'done' ? '#00E5A0' : 'var(--text-secondary)', lineHeight: 1.5, wordBreak: 'break-all' }}>{item.message}</span>
-                    <span style={{ fontSize: 9, color: 'var(--text-muted)', flexShrink: 0, fontFamily: 'var(--font-mono)' }}>{item.time.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
-                  </div>
-                );
-              })}
+              {feed.map((item, i) => <FeedItem key={i} item={item} />)}
             </div>
+
+            {phase === 'running' && (
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={onClose} style={{ flex: 1, padding: '12px', borderRadius: 8, cursor: 'pointer', background: 'rgba(0,229,160,0.1)', border: '1px solid rgba(0,229,160,0.3)', color: '#00E5A0', fontSize: 13, fontWeight: 600 }}>
+                  Close Window (job keeps running)
+                </button>
+                <button onClick={stopJob} style={{ flex: 1, padding: '12px', borderRadius: 8, cursor: 'pointer', background: 'rgba(255,68,68,0.1)', border: '1px solid rgba(255,68,68,0.3)', color: '#FF6666', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                  <Square size={13} /> Stop Job
+                </button>
+              </div>
+            )}
 
             {phase === 'done' && (
               <button onClick={onClose} style={{ padding: '12px', borderRadius: 8, cursor: 'pointer', background: 'var(--gradient-orange)', color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, boxShadow: '0 0 20px rgba(255,69,0,0.3)' }}>

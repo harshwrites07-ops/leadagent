@@ -3,6 +3,7 @@ import axios from 'axios';
 const api = axios.create({
   baseURL: '/api',
   timeout: 0, // no timeout — AI + scraping ops can take several minutes
+  withCredentials: true,
 });
 
 api.interceptors.response.use(
@@ -10,6 +11,12 @@ api.interceptors.response.use(
   err => {
     if (err.response?.data?.error) {
       err.message = err.response.data.error;
+    }
+    // Redirect to login on 401 (session expired)
+    if (err.response?.status === 401 && err.response?.data?.code === 'UNAUTHENTICATED') {
+      if (window.location.pathname !== '/login' && window.location.pathname !== '/signup') {
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(err);
   }

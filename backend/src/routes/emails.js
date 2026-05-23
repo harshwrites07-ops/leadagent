@@ -2,15 +2,15 @@ const express = require('express');
 const router = express.Router();
 const { getDb, getSetting, logActivity } = require('../models/database');
 const { asyncHandler } = require('../middleware/errorHandler');
-const { sendEmail, testSmtp, resetTransporter, checkSpamFolders, getInboxes, checkReplies } = require('../services/emailService');
+const { sendEmail, sendReply, testSmtp, resetTransporter, checkSpamFolders, getInboxes, checkReplies, checkDeliverability, isValidEmailFormat, ensureClean, hasMxRecord } = require('../services/emailService');
 
 // GET /api/emails — list all emails
 router.get('/', asyncHandler(async (req, res) => {
   const db = getDb();
   const { lead_id, status, page = 1, limit = 50 } = req.query;
 
-  let where = ['1=1'];
-  const params = [];
+  let where = ['e.user_id = ?'];
+  const params = [req.user.id];
 
   if (lead_id) { where.push('e.lead_id = ?'); params.push(lead_id); }
   if (status) { where.push('e.status = ?'); params.push(status); }
@@ -29,14 +29,31 @@ router.get('/', asyncHandler(async (req, res) => {
   res.json({ success: true, emails, total: total.count });
 }));
 
+// GET /api/emails/inboxes — inbox list with 30-day bounce stats from DB (no IMAP)
+router.get('/inboxes', asyncHandler(async (req, res) => {
+  const db = getDb();
+  const inboxList = getInboxes();
+  const result = inboxList.map(inbox => {
+    const totRow = db.prepare(`SELECT COUNT(*) as c FROM emails WHERE from_email=? AND DATE(sent_at) >= DATE('now','-30 days')`).get(inbox.email);
+    const bounceRow = db.prepare(`SELECT COUNT(*) as c FROM emails WHERE from_email=? AND status='bounced' AND DATE(sent_at) >= DATE('now','-30 days')`).get(inbox.email);
+    const sentCount = totRow?.c || 0;
+    const bouncedCount = bounceRow?.c || 0;
+    const bounceRate = sentCount > 0 ? parseFloat(((bouncedCount / sentCount) * 100).toFixed(1)) : 0;
+    return { email: inbox.email, sentCount, bouncedCount, bounceRate };
+  });
+  res.json({ success: true, inboxes: result });
+}));
+
 // GET /api/emails/stats — MUST be before any /:param routes
 router.get('/stats', asyncHandler(async (req, res) => {
   const db = getDb();
-  const today = db.prepare(`SELECT COUNT(*) as count FROM emails WHERE DATE(sent_at) = DATE('now') AND status='sent'`).get();
-  const month = db.prepare(`SELECT COUNT(*) as count FROM emails WHERE strftime('%Y-%m', sent_at) = strftime('%Y-%m','now') AND status='sent'`).get();
-  const opens = db.prepare(`SELECT COUNT(*) as count FROM emails WHERE status='opened' OR opened_at IS NOT NULL`).get();
-  const replies = db.prepare(`SELECT COUNT(*) as count FROM emails WHERE status='replied' OR replied_at IS NOT NULL`).get();
-  const totalSent = db.prepare(`SELECT COUNT(*) as count FROM emails WHERE status='sent' OR sent_at IS NOT NULL`).get();
+  const uid = req.user.id;
+  const today = db.prepare(`SELECT COUNT(*) as count FROM emails WHERE DATE(sent_at) = DATE('now') AND status='sent' AND user_id=?`).get(uid);
+  const month = db.prepare(`SELECT COUNT(*) as count FROM emails WHERE strftime('%Y-%m', sent_at) = strftime('%Y-%m','now') AND status='sent' AND user_id=?`).get(uid);
+  const opens = db.prepare(`SELECT COUNT(*) as count FROM emails WHERE (status='opened' OR opened_at IS NOT NULL) AND user_id=?`).get(uid);
+  const replies = db.prepare(`SELECT COUNT(*) as count FROM emails WHERE (status='replied' OR replied_at IS NOT NULL) AND user_id=?`).get(uid);
+  const totalSent = db.prepare(`SELECT COUNT(*) as count FROM emails WHERE (status='sent' OR sent_at IS NOT NULL) AND user_id=?`).get(uid);
+  const firstSent = db.prepare(`SELECT MIN(sent_at) as first_date FROM emails WHERE sent_at IS NOT NULL AND user_id=?`).get(uid);
   const dailyLimit = parseInt(getSetting('daily_send_limit') || '150');
 
   res.json({
@@ -46,6 +63,7 @@ router.get('/stats', asyncHandler(async (req, res) => {
     daily_limit: dailyLimit,
     daily_remaining: Math.max(0, dailyLimit - today.count),
     total_sent: totalSent.count,
+    first_sent_date: firstSent?.first_date || null,
     open_rate: totalSent.count > 0 ? parseFloat(((opens.count / totalSent.count) * 100).toFixed(1)) : 0,
     reply_rate: totalSent.count > 0 ? parseFloat(((replies.count / totalSent.count) * 100).toFixed(1)) : 0,
   });
@@ -58,9 +76,9 @@ router.get('/queue', asyncHandler(async (req, res) => {
     SELECT eq.*, l.channel_name as lead_name, l.email as lead_email, l.thumbnail_url as thumbnail
     FROM email_queue eq
     JOIN leads l ON l.id = eq.lead_id
-    WHERE eq.status IN ('pending', 'sending')
+    WHERE eq.status IN ('pending', 'sending') AND eq.user_id = ?
     ORDER BY eq.priority DESC, eq.created_at ASC
-  `).all();
+  `).all(req.user.id);
 
   const paused = getSetting('queue_paused') === '1';
   res.json({ success: true, queue, paused });
@@ -84,9 +102,9 @@ router.post('/queue', asyncHandler(async (req, res) => {
   }
 
   const result = db.prepare(`
-    INSERT INTO email_queue (lead_id, subject, body, status, scheduled_at, priority)
-    VALUES (?, ?, ?, 'pending', ?, ?)
-  `).run(lead.id, finalSubject, finalBody, scheduled_at || null, priority);
+    INSERT INTO email_queue (user_id, lead_id, subject, body, status, scheduled_at, priority)
+    VALUES (?, ?, ?, ?, 'pending', ?, ?)
+  `).run(req.user.id, lead.id, finalSubject, finalBody, scheduled_at || null, priority);
 
   logActivity('queued', `Email queued for ${lead.channel_name}`, lead.id);
   const item = db.prepare('SELECT * FROM email_queue WHERE id = ?').get(result.lastInsertRowid);
@@ -126,9 +144,9 @@ router.post('/queue/bulk', asyncHandler(async (req, res) => {
     if (existing) { skipped++; continue; }
 
     db.prepare(`
-      INSERT INTO email_queue (lead_id, subject, body, status)
-      VALUES (?, ?, ?, 'pending')
-    `).run(id, pitch.email_subject, pitch.cold_email);
+      INSERT INTO email_queue (user_id, lead_id, subject, body, status)
+      VALUES (?, ?, ?, ?, 'pending')
+    `).run(req.user.id, id, pitch.email_subject, pitch.cold_email);
     added++;
   }
 
@@ -149,7 +167,7 @@ router.post('/queue/reorder', asyncHandler(async (req, res) => {
 // POST /api/emails/queue/:leadId — add to queue by URL param
 router.post('/queue/:leadId', asyncHandler(async (req, res) => {
   const db = getDb();
-  const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(req.params.leadId);
+  const lead = db.prepare('SELECT * FROM leads WHERE id = ? AND user_id = ?').get(req.params.leadId, req.user.id);
   if (!lead) return res.status(404).json({ success: false, error: 'Lead not found' });
 
   const { subject, body, scheduled_at, priority = 0 } = req.body;
@@ -163,9 +181,9 @@ router.post('/queue/:leadId', asyncHandler(async (req, res) => {
   }
 
   const result = db.prepare(`
-    INSERT INTO email_queue (lead_id, subject, body, status, scheduled_at, priority)
-    VALUES (?, ?, ?, 'pending', ?, ?)
-  `).run(lead.id, finalSubject, finalBody, scheduled_at || null, priority);
+    INSERT INTO email_queue (user_id, lead_id, subject, body, status, scheduled_at, priority)
+    VALUES (?, ?, ?, ?, 'pending', ?, ?)
+  `).run(req.user.id, lead.id, finalSubject, finalBody, scheduled_at || null, priority);
 
   logActivity('queued', `Email queued for ${lead.channel_name}`, lead.id);
   const item = db.prepare('SELECT * FROM email_queue WHERE id = ?').get(result.lastInsertRowid);
@@ -175,7 +193,7 @@ router.post('/queue/:leadId', asyncHandler(async (req, res) => {
 // DELETE /api/emails/queue/:id
 router.delete('/queue/:id', asyncHandler(async (req, res) => {
   const db = getDb();
-  db.prepare(`UPDATE email_queue SET status = 'cancelled' WHERE id = ? AND status = 'pending'`).run(req.params.id);
+  db.prepare(`UPDATE email_queue SET status = 'cancelled' WHERE id = ? AND status = 'pending' AND user_id = ?`).run(req.params.id, req.user.id);
   res.json({ success: true });
 }));
 
@@ -185,8 +203,8 @@ router.post('/send-now/:queueId', asyncHandler(async (req, res) => {
   const item = db.prepare(`
     SELECT eq.*, l.email, l.channel_name
     FROM email_queue eq JOIN leads l ON l.id = eq.lead_id
-    WHERE eq.id = ? AND eq.status = 'pending'
-  `).get(req.params.queueId);
+    WHERE eq.id = ? AND eq.status = 'pending' AND eq.user_id = ?
+  `).get(req.params.queueId, req.user.id);
 
   if (!item) return res.status(404).json({ success: false, error: 'Queue item not found or already sent' });
   if (!item.email) return res.status(400).json({ success: false, error: 'Lead has no email address' });
@@ -217,6 +235,93 @@ router.get('/track/open/:trackingId', asyncHandler(async (req, res) => {
   res.end(pixel);
 }));
 
+// GET /api/emails/deliverability — DNS check for SPF/DKIM/DMARC on all sending domains
+router.get('/deliverability', asyncHandler(async (req, res) => {
+  const results = await checkDeliverability();
+  const allGood = results.every(r => r.issues.length === 0);
+  res.json({ success: true, results, allGood });
+}));
+
+// POST /api/emails/process-bounces — scan IMAP for bounce notifications, auto-mark leads
+router.post('/process-bounces', asyncHandler(async (req, res) => {
+  const db = getDb();
+  const imapResults = await checkSpamFolders();
+  const totalBounces = imapResults.reduce((s, r) => s + r.bounceEmails.length, 0);
+  const newlyMarked = imapResults.reduce((s, r) => s + (r.newlyMarked || 0), 0);
+  const marked = db.prepare(`SELECT COUNT(*) as c FROM leads WHERE email_invalid=1`).get();
+
+  // Debug: show extraction results for unmatched bounce emails
+  const unmatched = imapResults.flatMap(r =>
+    r.bounceEmails.filter(b => !b.matched).map(b => ({
+      inbox: r.email,
+      subject: b.subject,
+      extractedEmail: b.extractedEmail,
+    }))
+  );
+
+  res.json({
+    success: true,
+    bounceEmailsFound: totalBounces,
+    newlyMarked,
+    totalInvalidLeads: marked.c,
+    unmatchedBounces: unmatched,
+    perInbox: imapResults,
+  });
+}));
+
+// GET /api/emails/invalid-leads — leads with bad email addresses
+router.get('/invalid-leads', asyncHandler(async (req, res) => {
+  const db = getDb();
+  const leads = db.prepare(`
+    SELECT id, channel_name, email, bounce_reason, crm_stage
+    FROM leads WHERE user_id = ? AND (email_invalid=1 OR (email IS NOT NULL AND (
+      email NOT LIKE '%@%.%' OR LENGTH(TRIM(SUBSTR(email,1,INSTR(email,'@')-1))) < 2
+    )))
+    ORDER BY updated_at DESC LIMIT 200
+  `).all(req.user.id);
+  res.json({ success: true, leads, count: leads.length });
+}));
+
+// POST /api/emails/validate-leads-mx — DNS MX check all valid leads, mark bad domains invalid
+router.post('/validate-leads-mx', asyncHandler(async (req, res) => {
+  const db = getDb();
+  const leads = db.prepare(`
+    SELECT id, email FROM leads
+    WHERE user_id = ? AND email IS NOT NULL AND email != ''
+    AND (email_invalid IS NULL OR email_invalid = 0)
+  `).all(req.user.id);
+
+  let checked = 0, invalidated = 0;
+  const domainResults = {};
+
+  for (const lead of leads) {
+    const domain = lead.email.split('@')[1]?.toLowerCase();
+    if (!domain) continue;
+    if (!(domain in domainResults)) {
+      domainResults[domain] = await hasMxRecord(domain);
+    }
+    if (!domainResults[domain]) {
+      db.prepare(`UPDATE leads SET email_invalid=1, bounce_reason='no_mx_record', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(lead.id);
+      invalidated++;
+    }
+    checked++;
+  }
+
+  const domainsChecked = Object.keys(domainResults).length;
+  const badDomains = Object.entries(domainResults).filter(([, v]) => !v).map(([d]) => d);
+  res.json({ success: true, checked, invalidated, domainsChecked, badDomains });
+}));
+
+// POST /api/emails/send-reply — send a manual reply from the correct quelro.com inbox
+router.post('/send-reply', asyncHandler(async (req, res) => {
+  const { to, from_email, subject, body, email_id } = req.body;
+  if (!to || !from_email || !subject || !body) {
+    return res.status(400).json({ success: false, error: 'to, from_email, subject, body are required' });
+  }
+  const result = await sendReply({ to, fromEmail: from_email, subject, body, emailId: email_id });
+  res.json({ success: true, messageId: result.messageId, fromEmail: result.fromEmail });
+}));
+
 // POST /api/emails/test-smtp
 router.post('/test-smtp', asyncHandler(async (req, res) => {
   const result = await testSmtp(req.body);
@@ -230,12 +335,13 @@ router.get('/replies', asyncHandler(async (req, res) => {
   const replies = db.prepare(`
     SELECT e.id, e.subject, e.body, e.sent_at, e.replied_at, e.from_email,
            e.reply_body, e.reply_subject, e.reply_from,
+           e.my_reply_body, e.my_reply_sent_at,
            l.channel_name, l.email as lead_email, l.thumbnail_url, l.subscriber_count, l.niche
     FROM emails e
     LEFT JOIN leads l ON l.id = e.lead_id
-    WHERE e.status = 'replied'
+    WHERE e.status = 'replied' AND e.user_id = ?
     ORDER BY e.replied_at DESC
-  `).all();
+  `).all(req.user.id).map(r => ({ ...r, reply_body: ensureClean(r.reply_body) }));
   res.json({ success: true, replies, count: replies.length });
 }));
 
@@ -246,12 +352,13 @@ router.post('/replies/fetch', asyncHandler(async (req, res) => {
   const replies = db.prepare(`
     SELECT e.id, e.subject, e.body, e.sent_at, e.replied_at, e.from_email,
            e.reply_body, e.reply_subject, e.reply_from,
+           e.my_reply_body, e.my_reply_sent_at,
            l.channel_name, l.email as lead_email, l.thumbnail_url, l.subscriber_count, l.niche
     FROM emails e
     LEFT JOIN leads l ON l.id = e.lead_id
-    WHERE e.status = 'replied'
+    WHERE e.status = 'replied' AND e.user_id = ?
     ORDER BY e.replied_at DESC
-  `).all();
+  `).all(req.user.id).map(r => ({ ...r, reply_body: ensureClean(r.reply_body) }));
   res.json({ success: true, newReplies: result.repliesFound, replies, count: replies.length });
 }));
 
@@ -309,7 +416,7 @@ router.get('/spam-report', asyncHandler(async (req, res) => {
   try {
     imapResults = await Promise.race([
       checkSpamFolders(),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 20000)),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 30000)),
     ]);
   } catch (e) {
     imapResults = inboxes.map(i => ({ email: i.email, bounceEmails: [], spamCount: 0, error: e.message }));

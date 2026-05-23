@@ -1,117 +1,228 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, MessageSquare, RefreshCw, Mail, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
+import { X, MessageSquare, RefreshCw, Mail, ArrowLeft, Send, Check, ChevronRight } from 'lucide-react';
 import api, { formatDate } from '../../utils/api';
 
-function ReplyCard({ reply }) {
-  const [expanded, setExpanded] = useState(false);
-  const initials = (reply.channel_name || '??').slice(0, 2).toUpperCase();
-  const hasContent = reply.reply_body && reply.reply_body.trim().length > 0;
+// ─── Conversation thread view ─────────────────────────────────────────────────
+function ConversationView({ reply, onBack, onReplySent }) {
+  const [replyBody, setReplyBody] = useState('');
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState('');
+  const [mySentReplies, setMySentReplies] = useState(
+    reply.my_reply_body ? [{ body: reply.my_reply_body, sent_at: reply.my_reply_sent_at }] : []
+  );
+  const textareaRef = useRef(null);
+  const bottomRef = useRef(null);
+
+  const reSubject = (reply.reply_subject || reply.subject || '').startsWith('Re:')
+    ? (reply.reply_subject || reply.subject)
+    : `Re: ${reply.reply_subject || reply.subject || ''}`;
+
+  const sendReply = async () => {
+    if (!replyBody.trim()) return;
+    setSending(true);
+    setSendError('');
+    const bodyToSend = replyBody.trim();
+    try {
+      await api.post('/emails/send-reply', {
+        to: reply.reply_from || reply.lead_email,
+        from_email: reply.from_email,
+        subject: reSubject,
+        body: bodyToSend,
+        email_id: reply.id,
+      });
+      const newReply = { body: bodyToSend, sent_at: new Date().toISOString() };
+      setMySentReplies(prev => [...prev, newReply]);
+      setReplyBody('');
+      if (onReplySent) onReplySent(reply.id, newReply);
+      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+    } catch (err) {
+      setSendError(err?.response?.data?.error || 'Failed to send — check SMTP settings');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') sendReply();
+  };
 
   return (
-    <div className="card bg-dark-700 border border-dark-500 overflow-hidden">
-      {/* Header row */}
-      <div
-        className="flex items-center gap-3 py-3 px-4 cursor-pointer hover:bg-dark-600 transition-colors"
-        onClick={() => hasContent && setExpanded(e => !e)}
-      >
-        <div className="w-9 h-9 rounded-full bg-dark-600 overflow-hidden flex-shrink-0 flex items-center justify-center text-xs font-bold text-slate-300">
+    <div className="flex flex-col h-full">
+      {/* Conversation header */}
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-dark-600 flex-shrink-0">
+        <button onClick={onBack} className="p-1.5 rounded-lg hover:bg-dark-600 transition-colors text-slate-400 hover:text-white">
+          <ArrowLeft size={16} />
+        </button>
+        <div className="w-8 h-8 rounded-full bg-dark-600 overflow-hidden flex-shrink-0 flex items-center justify-center text-xs font-bold text-slate-300">
           {reply.thumbnail_url
             ? <img src={reply.thumbnail_url} alt={reply.channel_name} className="w-full h-full object-cover" />
-            : <span>{initials}</span>
+            : <span>{(reply.channel_name || '??').slice(0, 2).toUpperCase()}</span>
           }
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <p className="text-sm font-semibold text-white truncate">{reply.channel_name || reply.lead_email}</p>
-            <span className="badge badge-purple text-xs flex-shrink-0">REPLIED</span>
-          </div>
-          <p className="text-xs text-slate-400 truncate">
-            {reply.reply_subject || reply.subject || 'No subject'}
-          </p>
-          <p className="text-xs text-slate-500 mt-0.5">{reply.reply_from || reply.lead_email}</p>
+          <p className="text-sm font-bold text-white truncate">{reply.channel_name || reply.lead_email}</p>
+          <p className="text-xs text-slate-500 truncate">{reply.reply_from || reply.lead_email}</p>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <span className="text-xs text-slate-500">{reply.replied_at ? formatDate(reply.replied_at) : '—'}</span>
-          <a
-            href={`https://mail.google.com/mail/?authuser=${encodeURIComponent(reply.from_email || '')}&shva=1#search/from%3A${encodeURIComponent(reply.reply_from || reply.lead_email || '')}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={e => e.stopPropagation()}
-            className="flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-md transition-colors flex-shrink-0"
-            style={{ background: 'rgba(255,69,0,0.15)', color: '#fb923c', border: '1px solid rgba(255,69,0,0.3)' }}
-            title={`Open in Gmail (${reply.from_email})`}
-          >
-            <ExternalLink size={11} /> Open
-          </a>
-          {hasContent && (
-            expanded ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />
-          )}
+        <div className="text-right flex-shrink-0">
+          <p className="text-xs text-slate-500">via</p>
+          <p className="text-xs font-semibold" style={{ color: '#a78bfa' }}>{reply.from_email}</p>
         </div>
       </div>
 
-      {/* Reply content */}
-      <AnimatePresence>
-        {expanded && hasContent && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden"
-          >
-            <div className="px-4 pb-4">
-              {/* Their reply */}
-              <div className="rounded-lg border border-purple-500/40 overflow-hidden mb-3">
-                <div className="bg-purple-500/15 px-4 py-2 flex items-center gap-2">
-                  <MessageSquare size={13} className="text-purple-400" />
-                  <span className="text-xs text-purple-300 font-bold uppercase tracking-wider">Their Reply</span>
-                  {reply.reply_from && <span className="text-xs text-slate-400 ml-auto">{reply.reply_from}</span>}
-                </div>
-                <div className="bg-dark-600 p-4 max-h-64 overflow-y-auto">
-                  <p className="text-sm text-white whitespace-pre-wrap leading-relaxed">{reply.reply_body}</p>
-                </div>
-              </div>
-              {/* Original email we sent */}
-              <div className="rounded-lg border border-dark-500 overflow-hidden">
-                <div className="bg-dark-700 px-4 py-2">
-                  <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Your Original Email — </span>
-                  <span className="text-xs text-slate-400">{reply.subject}</span>
-                </div>
-                <div className="bg-dark-800 p-4 max-h-48 overflow-y-auto">
-                  <p className="text-sm text-slate-400 whitespace-pre-wrap leading-relaxed">{reply.body}</p>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Thread */}
+      <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4">
+        {/* Subject */}
+        <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold text-center">
+          {reply.reply_subject || reply.subject || 'No subject'}
+        </p>
 
-      {/* No content fallback */}
-      {!hasContent && (
-        <div className="px-4 pb-3">
-          <p className="text-xs text-slate-500 italic">Reply content not yet fetched — click "Sync Replies" to load it from Gmail.</p>
+        {/* Original email — sent bubble */}
+        <div className="flex flex-col items-end gap-1">
+          <div className="flex items-center gap-2 text-xs text-slate-500">
+            <span>{reply.from_email}</span>
+            <span>·</span>
+            <span>{reply.sent_at ? formatDate(reply.sent_at) : '—'}</span>
+          </div>
+          <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-dark-600 border border-dark-500 px-4 py-3">
+            <p className="text-sm text-slate-300 whitespace-pre-wrap leading-relaxed">{reply.body || 'Email body not available'}</p>
+          </div>
+          <span className="text-xs text-slate-600">You</span>
         </div>
-      )}
+
+        {/* Their reply — received bubble */}
+        {reply.reply_body ? (
+          <div className="flex flex-col items-start gap-1">
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <span>{reply.reply_from || reply.lead_email}</span>
+              <span>·</span>
+              <span>{reply.replied_at ? formatDate(reply.replied_at) : '—'}</span>
+            </div>
+            <div className="max-w-[85%] rounded-2xl rounded-tl-sm border px-4 py-3"
+              style={{ background: 'rgba(124,58,237,0.12)', borderColor: 'rgba(124,58,237,0.3)' }}>
+              <p className="text-sm text-white whitespace-pre-wrap leading-relaxed">{reply.reply_body}</p>
+            </div>
+            <span className="text-xs text-slate-600">{reply.channel_name || 'Them'}</span>
+          </div>
+        ) : (
+          <div className="text-center py-4">
+            <p className="text-xs text-slate-500 italic">Reply content not synced yet — click Sync Replies</p>
+          </div>
+        )}
+
+        {/* My sent replies */}
+        {mySentReplies.map((r, i) => (
+          <div key={i} className="flex flex-col items-end gap-1">
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <span>{reply.from_email}</span>
+              <span>·</span>
+              <span>{r.sent_at ? formatDate(r.sent_at) : 'Just now'}</span>
+            </div>
+            <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-dark-600 border border-dark-500 px-4 py-3">
+              <p className="text-sm text-slate-300 whitespace-pre-wrap leading-relaxed">{r.body}</p>
+            </div>
+            <div className="flex items-center gap-1 text-xs text-green-400">
+              <Check size={11} /> Sent
+            </div>
+          </div>
+        ))}
+
+        <div ref={bottomRef} />
+      </div>
+
+      {/* Compose area */}
+      <div className="flex-shrink-0 border-t border-dark-600 bg-dark-700">
+        {sendError && (
+          <div className="px-4 pt-2 text-xs text-red-400">{sendError}</div>
+        )}
+        <div className="flex items-end gap-3 p-3">
+          <textarea
+            ref={textareaRef}
+            className="flex-1 bg-dark-600 border border-dark-500 rounded-xl text-sm text-white px-4 py-3 resize-none outline-none placeholder-slate-500 focus:border-purple-500/50 transition-colors"
+            rows={3}
+            placeholder={`Reply to ${reply.channel_name || 'them'}… (Ctrl+Enter to send)`}
+            value={replyBody}
+            onChange={e => setReplyBody(e.target.value)}
+            onKeyDown={handleKeyDown}
+          />
+          <button
+            onClick={sendReply}
+            disabled={sending || !replyBody.trim()}
+            className="flex-shrink-0 p-3 rounded-xl transition-colors disabled:opacity-40"
+            style={{ background: replyBody.trim() ? 'rgba(124,58,237,0.8)' : 'rgba(124,58,237,0.2)', color: '#fff' }}
+            title="Send reply (Ctrl+Enter)"
+          >
+            <Send size={18} className={sending ? 'animate-pulse' : ''} />
+          </button>
+        </div>
+        <p className="text-xs text-slate-600 pb-2 px-4">Sending from {reply.from_email}</p>
+      </div>
     </div>
   );
 }
 
+// ─── Reply list item ───────────────────────────────────────────────────────────
+function ReplyRow({ reply, onOpen }) {
+  const initials = (reply.channel_name || '??').slice(0, 2).toUpperCase();
+  const hasContent = reply.reply_body && reply.reply_body.trim().length > 0;
+  const preview = hasContent
+    ? reply.reply_body.trim().slice(0, 80) + (reply.reply_body.length > 80 ? '…' : '')
+    : 'Click Sync Replies to load reply content';
+
+  return (
+    <div
+      className="flex items-center gap-3 py-3 px-4 rounded-xl cursor-pointer hover:bg-dark-600 transition-colors border border-transparent hover:border-dark-500"
+      onClick={() => onOpen(reply)}
+    >
+      <div className="w-10 h-10 rounded-full bg-dark-600 overflow-hidden flex-shrink-0 flex items-center justify-center text-xs font-bold text-slate-300">
+        {reply.thumbnail_url
+          ? <img src={reply.thumbnail_url} alt={reply.channel_name} className="w-full h-full object-cover" />
+          : <span>{initials}</span>
+        }
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-0.5">
+          <p className="text-sm font-semibold text-white truncate">{reply.channel_name || reply.lead_email}</p>
+          <span className="badge badge-purple text-xs flex-shrink-0">REPLIED</span>
+        </div>
+        <p className="text-xs text-slate-400 truncate">{reply.reply_subject || reply.subject || 'No subject'}</p>
+        <p className={`text-xs truncate mt-0.5 ${hasContent ? 'text-slate-500' : 'text-slate-600 italic'}`}>{preview}</p>
+      </div>
+      <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+        <span className="text-xs text-slate-500">{reply.replied_at ? formatDate(reply.replied_at) : '—'}</span>
+        <div className="flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-lg"
+          style={{ background: 'rgba(124,58,237,0.15)', color: '#a78bfa', border: '1px solid rgba(124,58,237,0.25)' }}>
+          Open <ChevronRight size={11} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main modal ───────────────────────────────────────────────────────────────
 export default function RepliesInbox({ onClose }) {
   const [replies, setReplies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [newCount, setNewCount] = useState(null);
+  const [activeReply, setActiveReply] = useState(null);
 
-  const load = async () => {
-    setLoading(true);
+  const load = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const { data } = await api.get('/emails/replies');
-      setReplies(data.replies || []);
+      const fresh = data.replies || [];
+      setReplies(fresh);
+      // Keep activeReply in sync if it's open
+      setActiveReply(prev => {
+        if (!prev) return prev;
+        const updated = fresh.find(r => r.id === prev.id);
+        return updated || prev;
+      });
     } catch {
       setReplies([]);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -127,12 +238,12 @@ export default function RepliesInbox({ onClose }) {
     }
   };
 
+  // Auto-poll every 30s for new replies
   useEffect(() => {
     load();
+    const interval = setInterval(() => load(true), 30000);
+    return () => clearInterval(interval);
   }, []);
-
-  const withContent = replies.filter(r => r.reply_body);
-  const withoutContent = replies.filter(r => !r.reply_body);
 
   return (
     <AnimatePresence>
@@ -148,78 +259,91 @@ export default function RepliesInbox({ onClose }) {
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.95, opacity: 0 }}
           transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-          className="w-full max-w-2xl max-h-[85vh] bg-dark-800 border border-dark-600 rounded-xl flex flex-col"
+          className="w-full max-w-2xl bg-dark-800 border border-dark-600 rounded-xl flex flex-col overflow-hidden"
+          style={{ height: '82vh', boxShadow: '0 0 60px rgba(124,58,237,0.15)' }}
           onClick={e => e.stopPropagation()}
-          style={{ boxShadow: '0 0 60px rgba(124,58,237,0.15)' }}
         >
-          {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-dark-600">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-purple-500/20 rounded-lg">
-                <MessageSquare size={18} className="text-purple-400" />
-              </div>
-              <div>
-                <h2 className="text-white font-bold text-lg">Replies Inbox</h2>
-                <p className="text-xs text-slate-400">{replies.length} leads replied to your emails</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={sync}
-                disabled={syncing}
-                className="btn btn-primary flex items-center gap-2 text-sm"
+          <AnimatePresence mode="wait">
+            {activeReply ? (
+              /* ── Conversation view ── */
+              <motion.div
+                key="conversation"
+                initial={{ x: 40, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={{ x: 40, opacity: 0 }}
+                transition={{ duration: 0.18 }}
+                className="flex flex-col h-full"
               >
-                <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
-                {syncing ? 'Syncing...' : 'Sync Replies'}
-              </button>
-              <button onClick={onClose} className="btn btn-ghost p-2"><X size={18} /></button>
-            </div>
-          </div>
-
-          {/* New count banner */}
-          {newCount !== null && (
-            <div className={`px-6 py-2 text-sm font-medium ${newCount > 0 ? 'bg-green-500/10 text-green-400' : 'bg-dark-700 text-slate-400'}`}>
-              {newCount > 0 ? `✓ Found ${newCount} new repl${newCount === 1 ? 'y' : 'ies'}` : '✓ All caught up — no new replies'}
-            </div>
-          )}
-
-          {/* Content */}
-          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
-            {loading ? (
-              <div className="flex items-center justify-center h-48 gap-3">
-                <RefreshCw size={24} className="animate-spin text-purple-400" />
-                <span className="text-slate-400">Loading replies...</span>
-              </div>
-            ) : replies.length === 0 ? (
-              <div className="flex flex-col items-center py-16 gap-4">
-                <Mail size={40} className="text-slate-600" />
-                <p className="text-slate-400 font-medium">No replies yet</p>
-                <p className="text-slate-500 text-sm text-center">Click "Sync Replies" to check your Gmail inboxes for new replies</p>
-                <button onClick={sync} disabled={syncing} className="btn btn-primary">
-                  <RefreshCw size={14} className={syncing ? 'animate-spin mr-2' : 'mr-2'} /> Check Gmail Now
-                </button>
-              </div>
+                <ConversationView
+                  reply={activeReply}
+                  onBack={() => setActiveReply(null)}
+                  onReplySent={(emailId, newReply) => {
+                    setReplies(prev => prev.map(r =>
+                      r.id === emailId ? { ...r, my_reply_body: newReply.body, my_reply_sent_at: newReply.sent_at } : r
+                    ));
+                  }}
+                />
+              </motion.div>
             ) : (
-              <>
-                {withContent.length > 0 && (
-                  <>
-                    <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold px-1">
-                      Replies with content ({withContent.length})
-                    </p>
-                    {withContent.map(r => <ReplyCard key={r.id} reply={r} />)}
-                  </>
+              /* ── List view ── */
+              <motion.div
+                key="list"
+                initial={{ x: -40, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={{ x: -40, opacity: 0 }}
+                transition={{ duration: 0.18 }}
+                className="flex flex-col h-full"
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-dark-600 flex-shrink-0">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-purple-500/20 rounded-lg">
+                      <MessageSquare size={18} className="text-purple-400" />
+                    </div>
+                    <div>
+                      <h2 className="text-white font-bold text-lg">Replies Inbox</h2>
+                      <p className="text-xs text-slate-400">{replies.length} leads replied — click to open & reply</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={sync} disabled={syncing} className="btn btn-primary flex items-center gap-2 text-sm">
+                      <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
+                      {syncing ? 'Syncing...' : 'Sync Replies'}
+                    </button>
+                    <button onClick={onClose} className="btn btn-ghost p-2"><X size={18} /></button>
+                  </div>
+                </div>
+
+                {/* New count banner */}
+                {newCount !== null && (
+                  <div className={`px-6 py-2 text-sm font-medium flex-shrink-0 ${newCount > 0 ? 'bg-green-500/10 text-green-400' : 'bg-dark-700 text-slate-400'}`}>
+                    {newCount > 0 ? `✓ Found ${newCount} new repl${newCount === 1 ? 'y' : 'ies'}` : '✓ All caught up — no new replies'}
+                  </div>
                 )}
-                {withoutContent.length > 0 && (
-                  <>
-                    <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold px-1 mt-2">
-                      Detected but content not yet synced ({withoutContent.length}) — click Sync Replies
-                    </p>
-                    {withoutContent.map(r => <ReplyCard key={r.id} reply={r} />)}
-                  </>
-                )}
-              </>
+
+                {/* List */}
+                <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-1">
+                  {loading ? (
+                    <div className="flex items-center justify-center h-48 gap-3">
+                      <RefreshCw size={24} className="animate-spin text-purple-400" />
+                      <span className="text-slate-400">Loading replies...</span>
+                    </div>
+                  ) : replies.length === 0 ? (
+                    <div className="flex flex-col items-center py-16 gap-4">
+                      <Mail size={40} className="text-slate-600" />
+                      <p className="text-slate-400 font-medium">No replies yet</p>
+                      <p className="text-slate-500 text-sm text-center">Click "Sync Replies" to check your Gmail inboxes</p>
+                      <button onClick={sync} disabled={syncing} className="btn btn-primary">
+                        <RefreshCw size={14} className={syncing ? 'animate-spin mr-2' : 'mr-2'} /> Check Gmail Now
+                      </button>
+                    </div>
+                  ) : (
+                    replies.map(r => <ReplyRow key={r.id} reply={r} onOpen={setActiveReply} />)
+                  )}
+                </div>
+              </motion.div>
             )}
-          </div>
+          </AnimatePresence>
         </motion.div>
       </motion.div>
     </AnimatePresence>

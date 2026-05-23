@@ -1,0 +1,409 @@
+const express = require('express');
+const router = express.Router();
+const bcrypt = require('bcryptjs');
+const { getDb, getUserById, getUserByEmail } = require('../models/database');
+const { requireAuth, requireAdmin } = require('../middleware/requireAuth');
+const { asyncHandler } = require('../middleware/errorHandler');
+const {
+  generateOtp, verifyOtp, sendSmsOtp,
+  sendVerificationEmail, sendPasswordResetEmail, sendOtpEmail,
+  checkUsageLimit, PLAN_LIMITS,
+} = require('../services/authService');
+
+const safeUser = (u) => u ? {
+  id: u.id, email: u.email, full_name: u.full_name, agency_name: u.agency_name,
+  role: u.role, plan: u.plan, plan_status: u.plan_status, is_admin: u.is_admin,
+  email_verified: u.email_verified, phone_verified: u.phone_verified,
+  phone_number: u.phone_number, profile_picture: u.profile_picture,
+  onboarding_completed: u.onboarding_completed, created_at: u.created_at,
+  leads_used_this_month: u.leads_used_this_month,
+  emails_used_this_month: u.emails_used_this_month,
+  usage_reset_date: u.usage_reset_date,
+  target_niches: u.target_niches, target_platforms: u.target_platforms,
+  portfolio_url: u.portfolio_url, daily_email_limit: u.daily_email_limit,
+} : null;
+
+// ── GET /api/auth/me ────────────────────────────────────────────────────────
+router.get('/me', requireAuth, (req, res) => {
+  const limits = PLAN_LIMITS[req.user.plan] || PLAN_LIMITS.free;
+  res.json({ success: true, user: safeUser(req.user), limits });
+});
+
+// ── POST /api/auth/register ─────────────────────────────────────────────────
+router.post('/register', asyncHandler(async (req, res) => {
+  const { email, password, full_name, phone_number } = req.body;
+  if (!email || !password || !full_name) {
+    return res.status(400).json({ success: false, error: 'email, password and full_name are required' });
+  }
+  if (password.length < 8) {
+    return res.status(400).json({ success: false, error: 'Password must be at least 8 characters' });
+  }
+
+  const db = getDb();
+  const existing = getUserByEmail(email);
+  if (existing) {
+    return res.status(409).json({ success: false, error: 'Email already registered', code: 'EMAIL_EXISTS' });
+  }
+
+  if (phone_number) {
+    const existingPhone = db.prepare('SELECT id FROM users WHERE phone_number=?').get(phone_number);
+    if (existingPhone) {
+      return res.status(409).json({ success: false, error: 'Phone number already registered', code: 'PHONE_EXISTS' });
+    }
+  }
+
+  const hashed = await bcrypt.hash(password, 12);
+  const result = db.prepare(`
+    INSERT INTO users (email, password, full_name, phone_number, plan, plan_status)
+    VALUES (?, ?, ?, ?, 'free', 'active')
+  `).run(email.toLowerCase().trim(), hashed, full_name.trim(), phone_number || null);
+
+  const user = getUserById(result.lastInsertRowid);
+
+  // Send email verification — await so we can include verifyUrl in response if email fails
+  const emailResult = await sendVerificationEmail(user).catch(e => ({ ok: false, error: e.message }));
+
+  // Send phone OTP if phone provided
+  if (phone_number) {
+    const code = generateOtp(user.id, 'phone');
+    sendSmsOtp(phone_number, code).catch(() => {});
+  }
+
+  req.session.userId = user.id;
+  req.session.save(err => {
+    if (err) console.error('[AUTH] Session save error:', err);
+    res.status(201).json({
+      success: true,
+      user: safeUser(user),
+      needsVerification: true,
+      message: 'Account created! Check your email to verify.',
+      // Include link in response when email service isn't configured (dev/staging)
+      ...(emailResult.dev && { _devVerifyUrl: emailResult.verifyUrl }),
+    });
+  });
+}));
+
+// ── POST /api/auth/login ────────────────────────────────────────────────────
+router.post('/login', asyncHandler(async (req, res) => {
+  const { email, password, remember } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ success: false, error: 'Email and password are required' });
+  }
+
+  const db = getDb();
+  const user = getUserByEmail(email);
+  if (!user) {
+    return res.status(401).json({ success: false, error: 'Invalid email or password' });
+  }
+
+  // Lockout check
+  if (user.lockout_until && new Date(user.lockout_until) > new Date()) {
+    const mins = Math.ceil((new Date(user.lockout_until) - Date.now()) / 60000);
+    return res.status(429).json({ success: false, error: `Too many attempts. Try again in ${mins} minute(s).`, code: 'LOCKED_OUT' });
+  }
+
+  if (!user.password) {
+    return res.status(401).json({ success: false, error: 'This account uses Google login — use "Continue with Google"', code: 'USE_GOOGLE' });
+  }
+
+  const match = await bcrypt.compare(password, user.password);
+  if (!match) {
+    const attempts = (user.login_attempts || 0) + 1;
+    const lockout = attempts >= 5 ? new Date(Date.now() + 15 * 60 * 1000).toISOString() : null;
+    db.prepare(`UPDATE users SET login_attempts=?, lockout_until=? WHERE id=?`).run(attempts, lockout, user.id);
+    if (lockout) {
+      return res.status(429).json({ success: false, error: 'Too many failed attempts. Locked out for 15 minutes.', code: 'LOCKED_OUT' });
+    }
+    return res.status(401).json({ success: false, error: 'Invalid email or password', attemptsLeft: 5 - attempts });
+  }
+
+  // Reset attempts on success
+  db.prepare(`UPDATE users SET login_attempts=0, lockout_until=NULL, last_login=CURRENT_TIMESTAMP WHERE id=?`).run(user.id);
+
+  req.session.userId = user.id;
+  if (remember) req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+  const limits = PLAN_LIMITS[user.plan] || PLAN_LIMITS.free;
+  req.session.save(err => {
+    if (err) console.error('[AUTH] Session save error:', err);
+    res.json({ success: true, user: safeUser(user), limits });
+  });
+}));
+
+// ── POST /api/auth/logout ───────────────────────────────────────────────────
+router.post('/logout', (req, res) => {
+  req.session.destroy(() => {
+    res.clearCookie('ccz.sid');
+    res.json({ success: true });
+  });
+});
+
+// ── POST /api/auth/verify-email ─────────────────────────────────────────────
+router.post('/verify-email', asyncHandler(async (req, res) => {
+  const { token } = req.body;
+  if (!token) return res.status(400).json({ success: false, error: 'Token required' });
+
+  const db = getDb();
+  const row = db.prepare(`
+    SELECT * FROM password_reset_tokens
+    WHERE token=? AND used=0 AND expires_at > datetime('now')
+  `).get(token);
+
+  if (!row) return res.status(400).json({ success: false, error: 'Invalid or expired link' });
+
+  db.prepare(`UPDATE users SET email_verified=1 WHERE id=?`).run(row.user_id);
+  db.prepare(`UPDATE password_reset_tokens SET used=1 WHERE id=?`).run(row.id);
+
+  const user = getUserById(row.user_id);
+  if (req.session.userId === row.user_id) {
+    req.session.save(() => {});
+  }
+
+  res.json({ success: true, message: 'Email verified!', user: safeUser(user) });
+}));
+
+// ── POST /api/auth/resend-verification ─────────────────────────────────────
+router.post('/resend-verification', requireAuth, asyncHandler(async (req, res) => {
+  if (req.user.email_verified) {
+    return res.json({ success: true, message: 'Email already verified' });
+  }
+  await sendVerificationEmail(req.user);
+  res.json({ success: true, message: 'Verification email sent' });
+}));
+
+// ── POST /api/auth/send-phone-otp ───────────────────────────────────────────
+router.post('/send-phone-otp', requireAuth, asyncHandler(async (req, res) => {
+  const { phone_number } = req.body;
+  const phone = phone_number || req.user.phone_number;
+  if (!phone) return res.status(400).json({ success: false, error: 'Phone number required' });
+
+  const db = getDb();
+  if (phone_number && phone_number !== req.user.phone_number) {
+    const existing = db.prepare('SELECT id FROM users WHERE phone_number=? AND id != ?').get(phone_number, req.user.id);
+    if (existing) return res.status(409).json({ success: false, error: 'Phone already registered' });
+    db.prepare(`UPDATE users SET phone_number=? WHERE id=?`).run(phone_number, req.user.id);
+  }
+
+  const code = generateOtp(req.user.id, 'phone');
+  const result = await sendSmsOtp(phone, code);
+  res.json({ success: true, dev: result.dev || false, message: result.dev ? 'OTP in server console (SMS not configured)' : 'OTP sent' });
+}));
+
+// ── POST /api/auth/verify-phone-otp ─────────────────────────────────────────
+router.post('/verify-phone-otp', requireAuth, asyncHandler(async (req, res) => {
+  const { code } = req.body;
+  if (!code) return res.status(400).json({ success: false, error: 'Code required' });
+
+  const result = verifyOtp(req.user.id, code, 'phone');
+  if (!result.ok) return res.status(400).json({ success: false, error: result.error });
+
+  const db = getDb();
+  db.prepare(`UPDATE users SET phone_verified=1 WHERE id=?`).run(req.user.id);
+  const user = getUserById(req.user.id);
+  res.json({ success: true, message: 'Phone verified!', user: safeUser(user) });
+}));
+
+// ── POST /api/auth/phone-login ──────────────────────────────────────────────
+router.post('/phone-login', asyncHandler(async (req, res) => {
+  const { phone_number } = req.body;
+  if (!phone_number) return res.status(400).json({ success: false, error: 'Phone number required' });
+
+  const db = getDb();
+  const user = db.prepare('SELECT * FROM users WHERE phone_number=?').get(phone_number);
+  if (!user) return res.status(404).json({ success: false, error: 'No account with this phone number' });
+
+  const code = generateOtp(user.id, 'phone_login');
+  const smsResult = await sendSmsOtp(phone_number, code);
+  if (smsResult.dev && user.email) {
+    await sendOtpEmail(user, code);
+    return res.json({ success: true, userId: user.id, message: `OTP sent to ${user.email}`, viaEmail: true });
+  }
+  res.json({ success: true, userId: user.id, message: smsResult.dev ? 'OTP in server console (Twilio not configured)' : 'OTP sent via SMS' });
+}));
+
+router.post('/phone-login/verify', asyncHandler(async (req, res) => {
+  const { user_id, code } = req.body;
+  if (!user_id || !code) return res.status(400).json({ success: false, error: 'user_id and code required' });
+
+  const result = verifyOtp(user_id, code, 'phone_login');
+  if (!result.ok) return res.status(400).json({ success: false, error: result.error });
+
+  const db = getDb();
+  db.prepare(`UPDATE users SET last_login=CURRENT_TIMESTAMP WHERE id=?`).run(user_id);
+  const user = getUserById(user_id);
+  req.session.userId = user.id;
+  const limits = PLAN_LIMITS[user.plan] || PLAN_LIMITS.free;
+  req.session.save(err => {
+    if (err) console.error('[AUTH] Session save error:', err);
+    res.json({ success: true, user: safeUser(user), limits });
+  });
+}));
+
+// ── POST /api/auth/forgot-password ──────────────────────────────────────────
+router.post('/forgot-password', asyncHandler(async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ success: false, error: 'Email required' });
+
+  const user = getUserByEmail(email);
+  if (!user) {
+    // Don't reveal whether email exists
+    return res.json({ success: true, message: 'If that email is registered, a reset link was sent.' });
+  }
+
+  const result = await sendPasswordResetEmail(user);
+  res.json({ success: true, message: 'If that email is registered, a reset link was sent.', dev: result.dev, resetUrl: result.resetUrl });
+}));
+
+// ── POST /api/auth/reset-password ───────────────────────────────────────────
+router.post('/reset-password', asyncHandler(async (req, res) => {
+  const { token, password } = req.body;
+  if (!token || !password) return res.status(400).json({ success: false, error: 'Token and password required' });
+  if (password.length < 8) return res.status(400).json({ success: false, error: 'Password must be at least 8 characters' });
+
+  const db = getDb();
+  const row = db.prepare(`
+    SELECT * FROM password_reset_tokens
+    WHERE token=? AND used=0 AND expires_at > datetime('now')
+  `).get(token);
+
+  if (!row) return res.status(400).json({ success: false, error: 'Invalid or expired reset link' });
+
+  const hashed = await bcrypt.hash(password, 12);
+  db.prepare(`UPDATE users SET password=?, login_attempts=0, lockout_until=NULL WHERE id=?`).run(hashed, row.user_id);
+  db.prepare(`UPDATE password_reset_tokens SET used=1 WHERE id=?`).run(row.id);
+
+  res.json({ success: true, message: 'Password updated! You can now log in.' });
+}));
+
+// ── PUT /api/auth/onboarding ────────────────────────────────────────────────
+router.put('/onboarding', requireAuth, asyncHandler(async (req, res) => {
+  const { full_name, agency_name, role, target_niches, target_platforms, portfolio_url, daily_email_limit, auto_find_leads } = req.body;
+  const db = getDb();
+  db.prepare(`
+    UPDATE users SET
+      full_name=COALESCE(?,full_name),
+      agency_name=COALESCE(?,agency_name),
+      role=COALESCE(?,role),
+      target_niches=COALESCE(?,target_niches),
+      target_platforms=COALESCE(?,target_platforms),
+      portfolio_url=COALESCE(?,portfolio_url),
+      daily_email_limit=COALESCE(?,daily_email_limit),
+      auto_find_leads=COALESCE(?,auto_find_leads),
+      onboarding_completed=1
+    WHERE id=?
+  `).run(
+    full_name || null, agency_name || null, role || null,
+    target_niches ? JSON.stringify(target_niches) : null,
+    target_platforms ? JSON.stringify(target_platforms) : null,
+    portfolio_url || null, daily_email_limit || null, auto_find_leads != null ? (auto_find_leads ? 1 : 0) : null,
+    req.user.id,
+  );
+
+  // Also update app settings with user's preferences
+  const { setSetting } = require('../models/database');
+  if (full_name) setSetting('your_name', full_name);
+  if (agency_name) setSetting('agency_name', agency_name);
+  if (portfolio_url) setSetting('portfolio_url', portfolio_url);
+  if (auto_find_leads) setSetting('auto_scrape', 'true');
+
+  const user = getUserById(req.user.id);
+  res.json({ success: true, user: safeUser(user) });
+}));
+
+// ── PUT /api/auth/profile ───────────────────────────────────────────────────
+router.put('/profile', requireAuth, asyncHandler(async (req, res) => {
+  const { full_name, agency_name, role, portfolio_url } = req.body;
+  const db = getDb();
+  db.prepare(`
+    UPDATE users SET
+      full_name=COALESCE(?,full_name),
+      agency_name=COALESCE(?,agency_name),
+      role=COALESCE(?,role),
+      portfolio_url=COALESCE(?,portfolio_url)
+    WHERE id=?
+  `).run(full_name || null, agency_name || null, role || null, portfolio_url || null, req.user.id);
+  const user = getUserById(req.user.id);
+  res.json({ success: true, user: safeUser(user) });
+}));
+
+// ── GET /api/auth/usage ─────────────────────────────────────────────────────
+router.get('/usage', requireAuth, (req, res) => {
+  const limits = PLAN_LIMITS[req.user.plan] || PLAN_LIMITS.free;
+  res.json({
+    success: true,
+    usage: {
+      leads: { used: req.user.leads_used_this_month, limit: limits.leads },
+      emails: { used: req.user.emails_used_this_month, limit: limits.emails },
+      reset_date: req.user.usage_reset_date,
+      plan: req.user.plan,
+    },
+  });
+});
+
+// ── ADMIN routes ─────────────────────────────────────────────────────────────
+
+router.get('/admin/stats', requireAdmin, asyncHandler(async (req, res) => {
+  const db = getDb();
+  const totalUsers = db.prepare('SELECT COUNT(*) as c FROM users').get();
+  const activeToday = db.prepare(`SELECT COUNT(*) as c FROM users WHERE last_login >= datetime('now','-1 day')`).get();
+  const totalLeads = db.prepare('SELECT COUNT(*) as c FROM leads').get();
+  const totalEmails = db.prepare('SELECT COUNT(*) as c FROM emails').get();
+
+  const users = db.prepare(`
+    SELECT id, email, full_name, agency_name, plan, plan_status, is_admin,
+           leads_used_this_month, emails_used_this_month, created_at, last_login,
+           email_verified, phone_verified
+    FROM users ORDER BY created_at DESC
+  `).all();
+
+  res.json({
+    success: true,
+    stats: {
+      total_users: totalUsers.c,
+      active_today: activeToday.c,
+      total_leads: totalLeads.c,
+      total_emails: totalEmails.c,
+    },
+    users,
+  });
+}));
+
+router.put('/admin/users/:id/plan', requireAdmin, asyncHandler(async (req, res) => {
+  const { plan, plan_status } = req.body;
+  const validPlans = ['free', 'starter', 'growth', 'agency'];
+  if (plan && !validPlans.includes(plan)) {
+    return res.status(400).json({ success: false, error: 'Invalid plan' });
+  }
+  const db = getDb();
+  db.prepare(`UPDATE users SET plan=COALESCE(?,plan), plan_status=COALESCE(?,plan_status) WHERE id=?`)
+    .run(plan || null, plan_status || null, req.params.id);
+  res.json({ success: true });
+}));
+
+router.delete('/admin/users/:id', requireAdmin, asyncHandler(async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (id === req.user.id) return res.status(400).json({ success: false, error: 'Cannot delete yourself' });
+  const db = getDb();
+  db.prepare('DELETE FROM users WHERE id=?').run(id);
+  res.json({ success: true });
+}));
+
+router.post('/admin/users/:id/reset-usage', requireAdmin, asyncHandler(async (req, res) => {
+  const db = getDb();
+  db.prepare(`UPDATE users SET leads_used_this_month=0, emails_used_this_month=0 WHERE id=?`).run(req.params.id);
+  res.json({ success: true });
+}));
+
+router.put('/admin/users/:id/ban', requireAdmin, asyncHandler(async (req, res) => {
+  const db = getDb();
+  const user = getUserById(req.params.id);
+  if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+  const lockout = user.lockout_until ? null : new Date(Date.now() + 100 * 365 * 24 * 60 * 60 * 1000).toISOString();
+  db.prepare(`UPDATE users SET lockout_until=? WHERE id=?`).run(lockout, req.params.id);
+  res.json({ success: true, banned: !!lockout });
+}));
+
+// ── Google OAuth ─────────────────────────────────────────────────────────────
+// These routes are registered directly in server.js via passport
+
+module.exports = router;
