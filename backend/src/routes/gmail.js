@@ -5,6 +5,9 @@ const { asyncHandler } = require('../middleware/errorHandler');
 const { getAuthUrl, exchangeCodeForTokens, getAccountsForUser, getGmailLimit } = require('../services/gmailService');
 const { getDb } = require('../models/database');
 
+// Public ping to verify routes are loaded
+router.get('/ping', (req, res) => res.json({ ok: true, routes: 'gmail' }));
+
 // GET /api/gmail/auth-url — returns the OAuth URL for connecting Gmail
 router.get('/auth-url', requireAuth, (req, res) => {
   if (!process.env.GMAIL_CLIENT_ID && !process.env.GOOGLE_CLIENT_ID) {
