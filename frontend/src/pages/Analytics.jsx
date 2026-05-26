@@ -371,8 +371,8 @@ const PlatformsTab = ({ data, loading }) => {
                 <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} horizontal={false} />
                 <XAxis type="number" {...axisProps()} unit="%" />
                 <YAxis type="category" dataKey="niche" tick={{ fill: TICK_COLOR, fontSize: 11 }} tickLine={false} axisLine={false} />
-                <Tooltip content={<DarkTooltip />} formatter={(v) => [`${v.toFixed(1)}%`, 'Close Rate']} />
-                <Bar dataKey="close_rate" name="Close Rate" radius={[0, 3, 3, 0]}>
+                <Tooltip content={<DarkTooltip />} />
+                <Bar dataKey="close_rate" name="Close Rate" unit="%" radius={[0, 3, 3, 0]}>
                   {niches.map((_, i) => (
                     <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                   ))}
@@ -424,28 +424,33 @@ const PlatformsTab = ({ data, loading }) => {
 // ---------------------------------------------------------------------------
 // Main Analytics component
 // ---------------------------------------------------------------------------
+const DATE_RANGES = [
+  { label: '7d',  value: '7d'  },
+  { label: '30d', value: '30d' },
+  { label: '90d', value: '90d' },
+  { label: 'All', value: 'all' },
+];
+
 export default function Analytics() {
   const [activeTab, setActiveTab] = useState('Outreach');
+  const [dateRange, setDateRange] = useState('30d');
   const [outreachData, setOutreachData] = useState(null);
   const [pipelineData, setPipelineData] = useState(null);
   const [platformsData, setPlatformsData] = useState(null);
   const [loading, setLoading] = useState({ Outreach: false, Pipeline: false, Platforms: false });
 
-  const fetchTab = useCallback(async (tab) => {
-    if (tab === 'Outreach' && outreachData) return;
-    if (tab === 'Pipeline' && pipelineData) return;
-    if (tab === 'Platforms' && platformsData) return;
-
+  const fetchTab = useCallback(async (tab, range) => {
+    const params = range !== 'all' ? { range } : {};
     setLoading((prev) => ({ ...prev, [tab]: true }));
     try {
       if (tab === 'Outreach') {
-        const { data } = await api.get('/analytics/email');
+        const { data } = await api.get('/analytics/email', { params });
         setOutreachData(data);
       } else if (tab === 'Pipeline') {
-        const { data } = await api.get('/analytics/pipeline');
+        const { data } = await api.get('/analytics/pipeline', { params });
         setPipelineData(data);
       } else if (tab === 'Platforms') {
-        const { data } = await api.get('/analytics/platforms');
+        const { data } = await api.get('/analytics/platforms', { params });
         setPlatformsData(data);
       }
     } catch {
@@ -453,33 +458,24 @@ export default function Analytics() {
     } finally {
       setLoading((prev) => ({ ...prev, [tab]: false }));
     }
-  }, [outreachData, pipelineData, platformsData]);
+  }, []);
 
   useEffect(() => {
-    fetchTab(activeTab);
-  }, [activeTab, fetchTab]);
+    fetchTab(activeTab, dateRange);
+  }, [activeTab, dateRange, fetchTab]);
 
-  const handleRefresh = async () => {
-    if (activeTab === 'Outreach') setOutreachData(null);
-    if (activeTab === 'Pipeline') setPipelineData(null);
-    if (activeTab === 'Platforms') setPlatformsData(null);
-    setLoading((prev) => ({ ...prev, [activeTab]: true }));
-    try {
-      if (activeTab === 'Outreach') {
-        const { data } = await api.get('/analytics/email');
-        setOutreachData(data);
-      } else if (activeTab === 'Pipeline') {
-        const { data } = await api.get('/analytics/pipeline');
-        setPipelineData(data);
-      } else if (activeTab === 'Platforms') {
-        const { data } = await api.get('/analytics/platforms');
-        setPlatformsData(data);
-      }
-    } catch {
-      toast.error('Refresh failed');
-    } finally {
-      setLoading((prev) => ({ ...prev, [activeTab]: false }));
-    }
+  // Invalidate cached data when range changes
+  useEffect(() => {
+    setOutreachData(null);
+    setPipelineData(null);
+    setPlatformsData(null);
+  }, [dateRange]);
+
+  const handleRefresh = () => {
+    setOutreachData(null);
+    setPipelineData(null);
+    setPlatformsData(null);
+    fetchTab(activeTab, dateRange);
   };
 
   // ---------------------------------------------------------------------------
@@ -493,9 +489,26 @@ export default function Analytics() {
           <h1 className="text-2xl font-bold text-white">Analytics</h1>
           <p className="text-sm text-slate-400 mt-0.5">Track outreach performance, pipeline health, and platform ROI</p>
         </div>
-        <button onClick={handleRefresh} className="btn btn-ghost flex items-center gap-2">
-          <RefreshCw size={15} /> Refresh
-        </button>
+        <div className="flex items-center gap-3">
+          <div className="flex gap-1 bg-dark-800 rounded-lg p-1">
+            {DATE_RANGES.map(r => (
+              <button
+                key={r.value}
+                onClick={() => setDateRange(r.value)}
+                className={`px-3 py-1.5 rounded text-xs font-medium transition-all ${
+                  dateRange === r.value
+                    ? 'bg-brand-600 text-white'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+          <button onClick={handleRefresh} className="btn btn-ghost flex items-center gap-2">
+            <RefreshCw size={15} /> Refresh
+          </button>
+        </div>
       </div>
 
       {/* Section tabs */}

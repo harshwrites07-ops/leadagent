@@ -5,10 +5,13 @@ const { asyncHandler } = require('../middleware/errorHandler');
 
 const CRM_STAGES = ['new_lead', 'studying', 'pitch_ready', 'emailed', 'opened', 'replied', 'call_booked', 'closed_won', 'closed_lost'];
 
-// GET /api/crm — all leads as flat array (frontend groups by crm_stage)
+// GET /api/crm — paginated leads (frontend groups by crm_stage)
 router.get('/', asyncHandler(async (req, res) => {
   const db = getDb();
-  const { search, temperature, platform } = req.query;
+  const { search, temperature, platform, page = 1, limit = 50 } = req.query;
+  const pageNum = Math.max(1, parseInt(page) || 1);
+  const limitNum = Math.min(200, Math.max(1, parseInt(limit) || 50));
+  const offset = (pageNum - 1) * limitNum;
 
   let where = ['l.user_id = ?'];
   const params = [req.user.id];
@@ -17,6 +20,8 @@ router.get('/', asyncHandler(async (req, res) => {
   if (temperature) { where.push('l.temperature = ?'); params.push(temperature); }
   if (platform) { where.push('l.platform = ?'); params.push(platform); }
 
+  const total = db.prepare(`SELECT COUNT(*) as n FROM leads l WHERE ${where.join(' AND ')}`).get(...params).n;
+
   const leads = db.prepare(`
     SELECT l.*,
       (SELECT COUNT(*) FROM emails e WHERE e.lead_id = l.id) as email_count,
@@ -24,9 +29,10 @@ router.get('/', asyncHandler(async (req, res) => {
     FROM leads l
     WHERE ${where.join(' AND ')}
     ORDER BY l.lead_score DESC
-  `).all(...params);
+    LIMIT ? OFFSET ?
+  `).all(...params, limitNum, offset);
 
-  res.json({ success: true, leads });
+  res.json({ success: true, leads, total, page: pageNum, limit: limitNum, hasMore: offset + leads.length < total });
 }));
 
 // GET /api/crm/pipeline-value — MUST be before /:leadId
@@ -64,10 +70,10 @@ router.put('/:leadId/stage', asyncHandler(async (req, res) => {
   if (!lead) return res.status(404).json({ success: false, error: 'Lead not found' });
 
   db.prepare(`UPDATE leads SET crm_stage = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(stage, lead.id);
-  logActivity('stage_changed', `${lead.channel_name} moved to ${stage.replace(/_/g, ' ')}`, lead.id, { from: lead.crm_stage, to: stage });
+  logActivity('stage_changed', `${lead.channel_name} moved to ${stage.replace(/_/g, ' ')}`, lead.id, { from: lead.crm_stage, to: stage }, req.user.id);
 
-  if (stage === 'call_booked') logActivity('call_booked', `Call booked with ${lead.channel_name}`, lead.id);
-  if (stage === 'closed_won') logActivity('closed_won', `${lead.channel_name} closed as WON`, lead.id);
+  if (stage === 'call_booked') logActivity('call_booked', `Call booked with ${lead.channel_name}`, lead.id, {}, req.user.id);
+  if (stage === 'closed_won') logActivity('closed_won', `${lead.channel_name} closed as WON`, lead.id, {}, req.user.id);
 
   res.json({ success: true, stage });
 }));
@@ -78,15 +84,20 @@ router.post('/:leadId/note', asyncHandler(async (req, res) => {
   if (!content) return res.status(400).json({ success: false, error: 'content required' });
 
   const db = getDb();
+  const lead = db.prepare('SELECT id FROM leads WHERE id = ? AND user_id = ?').get(req.params.leadId, req.user.id);
+  if (!lead) return res.status(404).json({ success: false, error: 'Lead not found' });
+
   const result = db.prepare('INSERT INTO notes (lead_id, content) VALUES (?, ?)').run(req.params.leadId, content);
   const note = db.prepare('SELECT * FROM notes WHERE id = ?').get(result.lastInsertRowid);
-  logActivity('note_added', `Note added`, req.params.leadId);
+  logActivity('note_added', `Note added`, req.params.leadId, {}, req.user.id);
   res.status(201).json({ success: true, note });
 }));
 
 // DELETE /api/crm/:leadId/note/:noteId
 router.delete('/:leadId/note/:noteId', asyncHandler(async (req, res) => {
   const db = getDb();
+  const lead = db.prepare('SELECT id FROM leads WHERE id = ? AND user_id = ?').get(req.params.leadId, req.user.id);
+  if (!lead) return res.status(404).json({ success: false, error: 'Lead not found' });
   db.prepare('DELETE FROM notes WHERE id = ? AND lead_id = ?').run(req.params.noteId, req.params.leadId);
   res.json({ success: true });
 }));
@@ -94,6 +105,8 @@ router.delete('/:leadId/note/:noteId', asyncHandler(async (req, res) => {
 // GET /api/crm/:leadId/history
 router.get('/:leadId/history', asyncHandler(async (req, res) => {
   const db = getDb();
+  const lead = db.prepare('SELECT id FROM leads WHERE id = ? AND user_id = ?').get(req.params.leadId, req.user.id);
+  if (!lead) return res.status(404).json({ success: false, error: 'Lead not found' });
 
   const activities = db.prepare(`
     SELECT * FROM activities WHERE lead_id = ? ORDER BY created_at DESC LIMIT 50

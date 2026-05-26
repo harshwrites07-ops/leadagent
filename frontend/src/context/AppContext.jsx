@@ -30,13 +30,15 @@ export function AppProvider({ children }) {
 
   const loadSettings = useCallback(async () => {
     try {
-      const res = await api.get('/settings');
-      setSettings(res.data.settings || {});
+      const [adminRes, meRes] = await Promise.allSettled([
+        api.get('/settings'),
+        api.get('/settings/me'),
+      ]);
+      const adminSettings = adminRes.status === 'fulfilled' ? (adminRes.value.data.settings || {}) : {};
+      const meData = meRes.status === 'fulfilled' ? meRes.value.data : {};
+      setSettings({ ...adminSettings, ...meData.profile, ...meData.preferences, plan: meData.plan });
     } catch (e) {
-      // 403 is expected for non-admin users — settings table is admin-only
-      if (e.response?.status !== 403) {
-        console.error('Settings load error:', e.message);
-      }
+      console.error('Settings load error:', e.message);
     }
   }, []);
 

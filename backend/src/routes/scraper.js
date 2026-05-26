@@ -3,7 +3,7 @@ const router = express.Router();
 const { getDb, logActivity } = require('../models/database');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { scrapeLimiter, aiLimiter } = require('../middleware/rateLimiter');
-const { detectViralChannels, searchChannels, searchChannelsMulti } = require('../services/youtubeService');
+const { detectViralChannels, searchChannels, searchChannelsMulti, getKeyPoolStatus, isQuotaExhausted } = require('../services/youtubeService');
 
 // ─── Niche keyword maps ────────────────────────────────────────────────────────
 const NICHE_KEYWORDS = {
@@ -18,16 +18,47 @@ const NICHE_KEYWORDS = {
   'Podcasters': ['podcast video channel','video podcast YouTube','podcaster YouTube','interview show channel','talk show YouTube'],
 };
 
-// In-memory hunt state
-const huntState = { running: false, niche: null, found: 0, saved: 0, startedAt: null, keywords: [], error: null };
+// Per-user hunt and powermode state (keyed by userId)
+const huntStates = new Map();
+const powermodeStates = new Map();
 
-// PowerMode state
-const powermodeState = {
-  running: false, startedAt: null, total: 0, saved: 0,
-  keywordsTotal: 0, keywordsDone: 0, currentKeywords: [],
-  recentLeads: [], stats: { hot: 0, warm: 0, cold: 0, withEmail: 0 },
-  stopped: false, error: null,
-};
+// Purge completed entries older than 10 minutes, cap maps at 100 entries
+setInterval(() => {
+  const cutoff = Date.now() - 10 * 60 * 1000;
+  for (const [k, v] of huntStates) {
+    if (!v.running && v.completedAt && v.completedAt < cutoff) huntStates.delete(k);
+  }
+  for (const [k, v] of powermodeStates) {
+    if (!v.running && v.completedAt && v.completedAt < cutoff) powermodeStates.delete(k);
+  }
+  if (huntStates.size > 100) {
+    const oldest = [...huntStates.keys()].slice(0, huntStates.size - 100);
+    oldest.forEach(k => huntStates.delete(k));
+  }
+  if (powermodeStates.size > 100) {
+    const oldest = [...powermodeStates.keys()].slice(0, powermodeStates.size - 100);
+    oldest.forEach(k => powermodeStates.delete(k));
+  }
+}, 30 * 60 * 1000);
+
+function getHuntState(userId) {
+  if (!huntStates.has(userId)) {
+    huntStates.set(userId, { running: false, niche: null, found: 0, saved: 0, startedAt: null, keywords: [], error: null });
+  }
+  return huntStates.get(userId);
+}
+
+function getPowermodeState(userId) {
+  if (!powermodeStates.has(userId)) {
+    powermodeStates.set(userId, {
+      running: false, startedAt: null, total: 0, saved: 0,
+      keywordsTotal: 0, keywordsDone: 0, currentKeywords: [],
+      recentLeads: [], stats: { hot: 0, warm: 0, cold: 0, withEmail: 0 },
+      stopped: false, error: null,
+    });
+  }
+  return powermodeStates.get(userId);
+}
 
 const POWERMODE_KEYWORDS = [
   // Business & Entrepreneurship
@@ -65,12 +96,12 @@ const POWERMODE_KEYWORDS = [
 
 const LEAD_INSERT_SQL = `
   INSERT OR IGNORE INTO leads
-    (platform, channel_id, channel_name, channel_handle, subscriber_count, total_videos,
+    (user_id, platform, channel_id, channel_name, channel_handle, subscriber_count, total_videos,
      avg_views, avg_likes, avg_comments, engagement_rate, upload_frequency_days,
      last_upload_date, channel_description, channel_tags, recent_videos, most_viewed_video,
      country, email, website, social_links, thumbnail_url, pain_points, lead_score, temperature, niche, crm_stage)
   VALUES
-    (@platform, @channel_id, @channel_name, @channel_handle, @subscriber_count, @total_videos,
+    (@user_id, @platform, @channel_id, @channel_name, @channel_handle, @subscriber_count, @total_videos,
      @avg_views, @avg_likes, @avg_comments, @engagement_rate, @upload_frequency_days,
      @last_upload_date, @channel_description, @channel_tags, @recent_videos, @most_viewed_video,
      @country, @email, @website, @social_links, @thumbnail_url, @pain_points, @lead_score, @temperature, @niche, 'new_lead')
@@ -79,19 +110,21 @@ const LEAD_INSERT_SQL = `
 // POST /api/scraper/hunt — fire-and-forget niche hunt (runs in background)
 router.post('/hunt', asyncHandler(async (req, res) => {
   const { niche, target = 100 } = req.body;
+  const userId = req.user.id;
   if (!niche) return res.status(400).json({ error: 'niche required' });
-  if (huntState.running) return res.json({ status: 'already_running', ...huntState });
+  const hs = getHuntState(userId);
+  if (hs.running) return res.json({ status: 'already_running', ...hs });
 
   const keywords = NICHE_KEYWORDS[niche];
   if (!keywords) return res.status(400).json({ error: `Unknown niche. Valid: ${Object.keys(NICHE_KEYWORDS).join(', ')}` });
 
-  huntState.running = true;
-  huntState.niche = niche;
-  huntState.found = 0;
-  huntState.saved = 0;
-  huntState.startedAt = new Date().toISOString();
-  huntState.keywords = keywords;
-  huntState.error = null;
+  hs.running = true;
+  hs.niche = niche;
+  hs.found = 0;
+  hs.saved = 0;
+  hs.startedAt = new Date().toISOString();
+  hs.keywords = keywords;
+  hs.error = null;
 
   res.json({ status: 'started', niche, target, message: `Hunting ${niche} leads in background. Check /scraper/hunt/status for progress.` });
 
@@ -107,27 +140,28 @@ router.post('/hunt', asyncHandler(async (req, res) => {
       kwIdx += 3;
       try {
         const leads = await searchChannelsMulti(batch, { minSubs: 5000, maxSubs: 500000, maxResults: Math.min(remaining, 50), emailOnly: true });
-        huntState.found += leads.length;
+        hs.found += leads.length;
         for (const lead of leads) {
           try {
-            const r = insert.run({ ...lead, niche });
-            if (r.changes > 0) { huntState.saved++; remaining--; }
+            const r = insert.run({ ...lead, niche, user_id: userId });
+            if (r.changes > 0) { hs.saved++; remaining--; }
           } catch {}
         }
-        if (leads.length > 0) logActivity('niche_hunt', `Hunt[${niche}]: +${leads.length} leads saved`, null);
+        if (leads.length > 0) logActivity('niche_hunt', `Hunt[${niche}]: +${leads.length} leads saved`, null, {}, userId);
       } catch (e) {
-        huntState.error = e.message;
+        hs.error = e.message;
         if (e.message.includes('quota')) break;
       }
     }
-    huntState.running = false;
-    console.log(`[Hunt] ${niche} done: ${huntState.saved} saved`);
+    hs.running = false;
+    hs.completedAt = Date.now();
+    console.log(`[Hunt] ${niche} done: ${hs.saved} saved`);
   })();
 }));
 
 // GET /api/scraper/hunt/status
 router.get('/hunt/status', asyncHandler(async (req, res) => {
-  res.json(huntState);
+  res.json(getHuntState(req.user.id));
 }));
 
 // Rotate through countries so each PowerMode run finds fresh channels
@@ -136,13 +170,15 @@ let pmCountryIdx = 0;
 
 // POST /api/scraper/powermode/start
 router.post('/powermode/start', asyncHandler(async (req, res) => {
-  if (powermodeState.running) return res.json({ status: 'already_running', ...powermodeState });
+  const userId = req.user.id;
+  const ps = getPowermodeState(userId);
+  if (ps.running) return res.json({ status: 'already_running', ...ps });
 
   // Pick next country in rotation
   const country = POWERMODE_COUNTRIES[pmCountryIdx % POWERMODE_COUNTRIES.length];
   pmCountryIdx++;
 
-  Object.assign(powermodeState, {
+  Object.assign(ps, {
     running: true, startedAt: new Date().toISOString(),
     total: 0, saved: 0,
     keywordsTotal: POWERMODE_KEYWORDS.length,
@@ -158,83 +194,87 @@ router.post('/powermode/start', asyncHandler(async (req, res) => {
     const insert = db.prepare(LEAD_INSERT_SQL);
     const BATCH = 5;
 
-    for (let i = 0; i < POWERMODE_KEYWORDS.length && !powermodeState.stopped; i += BATCH) {
+    for (let i = 0; i < POWERMODE_KEYWORDS.length && !ps.stopped; i += BATCH) {
       const batch = POWERMODE_KEYWORDS.slice(i, i + BATCH);
-      powermodeState.currentKeywords = batch;
+      ps.currentKeywords = batch;
 
       const results = await Promise.allSettled(
         batch.map(kw => searchChannels({ keyword: kw, minSubs: 5000, maxSubs: 500000, maxResults: 50, emailOnly: false, country }))
       );
 
-      powermodeState.keywordsDone += batch.length;
+      ps.keywordsDone += batch.length;
 
       for (const r of results) {
         if (r.status !== 'fulfilled') continue;
         for (const lead of (r.value || [])) {
-          powermodeState.total++;
+          ps.total++;
           const t = lead.temperature;
-          if (t === 'hot') powermodeState.stats.hot++;
-          else if (t === 'warm') powermodeState.stats.warm++;
-          else powermodeState.stats.cold++;
-          if (lead.email) powermodeState.stats.withEmail++;
+          if (t === 'hot') ps.stats.hot++;
+          else if (t === 'warm') ps.stats.warm++;
+          else ps.stats.cold++;
+          if (lead.email) ps.stats.withEmail++;
 
-          powermodeState.recentLeads.unshift({
+          ps.recentLeads.unshift({
             channel_name: lead.channel_name,
             subscriber_count: lead.subscriber_count,
             temperature: lead.temperature,
             hasEmail: !!lead.email,
             channel_id: lead.channel_id,
           });
-          if (powermodeState.recentLeads.length > 30) powermodeState.recentLeads.pop();
+          if (ps.recentLeads.length > 30) ps.recentLeads.pop();
 
           try {
-            const r = insert.run({ ...lead, niche: 'powermode' });
-            if (r.changes > 0) powermodeState.saved++;
+            const ir = insert.run({ ...lead, niche: 'powermode', user_id: userId });
+            if (ir.changes > 0) ps.saved++;
           } catch {}
         }
       }
     }
 
-    powermodeState.running = false;
-    if (!powermodeState.stopped) logActivity('powermode', `PowerMode: ${powermodeState.saved} leads found`, null);
-  })().catch(e => { powermodeState.running = false; powermodeState.error = e.message; });
+    ps.running = false;
+    ps.completedAt = Date.now();
+    if (!ps.stopped) logActivity('powermode', `PowerMode: ${ps.saved} leads found`, null, {}, userId);
+  })().catch(e => { ps.running = false; ps.completedAt = Date.now(); ps.error = e.message; });
 }));
 
 // POST /api/scraper/powermode/stop
 router.post('/powermode/stop', asyncHandler(async (req, res) => {
-  powermodeState.stopped = true;
-  powermodeState.running = false;
-  res.json({ status: 'stopped', saved: powermodeState.saved });
+  const ps = getPowermodeState(req.user.id);
+  ps.stopped = true;
+  ps.running = false;
+  res.json({ status: 'stopped', saved: ps.saved });
 }));
 
 // GET /api/scraper/powermode/status
 router.get('/powermode/status', asyncHandler(async (req, res) => {
-  res.json(powermodeState);
+  res.json(getPowermodeState(req.user.id));
 }));
 
 // POST /api/scraper/viral-detector
 router.post('/viral-detector', scrapeLimiter, asyncHandler(async (req, res) => {
   const { keyword = 'youtube', niche } = req.body;
+  const userId = req.user.id;
   const db = getDb();
 
   const viralChannels = await detectViralChannels(niche || keyword);
 
   const results = [];
   for (const ch of viralChannels) {
-    const existing = db.prepare('SELECT id FROM leads WHERE channel_id = ?').get(ch.channel_id);
+    const existing = db.prepare('SELECT id FROM leads WHERE channel_id = ? AND user_id = ?').get(ch.channel_id, userId);
     if (existing) { results.push({ ...ch, id: existing.id, status: 'existing' }); continue; }
 
     const r = db.prepare(`
       INSERT INTO leads (
-        platform, channel_id, channel_name, channel_handle, subscriber_count, avg_views,
+        user_id, platform, channel_id, channel_name, channel_handle, subscriber_count, avg_views,
         engagement_rate, upload_frequency_days, recent_videos, pain_points, lead_score,
         temperature, niche, thumbnail_url, channel_description
       ) VALUES (
-        'youtube', @channel_id, @channel_name, @channel_handle, @subscriber_count, @avg_views,
+        @user_id, 'youtube', @channel_id, @channel_name, @channel_handle, @subscriber_count, @avg_views,
         @engagement_rate, @upload_frequency_days, @recent_videos, @pain_points, @lead_score,
         'hot', @niche, @thumbnail_url, @channel_description
       )
     `).run({
+      user_id: userId,
       channel_id: ch.channel_id,
       channel_name: ch.channel_name,
       channel_handle: ch.channel_handle || null,
@@ -250,7 +290,7 @@ router.post('/viral-detector', scrapeLimiter, asyncHandler(async (req, res) => {
       channel_description: ch.channel_description || null,
     });
 
-    logActivity('viral_detected', `VIRAL: ${ch.channel_name} got ${ch.viral_multiplier}x normal views 🚀`, r.lastInsertRowid);
+    logActivity('viral_detected', `VIRAL: ${ch.channel_name} got ${ch.viral_multiplier}x normal views`, r.lastInsertRowid, {}, userId);
     results.push({ ...ch, id: r.lastInsertRowid, status: 'new' });
   }
 
@@ -262,6 +302,7 @@ router.post('/competitor-spy', scrapeLimiter, asyncHandler(async (req, res) => {
   const { competitor_name, competitor_keywords } = req.body;
   if (!competitor_name) return res.status(400).json({ success: false, error: 'competitor_name required' });
 
+  const userId = req.user.id;
   const db = getDb();
 
   // Search for channels related to the competitor
@@ -283,32 +324,45 @@ router.post('/competitor-spy', scrapeLimiter, asyncHandler(async (req, res) => {
   const results = [];
   for (const ch of allLeads) {
     if (!ch.channel_id) continue;
-    const existing = db.prepare('SELECT id FROM leads WHERE channel_id = ?').get(ch.channel_id);
+    const existing = db.prepare('SELECT id FROM leads WHERE channel_id = ? AND user_id = ?').get(ch.channel_id, userId);
     if (existing) continue;
 
     const r = db.prepare(`
       INSERT INTO leads (
-        platform, channel_id, channel_name, channel_handle, subscriber_count, avg_views,
+        user_id, platform, channel_id, channel_name, channel_handle, subscriber_count, avg_views,
         avg_likes, avg_comments, engagement_rate, upload_frequency_days, last_upload_date,
         channel_description, channel_tags, recent_videos, most_viewed_video,
         country, email, website, pain_points, lead_score, temperature,
         niche, thumbnail_url
       ) VALUES (
-        @platform, @channel_id, @channel_name, @channel_handle, @subscriber_count, @avg_views,
+        @user_id, @platform, @channel_id, @channel_name, @channel_handle, @subscriber_count, @avg_views,
         @avg_likes, @avg_comments, @engagement_rate, @upload_frequency_days, @last_upload_date,
         @channel_description, @channel_tags, @recent_videos, @most_viewed_video,
         @country, @email, @website, @pain_points, @lead_score, @temperature,
         @niche, @thumbnail_url
       )
-    `).run({ ...ch, niche: `competitor:${competitor_name}` });
+    `).run({ ...ch, user_id: userId, niche: `competitor:${competitor_name}` });
 
     ch.id = r.lastInsertRowid;
     results.push(ch);
     added++;
-    logActivity('competitor_spy', `Found competitor lead: ${ch.channel_name}`, r.lastInsertRowid, { competitor: competitor_name });
+    logActivity('competitor_spy', `Found competitor lead: ${ch.channel_name}`, r.lastInsertRowid, { competitor: competitor_name }, userId);
   }
 
   res.json({ success: true, added, leads: results });
+}));
+
+// GET /api/scraper/quota-status
+router.get('/quota-status', asyncHandler(async (req, res) => {
+  const keys = getKeyPoolStatus();
+  const exhausted = isQuotaExhausted();
+  const active = keys.filter(k => !k.exhausted).length;
+  // Hours until midnight PT (roughly UTC-8)
+  const now = new Date();
+  const ptHour = (now.getUTCHours() - 8 + 24) % 24;
+  const ptMin = now.getUTCMinutes();
+  const hoursToReset = Math.max(1, Math.ceil(24 - ptHour - ptMin / 60));
+  res.json({ success: true, exhausted, active, total: keys.length, hoursToReset, keys });
 }));
 
 // GET /api/scraper/activities - recent activity feed
@@ -320,9 +374,10 @@ router.get('/activities', asyncHandler(async (req, res) => {
     SELECT a.*, l.channel_name, l.thumbnail_url, l.temperature, l.subscriber_count
     FROM activities a
     LEFT JOIN leads l ON l.id = a.lead_id
+    WHERE a.lead_id IS NULL OR l.user_id = ?
     ORDER BY a.created_at DESC
     LIMIT ?
-  `).all(limit);
+  `).all(req.user.id, limit);
 
   res.json({ success: true, activities });
 }));

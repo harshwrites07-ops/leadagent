@@ -2,20 +2,29 @@ import axios from 'axios';
 
 const api = axios.create({
   baseURL: '/api',
-  timeout: 0, // no timeout — AI + scraping ops can take several minutes
+  timeout: 120000,
   withCredentials: true,
 });
 
 api.interceptors.response.use(
   res => res,
   err => {
-    if (err.response?.data?.error) {
+    if (err.code === 'ECONNABORTED' || err.code === 'ERR_NETWORK') {
+      err.message = 'Request timed out — the server is taking too long. Try again or check your connection.';
+    } else if (err.response?.data?.error) {
       err.message = err.response.data.error;
     }
     // Redirect to login on 401 (session expired)
     if (err.response?.status === 401 && err.response?.data?.code === 'UNAUTHENTICATED') {
       if (window.location.pathname !== '/login' && window.location.pathname !== '/signup') {
         window.location.href = '/login';
+      }
+    }
+    // Global upgrade interceptor — 429 with upgradeRequired flag
+    if (err.response?.status === 429 && err.response?.data?.upgradeRequired) {
+      if (window.location.pathname !== '/settings') {
+        window.__upgradeModalTrigger?.();
+        window.location.href = '/settings#billing';
       }
     }
     return Promise.reject(err);

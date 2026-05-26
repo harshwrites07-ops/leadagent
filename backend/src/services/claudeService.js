@@ -183,23 +183,39 @@ Creator confused by declining views → "I think I know what's happening"
 
 const BUSINESS_PROFILE = CONTENTCRAFTERZZ_INTELLIGENCE;
 
-function buildAgencyContext() {
-  const name = getSetting('your_name') || 'the founder';
-  const role = getSetting('your_role') || 'Founder';
-  const portfolio = getSetting('portfolio_url') || '(portfolio link)';
-  const agencyName = getSetting('agency_name') || 'ContentCrafterzz';
+function buildAgencyContext(userId = null) {
+  let name, role, portfolio, agencyName;
+  if (userId) {
+    try {
+      const user = getDb().prepare('SELECT full_name, role, portfolio_url, agency_name FROM users WHERE id = ?').get(userId);
+      name = user?.full_name || getSetting('your_name') || 'the founder';
+      role = user?.role || getSetting('your_role') || 'Founder';
+      portfolio = user?.portfolio_url || getSetting('portfolio_url') || '(portfolio link)';
+      agencyName = user?.agency_name || getSetting('agency_name') || 'ContentCrafterzz';
+    } catch {
+      name = getSetting('your_name') || 'the founder';
+      role = getSetting('your_role') || 'Founder';
+      portfolio = getSetting('portfolio_url') || '(portfolio link)';
+      agencyName = getSetting('agency_name') || 'ContentCrafterzz';
+    }
+  } else {
+    name = getSetting('your_name') || 'the founder';
+    role = getSetting('your_role') || 'Founder';
+    portfolio = getSetting('portfolio_url') || '(portfolio link)';
+    agencyName = getSetting('agency_name') || 'ContentCrafterzz';
+  }
   return `${BUSINESS_PROFILE}\n\nSENDER: ${name} | ${role} | ${agencyName} | ${portfolio}`;
 }
 
 // ─── ONE-SHOT pitch generation — Prahvi persona, 120-word limit, score ≥7 ─────
 // Returns { email_subject, email_body, subject_variants, custom_offer, key_insight }
-async function generateFullPitch(lead) {
+async function generateFullPitch(lead, userId = null) {
   const recentVideos = (() => { try { return JSON.parse(lead.recent_videos || '[]'); } catch { return []; } })();
   const painPoints = (() => { try { return JSON.parse(lead.pain_points || '[]'); } catch { return []; } })();
   const daysSince = lead.last_upload_date
     ? Math.floor((Date.now() - new Date(lead.last_upload_date)) / 86400000)
     : null;
-  const ctx = buildAgencyContext();
+  const ctx = buildAgencyContext(userId || lead.user_id);
 
   // Detect psychological profile from channel data
   const subsCount = lead.subscriber_count || 0;
@@ -299,13 +315,14 @@ function parsePitchResponse(text, lead) {
     if (!parsed.email_subject || !parsed.email_body) throw new Error('Missing fields');
     return parsed;
   } catch {
+    console.warn(`[parsePitchResponse] Parse failed for ${lead?.channel_name}, using safe template fallback`);
     const subjectMatch = text.match(/SUBJECT:\s*(.+)/i);
     const bodyMatch = text.match(/---\s*([\s\S]+)/);
     return {
       key_insight: 'Channel analyzed',
       custom_offer: `Retention-optimized editing for ${lead.channel_name}`,
       email_subject: subjectMatch?.[1]?.trim() || `Quick question about ${lead.channel_name}`,
-      email_body: bodyMatch?.[1]?.trim() || text.substring(0, 800),
+      email_body: bodyMatch?.[1]?.trim() || `Hi ${lead.channel_name},\n\nI came across your channel and think there's a real opportunity to grow your views with better retention editing.\n\nWould you be open to a quick chat?\n\nBest`,
       subject_variants: [],
       score: 7,
     };
@@ -322,7 +339,7 @@ async function deepStudyLead(lead) {
 
   const prompt = `You are a senior outreach strategist for ContentCrafterzz.
 
-${buildAgencyContext()}
+${buildAgencyContext(lead?.user_id)}
 
 CHANNEL: ${lead.channel_name} | ${(lead.subscriber_count || 0).toLocaleString()} subs | ${(lead.avg_views || 0).toLocaleString()} avg views | ${lead.engagement_rate || 0}% engagement
 Upload gap: ${daysSince ?? 'unknown'} days since last upload (every ${lead.upload_frequency_days || '?'} days)
@@ -344,7 +361,7 @@ No generic advice. Every point must use their actual data.`;
 async function generateOffer(lead, deepStudy) {
   const prompt = `Write a custom offer for ContentCrafterzz.
 
-${buildAgencyContext()}
+${buildAgencyContext(lead?.user_id)}
 
 CREATOR: ${lead.channel_name} | ${(lead.subscriber_count || 0).toLocaleString()} subs
 DEEP STUDY: ${deepStudy}
@@ -395,7 +412,7 @@ SUBJECT: [subject under 8 words]
 async function generateRedditDM(lead, deepStudy) {
   const prompt = `Write a Reddit DM for ContentCrafterzz.
 
-${buildAgencyContext()}
+${buildAgencyContext(lead?.user_id)}
 
 CREATOR: ${lead.channel_name} | POST: "${lead.reddit_post_title}" | THEIR WORDS: "${lead.reddit_post_content?.substring(0, 400)}"
 DEEP STUDY: ${deepStudy}
@@ -449,7 +466,7 @@ async function suggestReplyResponse(originalEmail, replyText) {
 
 ORIGINAL EMAIL: ${originalEmail}
 THEIR REPLY: ${replyText}
-AGENCY: ${buildAgencyContext()}
+AGENCY: ${buildAgencyContext(lead?.user_id)}
 
 Analyze reply type (interested / objection / question / price concern / has editor / not now).
 Write ideal response: warm, confident, addresses their specific concern, moves toward booking.
@@ -544,7 +561,7 @@ async function analyzeChannelDeep(channelData) {
 
   const prompt = `You are a ContentCrafterzz channel analyst. Study this channel and identify exactly how we can help.
 
-${buildAgencyContext()}
+${buildAgencyContext(lead?.user_id)}
 
 CHANNEL: ${channelData.channel_name} (@${channelData.channel_handle || 'N/A'})
 Subs: ${(channelData.subscriber_count || 0).toLocaleString()} | Videos: ${channelData.total_videos}
@@ -619,7 +636,7 @@ async function generateAnalyzerDM(channelData, deepStudy) {
 CREATOR: ${channelData.channel_name} (${(channelData.subscriber_count || 0).toLocaleString()} subs)
 RECENT VIDEO: "${recentVideos[0]?.title || 'N/A'}"
 DEEP STUDY: ${deepStudy}
-AGENCY: ${buildAgencyContext()}
+AGENCY: ${buildAgencyContext(lead?.user_id)}
 
 Rules: Under 80 words. References specific content. Casual peer tone. $29 trial mention. ONE CTA. Zero sales speak.
 

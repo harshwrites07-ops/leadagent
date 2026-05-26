@@ -9,7 +9,7 @@ function isValidEmailFormat(email) {
   if (!email || typeof email !== 'string') return false;
   const e = email.trim();
   const atIdx = e.indexOf('@');
-  if (atIdx < 2) return false; // local part must be >= 2 chars — rejects 'n@...'
+  if (atIdx < 1) return false;
   const domain = e.substring(atIdx + 1);
   if (!domain.includes('.')) return false;
   const tld = domain.split('.').pop();
@@ -179,9 +179,11 @@ async function testSmtp(config) {
 }
 
 async function sendEmail({ to, subject, body, leadId, followUpNumber = 0, skipInboxes = [], userId = null }) {
+  console.log(`[Email] Attempting send to: ${to} | leadId: ${leadId} | userId: ${userId}`);
   const db = getDb();
 
   if (!isValidEmailFormat(to)) {
+    console.warn(`[Email] Invalid format rejected: ${to}`);
     if (leadId) {
       db.prepare(`UPDATE leads SET email_invalid=1, bounce_reason='invalid_format', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(leadId);
     }
@@ -214,27 +216,37 @@ async function sendEmail({ to, subject, body, leadId, followUpNumber = 0, skipIn
       const { pickAccountForUser, sendViaGmail } = require('./gmailService');
       const gmailAccount = pickAccountForUser(userId);
       if (gmailAccount) {
-        await sendViaGmail(gmailAccount, { to, subject, htmlBody, fromName: 'ContentCrafterzz' });
+        console.log(`[Email] Using Gmail OAuth: ${gmailAccount.email} (sent today: ${gmailAccount.emails_sent_today})`);
+        const userRow = db.prepare('SELECT full_name, agency_name FROM users WHERE id=?').get(userId);
+        const fromName = userRow?.agency_name || userRow?.full_name || 'ContentCrafterzz';
+        await sendViaGmail(gmailAccount, { to, subject, htmlBody, fromName });
         fromEmail = gmailAccount.email;
         messageId = `gmail-${trackingId}`;
+        console.log(`[Email] Gmail send success: ${fromEmail} → ${to}`);
 
         const emailRecord = db.prepare(`
           INSERT INTO emails (lead_id, subject, body, status, sent_at, tracking_id, follow_up_number, from_email, user_id)
           VALUES (?, ?, ?, 'sent', CURRENT_TIMESTAMP, ?, ?, ?, ?)
         `).run(leadId, subject, body, trackingId, followUpNumber, fromEmail, userId);
 
-        logActivity('email_sent', `Email sent to lead #${leadId} via Gmail (${fromEmail})`, leadId, { subject });
+        logActivity('email_sent', `Email sent to lead #${leadId} via Gmail (${fromEmail})`, leadId, { subject }, userId);
         return { emailId: emailRecord.lastInsertRowid, trackingId, messageId, fromEmail };
+      } else {
+        console.log(`[Email] No available Gmail account for userId=${userId}, falling back to SMTP`);
       }
     } catch (gmailErr) {
-      console.warn('[Email] Gmail send failed, falling back to SMTP:', gmailErr.message);
+      console.warn(`[Email] Gmail send failed (${gmailErr.message}), falling back to SMTP`);
     }
+  } else {
+    console.log(`[Email] No userId provided, using SMTP directly`);
   }
 
   // Fall back to SMTP
+  console.log(`[Email] Using SMTP — available inboxes: ${getInboxes().map(i => i.email).join(', ') || 'NONE'}`);
   const inbox = await selectInbox(db, skipInboxes);
   fromEmail = inbox.email;
   const fromName = inbox.from_name || 'ContentCrafterzz';
+  console.log(`[Email] SMTP inbox selected: ${fromEmail}`);
 
   const t = getTransporterForInbox(inbox);
   let info;
@@ -246,7 +258,9 @@ async function sendEmail({ to, subject, body, leadId, followUpNumber = 0, skipIn
       text: body,
       html: htmlBody,
     });
+    console.log(`[Email] SMTP send success: ${fromEmail} → ${to} | msgId: ${info.messageId}`);
   } catch (smtpErr) {
+    console.error(`[Email] SMTP send error (${fromEmail} → ${to}): ${smtpErr.message}`);
     const code = smtpErr.responseCode || smtpErr.code || 0;
     const msg = (smtpErr.message || '').toLowerCase();
     const isHardBounce = code >= 500 || /user.*not.*found|no.*such.*user|does.*not.*exist|invalid.*address|mailbox.*unavailable|address.*rejected/i.test(msg);
@@ -262,7 +276,7 @@ async function sendEmail({ to, subject, body, leadId, followUpNumber = 0, skipIn
     VALUES (?, ?, ?, 'sent', CURRENT_TIMESTAMP, ?, ?, ?, ?)
   `).run(leadId, subject, body, trackingId, followUpNumber, fromEmail, userId);
 
-  logActivity('email_sent', `Email sent to lead #${leadId} via ${fromEmail}`, leadId, { subject, messageId: info.messageId });
+  logActivity('email_sent', `Email sent to lead #${leadId} via ${fromEmail}`, leadId, { subject, messageId: info.messageId }, userId);
 
   return { emailId: emailRecord.lastInsertRowid, trackingId, messageId: info.messageId, fromEmail };
 }
@@ -313,6 +327,7 @@ async function processQueue() {
     return { processed: 0, reason: 'Lead has no email address' };
   }
 
+  console.log(`[Queue] Processing item ${item.id}: ${item.channel_name} <${item.email}>`);
   db.prepare(`UPDATE email_queue SET status = 'sending' WHERE id = ?`).run(item.id);
 
   try {
@@ -386,7 +401,12 @@ async function checkReplies() {
           replyBody = parseMimeBody(textPart.body);
         }
 
-        const lead = db.prepare(`SELECT * FROM leads WHERE email = ?`).get(fromEmail);
+        const lead = db.prepare(`
+          SELECT l.* FROM leads l
+          INNER JOIN emails e ON e.lead_id = l.id
+          WHERE l.email = ?
+          ORDER BY e.sent_at DESC LIMIT 1
+        `).get(fromEmail);
         if (!lead) continue;
 
         // Update the most recent sent/opened email for this lead
@@ -404,7 +424,7 @@ async function checkReplies() {
 
           if (alreadyReplied?.status !== 'replied') {
             db.prepare(`UPDATE leads SET crm_stage='replied', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(lead.id);
-            logActivity('reply_received', `Reply received from ${lead.channel_name} ⭐`, lead.id);
+            logActivity('reply_received', `Reply received from ${lead.channel_name} ⭐`, lead.id, {}, lead.user_id);
             totalReplies++;
           }
         }

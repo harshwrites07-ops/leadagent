@@ -9,14 +9,15 @@ const { requireAuth, requireAdmin } = require('../middleware/requireAuth');
 const ENV_PATH = path.join(__dirname, '../../../.env');
 
 function writeToEnv(key, value) {
+  const sanitized = String(value).replace(/[\r\n]/g, '');
   let content = '';
   try { content = fs.readFileSync(ENV_PATH, 'utf8'); } catch { content = ''; }
   const regex = new RegExp(`^${key}=.*$`, 'm');
   content = regex.test(content)
-    ? content.replace(regex, `${key}=${value}`)
-    : content + `\n${key}=${value}\n`;
+    ? content.replace(regex, `${key}=${sanitized}`)
+    : content + `\n${key}=${sanitized}\n`;
   fs.writeFileSync(ENV_PATH, content, 'utf8');
-  process.env[key] = value;
+  process.env[key] = sanitized;
 }
 
 // ── USER SETTINGS ─────────────────────────────────────────────────────────────
@@ -117,6 +118,7 @@ router.get('/', requireAdmin, asyncHandler(async (req, res) => {
     } catch { settings[row.key] = row.value; }
   }
   delete settings.smtp_pass;
+  for (let i = 1; i <= 4; i++) { if (settings[`smtp_pass_${i}`]) settings[`smtp_pass_${i}`] = '••••••••'; }
   res.json({ success: true, settings });
 }));
 

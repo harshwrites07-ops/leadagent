@@ -21,11 +21,14 @@ const navItems = [
 ];
 
 const bottomNavItems = [
-  { path: '/',        icon: LayoutDashboard, label: 'Home' },
-  { path: '/leads',   icon: Search,          label: 'Leads' },
-  { path: '/pitch',   icon: Wand2,           label: 'Pitch' },
-  { path: '/crm',     icon: Kanban,          label: 'CRM' },
-  { path: '/settings', icon: Settings,       label: 'Settings' },
+  { path: '/',          icon: LayoutDashboard, label: 'Home' },
+  { path: '/leads',     icon: Search,          label: 'Leads' },
+  { path: '/analyzer',  icon: ScanSearch,      label: 'Scan' },
+  { path: '/pitch',     icon: Wand2,           label: 'Pitch' },
+  { path: '/email',     icon: Mail,            label: 'Email' },
+  { path: '/crm',       icon: Kanban,          label: 'CRM' },
+  { path: '/analytics', icon: BarChart3,       label: 'Stats' },
+  { path: '/settings',  icon: Settings,        label: 'More' },
 ];
 
 function useIsMobile() {
@@ -40,12 +43,25 @@ function useIsMobile() {
   return isMobile;
 }
 
+function useIsSmall() {
+  const [isSmall, setIsSmall] = useState(
+    typeof window !== 'undefined' && window.innerWidth < 480
+  );
+  useEffect(() => {
+    const handler = () => setIsSmall(window.innerWidth < 480);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+  return isSmall;
+}
+
 export { useIsMobile };
 
 function UserMenu({ user, logout }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const navigate = useNavigate();
+  const isSmall = useIsSmall();
 
   useEffect(() => {
     const handler = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
@@ -72,7 +88,7 @@ function UserMenu({ user, logout }) {
             {initials}
           </div>
         )}
-        <div style={{ textAlign: 'left', lineHeight: 1.2, display: window.innerWidth < 480 ? 'none' : 'block' }}>
+        <div style={{ textAlign: 'left', lineHeight: 1.2, display: isSmall ? 'none' : 'block' }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-primary)', maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.full_name || user?.email?.split('@')[0] || 'User'}</div>
           <div style={{ fontSize: 9, fontWeight: 700, color: planColor, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>{user?.plan || 'free'}</div>
         </div>
@@ -133,7 +149,7 @@ function UserMenu({ user, logout }) {
 export default function Layout({ children }) {
   const [collapsed, setCollapsed] = useState(false);
   const [time, setTime] = useState('');
-  const [sysStatus, setSysStatus] = useState({ gemini: false, smtp: false, claude: false });
+  const [sysStatus, setSysStatus] = useState({ gemini: false, smtp: false, claude: false, youtube: { configured: true, exhausted: false }, innertube: { online: true } });
   const isMobile = useIsMobile();
   const location = useLocation();
   const currentPage = navItems.find(n => n.path === location.pathname)?.label || 'ContentCrafterzz';
@@ -147,6 +163,8 @@ export default function Layout({ children }) {
           gemini: data.gemini?.configured || false,
           smtp: data.smtp?.configured || false,
           claude: data.claude?.configured || false,
+          youtube: { configured: data.youtube?.configured ?? true, exhausted: data.youtube?.exhausted ?? false },
+          innertube: { online: data.innertube?.online ?? true },
         });
       } catch {}
     };
@@ -248,15 +266,16 @@ export default function Layout({ children }) {
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, fontWeight: 600, letterSpacing: '0.16em', color: '#00E5A0' }}>SYSTEM ONLINE</span>
               </div>
               {[
-                { label: 'YT API',  on: true },
+                { label: 'SCRAPER', on: sysStatus.innertube.online },
+                { label: 'YT API',  on: sysStatus.youtube.configured && !sysStatus.youtube.exhausted, warn: sysStatus.youtube.configured && sysStatus.youtube.exhausted },
                 { label: 'GEMINI',  on: sysStatus.gemini },
                 { label: 'SMTP',    on: sysStatus.smtp },
               ].map(item => {
-                const color = item.on ? '#00E5A0' : '#FF4444';
+                const color = item.warn ? '#F5A623' : item.on ? '#00E5A0' : '#FF4444';
                 return (
                   <div key={item.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: 'var(--text-muted)', letterSpacing: '0.1em' }}>{item.label}</span>
-                    <div style={{ width: 5, height: 5, borderRadius: '50%', background: color, boxShadow: item.on ? `0 0 5px ${color}` : 'none' }} />
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: 'var(--text-muted)', letterSpacing: '0.1em' }}>{item.label}{item.warn ? ' !' : ''}</span>
+                    <div style={{ width: 5, height: 5, borderRadius: '50%', background: color, boxShadow: `0 0 5px ${color}` }} />
                   </div>
                 );
               })}

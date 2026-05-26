@@ -6,18 +6,19 @@ import {
   Search, Wand2, Mail, StickyNote, X, ChevronDown,
   Copy, Check, Clock, Users, Activity, Plus,
   Trash2, ArrowRight, RefreshCw, Zap,
-  ExternalLink, CheckSquare, Square, AlignLeft,
+  ExternalLink, CheckSquare, Square, AlignLeft, Download,
 } from 'lucide-react';
 import PowerSendOverlay from '../components/ui/PowerSendOverlay';
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor,
-  useSensor, useSensors, DragOverlay,
+  useSensor, useSensors, DragOverlay, useDroppable,
 } from '@dnd-kit/core';
 import {
   SortableContext, verticalListSortingStrategy, useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import api, { formatNumber, formatDate, tempLabel, tempClass, stageLabel } from '../utils/api';
+import ConfirmModal from '../components/ui/ConfirmModal';
 
 const STAGES = [
   { key: 'new_lead',     label: 'New Lead',    color: '#6B7280' },
@@ -97,6 +98,9 @@ const LeadCard = ({ lead, onClick, onPitch, onEmail, onNote, selected, onToggleS
             {lead.platform === 'youtube' ? 'YT' : 'RD'}
           </span>
           {lead.temperature && <TempBadge temp={lead.temperature} />}
+          {lead.exported_at && (
+            <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 99, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.06em', background: 'rgba(113,113,122,0.1)', color: '#71717a', border: '1px solid rgba(113,113,122,0.2)' }}>EXPORTED</span>
+          )}
         </div>
       </div>
     </div>
@@ -128,6 +132,7 @@ const LeadCard = ({ lead, onClick, onPitch, onEmail, onNote, selected, onToggleS
 // ─── Kanban Column ────────────────────────────────────────────────────────────
 const KanbanColumn = ({ stage, leads, onCardClick, onPitch, onEmail, onNote, selectedIds, onToggleSelect, onSelectAllInColumn }) => {
   const allSelected = leads.length > 0 && leads.every(l => selectedIds.has(l.id));
+  const { setNodeRef, isOver } = useDroppable({ id: stage.key });
   return (
   <div style={{
     display: 'flex', flexDirection: 'column', borderRadius: 8, minWidth: 248, maxWidth: 264, minHeight: 200,
@@ -147,13 +152,13 @@ const KanbanColumn = ({ stage, leads, onCardClick, onPitch, onEmail, onNote, sel
       </span>
     </div>
     <SortableContext items={leads.map(l => l.id)} strategy={verticalListSortingStrategy}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '0 8px 8px', overflowY: 'auto', flex: 1, maxHeight: 'calc(100vh - 240px)' }}>
+      <div ref={setNodeRef} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '0 8px 8px', overflowY: 'auto', flex: 1, maxHeight: 'calc(100vh - 240px)', minHeight: 80, borderRadius: 4, transition: 'background 0.15s', background: isOver ? `${stage.color}08` : 'transparent' }}>
         {leads.map(lead => (
           <LeadCard key={lead.id} lead={lead} onClick={onCardClick} onPitch={onPitch} onEmail={onEmail} onNote={onNote}
             selected={selectedIds.has(lead.id)} onToggleSelect={onToggleSelect} />
         ))}
         {leads.length === 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 0', gap: 6, color: 'var(--text-muted)' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 0', gap: 6, color: isOver ? stage.color : 'var(--text-muted)', transition: 'color 0.15s' }}>
             <AlignLeft size={16} />
             <p style={{ fontSize: 11 }}>Drop leads here</p>
           </div>
@@ -463,6 +468,9 @@ export default function CRM() {
   const [genSending, setGenSending] = useState(false);
   const [showPowerOverlay, setShowPowerOverlay] = useState(false);
   const [powerLeadIds, setPowerLeadIds] = useState(null);
+  const [confirmModal, setConfirmModal] = useState(null);
+  const [exportCount, setExportCount] = useState({ new: 0, total: 0 });
+  const [exporting, setExporting] = useState(null); // 'new' | 'all' | null
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }), useSensor(KeyboardSensor));
 
@@ -475,7 +483,15 @@ export default function CRM() {
     finally { setLoading(false); }
   }, [search, tempFilter, platformFilter]);
 
+  const fetchExportCount = useCallback(async () => {
+    try {
+      const { data } = await api.get('/leads/export/count');
+      setExportCount({ new: data.new || 0, total: data.total || 0 });
+    } catch { /* non-critical */ }
+  }, []);
+
   useEffect(() => { const t = setTimeout(fetchLeads, search ? 350 : 0); return () => clearTimeout(t); }, [fetchLeads, search]);
+  useEffect(() => { fetchExportCount(); }, [fetchExportCount]);
 
   const grouped = STAGES.reduce((acc, s) => { acc[s.key] = leads.filter(l => (l.crm_stage || 'new_lead') === s.key); return acc; }, {});
 
@@ -505,6 +521,41 @@ export default function CRM() {
     });
   };
 
+  const exportLeads = async (filter) => {
+    if (filter === 'new' && exportCount.new === 0) {
+      toast.error('No new leads to export');
+      return;
+    }
+    setExporting(filter);
+    try {
+      const response = await api.get('/leads/export/csv', {
+        params: { filter },
+        responseType: 'blob',
+      });
+      const count = parseInt(response.headers['x-export-count'] || '0', 10);
+      const date = new Date().toISOString().split('T')[0];
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'text/csv' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `leads-export-${date}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast.success(`${count} lead${count !== 1 ? 's' : ''} exported successfully`);
+      // Refresh count and mark badges in local state
+      await fetchExportCount();
+      // Update exported_at locally so badges appear immediately without a full reload
+      if (filter === 'new') {
+        setLeads(prev => prev.map(l => l.exported_at ? l : { ...l, exported_at: new Date().toISOString() }));
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || err.message || 'Export failed');
+    } finally {
+      setExporting(null);
+    }
+  };
+
   const openPowerSend = () => {
     const ids = selectedIds.size > 0 ? [...selectedIds] : null;
     setPowerLeadIds(ids);
@@ -518,26 +569,41 @@ export default function CRM() {
   };
   const bulkGenPitches = async () => { const ids = [...selectedIds]; try { await api.post('/pitches/bulk-generate', { lead_ids: ids }); toast.success(`Generating pitches for ${ids.length} leads`); clearSelection(); } catch (err) { toast.error(err.message || 'Failed'); } };
   const bulkAddQueue = async () => { const ids = [...selectedIds]; try { await api.post('/emails/queue/bulk', { lead_ids: ids }); toast.success(`Added ${ids.length} leads to queue`); clearSelection(); } catch (err) { toast.error(err.message || 'Failed'); } };
-  const bulkGenerateAndSend = async () => {
+  const bulkGenerateAndSend = () => {
     const ids = [...selectedIds];
     if (!ids.length) return;
-    if (!window.confirm(`Study, generate pitch, and send emails to ${ids.length} leads in one shot?`)) return;
-    setGenSending(true);
-    try {
-      toast.loading(`Studying leads & generating emails...`, { id: 'gen-send' });
-      const { data } = await api.post('/pitches/generate-and-send', { lead_ids: ids });
-      const sent = data.sent || 0;
-      const failed = (data.total || 0) - sent;
-      toast.success(`Done! ${sent} emails sent${failed > 0 ? `, ${failed} failed` : ''}.`, { id: 'gen-send' });
-      clearSelection(); fetchLeads();
-    } catch (err) { toast.error(err.response?.data?.error || err.message || 'Failed', { id: 'gen-send' }); }
-    finally { setGenSending(false); }
+    setConfirmModal({
+      title: 'Generate & Send All',
+      message: `Study, generate pitch, and send emails to ${ids.length} leads in one shot? This will use AI credits and email quota.`,
+      confirmLabel: 'Send All',
+      danger: false,
+      onConfirm: async () => {
+        setConfirmModal(null);
+        setGenSending(true);
+        try {
+          toast.loading(`Studying leads & generating emails...`, { id: 'gen-send' });
+          const { data } = await api.post('/pitches/generate-and-send', { lead_ids: ids });
+          const sent = data.sent || 0;
+          const failed = (data.total || 0) - sent;
+          toast.success(`Done! ${sent} emails sent${failed > 0 ? `, ${failed} failed` : ''}.`, { id: 'gen-send' });
+          clearSelection(); fetchLeads();
+        } catch (err) { toast.error(err.response?.data?.error || err.message || 'Failed', { id: 'gen-send' }); }
+        finally { setGenSending(false); }
+      },
+    });
   };
-  const bulkDelete = async () => {
-    if (!window.confirm(`Delete ${selectedIds.size} leads? Cannot be undone.`)) return;
-    const ids = [...selectedIds];
-    try { await api.delete('/crm/bulk', { data: { lead_ids: ids } }); setLeads(prev => prev.filter(l => !selectedIds.has(l.id))); toast.success(`Deleted ${ids.length} leads`); clearSelection(); }
-    catch (err) { toast.error(err.message || 'Delete failed'); }
+  const bulkDelete = () => {
+    setConfirmModal({
+      title: 'Delete leads',
+      message: `Delete ${selectedIds.size} leads? This cannot be undone.`,
+      confirmLabel: 'Delete',
+      onConfirm: async () => {
+        setConfirmModal(null);
+        const ids = [...selectedIds];
+        try { await api.delete('/crm/bulk', { data: { lead_ids: ids } }); setLeads(prev => prev.filter(l => !selectedIds.has(l.id))); toast.success(`Deleted ${ids.length} leads`); clearSelection(); }
+        catch (err) { toast.error(err.message || 'Delete failed'); }
+      },
+    });
   };
 
   const activeLead = activeId ? leads.find(l => l.id === activeId) : null;
@@ -551,6 +617,7 @@ export default function CRM() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+      {confirmModal && <ConfirmModal {...confirmModal} onCancel={() => setConfirmModal(null)} />}
       {/* Top bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
         <div style={{ position: 'relative', flex: '1 1 200px', maxWidth: 280 }}>
@@ -566,6 +633,22 @@ export default function CRM() {
         </div>
         <button onClick={fetchLeads} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 6, cursor: 'pointer', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', fontSize: 12 }}>
           <RefreshCw size={12} /> Refresh
+        </button>
+        <button
+          onClick={() => exportLeads('new')}
+          disabled={exportCount.new === 0 || exporting === 'new'}
+          title={exportCount.new === 0 ? 'No new leads to export' : `Export ${exportCount.new} unexported leads`}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 6, cursor: exportCount.new === 0 ? 'not-allowed' : 'pointer', background: exportCount.new > 0 ? 'rgba(59,130,246,0.12)' : 'transparent', border: `1px solid ${exportCount.new > 0 ? 'rgba(59,130,246,0.3)' : 'var(--border-subtle)'}`, color: exportCount.new > 0 ? '#3b82f6' : 'var(--text-muted)', fontSize: 12, fontWeight: 600, opacity: exporting === 'new' ? 0.6 : 1, whiteSpace: 'nowrap' }}>
+          <Download size={12} />
+          {exporting === 'new' ? 'Exporting...' : `Export New${exportCount.new > 0 ? ` (${exportCount.new})` : ''}`}
+        </button>
+        <button
+          onClick={() => exportLeads('all')}
+          disabled={exporting === 'all'}
+          title="Export all leads to CSV"
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 6, cursor: 'pointer', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', fontSize: 12, opacity: exporting === 'all' ? 0.6 : 1, whiteSpace: 'nowrap' }}>
+          <Download size={12} />
+          {exporting === 'all' ? 'Exporting...' : 'Export All'}
         </button>
         <button onClick={selectedIds.size === leads.length && leads.length > 0 ? clearSelection : selectAll} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 6, cursor: 'pointer', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', fontSize: 12 }}>
           {selectedIds.size === leads.length && leads.length > 0 ? <><CheckSquare size={12} style={{ color: 'var(--accent-primary)' }} /> Deselect All</> : <><Square size={12} /> Select All ({leads.length})</>}

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Zap, CheckCircle, XCircle, Clock, Loader } from 'lucide-react';
+import api from '../../utils/api';
 
 const STEP_LABELS = ['', 'Fresh Insight', 'Social Proof', 'Check-In', 'Last Try', 'Close Loop'];
 
@@ -12,9 +13,8 @@ export default function PowerFollowUpOverlay({ onClose }) {
   const feedRef = useRef(null);
 
   useEffect(() => {
-    fetch('/api/followups/pending')
-      .then(r => r.json())
-      .then(d => setPending(d.due || 0))
+    api.get('/followups/pending')
+      .then(r => setPending(r.data.due || 0))
       .catch(() => setPending(0));
   }, []);
 
@@ -33,6 +33,7 @@ export default function PowerFollowUpOverlay({ onClose }) {
       const response = await fetch('/api/followups/send-all', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ max_leads: 100 }),
       });
 

@@ -7,6 +7,7 @@ import {
 import toast from 'react-hot-toast';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
+import ConfirmModal from '../components/ui/ConfirmModal';
 
 const inputSt = {
   background: 'var(--bg-elevated)', border: '1px solid var(--border-default)',
@@ -136,6 +137,7 @@ export default function AdminSettings() {
   const [newInbox, setNewInbox] = useState({ email: '', from_name: '', host: 'smtp.gmail.com', port: 587, pass: '' });
   const [addingInbox, setAddingInbox] = useState(false);
   const [showAddInbox, setShowAddInbox] = useState(false);
+  const [confirmModal, setConfirmModal] = useState(null);
 
   useEffect(() => {
     loadSettings();
@@ -193,13 +195,20 @@ export default function AdminSettings() {
     finally { setAddingInbox(false); }
   };
 
-  const removeInbox = async (email) => {
-    if (!window.confirm(`Remove ${email}?`)) return;
-    try {
-      await api.delete(`/settings/inboxes/${encodeURIComponent(email)}`);
-      toast.success('Inbox removed');
-      loadInboxes();
-    } catch (e) { toast.error(e.message); }
+  const removeInbox = (email) => {
+    setConfirmModal({
+      title: 'Remove Inbox',
+      message: `Remove ${email} from your inboxes?`,
+      confirmLabel: 'Remove',
+      onConfirm: async () => {
+        setConfirmModal(null);
+        try {
+          await api.delete(`/settings/inboxes/${encodeURIComponent(email)}`);
+          toast.success('Inbox removed');
+          loadInboxes();
+        } catch (e) { toast.error(e.message); }
+      },
+    });
   };
 
   const caseStudies = Array.isArray(local.case_studies) ? local.case_studies : [];
@@ -223,6 +232,7 @@ export default function AdminSettings() {
 
   return (
     <div style={{ maxWidth: 720, margin: '0 auto', paddingBottom: 96, display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {confirmModal && <ConfirmModal {...confirmModal} onCancel={() => setConfirmModal(null)} />}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

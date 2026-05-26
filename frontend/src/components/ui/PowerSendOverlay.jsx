@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Zap, X, Loader, ChevronDown, ChevronUp, Square } from 'lucide-react';
+import toast from 'react-hot-toast';
+import api from '../../utils/api';
 
 const GAP_PRESETS = [
   { label: 'No gap', secs: 0 },
@@ -61,22 +63,22 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
 
   // Load warmup stage + check for an already-running job when overlay opens
   useEffect(() => {
-    fetch('/api/emails/stats').then(r => r.json()).then(data => {
-      setWarmup(getWarmupStage(data.first_sent_date));
-      setSentToday(data.sent_today || 0);
+    api.get('/emails/stats').then(r => {
+      setWarmup(getWarmupStage(r.data.first_sent_date));
+      setSentToday(r.data.sent_today || 0);
     }).catch(() => {});
 
-    fetch('/api/emails/inboxes').then(r => r.json()).then(data => {
-      if (data.inboxes) setInboxes(data.inboxes);
+    api.get('/emails/inboxes').then(r => {
+      if (r.data.inboxes) setInboxes(r.data.inboxes);
     }).catch(() => {});
 
-    fetch('/api/pitches/power-send/active').then(r => r.json()).then(data => {
-      if (data.job) {
-        setJobId(data.job.id);
-        const s = data.job.status;
+    api.get('/pitches/power-send/active').then(r => {
+      if (r.data.job) {
+        setJobId(r.data.job.id);
+        const s = r.data.job.status;
         setPhase(s === 'running' ? 'running' : 'done');
-        syncJobState(data.job);
-        if (s === 'running') startPolling(data.job.id);
+        syncJobState(r.data.job);
+        if (s === 'running') startPolling(r.data.job.id);
       }
     }).catch(() => {});
   }, []);
@@ -99,7 +101,7 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
     clearInterval(pollRef.current);
     pollRef.current = setInterval(async () => {
       try {
-        const data = await fetch(`/api/pitches/power-send/${id}`).then(r => r.json());
+        const { data } = await api.get(`/pitches/power-send/${id}`);
         if (!data.job) return;
         syncJobState(data.job);
         if (data.job.status !== 'running') {
@@ -126,51 +128,41 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
 
   const startPowerSend = async () => {
     try {
-      const data = await fetch('/api/pitches/power-send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          lead_ids: leadIds || null,
-          max_leads: effectiveCount,
-          per_account_limit: perAccountLimit,
-          gap_seconds: gapSeconds,
-          skip_inboxes: skipInboxes,
-        }),
-      }).then(r => r.json());
-
+      const { data } = await api.post('/pitches/power-send', {
+        lead_ids: leadIds || null,
+        max_leads: effectiveCount,
+        per_account_limit: perAccountLimit,
+        gap_seconds: gapSeconds,
+        skip_inboxes: skipInboxes,
+      });
       if (!data.success) throw new Error(data.error || 'Failed to start');
       setJobId(data.job_id);
       setPhase('running');
       startPolling(data.job_id);
     } catch (err) {
-      alert(`Failed to start: ${err.message}`);
+      toast.error(`Failed to start: ${err.message}`);
     }
   };
 
   const stopJob = async () => {
     if (!jobId) return;
-    await fetch(`/api/pitches/power-send/${jobId}/stop`, { method: 'POST' }).catch(() => {});
+    await api.post(`/pitches/power-send/${jobId}/stop`).catch(() => {});
     clearInterval(pollRef.current);
     setPhase('done');
   };
 
   const dismissInterrupted = async () => {
-    if (jobId) await fetch(`/api/pitches/power-send/${jobId}/dismiss`, { method: 'POST' }).catch(() => {});
+    if (jobId) await api.post(`/pitches/power-send/${jobId}/dismiss`).catch(() => {});
     onClose();
   };
 
   const resumeJob = async () => {
     if (!jobId) return;
     try {
-      // Dismiss old interrupted job, then start fresh with same settings but no gap
-      await fetch(`/api/pitches/power-send/${jobId}/dismiss`, { method: 'POST' }).catch(() => {});
-      const jobData = await fetch(`/api/pitches/power-send/${jobId}`).then(r => r.json());
+      await api.post(`/pitches/power-send/${jobId}/dismiss`).catch(() => {});
+      const { data: jobData } = await api.get(`/pitches/power-send/${jobId}`);
       const settings = { ...JSON.parse(jobData.job?.settings || '{}'), gap_seconds: 0 };
-      const data = await fetch('/api/pitches/power-send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings),
-      }).then(r => r.json());
+      const { data } = await api.post('/pitches/power-send', settings);
       if (!data.success) throw new Error(data.error);
       setJobId(data.job_id);
       setStats({ studied: 0, generated: 0, sent: 0, failed: 0, total: 0 });
@@ -178,7 +170,7 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
       setPhase('running');
       startPolling(data.job_id);
     } catch (err) {
-      alert(`Resume failed: ${err.message}`);
+      toast.error(`Resume failed: ${err.message}`);
     }
   };
 
@@ -290,7 +282,7 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
                     <div>
                       <p style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.12em', marginBottom: 8 }}>SENDING INBOXES (UNCHECK TO SKIP)</p>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        {inboxes.map(inbox => {
+                        {inboxes.map((inbox, idx) => {
                           const skipped = skipInboxes.includes(inbox.email);
                           const riskColor = inbox.bounceRate >= 8 ? '#FF4444' : inbox.bounceRate >= 4 ? '#FF9500' : '#00E5A0';
                           const toggle = () => setSkipInboxes(prev =>
@@ -301,7 +293,7 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
                               <div style={{ width: 16, height: 16, borderRadius: 4, border: `2px solid ${skipped ? '#666' : 'var(--accent-primary)'}`, background: skipped ? 'transparent' : 'var(--accent-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                                 {!skipped && <span style={{ color: '#fff', fontSize: 10, lineHeight: 1 }}>✓</span>}
                               </div>
-                              <span style={{ flex: 1, fontSize: 12, color: skipped ? 'var(--text-muted)' : 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{inbox.email}</span>
+                              <span style={{ flex: 1, fontSize: 12, color: skipped ? 'var(--text-muted)' : 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>Inbox {idx + 1}</span>
                               {inbox.sentCount > 0 && (
                                 <span style={{ fontSize: 10, color: riskColor, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
                                   {inbox.bounceRate}% bounce

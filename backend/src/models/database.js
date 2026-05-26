@@ -300,16 +300,47 @@ function initSchema() {
   try { db.exec(`UPDATE notes SET user_id=1 WHERE user_id IS NULL`); } catch {}
   try { db.exec(`UPDATE power_send_jobs SET user_id=1 WHERE user_id IS NULL`); } catch {}
 
-  // Unique indexes — prevent duplicate leads
-  try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_channel_id_uniq ON leads(channel_id) WHERE channel_id IS NOT NULL AND channel_id != ''`); } catch {}
-  try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_handle_uniq ON leads(channel_handle) WHERE channel_handle IS NOT NULL AND channel_handle != ''`); } catch {}
+  // Drop old global unique indexes (they block multi-user: two users can't have the same channel)
+  try { db.exec(`DROP INDEX IF EXISTS idx_leads_channel_id_uniq`); } catch {}
+  try { db.exec(`DROP INDEX IF EXISTS idx_leads_handle_uniq`); } catch {}
 
-  // One-time dedup: keep highest id (most recent) per channel_id
+  // Per-user unique indexes — one channel per user, not globally unique
+  try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_channel_id_user_uniq ON leads(channel_id, user_id) WHERE channel_id IS NOT NULL AND channel_id != ''`); } catch {}
+  try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_handle_user_uniq ON leads(channel_handle, user_id) WHERE channel_handle IS NOT NULL AND channel_handle != ''`); } catch {}
+
+  // One-time dedup: keep highest id (most recent) per channel_id+user_id pair
   try {
     db.exec(`DELETE FROM leads WHERE id NOT IN (
-      SELECT MAX(id) FROM leads WHERE channel_id IS NOT NULL AND channel_id != '' GROUP BY channel_id
+      SELECT MAX(id) FROM leads WHERE channel_id IS NOT NULL AND channel_id != '' GROUP BY channel_id, user_id
     ) AND channel_id IS NOT NULL AND channel_id != ''`);
   } catch {}
+
+  // Stripe billing columns
+  try { db.exec(`ALTER TABLE users ADD COLUMN stripe_customer_id TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN stripe_subscription_id TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN trial_ends_at DATETIME DEFAULT (datetime('now', '+14 days'))`); } catch {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN billing_cycle_start DATETIME DEFAULT (datetime('now'))`); } catch {}
+
+  // gmail_accounts migrations
+  try { db.exec(`ALTER TABLE gmail_accounts ADD COLUMN daily_limit INTEGER DEFAULT 500`); } catch {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_gmail_accounts_user_id ON gmail_accounts(user_id)`); } catch {}
+  try { db.exec(`ALTER TABLE leads ADD COLUMN exported_at DATETIME DEFAULT NULL`); } catch {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_leads_exported_at ON leads(user_id, exported_at)`); } catch {}
+  try { db.exec(`ALTER TABLE leads ADD COLUMN scrape_source TEXT DEFAULT 'youtube_api'`); } catch {}
+  try { db.exec(`ALTER TABLE leads ADD COLUMN view_trend TEXT`); } catch {}
+
+  // user_id indexes for fast per-user queries
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_leads_user_id ON leads(user_id)`); } catch {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_emails_user_id ON emails(user_id)`); } catch {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_email_queue_user_id ON email_queue(user_id)`); } catch {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_activities_user_id ON activities(user_id)`); } catch {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_pitches_user_id ON pitches(user_id)`); } catch {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_email_queue_user_status ON email_queue(user_id, status, priority, created_at)`); } catch {}
+
+  // Periodic cleanup of expired password reset tokens (runs every 24h)
+  setInterval(() => {
+    try { getDb().prepare(`DELETE FROM password_reset_tokens WHERE expires_at < datetime('now')`).run(); } catch {}
+  }, 24 * 60 * 60 * 1000);
 
   // Seed default settings
   const defaults = {
@@ -419,10 +450,10 @@ function setSetting(key, value) {
     .run(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
 }
 
-function logActivity(type, message, leadId = null, metadata = {}) {
+function logActivity(type, message, leadId = null, metadata = {}, userId = null) {
   const db = getDb();
-  db.prepare(`INSERT INTO activities (type, message, lead_id, metadata) VALUES (?, ?, ?, ?)`)
-    .run(type, message, leadId, JSON.stringify(metadata));
+  db.prepare(`INSERT INTO activities (type, message, lead_id, metadata, user_id) VALUES (?, ?, ?, ?, ?)`)
+    .run(type, message, leadId, JSON.stringify(metadata), userId);
 }
 
 module.exports = { getDb, getSetting, setSetting, logActivity, getUserById, getUserByEmail, BetterSQLiteStore };

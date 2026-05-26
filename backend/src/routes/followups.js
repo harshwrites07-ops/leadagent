@@ -97,10 +97,10 @@ router.post('/send-all', async (req, res) => {
           const subject = subjectMatch?.[1]?.trim() || `Following up — ${lead.channel_name}`;
           const body = bodyMatch?.[1]?.trim() || followUpRaw;
 
-          const qr = db.prepare(`INSERT INTO email_queue (lead_id,subject,body,status,priority) VALUES (?,?,?,'pending',?)`).run(lead.id, subject, body, nextStep);
+          const qr = db.prepare(`INSERT INTO email_queue (user_id,lead_id,subject,body,status,priority) VALUES (?,?,?,?,'pending',?)`).run(req.user.id, lead.id, subject, body, nextStep);
           db.prepare(`UPDATE email_queue SET status='sending' WHERE id=?`).run(qr.lastInsertRowid);
 
-          await sendEmail({ to: lead.email, subject, body, leadId: lead.id });
+          await sendEmail({ to: lead.email, subject, body, leadId: lead.id, userId: req.user.id });
 
           db.prepare(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP WHERE id=?`).run(qr.lastInsertRowid);
           db.prepare(`UPDATE leads SET follow_up_count=?, last_contacted_date=date('now'), updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(nextStep, lead.id);
@@ -109,7 +109,7 @@ router.post('/send-all', async (req, res) => {
             db.prepare(`UPDATE leads SET follow_up_status='complete', crm_stage='no_response', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(lead.id);
           }
 
-          logActivity('followup_sent', `Follow-up #${nextStep}/5 sent to ${lead.channel_name}`, lead.id);
+          logActivity('followup_sent', `Follow-up #${nextStep}/5 sent to ${lead.channel_name}`, lead.id, {}, req.user.id);
           stats.sent++;
           emit('progress', { type: 'sent', channel: lead.channel_name, step: nextStep, email: lead.email, id: lead.id, stats: { ...stats } });
         } catch (err) {

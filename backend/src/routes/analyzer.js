@@ -80,10 +80,11 @@ router.post('/channel', asyncHandler(async (req, res) => {
 
   // ── Step 6: Save to DB ──────────────────────────────────────────────────
   const db = getDb();
+  const userId = req.user.id;
   let leadId = null;
   try {
     const existing = channelData.channel_id
-      ? db.prepare('SELECT id FROM leads WHERE channel_id = ?').get(channelData.channel_id)
+      ? db.prepare('SELECT id FROM leads WHERE channel_id = ? AND user_id = ?').get(channelData.channel_id, userId)
       : null;
 
     if (existing) {
@@ -93,41 +94,41 @@ router.post('/channel', asyncHandler(async (req, res) => {
         avg_views=?, avg_likes=?, avg_comments=?, engagement_rate=?, upload_frequency_days=?,
         last_upload_date=?, channel_description=?, recent_videos=?, pain_points=?,
         lead_score=?, temperature=?, thumbnail_url=?, email=?, website=?,
-        updated_at=CURRENT_TIMESTAMP WHERE id=?
+        updated_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=?
       `).run(
         channelData.channel_name, channelData.channel_handle, channelData.subscriber_count,
         channelData.total_videos, channelData.avg_views, channelData.avg_likes,
         channelData.avg_comments, channelData.engagement_rate, channelData.upload_frequency_days,
         channelData.last_upload_date, channelData.channel_description, channelData.recent_videos,
         channelData.pain_points, channelData.lead_score, channelData.temperature,
-        channelData.thumbnail_url, channelData.email, channelData.website, leadId
+        channelData.thumbnail_url, channelData.email, channelData.website, leadId, userId
       );
     } else {
       const r = db.prepare(`
         INSERT INTO leads (
-          platform, channel_id, channel_name, channel_handle, subscriber_count, total_videos,
+          user_id, platform, channel_id, channel_name, channel_handle, subscriber_count, total_videos,
           avg_views, avg_likes, avg_comments, engagement_rate, upload_frequency_days,
           last_upload_date, channel_description, channel_tags, recent_videos, most_viewed_video,
           country, email, website, social_links, pain_points, lead_score, temperature, thumbnail_url
         ) VALUES (
-          @platform, @channel_id, @channel_name, @channel_handle, @subscriber_count, @total_videos,
+          @user_id, @platform, @channel_id, @channel_name, @channel_handle, @subscriber_count, @total_videos,
           @avg_views, @avg_likes, @avg_comments, @engagement_rate, @upload_frequency_days,
           @last_upload_date, @channel_description, @channel_tags, @recent_videos, @most_viewed_video,
           @country, @email, @website, @social_links, @pain_points, @lead_score, @temperature, @thumbnail_url
         )
-      `).run(channelData);
+      `).run({ ...channelData, user_id: userId });
       leadId = r.lastInsertRowid;
     }
 
     if (!claudeError) {
       db.prepare(`
         INSERT OR REPLACE INTO pitches
-          (lead_id, deep_study, cold_email, email_subject, reddit_dm, subject_variants)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `).run(leadId, deepStudy, emailBody, emailSubject, dm, JSON.stringify(subjectVariants));
+          (lead_id, user_id, deep_study, cold_email, email_subject, reddit_dm, subject_variants)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(leadId, userId, deepStudy, emailBody, emailSubject, dm, JSON.stringify(subjectVariants));
     }
 
-    logActivity('pitch_generated', `Channel analyzed: ${channelData.channel_name}`, leadId);
+    logActivity('pitch_generated', `Channel analyzed: ${channelData.channel_name}`, leadId, {}, userId);
   } catch (e) {
     console.error('[Analyzer] DB save error:', e.message);
   }
@@ -156,13 +157,13 @@ router.post('/save-to-crm', asyncHandler(async (req, res) => {
   if (!lead_id) return res.status(400).json({ success: false, error: 'lead_id required' });
 
   const db = getDb();
-  const lead = db.prepare('SELECT id, channel_name, crm_stage FROM leads WHERE id = ?').get(lead_id);
+  const lead = db.prepare('SELECT id, channel_name, crm_stage FROM leads WHERE id = ? AND user_id = ?').get(lead_id, req.user.id);
   if (!lead) return res.status(404).json({ success: false, error: 'Lead not found' });
 
   if (lead.crm_stage === 'new_lead' || lead.crm_stage === null) {
-    db.prepare(`UPDATE leads SET crm_stage='new_lead', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(lead_id);
+    db.prepare(`UPDATE leads SET crm_stage='new_lead', updated_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=?`).run(lead_id, req.user.id);
   }
-  logActivity('stage_changed', `${lead.channel_name} saved to CRM from Analyzer`, lead_id, { to: 'new_lead' });
+  logActivity('stage_changed', `${lead.channel_name} saved to CRM from Analyzer`, lead_id, { to: 'new_lead' }, req.user.id);
 
   res.json({ success: true, message: `${lead.channel_name} is in your CRM` });
 }));

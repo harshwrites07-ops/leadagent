@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
+const rateLimit = require('express-rate-limit');
 const { getDb, getUserById, getUserByEmail } = require('../models/database');
 const { requireAuth, requireAdmin } = require('../middleware/requireAuth');
 const { asyncHandler } = require('../middleware/errorHandler');
@@ -9,6 +10,14 @@ const {
   sendVerificationEmail, sendPasswordResetEmail, sendOtpEmail,
   checkUsageLimit, PLAN_LIMITS,
 } = require('../services/authService');
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) => res.status(429).json({ success: false, error: 'Too many login attempts. Try again in 15 minutes.' }),
+});
 
 const safeUser = (u) => u ? {
   id: u.id, email: u.email, full_name: u.full_name, agency_name: u.agency_name,
@@ -55,7 +64,7 @@ router.post('/register', asyncHandler(async (req, res) => {
   const hashed = await bcrypt.hash(password, 12);
   const result = db.prepare(`
     INSERT INTO users (email, password, full_name, phone_number, plan, plan_status)
-    VALUES (?, ?, ?, ?, 'free', 'active')
+    VALUES (?, ?, ?, ?, 'trial', 'active')
   `).run(email.toLowerCase().trim(), hashed, full_name.trim(), phone_number || null);
 
   const user = getUserById(result.lastInsertRowid);
@@ -84,7 +93,7 @@ router.post('/register', asyncHandler(async (req, res) => {
 }));
 
 // ── POST /api/auth/login ────────────────────────────────────────────────────
-router.post('/login', asyncHandler(async (req, res) => {
+router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
   const { email, password, remember } = req.body;
   if (!email || !password) {
     return res.status(400).json({ success: false, error: 'Email and password are required' });
@@ -204,7 +213,7 @@ router.post('/verify-phone-otp', requireAuth, asyncHandler(async (req, res) => {
 }));
 
 // ── POST /api/auth/phone-login ──────────────────────────────────────────────
-router.post('/phone-login', asyncHandler(async (req, res) => {
+router.post('/phone-login', loginLimiter, asyncHandler(async (req, res) => {
   const { phone_number } = req.body;
   if (!phone_number) return res.status(400).json({ success: false, error: 'Phone number required' });
 
@@ -222,15 +231,23 @@ router.post('/phone-login', asyncHandler(async (req, res) => {
 }));
 
 router.post('/phone-login/verify', asyncHandler(async (req, res) => {
-  const { user_id, code } = req.body;
-  if (!user_id || !code) return res.status(400).json({ success: false, error: 'user_id and code required' });
+  const { user_id, phone_number, code } = req.body;
+  if (!code) return res.status(400).json({ success: false, error: 'code required' });
 
-  const result = verifyOtp(user_id, code, 'phone_login');
+  let resolvedUserId = user_id;
+  if (!resolvedUserId && phone_number) {
+    const userRow = getDb().prepare('SELECT id FROM users WHERE phone_number=?').get(phone_number);
+    if (!userRow) return res.status(404).json({ success: false, error: 'No account with this phone number' });
+    resolvedUserId = userRow.id;
+  }
+  if (!resolvedUserId) return res.status(400).json({ success: false, error: 'user_id or phone_number required' });
+
+  const result = verifyOtp(resolvedUserId, code, 'phone_login');
   if (!result.ok) return res.status(400).json({ success: false, error: result.error });
 
   const db = getDb();
-  db.prepare(`UPDATE users SET last_login=CURRENT_TIMESTAMP WHERE id=?`).run(user_id);
-  const user = getUserById(user_id);
+  db.prepare(`UPDATE users SET last_login=CURRENT_TIMESTAMP WHERE id=?`).run(resolvedUserId);
+  const user = getUserById(resolvedUserId);
   req.session.userId = user.id;
   const limits = PLAN_LIMITS[user.plan] || PLAN_LIMITS.free;
   req.session.save(err => {
@@ -240,7 +257,7 @@ router.post('/phone-login/verify', asyncHandler(async (req, res) => {
 }));
 
 // ── POST /api/auth/forgot-password ──────────────────────────────────────────
-router.post('/forgot-password', asyncHandler(async (req, res) => {
+router.post('/forgot-password', loginLimiter, asyncHandler(async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ success: false, error: 'Email required' });
 
@@ -345,7 +362,7 @@ router.get('/usage', requireAuth, (req, res) => {
 router.get('/admin/stats', requireAdmin, asyncHandler(async (req, res) => {
   const db = getDb();
   const totalUsers = db.prepare('SELECT COUNT(*) as c FROM users').get();
-  const activeToday = db.prepare(`SELECT COUNT(*) as c FROM users WHERE last_login >= datetime('now','-1 day')`).get();
+  const activeToday = db.prepare(`SELECT COUNT(*) as c FROM users WHERE last_login >= datetime('now','-30 days')`).get();
   const totalLeads = db.prepare('SELECT COUNT(*) as c FROM leads').get();
   const totalEmails = db.prepare('SELECT COUNT(*) as c FROM emails').get();
 
@@ -360,7 +377,7 @@ router.get('/admin/stats', requireAdmin, asyncHandler(async (req, res) => {
     success: true,
     stats: {
       total_users: totalUsers.c,
-      active_today: activeToday.c,
+      active_users: activeToday.c,
       total_leads: totalLeads.c,
       total_emails: totalEmails.c,
     },
@@ -382,6 +399,7 @@ router.put('/admin/users/:id/plan', requireAdmin, asyncHandler(async (req, res) 
 
 router.delete('/admin/users/:id', requireAdmin, asyncHandler(async (req, res) => {
   const id = parseInt(req.params.id);
+  if (isNaN(id) || id <= 0) return res.status(400).json({ success: false, error: 'Invalid id' });
   if (id === req.user.id) return res.status(400).json({ success: false, error: 'Cannot delete yourself' });
   const db = getDb();
   db.prepare('DELETE FROM users WHERE id=?').run(id);

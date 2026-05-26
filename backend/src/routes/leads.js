@@ -4,8 +4,10 @@ const path = require('path');
 const { getDb, logActivity } = require('../models/database');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { scrapeLimiter } = require('../middleware/rateLimiter');
-const { searchChannels } = require('../services/youtubeService');
+const { searchChannelsMulti: ytSearchMulti } = require('../services/youtubeService');
+const { searchChannelsMulti: itSearchMulti } = require('../services/innertubeService');
 const { searchPosts } = require('../services/redditService');
+const { checkUsageLimit, incrementUsage } = require('../services/authService');
 
 const ENV_PATH = path.join(__dirname, '../../../.env');
 
@@ -32,6 +34,77 @@ async function smartKeyword(rawKeyword) {
     console.log(`[Smart keyword] Claude unavailable, using raw keyword: ${e.message}`);
     return rawKeyword;
   }
+}
+
+// ─── Keyword expansion presets ────────────────────────────────────────────────
+const KEYWORD_EXPANSIONS = {
+  'business coach':    ['business coaching', 'entrepreneur coach', 'startup coach', 'business mentor', 'CEO vlog'],
+  'fitness':           ['fitness coach', 'personal trainer', 'gym motivation', 'weight loss coach', 'nutrition coach'],
+  'finance':           ['personal finance', 'investing for beginners', 'stock market tips', 'financial freedom', 'passive income'],
+  'real estate':       ['real estate investing', 'real estate agent', 'property investor', 'house flipping', 'realtor'],
+  'health':            ['health coach', 'wellness coach', 'doctor youtube', 'nutritionist channel', 'therapist youtube'],
+  'education':         ['online course creator', 'digital educator', 'teach online', 'eLearning channel', 'skills trainer'],
+  'saas':              ['SaaS founder', 'software startup', 'tech founder', 'B2B marketing', 'product demo'],
+  'marketing':         ['digital marketing', 'social media marketing', 'email marketing tips', 'marketing agency', 'SEO youtube'],
+  'wealth':            ['wealth building', 'financial coach', 'money coach', 'investing wealth', 'financial advisor'],
+  'crypto':            ['crypto investing', 'bitcoin channel', 'crypto education', 'altcoin channel', 'DeFi youtube'],
+  'coaching':          ['life coach youtube', 'mindset coach', 'productivity coach', 'self improvement', 'motivation speaker'],
+  'ecommerce':         ['dropshipping youtube', 'Amazon FBA', 'shopify youtube', 'online store', 'ecommerce tips'],
+  'law':               ['lawyer youtube', 'attorney tips', 'legal education', 'law firm channel', 'immigration lawyer'],
+  'podcast':           ['podcast youtube', 'video podcast', 'interview show', 'talk show youtube', 'business podcast'],
+};
+
+async function expandKeywords(keyword) {
+  require('dotenv').config({ path: ENV_PATH, override: true });
+  const lower = keyword.toLowerCase().trim();
+
+  // Preset map check
+  for (const [key, variants] of Object.entries(KEYWORD_EXPANSIONS)) {
+    if (lower === key || lower.includes(key) || key.includes(lower)) {
+      return [keyword, ...variants.slice(0, 4)];
+    }
+  }
+
+  // Gemini — fastest
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (geminiKey && geminiKey !== 'placeholder') {
+    try {
+      const { GoogleGenerativeAI } = require('@google/generative-ai');
+      const genAI = new GoogleGenerativeAI(geminiKey);
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+      const result = await model.generateContent(
+        `Give me 4 YouTube search keywords related to "${keyword}" for finding content creators who might need video editing help. Return only the keywords, one per line, no numbering.`
+      );
+      const lines = result.response.text().trim().split('\n')
+        .map(l => l.replace(/^[\d\-\*\•\.]+\s*/, '').trim())
+        .filter(l => l.length > 2 && l.length < 60)
+        .slice(0, 4);
+      if (lines.length > 0) return [keyword, ...lines];
+    } catch (e) {
+      console.log(`[expandKeywords] Gemini failed: ${e.message}`);
+    }
+  }
+
+  // Claude Haiku fallback
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+  if (anthropicKey && anthropicKey !== 'placeholder') {
+    try {
+      const Anthropic = require('@anthropic-ai/sdk');
+      const client = new Anthropic({ apiKey: anthropicKey });
+      const r = await client.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 80,
+        messages: [{ role: 'user', content: `Give me 4 YouTube search keywords related to "${keyword}" for finding content creators. Return only keywords, one per line.` }],
+      });
+      const lines = (r.content[0]?.text || '').trim().split('\n')
+        .map(l => l.replace(/^[\d\-\*\•\.]+\s*/, '').trim())
+        .filter(l => l.length > 2 && l.length < 60)
+        .slice(0, 4);
+      if (lines.length > 0) return [keyword, ...lines];
+    } catch {}
+  }
+
+  return [keyword];
 }
 
 const JSON_FIELDS = ['pain_points', 'channel_tags', 'recent_videos', 'most_viewed_video', 'social_links'];
@@ -81,6 +154,54 @@ router.get('/', asyncHandler(async (req, res) => {
   res.json({ success: true, leads: leads.map(parseLead), total: total.count, page: parseInt(page), limit: parseInt(limit) });
 }));
 
+// GET /api/leads/export/count — new vs total unexported counts
+router.get('/export/count', asyncHandler(async (req, res) => {
+  const db = getDb();
+  const uid = req.user.id;
+  const newCount = db.prepare('SELECT COUNT(*) as c FROM leads WHERE user_id = ? AND exported_at IS NULL').get(uid);
+  const totalCount = db.prepare('SELECT COUNT(*) as c FROM leads WHERE user_id = ?').get(uid);
+  res.json({ success: true, new: newCount.c, total: totalCount.c });
+}));
+
+// GET /api/leads/export/csv?filter=new|all
+router.get('/export/csv', asyncHandler(async (req, res) => {
+  const db = getDb();
+  const uid = req.user.id;
+  const { filter = 'new' } = req.query;
+
+  const leads = filter === 'new'
+    ? db.prepare('SELECT * FROM leads WHERE user_id = ? AND exported_at IS NULL ORDER BY created_at DESC').all(uid)
+    : db.prepare('SELECT * FROM leads WHERE user_id = ? ORDER BY created_at DESC').all(uid);
+
+  const esc = v => {
+    if (v === null || v === undefined) return '';
+    const s = String(v);
+    return (s.includes(',') || s.includes('"') || s.includes('\n')) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+
+  const header = ['Channel Name', 'Subscribers', 'Email', 'Niche', 'Platform', 'Stage', 'Score', 'Upload Frequency (days)', 'Last Contacted', 'Created At'];
+  const rows = leads.map(l => [
+    l.channel_name, l.subscriber_count, l.email, l.niche,
+    l.platform, l.crm_stage, l.lead_score, l.upload_frequency_days,
+    l.last_contacted_date, l.created_at,
+  ].map(esc).join(','));
+
+  const csv = [header.join(','), ...rows].join('\r\n');
+
+  if (leads.length > 0) {
+    const placeholders = leads.map(() => '?').join(',');
+    db.prepare(`UPDATE leads SET exported_at = datetime('now') WHERE id IN (${placeholders}) AND user_id = ?`)
+      .run(...leads.map(l => l.id), uid);
+  }
+
+  const date = new Date().toISOString().split('T')[0];
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="leads-export-${date}.csv"`);
+  res.setHeader('X-Export-Count', String(leads.length));
+  res.setHeader('Access-Control-Expose-Headers', 'X-Export-Count');
+  res.send(csv);
+}));
+
 // GET /api/leads/:id
 router.get('/:id', asyncHandler(async (req, res) => {
   const db = getDb();
@@ -100,7 +221,7 @@ router.post('/', asyncHandler(async (req, res) => {
   const data = req.body;
 
   const existing = data.channel_id
-    ? db.prepare('SELECT id FROM leads WHERE channel_id = ?').get(data.channel_id)
+    ? db.prepare('SELECT id FROM leads WHERE channel_id = ? AND user_id = ?').get(data.channel_id, req.user.id)
     : null;
 
   if (existing) {
@@ -159,7 +280,7 @@ router.post('/', asyncHandler(async (req, res) => {
     thumbnail_url: data.thumbnail_url || null,
   });
 
-  logActivity('lead_added', `New lead added: ${data.channel_name}`, result.lastInsertRowid);
+  logActivity('lead_added', `New lead added: ${data.channel_name}`, result.lastInsertRowid, {}, req.user.id);
   const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(result.lastInsertRowid);
   res.status(201).json({ success: true, lead });
 }));
@@ -198,46 +319,68 @@ router.delete('/:id', asyncHandler(async (req, res) => {
   res.json({ success: true });
 }));
 
-// POST /api/leads/scrape/youtube
-router.post('/scrape/youtube', scrapeLimiter, asyncHandler(async (req, res) => {
-  const { keyword, minSubs = 5000, maxSubs = 200000, country, maxResults = 50, minViews = 1000, emailOnly = true } = req.body;
-  if (!keyword) return res.status(400).json({ success: false, error: 'keyword is required' });
+// POST /api/leads/scrape/youtube/stream — NDJSON streaming with real-time progress
+router.post('/scrape/youtube/stream', scrapeLimiter, asyncHandler(async (req, res) => {
+  res.setHeader('Content-Type', 'application/x-ndjson');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
 
-  const db = getDb();
-  const blacklistKeywords = JSON.parse(getSetting('blacklist_keywords') || '[]');
-  const blacklistChannels = JSON.parse(getSetting('blacklist_channels') || '[]');
+  const send = data => { try { res.write(JSON.stringify(data) + '\n'); } catch {} };
 
-  const optimisedKeyword = await smartKeyword(keyword);
-  logActivity('scrape_started', `YouTube scrape: "${keyword}" → "${optimisedKeyword}"`);
-
-  let channels;
   try {
-    channels = await searchChannels({ keyword: optimisedKeyword, minSubs, maxSubs, country, maxResults, emailOnly });
-  } catch (e) {
-    const ytErr = e.response?.data?.error;
-    if (ytErr?.errors?.[0]?.reason === 'quotaExceeded') {
-      return res.status(429).json({ success: false, error: 'YouTube API quota exceeded for today. Resets at midnight Pacific Time. Try again tomorrow or use a different API key in Settings.' });
+    const { keyword, minSubs = 1000, maxSubs = 500000, country, maxResults = 50, minViews = 100, emailOnly = false } = req.body;
+    if (!keyword) { send({ type: 'error', message: 'keyword is required' }); return res.end(); }
+
+    const usageCheck = checkUsageLimit(req.user, 'leads');
+    if (!usageCheck.allowed) {
+      send({ type: 'error', message: `Monthly lead limit reached (${usageCheck.used}/${usageCheck.limit}).`, upgradeRequired: true });
+      return res.end();
     }
-    throw e;
-  }
 
-  let added = 0, skipped = 0;
-  const results = [];
+    // Step 1 — Expand keywords
+    send({ type: 'progress', stage: 'expand', message: `Generating keyword variations for "${keyword}"...` });
+    const keywords = await expandKeywords(keyword);
+    send({ type: 'progress', stage: 'search', message: `Searching YouTube for: ${keywords.slice(0, 3).join(', ')}${keywords.length > 3 ? ' +more' : ''}`, keywords });
 
-  for (const ch of channels) {
-    // Check blacklists
-    if (blacklistChannels.includes(ch.channel_id)) { skipped++; continue; }
-    if (blacklistKeywords.some(kw => ch.channel_name.toLowerCase().includes(kw.toLowerCase()))) { skipped++; continue; }
+    // Step 2 — Search all variations (InnerTube first, YT Data API fallback)
+    const perKw = Math.max(15, Math.ceil((maxResults * 2.5) / keywords.length));
+    let allChannels;
 
-    // Check min views
-    if (ch.avg_views < minViews) { skipped++; continue; }
+    send({ type: 'progress', stage: 'search', message: `Searching with InnerTube (no quota limits)...` });
+    console.log(`[SCRAPER] Starting InnerTube search — keywords: ${keywords.join(', ')} | minSubs=${minSubs} maxSubs=${maxSubs} emailOnly=${emailOnly}`);
+    try {
+      allChannels = await itSearchMulti(keywords, {
+        minSubs, maxSubs, maxResults: perKw, emailOnly, minViews: 0,
+        onProgress: msg => send({ type: 'progress', stage: 'enrich', message: msg }),
+      });
+      console.log(`[SCRAPER] InnerTube returned ${allChannels.length} channels`);
+    } catch (itErr) {
+      console.warn(`[SCRAPER] InnerTube FAILED: ${itErr.message} — falling back to YouTube Data API`);
+      send({ type: 'progress', stage: 'fallback', message: 'InnerTube unavailable — using YouTube Data API...' });
+      try {
+        allChannels = await ytSearchMulti(keywords, { minSubs, maxSubs, country, maxResults: perKw, emailOnly, minViews: 0 });
+        console.log(`[SCRAPER] YT Data API fallback returned ${allChannels.length} channels`);
+      } catch (ytErr) {
+        const isQuota = ytErr.response?.status === 429 || (ytErr.message || '').toLowerCase().includes('quota');
+        if (isQuota) { send({ type: 'error', error_code: 'quota_exhausted', message: 'YouTube API quota exhausted. Resets at midnight Pacific Time.' }); }
+        else { send({ type: 'error', message: ytErr.message || 'YouTube search failed' }); }
+        return res.end();
+      }
+    }
 
-    // Deduplication
-    const existing = db.prepare('SELECT id FROM leads WHERE channel_id = ?').get(ch.channel_id);
-    if (existing) { skipped++; continue; }
+    send({ type: 'progress', stage: 'qualify', message: `Found ${allChannels.length} unique channels, qualifying leads...`, found: allChannels.length });
+
+    // Step 3 — Filter + save
+    const db = getDb();
+    const blacklistKeywords = JSON.parse(getSetting('blacklist_keywords') || '[]');
+    const blacklistChannels = JSON.parse(getSetting('blacklist_channels') || '[]');
+
+    let added = 0, skipped = 0;
+    const results = [];
 
     const stmt = db.prepare(`
-      INSERT INTO leads (
+      INSERT OR IGNORE INTO leads (
         user_id, platform, channel_id, channel_name, channel_handle, subscriber_count, total_videos,
         avg_views, avg_likes, avg_comments, engagement_rate, upload_frequency_days,
         last_upload_date, channel_description, channel_tags, recent_videos, most_viewed_video,
@@ -252,23 +395,124 @@ router.post('/scrape/youtube', scrapeLimiter, asyncHandler(async (req, res) => {
       )
     `);
 
-    const r = stmt.run({ ...ch, niche: keyword, user_id: req.user.id });
-    ch.id = r.lastInsertRowid;
-    results.push(ch);
-    added++;
+    for (const ch of allChannels) {
+      if (ch.avg_views < minViews) { skipped++; continue; }
+      if (blacklistChannels.includes(ch.channel_id)) { skipped++; continue; }
+      if (blacklistKeywords.some(kw => ch.channel_name.toLowerCase().includes(kw.toLowerCase()))) { skipped++; continue; }
 
-    logActivity('lead_found', `Found new lead: ${ch.channel_name} (${ch.subscriber_count?.toLocaleString()} subs) from YouTube`, ch.id, { platform: 'youtube', niche: keyword });
+      const existing = db.prepare('SELECT id FROM leads WHERE channel_id = ? AND user_id = ?').get(ch.channel_id, req.user.id);
+      if (existing) { skipped++; continue; }
+
+      const r = stmt.run({ ...ch, niche: keyword, user_id: req.user.id });
+      if (r.changes > 0) {
+        ch.id = r.lastInsertRowid;
+        added++;
+        results.push(ch);
+        logActivity('lead_found', `Found: ${ch.channel_name} (${(ch.subscriber_count || 0).toLocaleString()} subs)`, ch.id, { platform: 'youtube', niche: keyword }, req.user.id);
+      } else { skipped++; }
+    }
+
+    if (added > 0) incrementUsage(req.user.id, 'leads', added);
+    send({ type: 'complete', added, skipped, total: allChannels.length, leads: results.map(parseLead) });
+  } catch (e) {
+    send({ type: 'error', message: e.message || 'Scrape failed' });
+  }
+  res.end();
+}));
+
+// POST /api/leads/scrape/youtube
+router.post('/scrape/youtube', scrapeLimiter, asyncHandler(async (req, res) => {
+  const { keyword, minSubs = 1000, maxSubs = 500000, country, maxResults = 50, minViews = 100, emailOnly = false } = req.body;
+  if (!keyword) return res.status(400).json({ success: false, error: 'keyword is required' });
+
+  const usageCheck = checkUsageLimit(req.user, 'leads');
+  if (!usageCheck.allowed) {
+    return res.status(429).json({ success: false, upgradeRequired: true, error: `Monthly lead limit reached (${usageCheck.used}/${usageCheck.limit}). Upgrade your plan to scrape more leads.` });
   }
 
+  const db = getDb();
+  const blacklistKeywords = JSON.parse(getSetting('blacklist_keywords') || '[]');
+  const blacklistChannels = JSON.parse(getSetting('blacklist_channels') || '[]');
+
+  const keywords = await expandKeywords(keyword);
+  logActivity('scrape_started', `YouTube scrape: "${keyword}" (${keywords.length} variations)`, null, {}, req.user.id);
+
+  let channels;
+  const perKw = Math.max(15, Math.ceil((maxResults * 2) / keywords.length));
+  try {
+    channels = await itSearchMulti(keywords, { minSubs, maxSubs, maxResults: perKw, emailOnly, minViews: 0 });
+  } catch (itErr) {
+    console.warn(`[InnerTube] Failed (${itErr.message}), falling back to YouTube Data API`);
+    try {
+      channels = await ytSearchMulti(keywords, { minSubs, maxSubs, country, maxResults: perKw, emailOnly, minViews: 0 });
+    } catch (ytErr) {
+      const status = ytErr.response?.status;
+      const reason = ytErr.response?.data?.error?.errors?.[0]?.reason;
+      const isQuota = reason === 'quotaExceeded' || reason === 'dailyLimitExceeded' ||
+        status === 429 || (ytErr.message || '').toLowerCase().includes('quota');
+      if (isQuota) {
+        return res.status(429).json({
+          success: false,
+          error_code: 'quota_exhausted',
+          error: 'YouTube API quota exhausted. Daily limit resets at midnight Pacific Time. Try again tomorrow or add more API keys in Settings.',
+        });
+      }
+      throw ytErr;
+    }
+  }
+
+  let added = 0, skipped = 0;
+  const results = [];
+
+  const stmt = db.prepare(`
+    INSERT OR IGNORE INTO leads (
+      user_id, platform, channel_id, channel_name, channel_handle, subscriber_count, total_videos,
+      avg_views, avg_likes, avg_comments, engagement_rate, upload_frequency_days,
+      last_upload_date, channel_description, channel_tags, recent_videos, most_viewed_video,
+      country, email, website, social_links, pain_points, lead_score, temperature,
+      niche, thumbnail_url
+    ) VALUES (
+      @user_id, @platform, @channel_id, @channel_name, @channel_handle, @subscriber_count, @total_videos,
+      @avg_views, @avg_likes, @avg_comments, @engagement_rate, @upload_frequency_days,
+      @last_upload_date, @channel_description, @channel_tags, @recent_videos, @most_viewed_video,
+      @country, @email, @website, @social_links, @pain_points, @lead_score, @temperature,
+      @niche, @thumbnail_url
+    )
+  `);
+
+  for (const ch of channels) {
+    if (blacklistChannels.includes(ch.channel_id)) { skipped++; continue; }
+    if (blacklistKeywords.some(kw => ch.channel_name.toLowerCase().includes(kw.toLowerCase()))) { skipped++; continue; }
+    if (ch.avg_views < minViews) { skipped++; continue; }
+
+    const existing = db.prepare('SELECT id FROM leads WHERE channel_id = ? AND user_id = ?').get(ch.channel_id, req.user.id);
+    if (existing) { skipped++; continue; }
+
+    const r = stmt.run({ ...ch, niche: keyword, user_id: req.user.id });
+    if (r.changes > 0) {
+      ch.id = r.lastInsertRowid;
+      results.push(ch);
+      added++;
+      logActivity('lead_found', `Found: ${ch.channel_name} (${(ch.subscriber_count || 0).toLocaleString()} subs)`, ch.id, { platform: 'youtube', niche: keyword }, req.user.id);
+    } else { skipped++; }
+  }
+
+  if (added > 0) incrementUsage(req.user.id, 'leads', added);
   res.json({ success: true, added, skipped, total: channels.length, leads: results.map(parseLead) });
 }));
 
 // POST /api/leads/scrape/reddit
 router.post('/scrape/reddit', scrapeLimiter, asyncHandler(async (req, res) => {
   const { keyword = 'video editing help', subreddits, limit = 30 } = req.body;
+
+  const usageCheck = checkUsageLimit(req.user, 'leads');
+  if (!usageCheck.allowed) {
+    return res.status(429).json({ success: false, upgradeRequired: true, error: `Monthly lead limit reached (${usageCheck.used}/${usageCheck.limit}). Upgrade your plan to scrape more leads.` });
+  }
+
   const db = getDb();
 
-  logActivity('scrape_started', `Reddit scrape started for keyword: ${keyword}`);
+  logActivity('scrape_started', `Reddit scrape started for keyword: ${keyword}`, null, {}, req.user.id);
 
   const posts = await searchPosts(keyword, subreddits, limit);
 
@@ -276,7 +520,7 @@ router.post('/scrape/reddit', scrapeLimiter, asyncHandler(async (req, res) => {
   const results = [];
 
   for (const post of posts) {
-    const existing = db.prepare('SELECT id FROM leads WHERE reddit_username = ?').get(post.reddit_username);
+    const existing = db.prepare('SELECT id FROM leads WHERE reddit_username = ? AND user_id = ?').get(post.reddit_username, req.user.id);
     if (existing) { skipped++; continue; }
 
     const stmt = db.prepare(`
@@ -309,9 +553,10 @@ router.post('/scrape/reddit', scrapeLimiter, asyncHandler(async (req, res) => {
     results.push(post);
     added++;
 
-    logActivity('lead_found', `Found Reddit lead: u/${post.reddit_username} in r/${post.reddit_subreddit}`, r.lastInsertRowid, { platform: 'reddit' });
+    logActivity('lead_found', `Found Reddit lead: u/${post.reddit_username} in r/${post.reddit_subreddit}`, r.lastInsertRowid, { platform: 'reddit' }, req.user.id);
   }
 
+  if (added > 0) incrementUsage(req.user.id, 'leads', added);
   res.json({ success: true, added, skipped, total: posts.length, leads: results });
 }));
 
@@ -337,24 +582,6 @@ router.post('/bulk-action', asyncHandler(async (req, res) => {
   }
 
   res.status(400).json({ success: false, error: 'Unknown action' });
-}));
-
-// GET /api/leads/export/csv
-router.get('/export/csv', asyncHandler(async (req, res) => {
-  const db = getDb();
-  const leads = db.prepare('SELECT * FROM leads WHERE user_id = ? ORDER BY created_at DESC').all(req.user.id);
-
-  const headers = ['id', 'channel_name', 'platform', 'subscriber_count', 'avg_views', 'engagement_rate',
-    'temperature', 'lead_score', 'email', 'website', 'crm_stage', 'niche', 'country', 'created_at'];
-
-  const csv = [
-    headers.join(','),
-    ...leads.map(l => headers.map(h => `"${(l[h] || '').toString().replace(/"/g, '""')}"`).join(',')),
-  ].join('\n');
-
-  res.setHeader('Content-Type', 'text/csv');
-  res.setHeader('Content-Disposition', 'attachment; filename="leads.csv"');
-  res.send(csv);
 }));
 
 function getSetting(key) {

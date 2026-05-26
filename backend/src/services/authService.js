@@ -29,7 +29,9 @@ function verifyOtp(userId, code, type) {
     return { ok: false, error: 'Too many attempts — request a new code' };
   }
 
-  if (row.code !== code) return { ok: false, error: 'Incorrect code' };
+  const stored = Buffer.from(String(row.code));
+  const provided = Buffer.from(String(code));
+  if (stored.length !== provided.length || !crypto.timingSafeEqual(stored, provided)) return { ok: false, error: 'Incorrect code' };
   db.prepare(`UPDATE otp_codes SET used=1 WHERE id=?`).run(row.id);
   return { ok: true };
 }
@@ -232,14 +234,27 @@ async function sendOtpEmail(user, code) {
 // ── Usage limits ──────────────────────────────────────────────────────────────
 
 const PLAN_LIMITS = {
+  trial:   { leads: 50,     emails: 50 },
   free:    { leads: 100,    emails: 100 },
   starter: { leads: 500,    emails: 500 },
+  pro:     { leads: 5000,   emails: 2500 },
   growth:  { leads: 2500,   emails: 2000 },
   agency:  { leads: 10000,  emails: Infinity },
 };
 
 function checkUsageLimit(user, type) {
   const db = getDb();
+
+  // Agency is unlimited
+  if (user.plan === 'agency' && user.plan_status === 'active') {
+    return { allowed: true, limit: Infinity, used: 0 };
+  }
+
+  // Cancelled or past_due — enforce trial-level limits regardless of plan
+  const effectivePlan = (user.plan_status === 'cancelled' || user.plan_status === 'past_due')
+    ? 'trial'
+    : (user.plan || 'free');
+
   // Reset monthly counter if past reset date
   if (user.usage_reset_date && new Date(user.usage_reset_date) <= new Date()) {
     const nextReset = new Date();
@@ -250,7 +265,7 @@ function checkUsageLimit(user, type) {
     user.emails_used_this_month = 0;
   }
 
-  const limits = PLAN_LIMITS[user.plan] || PLAN_LIMITS.free;
+  const limits = PLAN_LIMITS[effectivePlan] || PLAN_LIMITS.free;
   if (type === 'leads') return { allowed: user.leads_used_this_month < limits.leads, limit: limits.leads, used: user.leads_used_this_month };
   if (type === 'emails') return { allowed: user.emails_used_this_month < limits.emails, limit: limits.emails, used: user.emails_used_this_month };
   return { allowed: true };

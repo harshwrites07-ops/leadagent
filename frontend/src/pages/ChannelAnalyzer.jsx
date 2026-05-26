@@ -108,6 +108,20 @@ function ResultCard({ result, index }) {
     } catch (e) { toast.error(e.message); }
   };
 
+  const handleSendEmail = async () => {
+    try {
+      if (!savedCrm) {
+        await api.post('/analyzer/save-to-crm', { lead_id: result.lead_id });
+        setSavedCrm(true);
+      }
+      await api.post(`/emails/queue/${result.lead_id}`, {
+        subject: email?.subject || result.email?.subject,
+        body: email?.body || result.email?.body,
+      });
+      toast.success(`Email queued for ${channel.channel_name}`);
+    } catch (e) { toast.error(e.response?.data?.error || e.message); }
+  };
+
   const sectionLabel = {
     fontFamily: 'var(--font-mono)', fontSize: 8, fontWeight: 600,
     letterSpacing: '0.16em', color: 'var(--text-muted)', textTransform: 'uppercase',
@@ -277,7 +291,7 @@ function ResultCard({ result, index }) {
           {savedCrm ? <><Check size={12} /> In CRM</> : <><Star size={12} /> Save to CRM</>}
         </button>
         {channel.email && (
-          <button style={{
+          <button onClick={handleSendEmail} style={{
             flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
             padding: '9px 16px', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontFamily: 'var(--font-body)',
             background: 'transparent', border: '1px solid var(--border-default)', color: 'var(--text-secondary)',

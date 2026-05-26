@@ -4,6 +4,7 @@ const path = require('path');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { getDb, getSetting, setSetting, logActivity } = require('../models/database');
 const { FAST_MODEL, SMART_MODEL, getGeminiKey, makeGeminiModel, checkAiAvailability, getAnthropicKey } = require('../services/claudeService');
+const { getAllKeys: getYtKeys, isQuotaExhausted } = require('../services/youtubeService');
 
 const ENV_PATH = path.join(__dirname, '../../../.env');
 
@@ -343,18 +344,18 @@ const GEMINI_TOOLS = TOOLS.map(t => ({
 // ── Tool executor ─────────────────────────────────────────────────────────────
 const LEAD_INSERT_SQL = `
   INSERT OR IGNORE INTO leads
-    (platform, channel_id, channel_name, channel_handle, subscriber_count, total_videos,
+    (user_id, platform, channel_id, channel_name, channel_handle, subscriber_count, total_videos,
      avg_views, avg_likes, avg_comments, engagement_rate, upload_frequency_days,
      last_upload_date, channel_description, channel_tags, recent_videos, most_viewed_video,
      country, email, website, social_links, thumbnail_url, pain_points, lead_score, temperature, crm_stage)
   VALUES
-    (@platform, @channel_id, @channel_name, @channel_handle, @subscriber_count, @total_videos,
+    (@user_id, @platform, @channel_id, @channel_name, @channel_handle, @subscriber_count, @total_videos,
      @avg_views, @avg_likes, @avg_comments, @engagement_rate, @upload_frequency_days,
      @last_upload_date, @channel_description, @channel_tags, @recent_videos, @most_viewed_video,
      @country, @email, @website, @social_links, @thumbnail_url, @pain_points, @lead_score, @temperature, 'new_lead')
 `;
 
-async function runTool(name, input) {
+async function runTool(name, input, userId) {
   const db = getDb();
 
   switch (name) {
@@ -369,29 +370,29 @@ async function runTool(name, input) {
           SUM(CASE WHEN crm_stage='replied' THEN 1 ELSE 0 END) as replied,
           SUM(CASE WHEN crm_stage='emailed' THEN 1 ELSE 0 END) as emailed,
           SUM(CASE WHEN email IS NOT NULL AND email!='' THEN 1 ELSE 0 END) as with_email
-        FROM leads`).get();
-      const sent = db.prepare(`SELECT COUNT(*) as n FROM email_queue WHERE status='sent'`).get();
-      const today = db.prepare(`SELECT COUNT(*) as n FROM leads WHERE date(created_at)=date('now')`).get();
-      const pitches = db.prepare(`SELECT COUNT(*) as n FROM pitches`).get();
+        FROM leads WHERE user_id=?`).get(userId);
+      const sent = db.prepare(`SELECT COUNT(*) as n FROM email_queue WHERE user_id=? AND status='sent'`).get(userId);
+      const today = db.prepare(`SELECT COUNT(*) as n FROM leads WHERE user_id=? AND date(created_at)=date('now')`).get(userId);
+      const pitches = db.prepare(`SELECT COUNT(*) as n FROM pitches WHERE lead_id IN (SELECT id FROM leads WHERE user_id=?)`).get(userId);
       return { ...row, emails_sent: sent?.n || 0, added_today: today?.n || 0, pitches_generated: pitches?.n || 0 };
     }
 
     case 'get_leads': {
-      let q = `SELECT id,channel_name,subscriber_count,avg_views,engagement_rate,temperature,crm_stage,email,lead_score,channel_handle FROM leads WHERE 1=1`;
-      const params = [];
+      let q = `SELECT id,channel_name,subscriber_count,avg_views,engagement_rate,temperature,crm_stage,email,lead_score,channel_handle FROM leads WHERE user_id=?`;
+      const params = [userId];
       if (input.search)      { q += ' AND channel_name LIKE ?'; params.push(`%${input.search}%`); }
       if (input.temperature) { q += ' AND temperature=?'; params.push(input.temperature); }
       if (input.stage)       { q += ' AND crm_stage=?'; params.push(input.stage); }
       q += ' ORDER BY lead_score DESC LIMIT ?';
       params.push(Math.min(input.limit || 25, 100));
       const leads = db.prepare(q).all(...params);
-      const total = db.prepare('SELECT COUNT(*) as n FROM leads').get();
+      const total = db.prepare('SELECT COUNT(*) as n FROM leads WHERE user_id=?').get(userId);
       return { leads, shown: leads.length, total_in_db: total.n };
     }
 
     case 'get_leads_bulk': {
-      let q = `SELECT id,channel_name,subscriber_count,avg_views,engagement_rate,temperature,crm_stage,email,lead_score,channel_handle,created_at FROM leads WHERE 1=1`;
-      const params = [];
+      let q = `SELECT id,channel_name,subscriber_count,avg_views,engagement_rate,temperature,crm_stage,email,lead_score,channel_handle,created_at FROM leads WHERE user_id=?`;
+      const params = [userId];
       if (input.temperature) { q += ' AND temperature=?'; params.push(input.temperature); }
       if (input.stage)       { q += ' AND crm_stage=?'; params.push(input.stage); }
       if (input.has_email === true)  { q += ' AND email IS NOT NULL AND email != ""'; }
@@ -399,7 +400,7 @@ async function runTool(name, input) {
       q += ' ORDER BY lead_score DESC LIMIT ? OFFSET ?';
       params.push(Math.min(input.limit || 200, 500), input.offset || 0);
       const leads = db.prepare(q).all(...params);
-      const total = db.prepare('SELECT COUNT(*) as n FROM leads').get();
+      const total = db.prepare('SELECT COUNT(*) as n FROM leads WHERE user_id=?').get(userId);
       return { leads, shown: leads.length, total_in_db: total.n, offset: input.offset || 0 };
     }
 
@@ -420,27 +421,27 @@ async function runTool(name, input) {
           SUM(CASE WHEN crm_stage='closed_lost' THEN 1 ELSE 0 END) as lost,
           SUM(CASE WHEN date(created_at)=date('now') THEN 1 ELSE 0 END) as added_today,
           SUM(CASE WHEN date(created_at)>=date('now','-7 days') THEN 1 ELSE 0 END) as added_this_week
-        FROM leads`).get();
-      const topLeads = db.prepare(`SELECT id,channel_name,subscriber_count,lead_score,email,temperature FROM leads WHERE temperature='hot' ORDER BY lead_score DESC LIMIT 10`).all();
-      const pitches = db.prepare('SELECT COUNT(*) as n FROM pitches').get();
-      const emailsSent = db.prepare("SELECT COUNT(*) as n FROM email_queue WHERE status='sent'").get();
+        FROM leads WHERE user_id=?`).get(userId);
+      const topLeads = db.prepare(`SELECT id,channel_name,subscriber_count,lead_score,email,temperature FROM leads WHERE user_id=? AND temperature='hot' ORDER BY lead_score DESC LIMIT 10`).all(userId);
+      const pitches = db.prepare('SELECT COUNT(*) as n FROM pitches WHERE lead_id IN (SELECT id FROM leads WHERE user_id=?)').get(userId);
+      const emailsSent = db.prepare("SELECT COUNT(*) as n FROM email_queue WHERE user_id=? AND status='sent'").get(userId);
       return { ...totals, pitches_generated: pitches.n, emails_sent: emailsSent.n, top_10_hot_leads: topLeads };
     }
 
     case 'mass_delete_leads': {
-      let countQ, deleteQ;
+      let countQ, deleteQ, countParams, deleteParams;
       switch (input.filter) {
-        case 'no_email':           countQ = `SELECT COUNT(*) as n FROM leads WHERE email IS NULL OR email = ''`; deleteQ = `DELETE FROM leads WHERE email IS NULL OR email = ''`; break;
-        case 'cold_stage_only':    countQ = `SELECT COUNT(*) as n FROM leads WHERE crm_stage='closed_lost'`; deleteQ = `DELETE FROM leads WHERE crm_stage='closed_lost'`; break;
-        case 'inactive_90days':    countQ = `SELECT COUNT(*) as n FROM leads WHERE julianday('now')-julianday(updated_at)>90 AND crm_stage='new_lead'`; deleteQ = `DELETE FROM leads WHERE julianday('now')-julianday(updated_at)>90 AND crm_stage='new_lead'`; break;
-        case 'duplicates':         countQ = `SELECT COUNT(*) as n FROM leads WHERE id NOT IN (SELECT MAX(id) FROM leads GROUP BY channel_id)`; deleteQ = `DELETE FROM leads WHERE id NOT IN (SELECT MAX(id) FROM leads GROUP BY channel_id)`; break;
-        case 'all_cold_temperature': countQ = `SELECT COUNT(*) as n FROM leads WHERE temperature='cold' AND crm_stage='new_lead'`; deleteQ = `DELETE FROM leads WHERE temperature='cold' AND crm_stage='new_lead'`; break;
+        case 'no_email':           countQ = `SELECT COUNT(*) as n FROM leads WHERE user_id=? AND (email IS NULL OR email = '')`; deleteQ = `DELETE FROM leads WHERE user_id=? AND (email IS NULL OR email = '')`; countParams = deleteParams = [userId]; break;
+        case 'cold_stage_only':    countQ = `SELECT COUNT(*) as n FROM leads WHERE user_id=? AND crm_stage='closed_lost'`; deleteQ = `DELETE FROM leads WHERE user_id=? AND crm_stage='closed_lost'`; countParams = deleteParams = [userId]; break;
+        case 'inactive_90days':    countQ = `SELECT COUNT(*) as n FROM leads WHERE user_id=? AND julianday('now')-julianday(updated_at)>90 AND crm_stage='new_lead'`; deleteQ = `DELETE FROM leads WHERE user_id=? AND julianday('now')-julianday(updated_at)>90 AND crm_stage='new_lead'`; countParams = deleteParams = [userId]; break;
+        case 'duplicates':         countQ = `SELECT COUNT(*) as n FROM leads WHERE user_id=? AND id NOT IN (SELECT MAX(id) FROM leads WHERE user_id=? GROUP BY channel_id)`; deleteQ = `DELETE FROM leads WHERE user_id=? AND id NOT IN (SELECT MAX(id) FROM leads WHERE user_id=? GROUP BY channel_id)`; countParams = deleteParams = [userId, userId]; break;
+        case 'all_cold_temperature': countQ = `SELECT COUNT(*) as n FROM leads WHERE user_id=? AND temperature='cold' AND crm_stage='new_lead'`; deleteQ = `DELETE FROM leads WHERE user_id=? AND temperature='cold' AND crm_stage='new_lead'`; countParams = deleteParams = [userId]; break;
         default: return { error: 'Unknown filter' };
       }
-      const count = db.prepare(countQ).get().n;
+      const count = db.prepare(countQ).get(...countParams).n;
       if (input.dry_run) return { would_delete: count, filter: input.filter, dry_run: true };
-      db.prepare(deleteQ).run();
-      const remaining = db.prepare('SELECT COUNT(*) as n FROM leads').get().n;
+      db.prepare(deleteQ).run(...deleteParams);
+      const remaining = db.prepare('SELECT COUNT(*) as n FROM leads WHERE user_id=?').get(userId).n;
       return { deleted: count, filter: input.filter, leads_remaining: remaining };
     }
 
@@ -448,15 +449,14 @@ async function runTool(name, input) {
       const { searchChannels } = require('../services/youtubeService');
       const { keyword, minSubs = 30000, maxSubs = 500000 } = input;
       const maxResults = Math.min(input.maxResults || 15, 25);
-      ;(async () => {
-        try {
-          const leads = await searchChannels({ keyword, minSubs, maxSubs, maxResults, emailOnly: true });
-          const ins = db.prepare(LEAD_INSERT_SQL);
-          for (const lead of leads) { try { ins.run(lead); } catch {} }
-          console.log(`[Levi] search_youtube "${keyword}": ${leads.length} leads saved`);
-        } catch (e) { console.error(`[Levi] search_youtube error:`, e.message); }
-      })();
-      return { status: 'searching', keyword, estimated_leads: maxResults, message: `Searching "${keyword}" in background. ~${maxResults} leads in 1-3 min. Ask "show leads" to check.` };
+      let saved = 0;
+      try {
+        const leads = await searchChannels({ keyword, minSubs, maxSubs, maxResults, emailOnly: true });
+        const ins = db.prepare(LEAD_INSERT_SQL);
+        for (const lead of leads) { try { const r = ins.run({ ...lead, user_id: userId }); if (r.changes > 0) saved++; } catch {} }
+        console.log(`[Levi] search_youtube "${keyword}": ${saved} new leads saved`);
+      } catch (e) { console.error(`[Levi] search_youtube error:`, e.message); return { error: e.message }; }
+      return { status: 'done', keyword, leads_found: saved, message: `Found and saved ${saved} new leads for "${keyword}". Check CRM to see them.` };
     }
 
     case 'scrape_bulk': {
@@ -464,33 +464,20 @@ async function runTool(name, input) {
       const keywords = (input.keywords || []).slice(0, 8);
       const { minSubs = 30000, maxSubs = 500000 } = input;
       const maxPerKw = Math.min(input.maxResultsPerKeyword || 10, 15);
-      ;(async () => {
-        for (const keyword of keywords) {
-          try {
-            const leads = await searchChannels({ keyword, minSubs, maxSubs, maxResults: maxPerKw, emailOnly: true });
-            const ins = db.prepare(LEAD_INSERT_SQL);
-            for (const lead of leads) { try { ins.run(lead); } catch {} }
-            console.log(`[Levi] scrape_bulk "${keyword}": ${leads.length} saved`);
-          } catch (e) { console.error(`[Levi] scrape_bulk "${keyword}" error:`, e.message); }
-        }
-        console.log(`[Levi] scrape_bulk complete — all ${keywords.length} keywords done`);
-      })();
-      return { status: 'searching', keywords, estimated_leads: keywords.length * maxPerKw, message: `Searching ${keywords.length} keywords in background (~${keywords.length * maxPerKw} leads expected). Takes 2-10 min. Ask "daily briefing" to check progress.` };
+      let totalSaved = 0;
+      for (const keyword of keywords) {
+        try {
+          const leads = await searchChannels({ keyword, minSubs, maxSubs, maxResults: maxPerKw, emailOnly: true });
+          const ins = db.prepare(LEAD_INSERT_SQL);
+          for (const lead of leads) { try { const r = ins.run({ ...lead, user_id: userId }); if (r.changes > 0) totalSaved++; } catch {} }
+          console.log(`[Levi] scrape_bulk "${keyword}": ${leads.length} found`);
+        } catch (e) { console.error(`[Levi] scrape_bulk "${keyword}" error:`, e.message); }
+      }
+      return { status: 'done', keywords, leads_saved: totalSaved, message: `Scraped ${keywords.length} keywords — ${totalSaved} new leads saved to CRM.` };
     }
 
     case 'trigger_niche_hunt': {
       const { niche, target = 50 } = input;
-      try {
-        const response = await require('node-fetch')('http://localhost:3001/api/scraper/hunt', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ niche, target }),
-        }).catch(() => null);
-        if (response?.ok) {
-          return { status: 'started', niche, target, message: `Niche hunt launched for "${niche}" — targeting ${target} leads. Check /api/scraper/hunt/status for live progress.` };
-        }
-      } catch {}
-      // Fallback: direct scrape
       const { searchChannels, searchChannelsMulti } = require('../services/youtubeService');
       const NICHE_KEYWORDS = {
         'Business': ['business coach YouTube','entrepreneur channel','agency owner YouTube','online business tips'],
@@ -509,7 +496,7 @@ async function runTool(name, input) {
           const leads = await searchChannelsMulti(keywords.slice(0, 3), { minSubs: 5000, maxSubs: 500000, maxResults: Math.min(target, 30), emailOnly: true });
           const ins = db.prepare(LEAD_INSERT_SQL);
           let saved = 0;
-          for (const lead of leads) { try { ins.run({ ...lead, niche }); saved++; } catch {} }
+          for (const lead of leads) { try { ins.run({ ...lead, niche, user_id: userId }); saved++; } catch {} }
           console.log(`[Levi] niche_hunt "${niche}": ${saved} saved`);
         } catch (e) { console.error(`[Levi] niche_hunt error:`, e.message); }
       })();
@@ -517,11 +504,27 @@ async function runTool(name, input) {
     }
 
     case 'trigger_powermode': {
-      try {
-        const fetch = (...args) => import('node-fetch').then(m => m.default(...args)).catch(() => null);
-        await fetch('http://localhost:3001/api/scraper/powermode/start', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
-      } catch {}
-      return { status: 'started', message: 'PowerMode launched — searching 15 high-value keywords simultaneously. Expect 50-150 leads in CRM over next 10-20 minutes. Check Lead Finder → PowerMode tab for live progress.' };
+      const { searchChannelsMulti: pmSearch } = require('../services/youtubeService');
+      const POWERMODE_KEYWORDS = [
+        'business coach YouTube', 'entrepreneur channel', 'startup founder vlog', 'agency owner YouTube',
+        'consultant YouTube channel', 'online business tips', 'CEO vlog',
+        'stock trader YouTube', 'investing channel', 'personal finance channel',
+        'real estate agent YouTube', 'property investor channel',
+        'online fitness coach', 'personal trainer YouTube', 'SaaS founder YouTube',
+      ];
+      ;(async () => {
+        try {
+          const ins = db.prepare(LEAD_INSERT_SQL);
+          let totalSaved = 0;
+          for (let i = 0; i < POWERMODE_KEYWORDS.length; i += 3) {
+            const batch = POWERMODE_KEYWORDS.slice(i, i + 3);
+            const leads = await pmSearch(batch, { minSubs: 5000, maxSubs: 500000, maxResults: 30, emailOnly: false });
+            for (const lead of leads) { try { const r = ins.run({ ...lead, user_id: userId }); if (r.changes > 0) totalSaved++; } catch {} }
+          }
+          console.log(`[Levi] powermode complete: ${totalSaved} leads saved`);
+        } catch (e) { console.error('[Levi] powermode error:', e.message); }
+      })();
+      return { status: 'started', message: 'PowerMode launched — searching 15 high-value keywords in background. Expect 50-150 leads in CRM over next 10-20 minutes.' };
     }
 
     case 'analyze_channel': {
@@ -541,18 +544,18 @@ async function runTool(name, input) {
           coldEmail = bm?.[1]?.trim() || coldEmail;
         }
       } catch (e) { deepStudy = `Analysis error: ${e.message}`; }
-      try { db.prepare(LEAD_INSERT_SQL).run(channelData); } catch {}
+      try { db.prepare(LEAD_INSERT_SQL).run({ ...channelData, user_id: userId }); } catch {}
       return { channel: channelData.channel_name, subscribers: channelData.subscriber_count?.toLocaleString(), email: channelData.email || 'none', temperature: channelData.temperature, deep_study: deepStudy, email_subject: emailSubject, cold_email: coldEmail };
     }
 
     case 'generate_pitch': {
       const claude = require('../services/claudeService');
-      const lead = db.prepare('SELECT * FROM leads WHERE id=?').get(input.lead_id);
+      const lead = db.prepare('SELECT * FROM leads WHERE id=? AND user_id=?').get(input.lead_id, userId);
       if (!lead) throw new Error(`Lead ${input.lead_id} not found`);
       db.prepare(`UPDATE leads SET crm_stage='studying', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(lead.id);
       const result = await claude.generateFullPitch(lead);
-      db.prepare(`INSERT OR REPLACE INTO pitches (lead_id,deep_study,custom_offer,cold_email,email_subject,subject_variants) VALUES (?,?,?,?,?,?)`)
-        .run(lead.id, result.key_insight, result.custom_offer, result.email_body, result.email_subject, JSON.stringify(result.subject_variants || []));
+      db.prepare(`INSERT OR REPLACE INTO pitches (lead_id,user_id,deep_study,custom_offer,cold_email,email_subject,subject_variants) VALUES (?,?,?,?,?,?,?)`)
+        .run(lead.id, userId, result.key_insight, result.custom_offer, result.email_body, result.email_subject, JSON.stringify(result.subject_variants || []));
       db.prepare(`UPDATE leads SET crm_stage='pitch_ready', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(lead.id);
       return { lead: lead.channel_name, subject: result.email_subject, preview: result.email_body.substring(0, 300) + '...' };
     }
@@ -566,12 +569,12 @@ async function runTool(name, input) {
         for (let i = 0; i < ids.length; i += CONCURRENCY) {
           const batch = ids.slice(i, i + CONCURRENCY);
           const results = await Promise.allSettled(batch.map(async id => {
-            const lead = db.prepare('SELECT * FROM leads WHERE id=?').get(id);
+            const lead = db.prepare('SELECT * FROM leads WHERE id=? AND user_id=?').get(id, userId);
             if (!lead) return;
             db.prepare(`UPDATE leads SET crm_stage='studying', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(id);
             const result = await claude.generateFullPitch(lead);
-            db.prepare(`INSERT OR REPLACE INTO pitches (lead_id,deep_study,custom_offer,cold_email,email_subject,subject_variants) VALUES (?,?,?,?,?,?)`)
-              .run(id, result.key_insight, result.custom_offer, result.email_body, result.email_subject, JSON.stringify(result.subject_variants || []));
+            db.prepare(`INSERT OR REPLACE INTO pitches (lead_id,user_id,deep_study,custom_offer,cold_email,email_subject,subject_variants) VALUES (?,?,?,?,?,?,?)`)
+              .run(id, userId, result.key_insight, result.custom_offer, result.email_body, result.email_subject, JSON.stringify(result.subject_variants || []));
             db.prepare(`UPDATE leads SET crm_stage='pitch_ready', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(id);
             done++;
           }));
@@ -595,8 +598,8 @@ async function runTool(name, input) {
           try {
             const leads = await searchChannels({ keyword, minSubs, maxSubs, maxResults: maxPerKw, emailOnly: true });
             for (const lead of leads) {
-              try { insert.run(lead); } catch {}
-              const saved = db.prepare('SELECT id FROM leads WHERE channel_id=?').get(lead.channel_id);
+              try { insert.run({ ...lead, user_id: userId }); } catch {}
+              const saved = db.prepare('SELECT id FROM leads WHERE channel_id=? AND user_id=?').get(lead.channel_id, userId);
               if (saved) allIds.push(saved.id);
             }
           } catch (e) { console.error(`[Levi] find_and_pitch scrape "${keyword}":`, e.message); }
@@ -606,11 +609,11 @@ async function runTool(name, input) {
           const batch = allIds.slice(i, i + CONCURRENCY);
           await Promise.allSettled(batch.map(async id => {
             try {
-              const fullLead = db.prepare('SELECT * FROM leads WHERE id=?').get(id);
+              const fullLead = db.prepare('SELECT * FROM leads WHERE id=? AND user_id=?').get(id, userId);
               if (!fullLead) return;
               const result = await claude.generateFullPitch(fullLead);
-              db.prepare(`INSERT OR REPLACE INTO pitches (lead_id,cold_email,email_subject,subject_variants) VALUES (?,?,?,?)`)
-                .run(fullLead.id, result.email_body, result.email_subject, JSON.stringify(result.subject_variants || []));
+              db.prepare(`INSERT OR REPLACE INTO pitches (lead_id,user_id,cold_email,email_subject,subject_variants) VALUES (?,?,?,?,?)`)
+                .run(fullLead.id, userId, result.email_body, result.email_subject, JSON.stringify(result.subject_variants || []));
               db.prepare(`UPDATE leads SET crm_stage='pitch_ready', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(fullLead.id);
               pitched++;
             } catch {}
@@ -636,8 +639,8 @@ async function runTool(name, input) {
       const temp = input.temperature;
       const limit = Math.min(input.limit || 10, 20);
 
-      let q = `SELECT * FROM leads WHERE email IS NOT NULL AND email != ''`;
-      const params = [];
+      let q = `SELECT * FROM leads WHERE user_id=? AND email IS NOT NULL AND email != ''`;
+      const params = [userId];
       if (temp) { q += ' AND temperature=?'; params.push(temp); }
       if (input.stage) { q += ' AND crm_stage=?'; params.push(input.stage); }
       else { q += ` AND crm_stage IN ('new_lead','pitch_ready')`; }
@@ -656,14 +659,14 @@ async function runTool(name, input) {
         const results = await Promise.allSettled(batch.map(async lead => {
           db.prepare(`UPDATE leads SET crm_stage='studying', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(lead.id);
           const result = await claude.generateFullPitch(lead);
-          db.prepare(`INSERT OR REPLACE INTO pitches (lead_id,deep_study,custom_offer,cold_email,email_subject,subject_variants) VALUES (?,?,?,?,?,?)`)
-            .run(lead.id, result.key_insight, result.custom_offer, result.email_body, result.email_subject, JSON.stringify(result.subject_variants || []));
-          const qr = db.prepare(`INSERT INTO email_queue (lead_id,subject,body,status) VALUES (?,?,?,'pending')`).run(lead.id, result.email_subject, result.email_body);
+          db.prepare(`INSERT OR REPLACE INTO pitches (lead_id,user_id,deep_study,custom_offer,cold_email,email_subject,subject_variants) VALUES (?,?,?,?,?,?,?)`)
+            .run(lead.id, userId, result.key_insight, result.custom_offer, result.email_body, result.email_subject, JSON.stringify(result.subject_variants || []));
+          const qr = db.prepare(`INSERT INTO email_queue (user_id,lead_id,subject,body,status) VALUES (?,?,?,?,'pending')`).run(userId, lead.id, result.email_subject, result.email_body);
           db.prepare(`UPDATE email_queue SET status='sending' WHERE id=?`).run(qr.lastInsertRowid);
           const sentResult = await sendEmail({ to: lead.email, subject: result.email_subject, body: result.email_body, leadId: lead.id });
           db.prepare(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP,email_id=? WHERE id=?`).run(sentResult.emailId || null, qr.lastInsertRowid);
           db.prepare(`UPDATE leads SET crm_stage='emailed', last_contacted_date=date('now'), follow_up_count=0, follow_up_status='active', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(lead.id);
-          logActivity('email_sent', `[Levi] Email sent to ${lead.channel_name}`, lead.id);
+          logActivity('email_sent', `[Levi] Email sent to ${lead.channel_name}`, lead.id, {}, userId);
           return lead.channel_name;
         }));
 
@@ -699,11 +702,12 @@ async function runTool(name, input) {
       const leads = db.prepare(`
         SELECT l.*, p.cold_email as original_email FROM leads l
         LEFT JOIN pitches p ON p.lead_id = l.id
-        WHERE l.crm_stage = 'emailed'
+        WHERE l.user_id = ?
+          AND l.crm_stage = 'emailed'
           AND l.email IS NOT NULL AND l.email != ''
           AND julianday('now') - julianday(l.updated_at) >= ?
         ORDER BY l.lead_score DESC LIMIT ?
-      `).all(daysSince, limit);
+      `).all(userId, daysSince, limit);
 
       if (!leads.length) return { sent: 0, message: `No emailed leads found that are ${daysSince}+ days silent.` };
 
@@ -719,11 +723,11 @@ async function runTool(name, input) {
               const bm = followUpRaw.match(/---\s*([\s\S]+)/);
               const subject = sm?.[1]?.trim() || `Following up — ${lead.channel_name}`;
               const body = bm?.[1]?.trim() || followUpRaw;
-              const qr = db.prepare(`INSERT INTO email_queue (lead_id,subject,body,status) VALUES (?,?,?,'pending')`).run(lead.id, subject, body);
+              const qr = db.prepare(`INSERT INTO email_queue (user_id,lead_id,subject,body,status) VALUES (?,?,?,?,'pending')`).run(userId, lead.id, subject, body);
               db.prepare(`UPDATE email_queue SET status='sending' WHERE id=?`).run(qr.lastInsertRowid);
               const sentResult = await sendEmail({ to: lead.email, subject, body, leadId: lead.id });
               db.prepare(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP,email_id=? WHERE id=?`).run(sentResult.emailId || null, qr.lastInsertRowid);
-              logActivity('follow_up_sent', `[Levi] Follow-up #${followUpNum} sent to ${lead.channel_name}`, lead.id);
+              logActivity('follow_up_sent', `[Levi] Follow-up #${followUpNum} sent to ${lead.channel_name}`, lead.id, {}, userId);
               sent++;
             } catch (e) { console.error(`[Levi] followup lead ${lead.id}:`, e.message); }
           }));
@@ -735,16 +739,16 @@ async function runTool(name, input) {
     }
 
     case 'get_email_queue': {
-      const pending = db.prepare(`SELECT COUNT(*) as n FROM email_queue WHERE status='pending'`).get();
-      const sentToday = db.prepare(`SELECT COUNT(*) as n FROM email_queue WHERE status='sent' AND date(sent_at)=date('now')`).get();
-      const failed = db.prepare(`SELECT COUNT(*) as n FROM email_queue WHERE status='failed'`).get();
+      const pending = db.prepare(`SELECT COUNT(*) as n FROM email_queue WHERE user_id=? AND status='pending'`).get(userId);
+      const sentToday = db.prepare(`SELECT COUNT(*) as n FROM email_queue WHERE user_id=? AND status='sent' AND date(sent_at)=date('now')`).get(userId);
+      const failed = db.prepare(`SELECT COUNT(*) as n FROM email_queue WHERE user_id=? AND status='failed'`).get(userId);
       const dailyLimit = parseInt(getSetting('daily_send_limit') || '150');
       const paused = getSetting('queue_paused') === '1';
       const recentSent = db.prepare(`
         SELECT eq.subject, l.channel_name, eq.sent_at
         FROM email_queue eq JOIN leads l ON l.id=eq.lead_id
-        WHERE eq.status='sent' ORDER BY eq.sent_at DESC LIMIT 5
-      `).all();
+        WHERE eq.user_id=? AND eq.status='sent' ORDER BY eq.sent_at DESC LIMIT 5
+      `).all(userId);
       return { pending: pending.n, sent_today: sentToday.n, daily_limit: dailyLimit, daily_remaining: Math.max(0, dailyLimit - sentToday.n), failed: failed.n, paused, recent_sent: recentSent };
     }
 
@@ -760,25 +764,25 @@ async function runTool(name, input) {
     }
 
     case 'move_lead': {
-      const lead = db.prepare('SELECT channel_name,crm_stage FROM leads WHERE id=?').get(input.lead_id);
+      const lead = db.prepare('SELECT channel_name,crm_stage FROM leads WHERE id=? AND user_id=?').get(input.lead_id, userId);
       if (!lead) throw new Error(`Lead ${input.lead_id} not found`);
-      db.prepare('UPDATE leads SET crm_stage=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(input.stage, input.lead_id);
+      db.prepare('UPDATE leads SET crm_stage=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=?').run(input.stage, input.lead_id, userId);
       return { success: true, lead: lead.channel_name, from: lead.crm_stage, to: input.stage };
     }
 
     case 'delete_lead': {
-      const lead = db.prepare('SELECT channel_name FROM leads WHERE id=?').get(input.lead_id);
+      const lead = db.prepare('SELECT channel_name FROM leads WHERE id=? AND user_id=?').get(input.lead_id, userId);
       if (!lead) throw new Error(`Lead ${input.lead_id} not found`);
-      db.prepare('DELETE FROM leads WHERE id=?').run(input.lead_id);
+      db.prepare('DELETE FROM leads WHERE id=? AND user_id=?').run(input.lead_id, userId);
       return { success: true, deleted: lead.channel_name };
     }
 
     case 'get_automation_status': {
       const autoScrape = getSetting('auto_scrape');
-      const today = db.prepare(`SELECT COUNT(*) as n FROM leads WHERE date(created_at)=date('now')`).get();
-      const lastRun = db.prepare(`SELECT description,created_at FROM activities WHERE description LIKE '%Auto-scrape%' ORDER BY created_at DESC LIMIT 1`).get();
+      const today = db.prepare(`SELECT COUNT(*) as n FROM leads WHERE user_id=? AND date(created_at)=date('now')`).get(userId);
+      const lastRun = db.prepare(`SELECT message,created_at FROM activities WHERE (user_id = ? OR user_id IS NULL) AND message LIKE '%Auto-scrape%' ORDER BY created_at DESC LIMIT 1`).get(userId);
       const keyPool = require('../services/youtubeService').getKeyPoolStatus?.() || [];
-      return { auto_scrape_enabled: autoScrape === 'true', leads_found_today: today?.n || 0, last_run: lastRun?.created_at || 'never', last_run_result: lastRun?.description || 'none', api_keys_active: keyPool.filter(k => !k.exhausted).length, api_keys_total: keyPool.length, schedule: 'Every 30 minutes, 45+ keywords, 15 niches' };
+      return { auto_scrape_enabled: autoScrape === 'true', leads_found_today: today?.n || 0, last_run: lastRun?.created_at || 'never', last_run_result: lastRun?.message || 'none', api_keys_active: keyPool.filter(k => !k.exhausted).length, api_keys_total: keyPool.length, schedule: 'Every 30 minutes, 45+ keywords, 15 niches' };
     }
 
     case 'toggle_automation': {
@@ -796,9 +800,9 @@ async function runTool(name, input) {
           SUM(CASE WHEN crm_stage='emailed' THEN 1 ELSE 0 END) as emailed,
           SUM(CASE WHEN crm_stage='replied' THEN 1 ELSE 0 END) as replied,
           SUM(CASE WHEN crm_stage='closed_won' THEN 1 ELSE 0 END) as won
-        FROM leads`).get();
-      const sentToday = db.prepare(`SELECT COUNT(*) as n FROM email_queue WHERE status='sent' AND date(sent_at)=date('now')`).get();
-      const topLeads = db.prepare(`SELECT id,channel_name,subscriber_count,lead_score,email,temperature FROM leads WHERE temperature='hot' AND crm_stage='new_lead' ORDER BY lead_score DESC LIMIT 5`).all();
+        FROM leads WHERE user_id=?`).get(userId);
+      const sentToday = db.prepare(`SELECT COUNT(*) as n FROM email_queue WHERE user_id=? AND status='sent' AND date(sent_at)=date('now')`).get(userId);
+      const topLeads = db.prepare(`SELECT id,channel_name,subscriber_count,lead_score,email,temperature FROM leads WHERE user_id=? AND temperature='hot' AND crm_stage='new_lead' ORDER BY lead_score DESC LIMIT 5`).all(userId);
       const autoScrape = getSetting('auto_scrape');
       const dailyLimit = parseInt(getSetting('daily_send_limit') || '150');
       return { date: new Date().toLocaleDateString(), leads_found_today: stats.today, total_leads: stats.total, hot: stats.hot, warm: stats.warm, pitch_ready: stats.pitch_ready, emailed: stats.emailed, replied: stats.replied, closed_won: stats.won, emails_sent_today: sentToday?.n || 0, daily_limit: dailyLimit, top_hot_leads_to_contact: topLeads, automation_running: autoScrape === 'true' };
@@ -808,18 +812,18 @@ async function runTool(name, input) {
       const action = input.action || 'archive';
       let count = 0;
       if (action === 'archive') {
-        const r = db.prepare(`UPDATE leads SET crm_stage='closed_lost',updated_at=CURRENT_TIMESTAMP WHERE (email IS NULL OR email='') AND crm_stage='new_lead'`).run();
+        const r = db.prepare(`UPDATE leads SET crm_stage='closed_lost',updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND (email IS NULL OR email='') AND crm_stage='new_lead'`).run(userId);
         count = r.changes;
       } else {
-        const r = db.prepare(`DELETE FROM leads WHERE (email IS NULL OR email='') AND crm_stage='new_lead'`).run();
+        const r = db.prepare(`DELETE FROM leads WHERE user_id=? AND (email IS NULL OR email='') AND crm_stage='new_lead'`).run(userId);
         count = r.changes;
       }
       return { action, affected: count, message: `${count} leads without emails ${action === 'delete' ? 'deleted' : 'archived to closed_lost'}` };
     }
 
     case 'export_leads_csv': {
-      let q = `SELECT id,channel_name,channel_handle,subscriber_count,avg_views,engagement_rate,email,website,temperature,crm_stage,niche,lead_score,created_at FROM leads WHERE 1=1`;
-      const params = [];
+      let q = `SELECT id,channel_name,channel_handle,subscriber_count,avg_views,engagement_rate,email,website,temperature,crm_stage,niche,lead_score,created_at FROM leads WHERE user_id=?`;
+      const params = [userId];
       if (input.temperature) { q += ' AND temperature=?'; params.push(input.temperature); }
       if (input.stage)       { q += ' AND crm_stage=?'; params.push(input.stage); }
       if (input.has_email === true)  { q += ' AND email IS NOT NULL AND email != ""'; }
@@ -833,9 +837,9 @@ async function runTool(name, input) {
     }
 
     case 'archive_cold_leads': {
-      const count = db.prepare(`SELECT COUNT(*) as n FROM leads WHERE temperature='cold' AND crm_stage='new_lead'`).get().n;
+      const count = db.prepare(`SELECT COUNT(*) as n FROM leads WHERE user_id=? AND temperature='cold' AND crm_stage='new_lead'`).get(userId).n;
       if (input.dry_run) return { would_archive: count, dry_run: true };
-      db.prepare(`UPDATE leads SET crm_stage='closed_lost',updated_at=CURRENT_TIMESTAMP WHERE temperature='cold' AND crm_stage='new_lead'`).run();
+      db.prepare(`UPDATE leads SET crm_stage='closed_lost',updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND temperature='cold' AND crm_stage='new_lead'`).run(userId);
       return { archived: count, message: `${count} cold new_leads moved to closed_lost. CRM is cleaner now.` };
     }
 
@@ -851,18 +855,18 @@ async function runTool(name, input) {
           SUM(CASE WHEN crm_stage='replied' THEN 1 ELSE 0 END) as replied,
           SUM(CASE WHEN crm_stage='closed_won' THEN 1 ELSE 0 END) as won,
           SUM(CASE WHEN crm_stage='no_response' THEN 1 ELSE 0 END) as no_response
-        FROM leads`).get();
-      const pitches = db.prepare('SELECT COUNT(*) as n FROM pitches').get();
-      const sentTotal = db.prepare(`SELECT COUNT(*) as n FROM email_queue WHERE status='sent'`).get();
-      const failed = db.prepare(`SELECT COUNT(*) as n FROM email_queue WHERE status='failed'`).get();
-      const activities = db.prepare('SELECT COUNT(*) as n FROM activities').get();
+        FROM leads WHERE user_id=?`).get(userId);
+      const pitches = db.prepare('SELECT COUNT(*) as n FROM pitches WHERE lead_id IN (SELECT id FROM leads WHERE user_id=?)').get(userId);
+      const sentTotal = db.prepare(`SELECT COUNT(*) as n FROM email_queue WHERE user_id=? AND status='sent'`).get(userId);
+      const failed = db.prepare(`SELECT COUNT(*) as n FROM email_queue WHERE user_id=? AND status='failed'`).get(userId);
+      const activities = db.prepare('SELECT COUNT(*) as n FROM activities WHERE user_id=?').get(userId);
       return { ...summary, pitches: pitches.n, emails_sent_total: sentTotal.n, emails_failed: failed.n, activity_log_entries: activities.n, database: 'SQLite (backend/data/outreach.db)', timestamp: new Date().toISOString() };
     }
 
     case 'clear_failed_emails': {
-      const count = db.prepare(`SELECT COUNT(*) as n FROM email_queue WHERE status='failed'`).get().n;
+      const count = db.prepare(`SELECT COUNT(*) as n FROM email_queue WHERE user_id=? AND status='failed'`).get(userId).n;
       if (input.dry_run) return { would_delete: count, dry_run: true };
-      db.prepare(`DELETE FROM email_queue WHERE status='failed'`).run();
+      db.prepare(`DELETE FROM email_queue WHERE user_id=? AND status='failed'`).run(userId);
       return { deleted: count, message: `${count} failed emails cleared from queue.` };
     }
 
@@ -874,12 +878,12 @@ async function runTool(name, input) {
           SUM(CASE WHEN e.replied_at IS NOT NULL THEN 1 ELSE 0 END) as replied
         FROM email_queue eq
         LEFT JOIN emails e ON e.id = eq.email_id
-        WHERE eq.status = 'sent' AND eq.subject IS NOT NULL
+        WHERE eq.user_id = ? AND eq.status = 'sent' AND eq.subject IS NOT NULL
         GROUP BY eq.subject
         HAVING sent >= 2
         ORDER BY (CAST(opened AS REAL)/sent) DESC
         LIMIT ?
-      `).all(limit);
+      `).all(userId, limit);
       return { subjects: best.map(r => ({ subject: r.subject, sent: r.sent, opened: r.opened, replied: r.replied, open_rate: r.sent > 0 ? `${Math.round(r.opened/r.sent*100)}%` : '0%' })), count: best.length };
     }
 
@@ -891,14 +895,15 @@ async function runTool(name, input) {
       const leads = db.prepare(`
         SELECT l.*, p.cold_email as original_email
         FROM leads l LEFT JOIN pitches p ON p.lead_id = l.id
-        WHERE l.crm_stage = 'emailed'
+        WHERE l.user_id = ?
+          AND l.crm_stage = 'emailed'
           AND l.follow_up_status = 'active'
           AND l.follow_up_count < 5
           AND l.last_contacted_date IS NOT NULL
           AND l.email IS NOT NULL AND l.email != ''
           AND julianday('now') - julianday(l.last_contacted_date) >= 3
         ORDER BY l.lead_score DESC LIMIT ?
-      `).all(limit);
+      `).all(userId, limit);
       if (!leads.length) return { sent: 0, message: 'No follow-ups due right now (need 3+ days since last contact).' };
       const CONCURRENCY = 3;
       ;(async () => {
@@ -913,13 +918,13 @@ async function runTool(name, input) {
               const bm = raw.match(/---\s*([\s\S]+)/);
               const subject = sm?.[1]?.trim() || `Following up — ${lead.channel_name}`;
               const body = bm?.[1]?.trim() || raw;
-              const qr = db.prepare(`INSERT INTO email_queue (lead_id,subject,body,status,priority) VALUES (?,?,?,'pending',?)`).run(lead.id, subject, body, step);
+              const qr = db.prepare(`INSERT INTO email_queue (user_id,lead_id,subject,body,status,priority) VALUES (?,?,?,?,'pending',?)`).run(userId, lead.id, subject, body, step);
               db.prepare(`UPDATE email_queue SET status='sending' WHERE id=?`).run(qr.lastInsertRowid);
               await sendEmail({ to: lead.email, subject, body, leadId: lead.id });
               db.prepare(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP WHERE id=?`).run(qr.lastInsertRowid);
               db.prepare(`UPDATE leads SET follow_up_count=?,last_contacted_date=date('now'),updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(step, lead.id);
               if (step >= 5) db.prepare(`UPDATE leads SET follow_up_status='complete',crm_stage='no_response',updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(lead.id);
-              logActivity('followup_sent', `[Levi] FU#${step}/5 sent to ${lead.channel_name}`, lead.id);
+              logActivity('followup_sent', `[Levi] FU#${step}/5 sent to ${lead.channel_name}`, lead.id, {}, userId);
               sent++;
             } catch (e) { console.error(`[Levi] FU lead ${lead.id}:`, e.message); }
           }));
@@ -932,18 +937,18 @@ async function runTool(name, input) {
     case 'show_follow_up_status': {
       const breakdown = db.prepare(`
         SELECT follow_up_count, follow_up_status, COUNT(*) as n
-        FROM leads WHERE crm_stage IN ('emailed','no_response')
+        FROM leads WHERE user_id=? AND crm_stage IN ('emailed','no_response')
         GROUP BY follow_up_count, follow_up_status
         ORDER BY follow_up_count
-      `).all();
+      `).all(userId);
       const overdue = db.prepare(`
         SELECT COUNT(*) as n FROM leads
-        WHERE crm_stage='emailed' AND follow_up_status='active' AND follow_up_count < 5
+        WHERE user_id=? AND crm_stage='emailed' AND follow_up_status='active' AND follow_up_count < 5
           AND last_contacted_date IS NOT NULL
           AND julianday('now') - julianday(last_contacted_date) >= 3
-      `).get();
-      const completed = db.prepare(`SELECT COUNT(*) as n FROM leads WHERE follow_up_status='complete'`).get();
-      const noResponse = db.prepare(`SELECT COUNT(*) as n FROM leads WHERE crm_stage='no_response'`).get();
+      `).get(userId);
+      const completed = db.prepare(`SELECT COUNT(*) as n FROM leads WHERE user_id=? AND follow_up_status='complete'`).get(userId);
+      const noResponse = db.prepare(`SELECT COUNT(*) as n FROM leads WHERE user_id=? AND crm_stage='no_response'`).get(userId);
       return { overdue_now: overdue.n, completed_sequences: completed.n, moved_to_no_response: noResponse.n, breakdown, message: `${overdue.n} leads ready for follow-up right now. ${completed.n} completed all 5 steps.` };
     }
 
@@ -1035,12 +1040,16 @@ router.get('/status', asyncHandler(async (req, res) => {
 
   const geminiKey = getGeminiKey();
   const anthropicKey = getAnthropicKey();
+  const ytKeys = getYtKeys();
+  const ytExhausted = isQuotaExhausted();
 
   res.json({
     smtp: { configured: inboxes.length > 0, inboxes: inboxes.length, sent_today: sentToday.n, daily_limit: dailyLimit },
     gemini: { configured: !!geminiKey },
     claude: { configured: !!anthropicKey },
     ai_available: !!(geminiKey || anthropicKey),
+    youtube: { configured: ytKeys.length > 0, keys: ytKeys.length, exhausted: ytExhausted },
+    innertube: { online: true },
   });
 }));
 
@@ -1050,6 +1059,7 @@ router.post('/chat', asyncHandler(async (req, res) => {
   if (!Array.isArray(messages) || !messages.length) {
     return res.status(400).json({ error: 'messages array required' });
   }
+  const userId = req.user.id;
 
   // ── Gemini (Flash — fast responses) ───────────────────────────────────────
   const geminiModel = getGeminiChat(SYSTEM);
@@ -1093,7 +1103,7 @@ router.post('/chat', asyncHandler(async (req, res) => {
           fnCalls.map(async p => {
             const { name, args } = p.functionCall;
             let output;
-            try { output = await runTool(name, args || {}); }
+            try { output = await runTool(name, args || {}, userId); }
             catch (err) { output = { error: err.message }; }
             return { functionResponse: { name, response: output } };
           })
@@ -1133,7 +1143,7 @@ router.post('/chat', asyncHandler(async (req, res) => {
       const results = await Promise.all(
         toolBlocks.map(async block => {
           let output;
-          try { output = await runTool(block.name, block.input); }
+          try { output = await runTool(block.name, block.input, userId); }
           catch (err) { output = { error: err.message }; }
           return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(output) };
         })

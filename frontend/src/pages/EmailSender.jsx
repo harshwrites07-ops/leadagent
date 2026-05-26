@@ -269,8 +269,8 @@ export default function EmailSender() {
 
   const checkSmtp = useCallback(async () => {
     try {
-      await api.post('/settings/test/smtp');
-      setSmtpOk(true);
+      const { data } = await api.get('/assistant/status');
+      setSmtpOk(data.smtp?.configured ?? false);
     } catch {
       setSmtpOk(false);
     }
@@ -573,7 +573,7 @@ export default function EmailSender() {
           <>
             <CheckCircle size={16} className="text-green-400" />
             <span className="text-sm text-green-400 font-medium">SMTP Connected</span>
-            <span className="text-xs text-slate-500 ml-1">"- outgoing mail is working</span>
+            <span className="text-xs text-slate-500 ml-1">— outgoing mail is working</span>
           </>
         ) : (
           <>

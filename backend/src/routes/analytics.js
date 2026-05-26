@@ -73,17 +73,25 @@ router.get('/dashboard', asyncHandler(async (req, res) => {
   });
 }));
 
+function rangeClause(range) {
+  const map = { '7d': '-7 days', '30d': '-30 days', '90d': '-90 days' };
+  if (!range || range === 'all') return null;
+  return map[range] || '-30 days';
+}
+
 // GET /api/analytics/email
 router.get('/email', asyncHandler(async (req, res) => {
   const db = getDb();
   const uid = req.user.id;
+  const since = rangeClause(req.query.range);
+  const emailDateFilter = since ? `AND sent_at >= datetime('now', '${since}')` : '';
 
   const dailySends = db.prepare(`
     SELECT DATE(sent_at) as date, COUNT(*) as sent,
       SUM(CASE WHEN opened_at IS NOT NULL THEN 1 ELSE 0 END) as opened,
       SUM(CASE WHEN replied_at IS NOT NULL THEN 1 ELSE 0 END) as replied
     FROM emails
-    WHERE sent_at >= datetime('now', '-30 days') AND user_id=?
+    WHERE sent_at IS NOT NULL ${emailDateFilter} AND user_id=?
     GROUP BY DATE(sent_at)
     ORDER BY date ASC
   `).all(uid);
@@ -101,7 +109,7 @@ router.get('/email', asyncHandler(async (req, res) => {
       SUM(CASE WHEN opened_at IS NOT NULL THEN 1 ELSE 0 END) as opened,
       ROUND(SUM(CASE WHEN opened_at IS NOT NULL THEN 1.0 ELSE 0 END) / COUNT(*) * 100, 1) as open_rate
     FROM emails
-    WHERE sent_at IS NOT NULL AND user_id=?
+    WHERE sent_at IS NOT NULL ${emailDateFilter} AND user_id=?
     GROUP BY subject
     HAVING sent >= 3
     ORDER BY open_rate DESC
@@ -115,7 +123,7 @@ router.get('/email', asyncHandler(async (req, res) => {
       SUM(CASE WHEN replied_at IS NOT NULL THEN 1 ELSE 0 END) as replies,
       ROUND(SUM(CASE WHEN opened_at IS NOT NULL THEN 1.0 ELSE 0 END) / COUNT(*) * 100, 1) as open_rate
     FROM emails
-    WHERE sent_at IS NOT NULL AND user_id=?
+    WHERE sent_at IS NOT NULL ${emailDateFilter} AND user_id=?
     GROUP BY hour
     ORDER BY open_rate DESC
   `).all(uid);
@@ -128,10 +136,12 @@ router.get('/pipeline', asyncHandler(async (req, res) => {
   const db = getDb();
   const uid = req.user.id;
   const avgDeal = parseInt(getSetting('average_deal_value') || '1000');
+  const since = rangeClause(req.query.range);
+  const leadDateFilter = since ? `AND created_at >= datetime('now', '${since}')` : '';
 
   // Use 'stage' alias so frontend funnel loop can use stage.stage
   const funnelData = db.prepare(`
-    SELECT crm_stage as stage, COUNT(*) as count FROM leads WHERE user_id=? GROUP BY crm_stage ORDER BY count DESC
+    SELECT crm_stage as stage, COUNT(*) as count FROM leads WHERE user_id=? ${leadDateFilter} GROUP BY crm_stage ORDER BY count DESC
   `).all(uid);
 
   const callBooked = db.prepare(`SELECT COUNT(*) as count FROM leads WHERE crm_stage = 'call_booked' AND user_id=?`).get(uid);
@@ -194,6 +204,8 @@ router.get('/pipeline', asyncHandler(async (req, res) => {
 router.get('/platforms', asyncHandler(async (req, res) => {
   const db = getDb();
   const uid = req.user.id;
+  const since = rangeClause(req.query.range);
+  const leadDateFilter = since ? `AND created_at >= datetime('now', '${since}')` : '';
 
   const platformData = db.prepare(`
     SELECT platform,
@@ -201,7 +213,7 @@ router.get('/platforms', asyncHandler(async (req, res) => {
       SUM(CASE WHEN crm_stage NOT IN ('new_lead','studying','pitch_ready') THEN 1 ELSE 0 END) as contacted,
       SUM(CASE WHEN crm_stage IN ('replied','call_booked','closed_won') THEN 1 ELSE 0 END) as responded,
       SUM(CASE WHEN crm_stage = 'closed_won' THEN 1 ELSE 0 END) as closed
-    FROM leads WHERE user_id=? GROUP BY platform
+    FROM leads WHERE user_id=? ${leadDateFilter} GROUP BY platform
   `).all(uid);
 
   const emailsByPlatform = db.prepare(`

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, RefreshCw, Trash2, Ban, TrendingUp } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
 
@@ -34,26 +35,30 @@ export default function Admin() {
 
   const setPlan = async (id, plan) => {
     setActionLoading(`plan-${id}`);
-    try { await api.put(`/auth/admin/users/${id}/plan`, { plan }); await load(); } catch {}
+    try { await api.put(`/auth/admin/users/${id}/plan`, { plan }); await load(); toast.success('Plan updated'); }
+    catch (e) { toast.error(e.response?.data?.error || e.message); }
     setActionLoading('');
   };
 
   const resetUsage = async id => {
     setActionLoading(`reset-${id}`);
-    try { await api.post(`/auth/admin/users/${id}/reset-usage`); await load(); } catch {}
+    try { await api.post(`/auth/admin/users/${id}/reset-usage`); await load(); toast.success('Usage reset'); }
+    catch (e) { toast.error(e.response?.data?.error || e.message); }
     setActionLoading('');
   };
 
   const deleteUser = async id => {
     if (!confirm('Delete this user and all their data?')) return;
     setActionLoading(`del-${id}`);
-    try { await api.delete(`/auth/admin/users/${id}`); await load(); } catch {}
+    try { await api.delete(`/auth/admin/users/${id}`); await load(); toast.success('User deleted'); }
+    catch (e) { toast.error(e.response?.data?.error || e.message); }
     setActionLoading('');
   };
 
   const banUser = async (id, banned) => {
     setActionLoading(`ban-${id}`);
-    try { await api.put(`/auth/admin/users/${id}/ban`, { banned: !banned }); await load(); } catch {}
+    try { await api.put(`/auth/admin/users/${id}/ban`, { banned: !banned }); await load(); toast.success(banned ? 'User unbanned' : 'User banned'); }
+    catch (e) { toast.error(e.response?.data?.error || e.message); }
     setActionLoading('');
   };
 

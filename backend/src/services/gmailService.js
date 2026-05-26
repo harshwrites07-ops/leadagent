@@ -1,4 +1,5 @@
 const { google } = require('googleapis');
+const crypto = require('crypto');
 const { getDb } = require('../models/database');
 
 const GMAIL_SCOPES = [
@@ -10,18 +11,44 @@ const GMAIL_SCOPES = [
 const GMAIL_DAILY_LIMIT = 500;
 
 const PLAN_GMAIL_LIMITS = {
-  free: 0,
+  trial:   0,
+  free:    0,
   starter: 1,
-  growth: 3,
-  agency: 10,
+  pro:     3,
+  growth:  3,
+  agency:  10,
 };
 
 function getOAuthClient() {
   return new google.auth.OAuth2(
     process.env.GMAIL_CLIENT_ID || process.env.GOOGLE_CLIENT_ID,
     process.env.GMAIL_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET,
-    process.env.GMAIL_REDIRECT_URI || `${process.env.APP_URL || 'https://app.quelro.com'}/api/gmail/callback`
+    process.env.GMAIL_REDIRECT_URI || process.env.GOOGLE_REDIRECT_URI || `${process.env.APP_URL || 'https://app.quelro.com'}/api/gmail/callback`
   );
+}
+
+function signState(userId) {
+  const secret = process.env.SESSION_SECRET || 'dev-secret';
+  const sig = crypto.createHmac('sha256', secret).update(String(userId)).digest('hex').slice(0, 16);
+  return `${userId}.${sig}`;
+}
+
+function verifyState(state) {
+  if (!state) return null;
+  const dot = state.lastIndexOf('.');
+  if (dot < 0) {
+    // Legacy unsigned state — allow only in dev
+    if (process.env.NODE_ENV !== 'production') return parseInt(state) || null;
+    return null;
+  }
+  const userId = parseInt(state.slice(0, dot));
+  const sig = state.slice(dot + 1);
+  if (!userId || !sig) return null;
+  const secret = process.env.SESSION_SECRET || 'dev-secret';
+  const expected = crypto.createHmac('sha256', secret).update(String(userId)).digest('hex').slice(0, 16);
+  // Constant-time compare
+  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
+  return userId;
 }
 
 function getAuthUrl(userId) {
@@ -30,7 +57,7 @@ function getAuthUrl(userId) {
     access_type: 'offline',
     scope: GMAIL_SCOPES,
     prompt: 'consent',
-    state: String(userId),
+    state: signState(userId),
   });
 }
 
@@ -77,6 +104,7 @@ async function getRefreshedAuth(account) {
 }
 
 async function sendViaGmail(account, { to, subject, htmlBody, fromName }) {
+  console.log(`[Gmail] Sending via ${account.email} → ${to}`);
   // Reset daily counter if needed
   const today = new Date().toISOString().split('T')[0];
   if (account.last_reset_date !== today) {
@@ -91,6 +119,7 @@ async function sendViaGmail(account, { to, subject, htmlBody, fromName }) {
   }
 
   const auth = await getRefreshedAuth(account);
+  console.log(`[Gmail] Token refreshed OK for ${account.email}`);
   const gmail = google.gmail({ version: 'v1', auth });
 
   const displayName = fromName || 'ContentCrafterzz';
@@ -112,15 +141,21 @@ async function sendViaGmail(account, { to, subject, htmlBody, fromName }) {
     `--${boundary}--`,
   ].join('\r\n');
 
-  await gmail.users.messages.send({
-    userId: 'me',
-    requestBody: { raw: Buffer.from(mime).toString('base64url') },
-  });
+  try {
+    await gmail.users.messages.send({
+      userId: 'me',
+      requestBody: { raw: Buffer.from(mime).toString('base64url') },
+    });
+  } catch (apiErr) {
+    console.error(`[Gmail] API send error for ${account.email}:`, apiErr.message, apiErr.errors || '');
+    throw apiErr;
+  }
 
   getDb()
     .prepare(`UPDATE gmail_accounts SET emails_sent_today=emails_sent_today+1 WHERE id=?`)
     .run(account.id);
 
+  console.log(`[Gmail] Send success: ${account.email} → ${to}`);
   return { ok: true, sentFrom: account.email };
 }
 
@@ -146,4 +181,4 @@ function getGmailLimit(plan) {
   return PLAN_GMAIL_LIMITS[plan] ?? 0;
 }
 
-module.exports = { getAuthUrl, exchangeCodeForTokens, sendViaGmail, getAccountsForUser, pickAccountForUser, getGmailLimit, GMAIL_DAILY_LIMIT };
+module.exports = { getAuthUrl, verifyState, exchangeCodeForTokens, sendViaGmail, getAccountsForUser, pickAccountForUser, getGmailLimit, GMAIL_DAILY_LIMIT };

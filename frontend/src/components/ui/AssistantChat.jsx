@@ -95,7 +95,13 @@ function VoiceWave({ color = '#FF4500', bars = 5 }) {
 export default function AssistantChat() {
   const [open, setOpen] = useState(false);
   const [minimized, setMinimized] = useState(false);
-  const [messages, setMessages] = useState([{ role: 'assistant', content: WELCOME }]);
+  const [messages, setMessages] = useState(() => {
+    try {
+      const stored = localStorage.getItem('levi_chat_history');
+      if (stored) return JSON.parse(stored);
+    } catch {}
+    return [{ role: 'assistant', content: WELCOME }];
+  });
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [pos, setPos] = useState(null);
@@ -114,6 +120,15 @@ export default function AssistantChat() {
   const recognitionRef = useRef(null);
   const interimRef = useRef('');
   const intentionalStop = useRef(false);
+  const messagesRef = useRef(messages);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+    try {
+      const capped = messages.slice(-50);
+      localStorage.setItem('levi_chat_history', JSON.stringify(capped));
+    } catch {}
+  }, [messages]);
 
   // ── Speech Recognition setup ─────────────────────────────────────────────────
   useEffect(() => {
@@ -245,7 +260,7 @@ export default function AssistantChat() {
     if (!text || loading) return;
     setInput('');
     setMinimized(false);
-    const updated = [...messages, { role: 'user', content: text }];
+    const updated = [...messagesRef.current, { role: 'user', content: text }];
     setMessages(updated);
     setLoading(true);
     try {
@@ -272,7 +287,9 @@ export default function AssistantChat() {
 
   const clearChat = () => {
     window.speechSynthesis?.cancel();
-    setMessages([{ role: 'assistant', content: WELCOME }]);
+    const fresh = [{ role: 'assistant', content: WELCOME }];
+    setMessages(fresh);
+    try { localStorage.removeItem('levi_chat_history'); } catch {}
   };
 
   const toggleMic = () => {

@@ -35,6 +35,10 @@ getDb();
 const FRONTEND_DIST = path.join(__dirname, '../frontend/dist');
 const isProd = process.env.NODE_ENV === 'production' || require('fs').existsSync(FRONTEND_DIST + '/index.html');
 
+// Stripe webhook — MUST be before express.json() (needs raw body)
+const { router: stripeRouter, webhookRouter: stripeWebhookRouter } = require('./src/routes/stripe');
+app.use('/api/stripe/webhook', stripeWebhookRouter);
+
 app.use(compression({
   filter: (req, res) => {
     // Never compress SSE streams — compression buffers them and breaks streaming
@@ -76,12 +80,15 @@ passport.deserializeUser((id, done) => {
 
 if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
   const appUrl = process.env.APP_URL || `http://localhost:${PORT}`;
+  const googleCallbackURL = process.env.GOOGLE_AUTH_CALLBACK_URL || `${appUrl}/api/auth/google/callback`;
+  console.log(`[Google OAuth] Strategy initialized — callback: ${googleCallbackURL}`);
   passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: `${appUrl}/api/auth/google/callback`,
+    callbackURL: googleCallbackURL,
   }, async (accessToken, refreshToken, profile, done) => {
     try {
+      console.log(`[Google OAuth] Callback hit — profile id: ${profile.id}, email: ${profile.emails?.[0]?.value}`);
       const db = getDb();
       const email = profile.emails?.[0]?.value;
       if (!email) return done(new Error('No email from Google'));
@@ -93,16 +100,25 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
         } else {
           db.prepare(`UPDATE users SET last_login=CURRENT_TIMESTAMP WHERE id=?`).run(user.id);
         }
-        return done(null, getUserById(user.id));
+        const updatedUser = getUserById(user.id);
+        console.log(`[Google OAuth] Existing user found: id=${updatedUser.id} email=${email}`);
+        return done(null, updatedUser);
       }
       // New user via Google
       const result = db.prepare(`
         INSERT INTO users (email, google_id, full_name, email_verified, profile_picture, plan)
-        VALUES (?, ?, ?, 1, ?, 'free')
+        VALUES (?, ?, ?, 1, ?, 'trial')
       `).run(email, profile.id, profile.displayName || email.split('@')[0], profile.photos?.[0]?.value || null);
-      done(null, getUserById(result.lastInsertRowid));
-    } catch (e) { done(e); }
+      const newUser = getUserById(result.lastInsertRowid);
+      console.log(`[Google OAuth] New user created: id=${newUser.id} email=${email}`);
+      done(null, newUser);
+    } catch (e) {
+      console.error('[Google OAuth] Strategy error:', e.message);
+      done(e);
+    }
   }));
+} else {
+  console.warn('[Google OAuth] GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET not set — Google Sign-In disabled');
 }
 
 app.use(passport.initialize());
@@ -123,15 +139,25 @@ app.use('/api/auth', require('./src/routes/auth'));
 // Google OAuth flow routes
 app.get('/api/auth/google', (req, res, next) => {
   if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+    console.warn('[Google OAuth] /api/auth/google hit but credentials not configured');
     return res.redirect('/login?error=google_not_configured');
   }
+  console.log('[Google OAuth] Initiating sign-in redirect to Google');
   passport.authenticate('google', { scope: ['profile', 'email'] })(req, res, next);
 });
 app.get('/api/auth/google/callback',
-  passport.authenticate('google', { failureRedirect: '/login?error=google_failed' }),
+  (req, res, next) => {
+    console.log('[Google OAuth] /api/auth/google/callback hit — code:', !!req.query.code, 'error:', req.query.error || 'none');
+    if (req.query.error) {
+      console.error('[Google OAuth] Google returned error:', req.query.error, req.query.error_description || '');
+    }
+    passport.authenticate('google', { failureRedirect: '/login?error=google_failed' })(req, res, next);
+  },
   (req, res) => {
+    console.log(`[Google OAuth] Session created for user ${req.user?.id} — redirecting`);
     req.session.userId = req.user.id;
-    req.session.save(() => {
+    req.session.save(err => {
+      if (err) console.error('[Google OAuth] Session save error:', err.message);
       const user = req.user;
       if (!user.onboarding_completed) return res.redirect('/onboarding');
       res.redirect('/');
@@ -156,6 +182,7 @@ app.use('/api/scraper', requireAuth, require('./src/routes/scraper'));
 app.use('/api/analyzer', requireAuth, require('./src/routes/analyzer'));
 app.use('/api/assistant', requireAuth, require('./src/routes/assistant'));
 app.use('/api/followups', requireAuth, require('./src/routes/followups'));
+app.use('/api/stripe', requireAuth, stripeRouter);
 
 // Health check
 app.get('/api/health', (req, res) => {

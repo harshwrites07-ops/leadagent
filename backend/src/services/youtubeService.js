@@ -71,36 +71,47 @@ async function ytGet(endpoint, params) {
 
 // ─── Search ────────────────────────────────────────────────────────────────────
 
-async function searchChannels({ keyword, minSubs = 5000, maxSubs = 500000, country, maxResults = 50, emailOnly = true }) {
+async function searchChannels({ keyword, minSubs = 5000, maxSubs = 500000, country, maxResults = 50, emailOnly = true, minViews = 0 }) {
   maxResults = Math.min(maxResults, 200);
-  console.log(`[YouTube] searchChannels — "${keyword}" subs:${minSubs}-${maxSubs} max:${maxResults}`);
+  const targetIds = Math.min(maxResults * 4, 500);
+  console.log(`[YouTube] searchChannels — "${keyword}" subs:${minSubs}-${maxSubs} max:${maxResults} minViews:${minViews}`);
 
-  let searchRes;
-  try {
-    searchRes = await ytGet('/search', {
-      part: 'snippet',
-      type: 'channel',
-      q: keyword,
-      maxResults: 50,
-      regionCode: country || undefined,
-    });
-  } catch (e) {
-    console.error(`[YouTube] search error: ${e.message}`);
-    throw e;
+  const channelIds = [];
+  let pageToken;
+
+  while (channelIds.length < targetIds) {
+    let searchRes;
+    try {
+      searchRes = await ytGet('/search', {
+        part: 'snippet',
+        type: 'channel',
+        q: keyword,
+        maxResults: 50,
+        regionCode: country || undefined,
+        ...(pageToken ? { pageToken } : {}),
+      });
+    } catch (e) {
+      console.error(`[YouTube] search error: ${e.message}`);
+      if (channelIds.length === 0) throw e;
+      break;
+    }
+    const ids = (searchRes.data.items || []).map(i => i.id.channelId || i.snippet.channelId).filter(Boolean);
+    channelIds.push(...ids);
+    pageToken = searchRes.data.nextPageToken;
+    if (!pageToken) break;
   }
 
-  const channelIds = (searchRes.data.items || []).map(i => i.id.channelId || i.snippet.channelId).filter(Boolean);
   if (!channelIds.length) return [];
-  return enrichChannels(channelIds, minSubs, maxSubs, maxResults, emailOnly);
+  return enrichChannels(channelIds, minSubs, maxSubs, maxResults, emailOnly, minViews);
 }
 
 // Searches multiple keywords in parallel — returns combined deduplicated leads
 async function searchChannelsMulti(keywords, options = {}) {
-  const { minSubs = 5000, maxSubs = 500000, maxResults = 50, emailOnly = true } = options;
+  const { minSubs = 5000, maxSubs = 500000, maxResults = 50, emailOnly = true, minViews = 0 } = options;
   const seen = new Set();
 
   const results = await Promise.allSettled(
-    keywords.map(kw => searchChannels({ keyword: kw, minSubs, maxSubs, maxResults, emailOnly }))
+    keywords.map(kw => searchChannels({ keyword: kw, minSubs, maxSubs, maxResults, emailOnly, minViews }))
   );
 
   const all = [];
@@ -118,7 +129,7 @@ async function searchChannelsMulti(keywords, options = {}) {
 
 // ─── Enrich channels — EMAIL-FIRST + PARALLEL ─────────────────────────────────
 
-async function enrichChannels(channelIds, minSubs, maxSubs, maxResults, emailOnly = true) {
+async function enrichChannels(channelIds, minSubs, maxSubs, maxResults, emailOnly = true, minViews = 0) {
   const leads = [];
 
   for (let i = 0; i < channelIds.length; i += 50) {
@@ -137,10 +148,16 @@ async function enrichChannels(channelIds, minSubs, maxSubs, maxResults, emailOnl
 
     const items = statsRes.data.items || [];
 
-    // 1. Subscriber filter (free — data already in hand)
+    // 1. Subscriber + rough views pre-filter (free — data already in hand)
     const subFiltered = items.filter(ch => {
       const subs = parseInt(ch.statistics.subscriberCount || '0');
-      return subs >= minSubs && subs <= maxSubs;
+      if (subs < minSubs || subs > maxSubs) return false;
+      if (minViews > 0) {
+        const totalViews = parseInt(ch.statistics.viewCount || '0');
+        const videoCount = parseInt(ch.statistics.videoCount || '1') || 1;
+        if ((totalViews / videoCount) < minViews * 0.5) return false;
+      }
+      return true;
     });
 
     // 2. EMAIL-FIRST: check email before doing expensive video API calls
@@ -434,4 +451,9 @@ function getKeyPoolStatus() {
   return keys.map((k, i) => ({ index: i + 1, preview: `${k.substring(0, 12)}...`, exhausted: exhaustedKeys.has(k) }));
 }
 
-module.exports = { searchChannels, searchChannelsMulti, buildChannelProfile, testApiKey, detectViralChannels, resolveChannelUrl, getChannelByUrl, getAllKeys, getKeyPoolStatus };
+function isQuotaExhausted() {
+  const keys = getAllKeys();
+  return keys.length > 0 && keys.every(k => exhaustedKeys.has(k));
+}
+
+module.exports = { searchChannels, searchChannelsMulti, buildChannelProfile, testApiKey, detectViralChannels, resolveChannelUrl, getChannelByUrl, getAllKeys, getKeyPoolStatus, isQuotaExhausted };

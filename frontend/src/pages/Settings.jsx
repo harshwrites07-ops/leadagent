@@ -8,6 +8,7 @@ import {
 import toast from 'react-hot-toast';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
+import ConfirmModal from '../components/ui/ConfirmModal';
 
 const inputSt = {
   background: 'var(--bg-elevated)', border: '1px solid var(--border-default)',
@@ -141,9 +142,7 @@ function GmailCard({ account, onDisconnect, onReconnect }) {
   );
 }
 
-const PLAN_LIMITS = { free: 0, starter: 250, growth: 750, agency: 2500 };
-const PLAN_LEAD_LIMITS = { free: 50, starter: 500, growth: 2000, agency: 10000 };
-const PLAN_COLORS = { free: '#888', starter: '#4285F4', growth: '#00E5A0', agency: '#FF4500' };
+const PLAN_COLORS = { trial: '#888', free: '#888', starter: '#4285F4', pro: '#FF4500', growth: '#00E5A0', agency: '#FF4500' };
 const NICHES = ['Gaming', 'Fitness', 'Finance', 'Tech', 'Travel', 'Food', 'Education', 'Lifestyle', 'Business', 'Entertainment', 'DIY/Crafts', 'Beauty', 'Sports', 'Pets', 'Music'];
 
 export default function Settings() {
@@ -161,21 +160,30 @@ export default function Settings() {
     followups_enabled: true, max_followups: 3, followup_delay_days: 3,
   });
   const [plan, setPlan] = useState({ name: 'free', leads_used: 0, emails_used: 0 });
+  const [billing, setBilling] = useState(null);
   const [gmailAccounts, setGmailAccounts] = useState([]);
   const [gmailLimit, setGmailLimit] = useState(0);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [connectingGmail, setConnectingGmail] = useState(false);
+  const [loadingPortal, setLoadingPortal] = useState(false);
+  const [loadingCheckout, setLoadingCheckout] = useState(null);
+  const [confirmModal, setConfirmModal] = useState(null);
 
   useEffect(() => {
     loadSettings();
     loadGmailAccounts();
+    loadBilling();
   }, []);
 
-  // Handle OAuth redirect params
+  // Handle OAuth and Stripe redirect params
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    if (params.get('gmail_connected') === '1') {
+    if (params.get('upgraded') === 'true') {
+      toast.success('Plan upgraded! Welcome to your new plan.', { duration: 5000 });
+      loadBilling();
+      navigate('/settings', { replace: true });
+    } else if (params.get('gmail_connected') === '1') {
       toast.success('Gmail account connected!');
       loadGmailAccounts();
       navigate('/settings', { replace: true });
@@ -184,6 +192,13 @@ export default function Settings() {
       navigate('/settings', { replace: true });
     }
   }, [location.search]);
+
+  const loadBilling = async () => {
+    try {
+      const res = await api.get('/stripe/subscription');
+      setBilling(res.data);
+    } catch {}
+  };
 
   const loadSettings = async () => {
     try {
@@ -231,14 +246,41 @@ export default function Settings() {
     }
   };
 
-  const disconnectGmail = async (id) => {
-    if (!window.confirm('Disconnect this Gmail account?')) return;
+  const disconnectGmail = (id) => {
+    setConfirmModal({
+      title: 'Disconnect Gmail',
+      message: 'Disconnect this Gmail account from your outreach system?',
+      confirmLabel: 'Disconnect',
+      onConfirm: async () => {
+        setConfirmModal(null);
+        try {
+          await api.delete(`/gmail/accounts/${id}`);
+          toast.success('Account disconnected');
+          loadGmailAccounts();
+        } catch (e) { toast.error(e.message); }
+      },
+    });
+  };
+
+  const openPortal = async () => {
+    setLoadingPortal(true);
     try {
-      await api.delete(`/gmail/accounts/${id}`);
-      toast.success('Account disconnected');
-      loadGmailAccounts();
+      const res = await api.post('/stripe/create-portal');
+      window.location.href = res.data.url;
     } catch (e) {
-      toast.error(e.message);
+      toast.error(e.response?.data?.error || 'Failed to open billing portal');
+      setLoadingPortal(false);
+    }
+  };
+
+  const startCheckout = async (planKey) => {
+    setLoadingCheckout(planKey);
+    try {
+      const res = await api.post('/stripe/create-checkout', { plan: planKey });
+      window.location.href = res.data.url;
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Failed to start checkout');
+      setLoadingCheckout(null);
     }
   };
 
@@ -251,13 +293,12 @@ export default function Settings() {
     }
   };
 
-  const planName = plan.name || 'free';
+  const planName = billing?.plan || plan.name || 'free';
   const planColor = PLAN_COLORS[planName] || '#888';
-  const emailLimit = PLAN_LIMITS[planName] || 0;
-  const leadLimit = PLAN_LEAD_LIMITS[planName] || 0;
 
   return (
     <div style={{ maxWidth: 680, margin: '0 auto', paddingBottom: 96, display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {confirmModal && <ConfirmModal {...confirmModal} onCancel={() => setConfirmModal(null)} />}
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
@@ -437,78 +478,126 @@ export default function Settings() {
         </div>
       </Section>
 
-      {/* 4. Plan & Usage */}
-      <Section icon={CreditCard} title="My Plan & Usage" defaultOpen={false}>
+      {/* 4. Plan & Billing */}
+      <Section icon={CreditCard} title="Plan & Billing" defaultOpen={true}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+          {/* Past due warning */}
+          {billing?.plan_status === 'past_due' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', background: 'rgba(255,68,68,0.08)', border: '1px solid rgba(255,68,68,0.25)', borderRadius: 8 }}>
+              <AlertCircle size={16} style={{ color: '#FF4444', flexShrink: 0 }} />
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: 13, fontWeight: 600, color: '#FF4444', margin: 0 }}>Payment failed</p>
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>Update your payment method to restore full access.</p>
+              </div>
+              <button onClick={openPortal} disabled={loadingPortal} style={{ padding: '6px 14px', borderRadius: 6, background: '#FF4444', border: 'none', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
+                Fix Now
+              </button>
+            </div>
+          )}
+
+          {/* Current plan row */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: 'var(--bg-elevated)', borderRadius: 8, border: `1px solid ${planColor}33` }}>
             <div style={{ flex: 1 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                <span style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 800, color: planColor, textTransform: 'uppercase' }}>{planName}</span>
-                <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: `${planColor}22`, color: planColor, fontFamily: 'var(--font-mono)' }}>
-                  {plan.status || 'ACTIVE'}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                <span style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 800, color: planColor, textTransform: 'uppercase' }}>
+                  {billing?.plan || planName}
                 </span>
+                <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: `${planColor}22`, color: planColor, fontFamily: 'var(--font-mono)' }}>
+                  {(billing?.plan_status || 'ACTIVE').toUpperCase()}
+                </span>
+                {billing?.trial_days_left > 0 && (billing?.plan === 'trial' || billing?.plan === 'free') && (
+                  <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: 'rgba(245,166,35,0.12)', color: '#F5A623', fontFamily: 'var(--font-mono)', border: '1px solid rgba(245,166,35,0.2)' }}>
+                    {billing.trial_days_left}d LEFT
+                  </span>
+                )}
               </div>
-              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>Usage resets monthly</p>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
+                Usage resets {billing?.reset_date ? `on ${billing.reset_date}` : 'monthly'}
+              </p>
             </div>
-            {planName === 'free' && (
-              <button style={{ padding: '7px 16px', borderRadius: 6, background: 'var(--gradient-orange)', border: 'none', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
-                Upgrade →
+            {billing?.has_billing ? (
+              <button onClick={openPortal} disabled={loadingPortal} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', borderRadius: 6, background: 'transparent', border: '1px solid var(--border-default)', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, cursor: loadingPortal ? 'wait' : 'pointer', flexShrink: 0 }}>
+                {loadingPortal ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <ExternalLink size={12} />}
+                Manage Billing
               </button>
-            )}
+            ) : null}
           </div>
 
-          {/* Usage bars */}
-          {[
-            { label: 'Emails Sent', used: plan.emails_used, limit: emailLimit, color: '#4285F4' },
-            { label: 'Leads Found', used: plan.leads_used, limit: leadLimit, color: '#00E5A0' },
+          {/* Usage progress bars */}
+          {billing?.usage && [
+            { label: 'Leads Found', used: billing.usage.leads.used, limit: billing.usage.leads.limit, color: '#00E5A0' },
+            { label: 'Emails Sent', used: billing.usage.emails.used, limit: billing.usage.emails.limit, color: '#4285F4' },
           ].map(({ label, used, limit, color }) => {
-            const pct = limit > 0 ? Math.min((used / limit) * 100, 100) : 0;
+            const pct = limit === Infinity || limit === 0 ? 0 : Math.min((used / limit) * 100, 100);
+            const near = pct >= 90;
             return (
               <div key={label}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
                   <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{label}</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: pct > 80 ? '#FF4444' : 'var(--text-muted)' }}>
-                    {used.toLocaleString()} / {limit > 0 ? limit.toLocaleString() : '∞'}
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: near ? '#FF4444' : 'var(--text-muted)' }}>
+                    {(used || 0).toLocaleString()} / {limit === Infinity ? '∞' : (limit || 0).toLocaleString()}
                   </span>
                 </div>
-                <div style={{ height: 6, background: 'var(--bg-elevated)', borderRadius: 3, overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${pct}%`, background: pct > 80 ? '#FF4444' : color, borderRadius: 3, transition: 'width 0.3s' }} />
+                <div style={{ height: 6, background: 'var(--bg-card)', borderRadius: 3, overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>
+                  <div style={{ height: '100%', width: `${pct}%`, background: near ? '#FF4444' : color, borderRadius: 3, transition: 'width 0.3s' }} />
                 </div>
               </div>
             );
           })}
 
-          {/* Plan table */}
-          <div style={{ marginTop: 8, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-              <thead>
-                <tr style={{ background: 'var(--bg-elevated)' }}>
-                  {['Feature', 'Free', 'Starter', 'Growth', 'Agency'].map(h => (
-                    <th key={h} style={{ padding: '8px 12px', textAlign: h === 'Feature' ? 'left' : 'center', color: h === planName.charAt(0).toUpperCase() + planName.slice(1) ? 'var(--accent-primary)' : 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.1em' }}>
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {[
-                  ['Gmail Accounts', '0', '1', '3', '10'],
-                  ['Emails/month', '0', '250', '750', '2,500'],
-                  ['Leads/month', '50', '500', '2,000', '10,000'],
-                  ['AI Pitch Gen', '✓', '✓', '✓', '✓'],
-                  ['Follow-ups', '—', '✓', '✓', '✓'],
-                ].map(([feat, ...vals], i) => (
-                  <tr key={feat} style={{ borderTop: '1px solid var(--border-subtle)', background: i % 2 === 0 ? 'transparent' : 'var(--bg-elevated)' }}>
-                    <td style={{ padding: '8px 12px', color: 'var(--text-secondary)' }}>{feat}</td>
-                    {vals.map((v, vi) => (
-                      <td key={vi} style={{ padding: '8px 12px', textAlign: 'center', color: vi === ['free', 'starter', 'growth', 'agency'].indexOf(planName) ? 'var(--text-primary)' : 'var(--text-muted)', fontWeight: vi === ['free', 'starter', 'growth', 'agency'].indexOf(planName) ? 600 : 400 }}>
-                        {v}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {/* Pricing cards */}
+          <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 16 }}>
+            <p style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 600, letterSpacing: '0.14em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 12 }}>Upgrade Your Plan</p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+              {[
+                { key: 'starter', name: 'Starter', price: '$29', per: '/mo', leads: '500', emails: '500', badge: null },
+                { key: 'pro', name: 'Pro', price: '$79', per: '/mo', leads: '5,000', emails: '2,500', badge: 'Most Popular' },
+                { key: 'agency', name: 'Agency', price: '$149', per: '/mo', leads: '10,000', emails: 'Unlimited', badge: null },
+              ].map(({ key, name, price, per, leads, emails, badge }) => {
+                const isCurrent = billing?.plan === key;
+                const isLoading = loadingCheckout === key;
+                return (
+                  <div key={key} style={{
+                    position: 'relative', padding: '16px 14px', borderRadius: 10,
+                    background: badge ? 'rgba(255,69,0,0.06)' : 'var(--bg-elevated)',
+                    border: badge ? '1px solid rgba(255,69,0,0.3)' : '1px solid var(--border-subtle)',
+                    display: 'flex', flexDirection: 'column', gap: 10,
+                  }}>
+                    {badge && (
+                      <span style={{ position: 'absolute', top: -10, left: '50%', transform: 'translateX(-50%)', background: 'var(--gradient-orange)', color: '#fff', fontSize: 9, fontWeight: 700, padding: '2px 10px', borderRadius: 99, fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
+                        {badge}
+                      </span>
+                    )}
+                    <div>
+                      <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 4px' }}>{name}</p>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 2 }}>
+                        <span style={{ fontSize: 22, fontWeight: 800, color: badge ? 'var(--accent-primary)' : 'var(--text-primary)', fontFamily: 'var(--font-heading)' }}>{price}</span>
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{per}</span>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{leads} leads/mo</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{emails} emails/mo</span>
+                    </div>
+                    <button
+                      onClick={() => !isCurrent && startCheckout(key)}
+                      disabled={isCurrent || isLoading}
+                      style={{
+                        padding: '8px', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: isCurrent ? 'default' : 'pointer',
+                        background: isCurrent ? 'var(--bg-card)' : (badge ? 'var(--gradient-orange)' : 'transparent'),
+                        color: isCurrent ? 'var(--text-muted)' : (badge ? '#fff' : 'var(--text-secondary)'),
+                        border: isCurrent ? '1px solid var(--border-subtle)' : (badge ? 'none' : '1px solid var(--border-default)'),
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                        marginTop: 'auto',
+                      }}>
+                      {isLoading ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : null}
+                      {isCurrent ? 'Current Plan' : 'Upgrade'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       </Section>

@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { requireAuth } = require('../middleware/requireAuth');
 const { asyncHandler } = require('../middleware/errorHandler');
-const { getAuthUrl, exchangeCodeForTokens, getAccountsForUser, getGmailLimit } = require('../services/gmailService');
+const { getAuthUrl, verifyState, exchangeCodeForTokens, getAccountsForUser, getGmailLimit, GMAIL_DAILY_LIMIT } = require('../services/gmailService');
 const { getDb } = require('../models/database');
 
 // Public ping to verify routes are loaded
@@ -28,7 +28,7 @@ router.get('/callback', asyncHandler(async (req, res) => {
   if (error) return res.redirect(`/settings?gmail_error=${encodeURIComponent(error)}`);
   if (!code || !state) return res.redirect('/settings?gmail_error=missing_code');
 
-  const userId = parseInt(state);
+  const userId = verifyState(state);
   if (!userId) return res.redirect('/settings?gmail_error=invalid_state');
 
   try {
@@ -59,7 +59,7 @@ router.get('/accounts', requireAuth, (req, res) => {
     email: a.email,
     status: a.status,
     emails_sent_today: a.emails_sent_today,
-    daily_limit: 500,
+    daily_limit: a.daily_limit || GMAIL_DAILY_LIMIT,
     connected_at: a.connected_at,
   }));
   const limit = getGmailLimit(req.user.plan);

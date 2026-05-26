@@ -2,7 +2,9 @@ const express = require('express');
 const router = express.Router();
 const { getDb, getSetting, logActivity } = require('../models/database');
 const { asyncHandler } = require('../middleware/errorHandler');
+const { requireAdmin } = require('../middleware/requireAuth');
 const { sendEmail, sendReply, testSmtp, resetTransporter, checkSpamFolders, getInboxes, checkReplies, checkDeliverability, isValidEmailFormat, ensureClean, hasMxRecord } = require('../services/emailService');
+const { checkUsageLimit, incrementUsage } = require('../services/authService');
 
 // GET /api/emails — list all emails
 router.get('/', asyncHandler(async (req, res) => {
@@ -69,6 +71,43 @@ router.get('/stats', asyncHandler(async (req, res) => {
   });
 }));
 
+// POST /api/emails/test-send — send a test email to diagnose sending issues (admin only)
+router.post('/test-send', requireAdmin, asyncHandler(async (req, res) => {
+  const { to } = req.body;
+  if (!to) return res.status(400).json({ success: false, error: 'to is required' });
+
+  const inboxes = getInboxes();
+  const { pickAccountForUser } = require('../services/gmailService');
+  const gmailAccount = pickAccountForUser(req.user.id);
+
+  const diagnostics = {
+    smtpInboxes: inboxes.map(i => ({ email: i.email, host: i.host, port: i.port })),
+    gmailAccount: gmailAccount ? { email: gmailAccount.email, status: gmailAccount.status, sentToday: gmailAccount.emails_sent_today } : null,
+    method: null,
+    error: null,
+    success: false,
+  };
+
+  try {
+    const result = await sendEmail({
+      to,
+      subject: 'ContentCrafterzz — Test Email',
+      body: `This is a test email sent at ${new Date().toISOString()}.\n\nIf you received this, email sending is working correctly.`,
+      leadId: null,
+      userId: req.user.id,
+    });
+    diagnostics.success = true;
+    diagnostics.method = result.fromEmail?.includes('gmail') && gmailAccount?.email === result.fromEmail ? 'Gmail OAuth' : 'SMTP';
+    diagnostics.fromEmail = result.fromEmail;
+    diagnostics.messageId = result.messageId;
+    res.json({ success: true, ...diagnostics });
+  } catch (e) {
+    console.error('[Test Send] Failed:', e.message);
+    diagnostics.error = e.message;
+    res.status(500).json({ success: false, ...diagnostics });
+  }
+}));
+
 // GET /api/emails/queue
 router.get('/queue', asyncHandler(async (req, res) => {
   const db = getDb();
@@ -90,7 +129,12 @@ router.post('/queue', asyncHandler(async (req, res) => {
   const { lead_id, subject, body, scheduled_at, priority = 0 } = req.body;
   if (!lead_id) return res.status(400).json({ success: false, error: 'lead_id required' });
 
-  const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(lead_id);
+  const usageCheck = checkUsageLimit(req.user, 'emails');
+  if (!usageCheck.allowed) {
+    return res.status(429).json({ success: false, upgradeRequired: true, error: `Monthly email limit reached (${usageCheck.used}/${usageCheck.limit}). Upgrade your plan to send more emails.` });
+  }
+
+  const lead = db.prepare('SELECT * FROM leads WHERE id = ? AND user_id = ?').get(lead_id, req.user.id);
   if (!lead) return res.status(404).json({ success: false, error: 'Lead not found' });
 
   let finalSubject = subject, finalBody = body;
@@ -106,7 +150,8 @@ router.post('/queue', asyncHandler(async (req, res) => {
     VALUES (?, ?, ?, ?, 'pending', ?, ?)
   `).run(req.user.id, lead.id, finalSubject, finalBody, scheduled_at || null, priority);
 
-  logActivity('queued', `Email queued for ${lead.channel_name}`, lead.id);
+  incrementUsage(req.user.id, 'emails', 1);
+  logActivity('queued', `Email queued for ${lead.channel_name}`, lead.id, {}, req.user.id);
   const item = db.prepare('SELECT * FROM email_queue WHERE id = ?').get(result.lastInsertRowid);
   res.status(201).json({ success: true, item });
 }));
@@ -130,11 +175,16 @@ router.post('/queue/bulk', asyncHandler(async (req, res) => {
   const { lead_ids } = req.body;
   if (!lead_ids?.length) return res.status(400).json({ success: false, error: 'lead_ids required' });
 
+  const usageCheck = checkUsageLimit(req.user, 'emails');
+  if (!usageCheck.allowed) {
+    return res.status(429).json({ success: false, upgradeRequired: true, error: `Monthly email limit reached (${usageCheck.used}/${usageCheck.limit}). Upgrade your plan to send more emails.` });
+  }
+
   const db = getDb();
   let added = 0, skipped = 0;
 
   for (const id of lead_ids) {
-    const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(id);
+    const lead = db.prepare('SELECT * FROM leads WHERE id = ? AND user_id = ?').get(id, req.user.id);
     if (!lead) { skipped++; continue; }
 
     const pitch = db.prepare('SELECT * FROM pitches WHERE lead_id = ?').get(id);
@@ -150,6 +200,7 @@ router.post('/queue/bulk', asyncHandler(async (req, res) => {
     added++;
   }
 
+  if (added > 0) incrementUsage(req.user.id, 'emails', added);
   res.json({ success: true, added, skipped });
 }));
 
@@ -170,6 +221,11 @@ router.post('/queue/:leadId', asyncHandler(async (req, res) => {
   const lead = db.prepare('SELECT * FROM leads WHERE id = ? AND user_id = ?').get(req.params.leadId, req.user.id);
   if (!lead) return res.status(404).json({ success: false, error: 'Lead not found' });
 
+  const usageCheck = checkUsageLimit(req.user, 'emails');
+  if (!usageCheck.allowed) {
+    return res.status(429).json({ success: false, upgradeRequired: true, error: `Monthly email limit reached (${usageCheck.used}/${usageCheck.limit}). Upgrade your plan to send more emails.` });
+  }
+
   const { subject, body, scheduled_at, priority = 0 } = req.body;
 
   let finalSubject = subject, finalBody = body;
@@ -185,7 +241,8 @@ router.post('/queue/:leadId', asyncHandler(async (req, res) => {
     VALUES (?, ?, ?, ?, 'pending', ?, ?)
   `).run(req.user.id, lead.id, finalSubject, finalBody, scheduled_at || null, priority);
 
-  logActivity('queued', `Email queued for ${lead.channel_name}`, lead.id);
+  incrementUsage(req.user.id, 'emails', 1);
+  logActivity('queued', `Email queued for ${lead.channel_name}`, lead.id, {}, req.user.id);
   const item = db.prepare('SELECT * FROM email_queue WHERE id = ?').get(result.lastInsertRowid);
   res.status(201).json({ success: true, item });
 }));
@@ -323,7 +380,7 @@ router.post('/send-reply', asyncHandler(async (req, res) => {
 }));
 
 // POST /api/emails/test-smtp
-router.post('/test-smtp', asyncHandler(async (req, res) => {
+router.post('/test-smtp', requireAdmin, asyncHandler(async (req, res) => {
   const result = await testSmtp(req.body);
   if (result.ok) resetTransporter();
   res.json(result);
@@ -388,22 +445,23 @@ router.get('/spam-report', asyncHandler(async (req, res) => {
            CAST((julianday('now') - julianday(e.sent_at)) AS INTEGER) as days_since
     FROM emails e
     LEFT JOIN leads l ON l.id = e.lead_id
-    WHERE e.status = 'sent'
+    WHERE e.user_id = ?
+      AND e.status = 'sent'
       AND e.opened_at IS NULL
       AND e.sent_at < datetime('now', '-5 days')
     ORDER BY e.sent_at DESC
     LIMIT 50
-  `).all();
+  `).all(req.user.id);
 
   // Recent bounces from DB
   const recentBounces = db.prepare(`
     SELECT e.id, e.subject, e.sent_at, e.from_email, l.channel_name, l.email as to_email
     FROM emails e
     LEFT JOIN leads l ON l.id = e.lead_id
-    WHERE e.status = 'bounced'
+    WHERE e.user_id = ? AND e.status = 'bounced'
     ORDER BY e.sent_at DESC
     LIMIT 20
-  `).all();
+  `).all(req.user.id);
 
   // Overall risk score
   const totalSent = perInbox.reduce((s, i) => s + i.sentCount, 0);

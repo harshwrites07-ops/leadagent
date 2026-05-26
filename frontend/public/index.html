@@ -1,0 +1,1496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ContentCrafterzz — Find YouTube Creators. Land Clients. On Autopilot.</title>
+  <meta name="description" content="ContentCrafterzz scrapes YouTube for channels in your niche, studies each creator with AI, writes hyper-personalized cold emails, and sends them automatically. Built for freelance video editors." />
+  <meta property="og:title" content="ContentCrafterzz — YouTube Outreach OS for Video Editors" />
+  <meta property="og:description" content="Stop hunting for clients. Let AI find YouTube creators who actually need you." />
+  <meta property="og:image" content="https://app.quelro.com/og-image.png" />
+  <meta property="og:url" content="https://quelro.com" />
+  <meta property="og:type" content="website" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    /* ── Reset & Variables ──────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    :root {
+      --bg: #0a0a0a;
+      --surface: #111111;
+      --surface2: #161616;
+      --border: #1f1f1f;
+      --border2: #2a2a2a;
+      --accent: #3b82f6;
+      --accent-glow: rgba(59,130,246,0.35);
+      --accent-dim: rgba(59,130,246,0.08);
+      --accent-mid: rgba(59,130,246,0.15);
+      --text: #ffffff;
+      --text-2: #a1a1aa;
+      --text-3: #71717a;
+      --green: #22c55e;
+      --green-dim: rgba(34,197,94,0.12);
+      --red-dim: rgba(239,68,68,0.08);
+      --red-border: rgba(239,68,68,0.18);
+      --yellow: #eab308;
+      --radius: 12px;
+      --radius-lg: 20px;
+      --radius-xl: 28px;
+      --max: 1200px;
+      --nav-h: 68px;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    a { text-decoration: none; color: inherit; }
+    img { max-width: 100%; }
+    button { cursor: pointer; font-family: inherit; }
+
+    .container {
+      max-width: var(--max);
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* ── Scroll animations ──────────────────────────────────────────── */
+    .fade-up {
+      opacity: 0;
+      transform: translateY(28px);
+      transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+    .fade-up.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .fade-up-delay-1 { transition-delay: 0.1s; }
+    .fade-up-delay-2 { transition-delay: 0.2s; }
+    .fade-up-delay-3 { transition-delay: 0.3s; }
+    .fade-up-delay-4 { transition-delay: 0.4s; }
+    .fade-up-delay-5 { transition-delay: 0.5s; }
+
+    /* ── Navbar ─────────────────────────────────────────────────────── */
+    #navbar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 1000;
+      height: var(--nav-h);
+      border-bottom: 1px solid transparent;
+      transition: background 0.3s, border-color 0.3s, backdrop-filter 0.3s;
+    }
+    #navbar.scrolled {
+      background: rgba(10,10,10,0.85);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom-color: var(--border);
+    }
+    .nav-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: var(--nav-h);
+    }
+    .nav-logo {
+      font-size: 1.1rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .nav-logo .dot {
+      width: 8px; height: 8px;
+      background: var(--accent);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--accent-glow);
+      flex-shrink: 0;
+    }
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 28px;
+    }
+    .nav-link {
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--text-2);
+      transition: color 0.2s;
+    }
+    .nav-link:hover { color: var(--text); }
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 600;
+      font-size: 0.875rem;
+      padding: 10px 20px;
+      border-radius: 8px;
+      border: none;
+      transition: opacity 0.2s, transform 0.2s, box-shadow 0.2s;
+      white-space: nowrap;
+    }
+    .btn-primary:hover {
+      opacity: 0.92;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 20px var(--accent-glow);
+    }
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: transparent;
+      color: var(--text-2);
+      font-weight: 600;
+      font-size: 0.9rem;
+      padding: 10px 22px;
+      border-radius: 8px;
+      border: 1px solid var(--border2);
+      transition: color 0.2s, border-color 0.2s;
+    }
+    .btn-secondary:hover {
+      color: var(--text);
+      border-color: #3f3f3f;
+    }
+    .hamburger {
+      display: none;
+      flex-direction: column;
+      gap: 5px;
+      background: none;
+      border: none;
+      padding: 4px;
+    }
+    .hamburger span {
+      display: block;
+      width: 24px; height: 2px;
+      background: var(--text);
+      border-radius: 2px;
+      transition: transform 0.3s, opacity 0.3s;
+    }
+    .hamburger.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+    .hamburger.open span:nth-child(2) { opacity: 0; }
+    .hamburger.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+    .mobile-menu {
+      display: none;
+      position: fixed;
+      top: var(--nav-h); left: 0; right: 0;
+      background: rgba(10,10,10,0.97);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      padding: 20px 24px 28px;
+      flex-direction: column;
+      gap: 16px;
+      z-index: 999;
+    }
+    .mobile-menu.open { display: flex; }
+    .mobile-menu .nav-link { font-size: 1rem; }
+    .mobile-menu .btn-primary { width: 100%; justify-content: center; padding: 13px 20px; }
+
+    /* ── Hero ───────────────────────────────────────────────────────── */
+    #hero {
+      padding: calc(var(--nav-h) + 80px) 0 80px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    #hero::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 50%; transform: translateX(-50%);
+      width: 800px; height: 600px;
+      background: radial-gradient(ellipse at center, rgba(59,130,246,0.07) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--accent-dim);
+      border: 1px solid var(--accent-mid);
+      border-radius: 100px;
+      padding: 6px 16px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--accent);
+      margin-bottom: 28px;
+    }
+    .hero-badge .pulse {
+      width: 6px; height: 6px;
+      background: var(--accent);
+      border-radius: 50%;
+      animation: pulse 2s ease infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.8); }
+    }
+    .hero-h1 {
+      font-size: clamp(2.2rem, 5.5vw, 4rem);
+      font-weight: 900;
+      letter-spacing: -0.04em;
+      line-height: 1.1;
+      margin-bottom: 24px;
+      max-width: 760px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .hero-h1 .accent { color: var(--accent); }
+    .hero-sub {
+      font-size: clamp(1rem, 2vw, 1.15rem);
+      color: var(--text-2);
+      max-width: 560px;
+      margin: 0 auto 36px;
+      line-height: 1.7;
+    }
+    .hero-ctas {
+      display: flex;
+      gap: 14px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 28px;
+    }
+    .btn-hero {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 700;
+      font-size: 1rem;
+      padding: 14px 28px;
+      border-radius: 10px;
+      border: none;
+      transition: opacity 0.2s, transform 0.2s, box-shadow 0.2s;
+    }
+    .btn-hero:hover {
+      opacity: 0.9;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px var(--accent-glow);
+    }
+    .hero-proof {
+      font-size: 0.83rem;
+      color: var(--text-3);
+      margin-bottom: 64px;
+    }
+    .hero-proof span { color: var(--text-2); }
+
+    /* ── Dashboard Mockup ───────────────────────────────────────────── */
+    .mockup-wrap {
+      position: relative;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    .mockup-glow {
+      position: absolute;
+      inset: -40px;
+      background: radial-gradient(ellipse at 50% 60%, rgba(59,130,246,0.12) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .mockup {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      overflow: hidden;
+      box-shadow: 0 40px 100px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04);
+      position: relative;
+    }
+    .mockup-bar {
+      background: #0d0d0d;
+      border-bottom: 1px solid var(--border);
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .mockup-dots { display: flex; gap: 8px; }
+    .mockup-dot {
+      width: 12px; height: 12px;
+      border-radius: 50%;
+    }
+    .mockup-dot.r { background: #ff5f57; }
+    .mockup-dot.y { background: #ffbd2e; }
+    .mockup-dot.g { background: #28c840; }
+    .mockup-title {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--text-3);
+      letter-spacing: 0.02em;
+    }
+    .mockup-badge {
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--green);
+      background: var(--green-dim);
+      padding: 3px 10px;
+      border-radius: 100px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .mockup-body { padding: 20px; }
+    .mockup-stats {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+    .m-stat {
+      flex: 1;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      text-align: left;
+    }
+    .m-stat-val {
+      font-size: 1.1rem;
+      font-weight: 800;
+      color: var(--text);
+      line-height: 1;
+      margin-bottom: 3px;
+    }
+    .m-stat-lbl { font-size: 0.68rem; color: var(--text-3); font-weight: 500; }
+    .m-stat-val.blue { color: var(--accent); }
+    .m-stat-val.green { color: var(--green); }
+    .m-stat-val.yellow { color: var(--yellow); }
+    .kanban {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+    .k-col-head {
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-3);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .k-count {
+      background: var(--border2);
+      color: var(--text-2);
+      font-size: 0.6rem;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 10px;
+    }
+    .k-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      transition: border-color 0.2s;
+    }
+    .k-card:last-child { margin-bottom: 0; }
+    .k-card-name {
+      font-size: 0.73rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 3px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .k-card-subs {
+      font-size: 0.65rem;
+      color: var(--text-3);
+      margin-bottom: 6px;
+    }
+    .k-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      font-size: 0.6rem;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 4px;
+    }
+    .k-tag.hot { background: rgba(239,68,68,0.12); color: #f87171; }
+    .k-tag.warm { background: rgba(234,179,8,0.12); color: var(--yellow); }
+    .k-tag.sent { background: var(--accent-dim); color: var(--accent); }
+    .k-tag.replied { background: var(--green-dim); color: var(--green); }
+    .k-tag.booked { background: rgba(168,85,247,0.12); color: #c084fc; }
+    .mockup-footer {
+      border-top: 1px solid var(--border);
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    .mf-item {
+      font-size: 0.68rem;
+      color: var(--text-3);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .mf-item strong { color: var(--text-2); }
+
+    /* ── Section base ───────────────────────────────────────────────── */
+    section { padding: 100px 0; }
+    .section-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 16px;
+    }
+    .section-h2 {
+      font-size: clamp(1.8rem, 4vw, 2.8rem);
+      font-weight: 900;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+      margin-bottom: 16px;
+    }
+    .section-sub {
+      font-size: 1.05rem;
+      color: var(--text-2);
+      max-width: 560px;
+      line-height: 1.7;
+    }
+    .text-center { text-align: center; }
+    .text-center .section-sub { margin-left: auto; margin-right: auto; }
+
+    /* ── Problem ────────────────────────────────────────────────────── */
+    #problem { background: var(--bg); }
+    .problem-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      margin: 48px 0 40px;
+    }
+    .problem-card {
+      background: var(--red-dim);
+      border: 1px solid var(--red-border);
+      border-radius: var(--radius-lg);
+      padding: 28px;
+    }
+    .problem-icon { font-size: 1.8rem; margin-bottom: 14px; }
+    .problem-text {
+      font-size: 0.95rem;
+      color: var(--text-2);
+      line-height: 1.6;
+      font-weight: 500;
+    }
+    .problem-transition {
+      text-align: center;
+      font-size: 1.3rem;
+      font-weight: 800;
+      color: var(--accent);
+      letter-spacing: -0.02em;
+      margin-top: 8px;
+    }
+
+    /* ── How it works ───────────────────────────────────────────────── */
+    #how {
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .steps-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 2px;
+      margin-top: 56px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+    .step-card {
+      background: var(--surface2);
+      padding: 32px 28px;
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      transition: background 0.2s;
+    }
+    .step-card:nth-child(3n) { border-right: none; }
+    .step-card:nth-child(4), .step-card:nth-child(5), .step-card:nth-child(6) { border-bottom: none; }
+    .step-card:hover { background: #1a1a1a; }
+    .step-num {
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 0.1em;
+      margin-bottom: 14px;
+    }
+    .step-icon { font-size: 1.6rem; margin-bottom: 12px; }
+    .step-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+      letter-spacing: -0.01em;
+    }
+    .step-desc {
+      font-size: 0.88rem;
+      color: var(--text-2);
+      line-height: 1.65;
+    }
+
+    /* ── Stats bar ──────────────────────────────────────────────────── */
+    #stats {
+      padding: 64px 0;
+      background: var(--bg);
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+    .stat-item {
+      background: var(--surface);
+      padding: 36px 24px;
+      text-align: center;
+    }
+    .stat-number {
+      font-size: 2.4rem;
+      font-weight: 900;
+      letter-spacing: -0.04em;
+      color: var(--accent);
+      line-height: 1;
+      margin-bottom: 8px;
+    }
+    .stat-label {
+      font-size: 0.85rem;
+      color: var(--text-2);
+      font-weight: 500;
+    }
+
+    /* ── Features ───────────────────────────────────────────────────── */
+    #features {
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .features-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px 48px;
+      margin-top: 48px;
+      max-width: 800px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .feature-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .feature-check {
+      flex-shrink: 0;
+      width: 20px; height: 20px;
+      background: var(--green-dim);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.7rem;
+      margin-top: 1px;
+    }
+    .feature-text {
+      font-size: 0.9rem;
+      color: var(--text-2);
+      font-weight: 500;
+      line-height: 1.5;
+    }
+
+    /* ── Pricing ────────────────────────────────────────────────────── */
+    #pricing { background: var(--bg); }
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      margin-top: 56px;
+    }
+    .pricing-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      padding: 32px 28px;
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+    }
+    .pricing-card:hover {
+      transform: translateY(-6px);
+      box-shadow: 0 24px 60px rgba(0,0,0,0.4);
+    }
+    .pricing-card.popular {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent), 0 0 40px var(--accent-glow);
+      position: relative;
+    }
+    .pricing-card.popular:hover {
+      box-shadow: 0 0 0 1px var(--accent), 0 0 60px var(--accent-glow), 0 24px 60px rgba(59,130,246,0.2);
+    }
+    .popular-badge {
+      position: absolute;
+      top: -14px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--accent);
+      color: #fff;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 5px 16px;
+      border-radius: 100px;
+      white-space: nowrap;
+    }
+    .plan-name {
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-3);
+      margin-bottom: 8px;
+    }
+    .plan-price {
+      font-size: 2.8rem;
+      font-weight: 900;
+      letter-spacing: -0.05em;
+      line-height: 1;
+      margin-bottom: 6px;
+    }
+    .plan-price sup {
+      font-size: 1.2rem;
+      font-weight: 700;
+      vertical-align: super;
+      letter-spacing: 0;
+    }
+    .plan-period {
+      font-size: 0.83rem;
+      color: var(--text-3);
+      margin-bottom: 6px;
+    }
+    .plan-best {
+      font-size: 0.8rem;
+      color: var(--text-3);
+      margin-bottom: 24px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    .plan-features {
+      list-style: none;
+      flex: 1;
+      margin-bottom: 28px;
+    }
+    .plan-features li {
+      font-size: 0.875rem;
+      color: var(--text-2);
+      padding: 7px 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .plan-features li::before {
+      content: '✓';
+      color: var(--green);
+      font-weight: 700;
+      font-size: 0.8rem;
+      flex-shrink: 0;
+    }
+    .btn-plan {
+      display: block;
+      width: 100%;
+      text-align: center;
+      padding: 13px 20px;
+      border-radius: 9px;
+      font-size: 0.9rem;
+      font-weight: 700;
+      border: none;
+      transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
+    }
+    .btn-plan:hover { opacity: 0.9; transform: translateY(-1px); }
+    .btn-plan.outline {
+      background: transparent;
+      border: 1px solid var(--border2);
+      color: var(--text);
+    }
+    .btn-plan.outline:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .btn-plan.filled {
+      background: var(--accent);
+      color: #fff;
+      box-shadow: 0 4px 20px var(--accent-glow);
+    }
+    .btn-plan.filled:hover {
+      box-shadow: 0 8px 32px var(--accent-glow);
+    }
+    .pricing-footer {
+      text-align: center;
+      margin-top: 28px;
+      font-size: 0.83rem;
+      color: var(--text-3);
+    }
+    .pricing-footer span { margin: 0 8px; }
+
+    /* ── FAQ ────────────────────────────────────────────────────────── */
+    #faq {
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .faq-list {
+      max-width: 720px;
+      margin: 48px auto 0;
+    }
+    .faq-item {
+      border-bottom: 1px solid var(--border);
+    }
+    .faq-item:first-child { border-top: 1px solid var(--border); }
+    .faq-q {
+      width: 100%;
+      background: none;
+      border: none;
+      text-align: left;
+      padding: 22px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text);
+      cursor: pointer;
+      transition: color 0.2s;
+    }
+    .faq-q:hover { color: var(--accent); }
+    .faq-icon {
+      flex-shrink: 0;
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.9rem;
+      transition: transform 0.3s, background 0.2s;
+    }
+    .faq-item.open .faq-icon {
+      transform: rotate(45deg);
+      background: var(--accent-dim);
+      border-color: var(--accent-mid);
+    }
+    .faq-a {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.35s ease, padding 0.35s ease;
+    }
+    .faq-item.open .faq-a { max-height: 300px; }
+    .faq-a-inner {
+      font-size: 0.92rem;
+      color: var(--text-2);
+      line-height: 1.75;
+      padding-bottom: 22px;
+    }
+
+    /* ── Final CTA ──────────────────────────────────────────────────── */
+    #cta {
+      background: linear-gradient(135deg, #0d1a2e 0%, #0a0a0a 50%, #0d1a2e 100%);
+      border-top: 1px solid rgba(59,130,246,0.2);
+      border-bottom: 1px solid rgba(59,130,246,0.2);
+      padding: 120px 0;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    #cta::before {
+      content: '';
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 600px; height: 400px;
+      background: radial-gradient(ellipse, rgba(59,130,246,0.1) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .cta-h2 {
+      font-size: clamp(2rem, 4.5vw, 3.2rem);
+      font-weight: 900;
+      letter-spacing: -0.04em;
+      line-height: 1.1;
+      margin-bottom: 18px;
+      position: relative;
+    }
+    .cta-sub {
+      font-size: 1.05rem;
+      color: var(--text-2);
+      max-width: 500px;
+      margin: 0 auto 36px;
+      line-height: 1.7;
+      position: relative;
+    }
+    .btn-cta {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 800;
+      font-size: 1.1rem;
+      padding: 16px 36px;
+      border-radius: 12px;
+      border: none;
+      transition: opacity 0.2s, transform 0.2s, box-shadow 0.2s;
+      margin-bottom: 16px;
+    }
+    .btn-cta:hover {
+      opacity: 0.9;
+      transform: translateY(-3px);
+      box-shadow: 0 16px 48px var(--accent-glow);
+    }
+    .cta-note {
+      font-size: 0.82rem;
+      color: var(--text-3);
+      position: relative;
+    }
+
+    /* ── Footer ─────────────────────────────────────────────────────── */
+    footer {
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+      padding: 28px 0;
+    }
+    .footer-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .footer-copy {
+      font-size: 0.83rem;
+      color: var(--text-3);
+    }
+    .footer-links {
+      display: flex;
+      gap: 20px;
+    }
+    .footer-links a {
+      font-size: 0.83rem;
+      color: var(--text-3);
+      transition: color 0.2s;
+    }
+    .footer-links a:hover { color: var(--text-2); }
+    .footer-right {
+      font-size: 0.83rem;
+      color: var(--text-3);
+    }
+
+    /* ── Mobile responsive ──────────────────────────────────────────── */
+    @media (max-width: 768px) {
+      section { padding: 72px 0; }
+      .nav-links { display: none; }
+      .hamburger { display: flex; }
+
+      .hero-ctas { flex-direction: column; align-items: center; }
+      .btn-hero { width: 100%; max-width: 380px; justify-content: center; }
+      .btn-secondary { width: 100%; max-width: 380px; justify-content: center; }
+
+      .mockup-stats { display: none; }
+      .kanban { grid-template-columns: 1fr 1fr; }
+      .k-col-head:nth-child(2) ~ .k-col-head { display: none; }
+
+      .problem-grid { grid-template-columns: 1fr; }
+
+      .steps-grid { grid-template-columns: 1fr; border-radius: var(--radius); }
+      .step-card { border-right: none !important; }
+      .step-card:last-child { border-bottom: none; }
+
+      .stats-grid { grid-template-columns: 1fr 1fr; }
+      .stat-item:nth-child(2) { border-right: none; }
+
+      .features-grid { grid-template-columns: 1fr; gap: 0; }
+
+      .pricing-grid { grid-template-columns: 1fr; }
+      .pricing-card.popular { margin-top: 16px; }
+
+      .footer-inner { flex-direction: column; text-align: center; }
+      .footer-links { justify-content: center; flex-wrap: wrap; }
+    }
+
+    @media (max-width: 480px) {
+      .hero-h1 { font-size: 2rem; }
+      .kanban { grid-template-columns: 1fr; }
+      .stats-grid { grid-template-columns: 1fr 1fr; }
+      .section-h2 { font-size: 1.7rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── NAVBAR ─────────────────────────────────────────────────── -->
+  <nav id="navbar">
+    <div class="container nav-inner">
+      <a href="#" class="nav-logo">
+        ContentCrafterzz
+        <span class="dot"></span>
+      </a>
+      <div class="nav-links">
+        <a href="#features" class="nav-link">Features</a>
+        <a href="#pricing" class="nav-link">Pricing</a>
+        <a href="#faq" class="nav-link">FAQ</a>
+        <a href="https://app.quelro.com/login" class="nav-link">Login</a>
+        <a href="https://app.quelro.com/signup" class="btn-primary">Start Free Trial</a>
+      </div>
+      <button class="hamburger" id="hamburger" aria-label="Toggle menu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Mobile menu -->
+  <div class="mobile-menu" id="mobileMenu">
+    <a href="#features" class="nav-link" onclick="closeMobile()">Features</a>
+    <a href="#pricing" class="nav-link" onclick="closeMobile()">Pricing</a>
+    <a href="#faq" class="nav-link" onclick="closeMobile()">FAQ</a>
+    <a href="https://app.quelro.com/login" class="nav-link">Login</a>
+    <a href="https://app.quelro.com/signup" class="btn-primary">Start Free Trial →</a>
+  </div>
+
+  <!-- ── HERO ───────────────────────────────────────────────────── -->
+  <section id="hero">
+    <div class="container">
+      <div class="hero-badge fade-up">
+        <span class="pulse"></span>
+        New: Gemini AI email generation now live
+      </div>
+      <h1 class="hero-h1 fade-up fade-up-delay-1">
+        Stop Hunting for Clients.<br>
+        Let AI Find <span class="accent">YouTube Creators</span><br>
+        Who Actually Need You.
+      </h1>
+      <p class="hero-sub fade-up fade-up-delay-2">
+        ContentCrafterzz scrapes YouTube for channels in your niche, studies each creator with AI, writes hyper-personalized cold emails, and sends them automatically — while you focus on editing.
+      </p>
+      <div class="hero-ctas fade-up fade-up-delay-3">
+        <a href="https://app.quelro.com/signup" class="btn-hero">
+          Start Free Trial — No Card Required →
+        </a>
+        <a href="#how" class="btn-secondary">See How It Works ↓</a>
+      </div>
+      <p class="hero-proof fade-up fade-up-delay-4">
+        <span>⚡ 464+ emails sent this month</span> &nbsp;·&nbsp;
+        <span>36–51% open rates</span> &nbsp;·&nbsp;
+        Built for video editors
+      </p>
+
+      <!-- Dashboard Mockup -->
+      <div class="mockup-wrap fade-up fade-up-delay-5">
+        <div class="mockup-glow"></div>
+        <div class="mockup">
+          <div class="mockup-bar">
+            <div class="mockup-dots">
+              <div class="mockup-dot r"></div>
+              <div class="mockup-dot y"></div>
+              <div class="mockup-dot g"></div>
+            </div>
+            <div class="mockup-title">ContentCrafterzz — Outreach OS</div>
+            <div class="mockup-badge">● 23 leads found today</div>
+          </div>
+          <div class="mockup-body">
+            <div class="mockup-stats">
+              <div class="m-stat">
+                <div class="m-stat-val blue">464</div>
+                <div class="m-stat-lbl">Emails Sent</div>
+              </div>
+              <div class="m-stat">
+                <div class="m-stat-val yellow">42%</div>
+                <div class="m-stat-lbl">Open Rate</div>
+              </div>
+              <div class="m-stat">
+                <div class="m-stat-val green">18</div>
+                <div class="m-stat-lbl">Replies</div>
+              </div>
+              <div class="m-stat">
+                <div class="m-stat-val" style="color:#c084fc">$14k</div>
+                <div class="m-stat-lbl">Pipeline Value</div>
+              </div>
+            </div>
+            <div class="kanban">
+              <!-- New Lead -->
+              <div>
+                <div class="k-col-head">New Lead <span class="k-count">4</span></div>
+                <div class="k-card">
+                  <div class="k-card-name">TechReviews Pro</div>
+                  <div class="k-card-subs">892K subscribers</div>
+                  <span class="k-tag hot">🔥 Hot</span>
+                </div>
+                <div class="k-card">
+                  <div class="k-card-name">DevTutorials</div>
+                  <div class="k-card-subs">340K subscribers</div>
+                  <span class="k-tag warm">🌡 Warm</span>
+                </div>
+              </div>
+              <!-- Emailed -->
+              <div>
+                <div class="k-col-head">Emailed <span class="k-count">7</span></div>
+                <div class="k-card">
+                  <div class="k-card-name">FitnessWithAlex</div>
+                  <div class="k-card-subs">1.2M subscribers</div>
+                  <span class="k-tag sent">✉ Email Sent</span>
+                </div>
+                <div class="k-card">
+                  <div class="k-card-name">CookingWithSarah</div>
+                  <div class="k-card-subs">2.1M subscribers</div>
+                  <span class="k-tag sent">✉ Follow-up #2</span>
+                </div>
+              </div>
+              <!-- Replied -->
+              <div>
+                <div class="k-col-head">Replied <span class="k-count">3</span></div>
+                <div class="k-card">
+                  <div class="k-card-name">VlogWithKing</div>
+                  <div class="k-card-subs">450K subscribers</div>
+                  <span class="k-tag replied">💬 Replied!</span>
+                </div>
+              </div>
+              <!-- Booked -->
+              <div>
+                <div class="k-col-head">Call Booked <span class="k-count">1</span></div>
+                <div class="k-card">
+                  <div class="k-card-name">StartupFounders</div>
+                  <div class="k-card-subs">680K subscribers</div>
+                  <span class="k-tag booked">📅 Call Booked</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="mockup-footer">
+            <div class="mf-item">📧 <strong>23</strong> sent today</div>
+            <div class="mf-item">📈 <strong>42%</strong> open rate</div>
+            <div class="mf-item">🔄 <strong>5-step</strong> follow-up</div>
+            <div class="mf-item">🤖 AI generating pitches...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── PROBLEM ────────────────────────────────────────────────── -->
+  <section id="problem">
+    <div class="container">
+      <div class="text-center">
+        <div class="section-label fade-up">The problem</div>
+        <h2 class="section-h2 fade-up fade-up-delay-1">The Way Most Editors Find Clients Is Broken</h2>
+      </div>
+      <div class="problem-grid">
+        <div class="problem-card fade-up fade-up-delay-1">
+          <div class="problem-icon">🕐</div>
+          <p class="problem-text">Spending <strong>6+ hours a day</strong> manually searching YouTube for potential clients, only to find they already have an editor.</p>
+        </div>
+        <div class="problem-card fade-up fade-up-delay-2">
+          <div class="problem-icon">📧</div>
+          <p class="problem-text">Sending generic <strong>"I love your content"</strong> emails that land in the promotions tab and get ignored forever.</p>
+        </div>
+        <div class="problem-card fade-up fade-up-delay-3">
+          <div class="problem-icon">😤</div>
+          <p class="problem-text">Getting <strong>0–2% reply rates</strong> and giving up after a week, right before clients were ready to say yes.</p>
+        </div>
+      </div>
+      <p class="problem-transition fade-up">There's a better way. →</p>
+    </div>
+  </section>
+
+  <!-- ── HOW IT WORKS ───────────────────────────────────────────── -->
+  <section id="how">
+    <div class="container">
+      <div class="text-center">
+        <div class="section-label fade-up">How it works</div>
+        <h2 class="section-h2 fade-up fade-up-delay-1">Your Entire Outreach. Automated.</h2>
+        <p class="section-sub fade-up fade-up-delay-2">Six steps from zero to booked call — all on autopilot.</p>
+      </div>
+      <div class="steps-grid">
+        <div class="step-card fade-up fade-up-delay-1">
+          <div class="step-num">STEP 01</div>
+          <div class="step-icon">🔍</div>
+          <div class="step-title">Find Leads</div>
+          <p class="step-desc">Search YouTube by niche or keyword. AI scrapes channels that match your ideal client — by subscriber count, upload frequency, and pain signals.</p>
+        </div>
+        <div class="step-card fade-up fade-up-delay-2">
+          <div class="step-num">STEP 02</div>
+          <div class="step-icon">🧠</div>
+          <div class="step-title">Study Each Creator</div>
+          <p class="step-desc">AI analyzes every channel — views, consistency, content gaps. Scores each lead so you know who to target first with a hot/warm/cold rating.</p>
+        </div>
+        <div class="step-card fade-up fade-up-delay-3">
+          <div class="step-num">STEP 03</div>
+          <div class="step-icon">✍️</div>
+          <div class="step-title">Write Personalized Emails</div>
+          <p class="step-desc">Not templates. Real emails that reference their latest video, exact subscriber count, and specific pain point. Under 150 words, every time.</p>
+        </div>
+        <div class="step-card fade-up fade-up-delay-1">
+          <div class="step-num">STEP 04</div>
+          <div class="step-icon">📤</div>
+          <div class="step-title">Send Automatically</div>
+          <p class="step-desc">Emails go out through your own Gmail account via OAuth. No spam flags. No technical setup. Safe daily sending limits built in.</p>
+        </div>
+        <div class="step-card fade-up fade-up-delay-2">
+          <div class="step-num">STEP 05</div>
+          <div class="step-icon">🔄</div>
+          <div class="step-title">Follow Up 5 Times</div>
+          <p class="step-desc">Automated follow-up sequence over 15 days. Each email takes a different angle — not just "just following up." Stops when they reply.</p>
+        </div>
+        <div class="step-card fade-up fade-up-delay-3">
+          <div class="step-num">STEP 06</div>
+          <div class="step-icon">📊</div>
+          <div class="step-title">Track Everything</div>
+          <p class="step-desc">Built-in CRM kanban shows every lead from cold to closed. See open rates, reply rates, and pipeline value in one clean dashboard.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── STATS BAR ──────────────────────────────────────────────── -->
+  <section id="stats">
+    <div class="container">
+      <div class="stats-grid fade-up">
+        <div class="stat-item">
+          <div class="stat-number">464+</div>
+          <div class="stat-label">Emails Sent This Month</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-number">51%</div>
+          <div class="stat-label">Average Open Rate</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-number">5×</div>
+          <div class="stat-label">Follow-Up Sequence</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-number">100%</div>
+          <div class="stat-label">YouTube-Specific</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── FEATURES ───────────────────────────────────────────────── -->
+  <section id="features">
+    <div class="container">
+      <div class="text-center">
+        <div class="section-label fade-up">Features</div>
+        <h2 class="section-h2 fade-up fade-up-delay-1">Everything You Need to Land Clients Consistently</h2>
+        <p class="section-sub fade-up fade-up-delay-2">No tools duct-taped together. One platform built for creator outreach from day one.</p>
+      </div>
+      <div class="features-grid">
+        <div class="feature-item fade-up fade-up-delay-1">
+          <div class="feature-check">✓</div>
+          <span class="feature-text">YouTube lead scraper with 50+ API key rotation</span>
+        </div>
+        <div class="feature-item fade-up fade-up-delay-2">
+          <div class="feature-check">✓</div>
+          <span class="feature-text">AI channel analysis and pain point detection</span>
+        </div>
+        <div class="feature-item fade-up fade-up-delay-1">
+          <div class="feature-check">✓</div>
+          <span class="feature-text">Hyper-personalized email generation (Gemini AI)</span>
+        </div>
+        <div class="feature-item fade-up fade-up-delay-2">
+          <div class="feature-check">✓</div>
+          <span class="feature-text">Gmail OAuth — send from your own inbox</span>
+        </div>
+        <div class="feature-item fade-up fade-up-delay-1">
+          <div class="feature-check">✓</div>
+          <span class="feature-text">5-step automated follow-up sequences</span>
+        </div>
+        <div class="feature-item fade-up fade-up-delay-2">
+          <div class="feature-check">✓</div>
+          <span class="feature-text">Built-in CRM with kanban pipeline</span>
+        </div>
+        <div class="feature-item fade-up fade-up-delay-1">
+          <div class="feature-check">✓</div>
+          <span class="feature-text">Email open + reply tracking</span>
+        </div>
+        <div class="feature-item fade-up fade-up-delay-2">
+          <div class="feature-check">✓</div>
+          <span class="feature-text">Bounce detection and spam monitoring</span>
+        </div>
+        <div class="feature-item fade-up fade-up-delay-1">
+          <div class="feature-check">✓</div>
+          <span class="feature-text">Captain Levi AI assistant (natural language commands)</span>
+        </div>
+        <div class="feature-item fade-up fade-up-delay-2">
+          <div class="feature-check">✓</div>
+          <span class="feature-text">Analytics dashboard with performance insights</span>
+        </div>
+        <div class="feature-item fade-up fade-up-delay-1">
+          <div class="feature-check">✓</div>
+          <span class="feature-text">Multi-inbox rotation for safe sending volume</span>
+        </div>
+        <div class="feature-item fade-up fade-up-delay-2">
+          <div class="feature-check">✓</div>
+          <span class="feature-text">One-click lead export to CSV</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── PRICING ────────────────────────────────────────────────── -->
+  <section id="pricing">
+    <div class="container">
+      <div class="text-center">
+        <div class="section-label fade-up">Pricing</div>
+        <h2 class="section-h2 fade-up fade-up-delay-1">Simple Pricing. Serious ROI.</h2>
+        <p class="section-sub fade-up fade-up-delay-2">One client closed pays for 6–25 months of subscription.</p>
+      </div>
+      <div class="pricing-grid">
+
+        <!-- Starter -->
+        <div class="pricing-card fade-up fade-up-delay-1">
+          <div class="plan-name">Starter</div>
+          <div class="plan-price"><sup>$</sup>29</div>
+          <div class="plan-period">per month</div>
+          <div class="plan-best">Best for solo editors just starting outreach</div>
+          <ul class="plan-features">
+            <li>500 leads/month</li>
+            <li>500 emails/month</li>
+            <li>1 Gmail account</li>
+            <li>Follow-up automation</li>
+            <li>CRM + Analytics</li>
+            <li>Email support</li>
+          </ul>
+          <a href="https://app.quelro.com/signup" class="btn-plan outline">Start Free Trial</a>
+        </div>
+
+        <!-- Pro -->
+        <div class="pricing-card popular fade-up fade-up-delay-2">
+          <div class="popular-badge">⚡ Most Popular</div>
+          <div class="plan-name">Pro</div>
+          <div class="plan-price"><sup>$</sup>79</div>
+          <div class="plan-period">per month</div>
+          <div class="plan-best">Best for serious editors and small agencies</div>
+          <ul class="plan-features">
+            <li>5,000 leads/month</li>
+            <li>2,500 emails/month</li>
+            <li>3 Gmail accounts</li>
+            <li>Everything in Starter</li>
+            <li>Priority support</li>
+            <li>Advanced analytics</li>
+          </ul>
+          <a href="https://app.quelro.com/signup" class="btn-plan filled">Start Free Trial</a>
+        </div>
+
+        <!-- Agency -->
+        <div class="pricing-card fade-up fade-up-delay-3">
+          <div class="plan-name">Agency</div>
+          <div class="plan-price"><sup>$</sup>149</div>
+          <div class="plan-period">per month</div>
+          <div class="plan-best">Best for growing agencies with a team</div>
+          <ul class="plan-features">
+            <li>Unlimited leads</li>
+            <li>Unlimited emails</li>
+            <li>10 Gmail accounts</li>
+            <li>5 team seats</li>
+            <li>Everything in Pro</li>
+            <li>Dedicated support</li>
+          </ul>
+          <a href="https://app.quelro.com/signup" class="btn-plan outline">Start Free Trial</a>
+        </div>
+
+      </div>
+      <p class="pricing-footer fade-up">
+        14-day free trial
+        <span>·</span>
+        No credit card required
+        <span>·</span>
+        Cancel anytime
+      </p>
+    </div>
+  </section>
+
+  <!-- ── FAQ ────────────────────────────────────────────────────── -->
+  <section id="faq">
+    <div class="container">
+      <div class="text-center">
+        <div class="section-label fade-up">FAQ</div>
+        <h2 class="section-h2 fade-up fade-up-delay-1">Common Questions</h2>
+      </div>
+      <div class="faq-list fade-up fade-up-delay-2">
+
+        <div class="faq-item">
+          <button class="faq-q">
+            Will my emails land in spam?
+            <span class="faq-icon">+</span>
+          </button>
+          <div class="faq-a">
+            <div class="faq-a-inner">Emails are sent through your own Gmail account via OAuth — not a shared server. Combined with our smart sending limits (max 50/day warmup, gradual ramp-up), deliverability is significantly better than bulk email tools.</div>
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q">
+            How is this different from Instantly or Lemlist?
+            <span class="faq-icon">+</span>
+          </button>
+          <div class="faq-a">
+            <div class="faq-a-inner">Those tools are generic — they work for any industry but know nothing about YouTube. ContentCrafterzz is built specifically for creator services. It understands YouTube data, creator pain points, and what makes a video editor's pitch stand out to a YouTuber.</div>
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q">
+            Do I need to be technical to use this?
+            <span class="faq-icon">+</span>
+          </button>
+          <div class="faq-a">
+            <div class="faq-a-inner">No. Connect your Gmail in one click, search a niche, and the tool handles everything else. No API keys, no SMTP setup, no coding required.</div>
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q">
+            What if a creator replies?
+            <span class="faq-icon">+</span>
+          </button>
+          <div class="faq-a">
+            <div class="faq-a-inner">You'll see their reply in the CRM. The follow-up sequence stops automatically when someone replies. You respond manually from the app — the personal touch matters at that point.</div>
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q">
+            Is this against YouTube's terms of service?
+            <span class="faq-icon">+</span>
+          </button>
+          <div class="faq-a">
+            <div class="faq-a-inner">We use the official YouTube Data API to find public channel information — the same way YouTube's own search works. We don't scrape private data or automate YouTube itself.</div>
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q">
+            Can I cancel anytime?
+            <span class="faq-icon">+</span>
+          </button>
+          <div class="faq-a">
+            <div class="faq-a-inner">Yes. Cancel from your billing settings anytime. No questions asked, no cancellation fees. Your data stays accessible until the end of your billing period.</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ── FINAL CTA ──────────────────────────────────────────────── -->
+  <section id="cta">
+    <div class="container">
+      <h2 class="cta-h2 fade-up">Your Next Client Is on YouTube Right Now.</h2>
+      <p class="cta-sub fade-up fade-up-delay-1">Start your free trial and send your first personalized outreach campaign in under 10 minutes.</p>
+      <div class="fade-up fade-up-delay-2">
+        <a href="https://app.quelro.com/signup" class="btn-cta">Get Started Free →</a>
+      </div>
+      <p class="cta-note fade-up fade-up-delay-3">No credit card required · 14-day free trial</p>
+    </div>
+  </section>
+
+  <!-- ── FOOTER ─────────────────────────────────────────────────── -->
+  <footer>
+    <div class="container footer-inner">
+      <div class="footer-copy">ContentCrafterzz © 2026</div>
+      <div class="footer-links">
+        <a href="#">Privacy Policy</a>
+        <a href="#">Terms of Service</a>
+        <a href="mailto:harshwrites07@gmail.com">Contact</a>
+      </div>
+      <div class="footer-right">Built for video editors, by a video editor</div>
+    </div>
+  </footer>
+
+  <script>
+    // ── Navbar scroll behavior
+    const navbar = document.getElementById('navbar');
+    window.addEventListener('scroll', () => {
+      navbar.classList.toggle('scrolled', window.scrollY > 20);
+    }, { passive: true });
+
+    // ── Hamburger menu
+    const hamburger = document.getElementById('hamburger');
+    const mobileMenu = document.getElementById('mobileMenu');
+    hamburger.addEventListener('click', () => {
+      hamburger.classList.toggle('open');
+      mobileMenu.classList.toggle('open');
+    });
+    function closeMobile() {
+      hamburger.classList.remove('open');
+      mobileMenu.classList.remove('open');
+    }
+    // Close mobile menu on outside click
+    document.addEventListener('click', (e) => {
+      if (!hamburger.contains(e.target) && !mobileMenu.contains(e.target)) {
+        closeMobile();
+      }
+    });
+
+    // ── Scroll animations (Intersection Observer)
+    const fadeEls = document.querySelectorAll('.fade-up');
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          e.target.classList.add('visible');
+          observer.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+    fadeEls.forEach(el => observer.observe(el));
+
+    // Make hero elements visible immediately (above fold)
+    document.querySelectorAll('#hero .fade-up').forEach(el => {
+      el.classList.add('visible');
+    });
+
+    // ── FAQ accordion
+    document.querySelectorAll('.faq-q').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const item = btn.closest('.faq-item');
+        const isOpen = item.classList.contains('open');
+        // Close all
+        document.querySelectorAll('.faq-item.open').forEach(i => i.classList.remove('open'));
+        // Open clicked if it was closed
+        if (!isOpen) item.classList.add('open');
+      });
+    });
+
+    // ── Smooth scroll for anchor links
+    document.querySelectorAll('a[href^="#"]').forEach(link => {
+      link.addEventListener('click', (e) => {
+        const id = link.getAttribute('href');
+        if (id === '#') return;
+        const target = document.querySelector(id);
+        if (target) {
+          e.preventDefault();
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          closeMobile();
+        }
+      });
+    });
+  </script>
+</body>
+</html>

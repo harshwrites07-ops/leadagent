@@ -41,12 +41,12 @@ let keywordIndex = 0;
 
 const LEAD_INSERT_SQL = `
   INSERT OR IGNORE INTO leads
-    (platform, channel_id, channel_name, channel_handle, subscriber_count, total_videos,
+    (user_id, platform, channel_id, channel_name, channel_handle, subscriber_count, total_videos,
      avg_views, avg_likes, avg_comments, engagement_rate, upload_frequency_days,
      last_upload_date, channel_description, channel_tags, recent_videos, most_viewed_video,
      country, email, website, social_links, thumbnail_url, pain_points, lead_score, temperature, crm_stage)
   VALUES
-    (@platform, @channel_id, @channel_name, @channel_handle, @subscriber_count, @total_videos,
+    (@user_id, @platform, @channel_id, @channel_name, @channel_handle, @subscriber_count, @total_videos,
      @avg_views, @avg_likes, @avg_comments, @engagement_rate, @upload_frequency_days,
      @last_upload_date, @channel_description, @channel_tags, @recent_videos, @most_viewed_video,
      @country, @email, @website, @social_links, @thumbnail_url, @pain_points, @lead_score, @temperature, 'new_lead')
@@ -170,10 +170,10 @@ cron.schedule('0 * * * *', async () => {
       const subject = subjectMatch[1].trim();
       const body = bodyMatch[1].trim();
 
-      const qr = db.prepare(`INSERT INTO email_queue (lead_id,subject,body,status,priority) VALUES (?,?,?,'sending',?)`).run(lead.id, subject, body, nextStep);
+      const qr = db.prepare(`INSERT INTO email_queue (user_id,lead_id,subject,body,status,priority) VALUES (?,?,?,?,'sending',?)`).run(lead.user_id, lead.id, subject, body, nextStep);
 
       try {
-        await sendEmail({ to: lead.email, subject, body, leadId: lead.id });
+        await sendEmail({ to: lead.email, subject, body, leadId: lead.id, userId: lead.user_id });
         db.prepare(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP WHERE id=?`).run(qr.lastInsertRowid);
       } catch (sendErr) {
         db.prepare(`UPDATE email_queue SET status='failed' WHERE id=?`).run(qr.lastInsertRowid);
@@ -186,7 +186,7 @@ cron.schedule('0 * * * *', async () => {
         db.prepare(`UPDATE leads SET follow_up_status='complete', crm_stage='no_response', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(lead.id);
       }
 
-      logActivity('followup_sent', `Follow-up #${nextStep}/5 sent to ${lead.channel_name}`, lead.id);
+      logActivity('followup_sent', `Follow-up #${nextStep}/5 sent to ${lead.channel_name}`, lead.id, {}, lead.user_id);
       sent++;
     } catch (e) {
       console.error(`[Scheduler] Follow-up failed for lead ${lead.id}:`, e.message);
@@ -198,20 +198,30 @@ cron.schedule('0 * * * *', async () => {
 
 // ── Auto lead scraper — every 15 minutes ──────────────────────────────────────
 // Searches 3 keywords IN PARALLEL per run. Target: 500+ leads/day.
-// Requires auto_scrape=true in Settings.
+// Runs for every user with auto_find_leads=1 (or falls back to global setting → admin).
 
 cron.schedule('*/15 * * * *', async () => {
-  const autoScrape = getSetting('auto_scrape');
-  if (autoScrape !== 'true') return;
   if (isScraping) return;
   isScraping = true;
 
-  // Pick 3 consecutive keywords from the pool
-  const keywords = [0, 1, 2].map(offset => ALL_KEYWORDS[(keywordIndex + offset) % ALL_KEYWORDS.length]);
-  keywordIndex = (keywordIndex + 3) % ALL_KEYWORDS.length;
-
   try {
-    console.log(`[Scheduler] Auto-scrape: ${keywords.map(k => `"${k}"`).join(', ')}`);
+    const db = getDb();
+
+    // Find all users with auto-scrape enabled (per-user flag)
+    let targetUsers = db.prepare(`SELECT id FROM users WHERE auto_find_leads = 1`).all();
+
+    // Fallback: global admin setting → assign to admin user (id=1)
+    if (!targetUsers.length) {
+      const autoScrape = getSetting('auto_scrape');
+      if (autoScrape !== 'true') return;
+      targetUsers = [{ id: 1 }];
+    }
+
+    // Pick 3 consecutive keywords from the pool
+    const keywords = [0, 1, 2].map(offset => ALL_KEYWORDS[(keywordIndex + offset) % ALL_KEYWORDS.length]);
+    keywordIndex = (keywordIndex + 3) % ALL_KEYWORDS.length;
+
+    console.log(`[Scheduler] Auto-scrape for ${targetUsers.length} user(s): ${keywords.map(k => `"${k}"`).join(', ')}`);
 
     const leads = await searchChannelsMulti(keywords, {
       minSubs: 5000,
@@ -225,20 +235,26 @@ cron.schedule('*/15 * * * *', async () => {
       return;
     }
 
-    const db = getDb();
     const insert = db.prepare(LEAD_INSERT_SQL);
-    let saved = 0;
-    let skipped = 0;
-    for (const lead of leads) {
-      try {
-        const r = insert.run(lead);
-        if (r.changes > 0) saved++; else skipped++;
-      } catch { skipped++; }
+    let totalSaved = 0, totalSkipped = 0;
+
+    for (const targetUser of targetUsers) {
+      let saved = 0, skipped = 0;
+      for (const lead of leads) {
+        try {
+          const r = insert.run({ ...lead, user_id: targetUser.id });
+          if (r.changes > 0) saved++; else skipped++;
+        } catch { skipped++; }
+      }
+      totalSaved += saved;
+      totalSkipped += skipped;
+      if (saved > 0) {
+        logActivity('auto_scrape', `Auto-scrape: +${saved} leads, ${skipped} duplicates skipped from [${keywords[0]}, ...]`, null, {}, targetUser.id);
+      }
     }
 
-    if (saved > 0 || skipped > 0) {
-      logActivity('auto_scrape', `Auto-scrape: +${saved} leads, ${skipped} duplicates skipped from [${keywords[0]}, ...]`, null);
-      console.log(`[Scheduler] Auto-scrape done: +${saved} leads, ${skipped} duplicates skipped`);
+    if (totalSaved > 0 || totalSkipped > 0) {
+      console.log(`[Scheduler] Auto-scrape done: +${totalSaved} leads, ${totalSkipped} duplicates skipped across ${targetUsers.length} user(s)`);
     }
   } catch (e) {
     console.error(`[Scheduler] Auto-scrape error:`, e.message);
@@ -247,24 +263,43 @@ cron.schedule('*/15 * * * *', async () => {
   }
 });
 
+// ── Monthly usage reset — 1st of each month at midnight ─────────────────────
+
+cron.schedule('0 0 1 * *', () => {
+  try {
+    const db = getDb();
+    const nextReset = new Date();
+    nextReset.setMonth(nextReset.getMonth() + 1);
+    nextReset.setDate(1);
+    const nextResetStr = nextReset.toISOString().split('T')[0];
+    db.prepare(`UPDATE users SET leads_used_this_month=0, emails_used_this_month=0, usage_reset_date=?`).run(nextResetStr);
+    console.log(`[Scheduler] Monthly usage reset for all users. Next reset: ${nextResetStr}`);
+  } catch (e) {
+    console.error('[Scheduler] Monthly reset error:', e.message);
+  }
+});
+
 // ── Lead resurrection — daily at 9am ─────────────────────────────────────────
 
-cron.schedule('0 9 * * *', async () => {
-  const db = getDb();
-  const oldLeads = db.prepare(`
-    SELECT * FROM leads
-    WHERE crm_stage = 'closed_lost'
-    AND updated_at < datetime('now', '-30 days')
-  `).all();
+cron.schedule('0 9 * * *', () => {
+  try {
+    const db = getDb();
+    const resurrected = db.prepare(`
+      UPDATE leads
+      SET crm_stage='new_lead', follow_up_status='active', follow_up_count=0,
+          last_contacted_date=NULL, updated_at=CURRENT_TIMESTAMP
+      WHERE crm_stage = 'closed_lost'
+        AND updated_at < datetime('now', '-30 days')
+        AND platform = 'youtube'
+        AND subscriber_count IS NOT NULL
+    `).run();
 
-  for (const lead of oldLeads) {
-    if (lead.platform === 'youtube' && lead.subscriber_count) {
-      logActivity('resurrection_check', `Lead ${lead.channel_name} flagged for re-review (30 days since close)`, lead.id);
+    if (resurrected.changes > 0) {
+      logActivity('resurrection', `Resurrected ${resurrected.changes} closed leads back to new_lead after 30 days`);
+      console.log(`[Scheduler] Resurrection: moved ${resurrected.changes} closed leads back to new_lead`);
     }
-  }
-
-  if (oldLeads.length > 0) {
-    console.log(`[Scheduler] Resurrection: flagged ${oldLeads.length} closed leads for re-review`);
+  } catch (e) {
+    console.error('[Scheduler] Resurrection error:', e.message);
   }
 });
 

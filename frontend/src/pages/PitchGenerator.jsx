@@ -476,30 +476,21 @@ export default function PitchGenerator() {
     setCurrentStep(STEPS[0].key);
 
     try {
-      // Kick off generation. Backend streams or returns full pitch.
-      // We animate through steps while waiting.
-      const stepTimer = (step, delay) => new Promise(resolve =>
-        setTimeout(() => {
-          setCurrentStep(step);
-          resolve();
-        }, delay)
-      );
-
-      // Animate steps while API is processing
-      const animationPromise = (async () => {
+      // Run animation in background — cancels when API responds
+      let animCancelled = false;
+      ;(async () => {
         const delays = [0, 6000, 14000, 22000, 30000];
         for (let i = 0; i < STEPS.length; i++) {
-          await stepTimer(STEPS[i].key, i === 0 ? 0 : delays[i] - delays[i - 1]);
-          setCompletedSteps(prev => {
-            const n = new Set(prev);
-            if (i > 0) n.add(STEPS[i - 1].key);
-            return n;
-          });
+          if (animCancelled) break;
+          await new Promise(r => setTimeout(r, i === 0 ? 0 : delays[i] - delays[i - 1]));
+          if (animCancelled) break;
+          setCurrentStep(STEPS[i].key);
+          if (i > 0) setCompletedSteps(prev => { const n = new Set(prev); n.add(STEPS[i - 1].key); return n; });
         }
       })();
 
-      const apiPromise = api.post(`/pitches/generate/${selectedLead.id}`);
-      const [{ data }] = await Promise.all([apiPromise, animationPromise]);
+      const { data } = await api.post(`/pitches/generate/${selectedLead.id}`);
+      animCancelled = true;
 
       setCompletedSteps(new Set(STEPS.map(s => s.key)));
       setCurrentStep(null);

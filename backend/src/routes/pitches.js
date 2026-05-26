@@ -16,7 +16,7 @@ function parsePitch(pitch) {
 }
 
 // Upsert a pitch record
-function savePitch(db, leadId, { email_subject, email_body, deep_study, custom_offer, subject_variants, pitch_score, pitch_feedback, reddit_dm }) {
+function savePitch(db, leadId, userId, { email_subject, email_body, deep_study, custom_offer, subject_variants, pitch_score, pitch_feedback, reddit_dm }) {
   const existing = db.prepare('SELECT id FROM pitches WHERE lead_id = ?').get(leadId);
   if (existing) {
     db.prepare(`
@@ -30,9 +30,9 @@ function savePitch(db, leadId, { email_subject, email_body, deep_study, custom_o
            pitch_score || null, pitch_feedback || null, leadId);
   } else {
     db.prepare(`
-      INSERT INTO pitches (lead_id,deep_study,custom_offer,cold_email,email_subject,reddit_dm,subject_variants,pitch_score,pitch_feedback)
-      VALUES (?,?,?,?,?,?,?,?,?)
-    `).run(leadId, deep_study || null, custom_offer || null, email_body, email_subject,
+      INSERT INTO pitches (lead_id,user_id,deep_study,custom_offer,cold_email,email_subject,reddit_dm,subject_variants,pitch_score,pitch_feedback)
+      VALUES (?,?,?,?,?,?,?,?,?,?)
+    `).run(leadId, userId, deep_study || null, custom_offer || null, email_body, email_subject,
            reddit_dm || null, JSON.stringify(subject_variants || []),
            pitch_score || null, pitch_feedback || null);
   }
@@ -45,7 +45,7 @@ router.post('/generate/:leadId', aiLimiter, asyncHandler(async (req, res) => {
   if (!lead) return res.status(404).json({ success: false, error: 'Lead not found' });
 
   db.prepare(`UPDATE leads SET crm_stage='studying', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(lead.id);
-  logActivity('pitch_generating', `Generating pitch for ${lead.channel_name}`, lead.id);
+  logActivity('pitch_generating', `Generating pitch for ${lead.channel_name}`, lead.id, {}, req.user.id);
 
   // ONE AI call instead of 4-6
   const result = await claude.generateFullPitch(lead);
@@ -59,7 +59,7 @@ router.post('/generate/:leadId', aiLimiter, asyncHandler(async (req, res) => {
     } catch {}
   }
 
-  savePitch(db, lead.id, {
+  savePitch(db, lead.id, req.user.id, {
     email_subject: result.email_subject,
     email_body: result.email_body,
     deep_study: result.key_insight,
@@ -69,7 +69,7 @@ router.post('/generate/:leadId', aiLimiter, asyncHandler(async (req, res) => {
   });
 
   db.prepare(`UPDATE leads SET crm_stage='pitch_ready', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(lead.id);
-  logActivity('pitch_generated', `Pitch generated for ${lead.channel_name}`, lead.id);
+  logActivity('pitch_generated', `Pitch generated for ${lead.channel_name}`, lead.id, {}, req.user.id);
 
   const pitch = parsePitch(db.prepare('SELECT * FROM pitches WHERE lead_id = ?').get(lead.id));
   res.json({ success: true, pitch });
@@ -101,7 +101,7 @@ router.post('/bulk-generate', aiLimiter, asyncHandler(async (req, res) => {
         if (!lead) return { id, success: false, error: 'Not found' };
         db.prepare(`UPDATE leads SET crm_stage='studying', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(id);
         const result = await claude.generateFullPitch(lead);
-        savePitch(db, id, {
+        savePitch(db, id, req.user.id, {
           email_subject: result.email_subject,
           email_body: result.email_body,
           deep_study: result.key_insight,
@@ -142,7 +142,7 @@ router.post('/generate-and-send', aiLimiter, asyncHandler(async (req, res) => {
         db.prepare(`UPDATE leads SET crm_stage='studying', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(id);
 
         const result = await claude.generateFullPitch(lead);
-        savePitch(db, id, {
+        savePitch(db, id, req.user.id, {
           email_subject: result.email_subject,
           email_body: result.email_body,
           deep_study: result.key_insight,
@@ -150,13 +150,13 @@ router.post('/generate-and-send', aiLimiter, asyncHandler(async (req, res) => {
           subject_variants: result.subject_variants,
         });
 
-        const qr = db.prepare(`INSERT INTO email_queue (lead_id,subject,body,status) VALUES (?,?,?,'pending')`).run(id, result.email_subject, result.email_body);
+        const qr = db.prepare(`INSERT INTO email_queue (user_id,lead_id,subject,body,status) VALUES (?,?,?,?,'pending')`).run(req.user.id, id, result.email_subject, result.email_body);
         db.prepare(`UPDATE email_queue SET status='sending' WHERE id=?`).run(qr.lastInsertRowid);
 
         const sent = await sendEmail({ to: lead.email, subject: result.email_subject, body: result.email_body, leadId: id });
         db.prepare(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP,email_id=? WHERE id=?`).run(sent.emailId || null, qr.lastInsertRowid);
         db.prepare(`UPDATE leads SET crm_stage='emailed', last_contacted_date=date('now'), follow_up_count=0, follow_up_status='active', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(id);
-        logActivity('email_sent', `Email sent to ${lead.channel_name}`, id);
+        logActivity('email_sent', `Email sent to ${lead.channel_name}`, id, {}, req.user.id);
         return { id, success: true, channel_name: lead.channel_name, email: lead.email };
       })
     );
@@ -232,11 +232,10 @@ async function runPowerSendJob(jobId, { lead_ids, max_leads = 100, per_account_l
   };
 
   try {
-    const userFilter = _userId ? `AND user_id = ${_userId}` : '';
     let leads;
     if (lead_ids && lead_ids.length > 0) {
       leads = lead_ids.slice(0, max_leads)
-        .map(id => db.prepare(`SELECT * FROM leads WHERE id=? ${userFilter}`).get(id))
+        .map(id => db.prepare('SELECT * FROM leads WHERE id=? AND user_id=?').get(id, _userId))
         .filter(Boolean).filter(l => l.email);
     } else {
       leads = db.prepare(`
@@ -245,9 +244,9 @@ async function runPowerSendJob(jobId, { lead_ids, max_leads = 100, per_account_l
           AND (email_invalid IS NULL OR email_invalid = 0)
           AND temperature = 'hot'
           AND crm_stage NOT IN ('emailed','opened','replied','call_booked','closed_won','closed_lost')
-          ${userFilter}
+          AND user_id=?
         ORDER BY subscriber_count DESC LIMIT ?
-      `).all(max_leads);
+      `).all(_userId, max_leads);
 
       if (leads.length < max_leads) {
         const needed = max_leads - leads.length;
@@ -259,9 +258,9 @@ async function runPowerSendJob(jobId, { lead_ids, max_leads = 100, per_account_l
             AND temperature = 'warm'
             AND crm_stage NOT IN ('emailed','opened','replied','call_booked','closed_won','closed_lost')
             ${hotIds.length ? `AND id NOT IN (${hotIds.map(() => '?').join(',')})` : ''}
-            ${userFilter}
+            AND user_id=?
           ORDER BY subscriber_count DESC LIMIT ?
-        `).all(...hotIds, needed);
+        `).all(...hotIds, _userId, needed);
         leads.push(...warm);
       }
     }
@@ -302,7 +301,7 @@ async function runPowerSendJob(jobId, { lead_ids, max_leads = 100, per_account_l
           jobUpdate(db, jobId, { studied: stats.studied, generated: stats.generated });
           jobLog(db, jobId, 'generated', `Pitch ready for ${lead.channel_name}`);
 
-          savePitch(db, lead.id, {
+          savePitch(db, lead.id, _userId, {
             email_subject: result.email_subject,
             email_body: result.email_body,
             deep_study: result.key_insight,
@@ -317,7 +316,7 @@ async function runPowerSendJob(jobId, { lead_ids, max_leads = 100, per_account_l
           if (sentResult.fromEmail) runCounts[sentResult.fromEmail] = (runCounts[sentResult.fromEmail] || 0) + 1;
 
           db.prepare(`UPDATE leads SET crm_stage='emailed', last_contacted_date=date('now'), follow_up_count=0, follow_up_status='active', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(lead.id);
-          logActivity('email_sent', `Email sent to ${lead.channel_name}`, lead.id);
+          logActivity('email_sent', `Email sent to ${lead.channel_name}`, lead.id, {}, userId);
           stats.sent++;
           jobUpdate(db, jobId, { sent: stats.sent });
           jobLog(db, jobId, 'sent', `Sent to ${lead.channel_name} (${lead.email})`);
@@ -338,7 +337,7 @@ async function runPowerSendJob(jobId, { lead_ids, max_leads = 100, per_account_l
     const finalStatus = ctx.stopped ? 'stopped' : 'done';
     jobUpdate(db, jobId, { status: finalStatus, completed_at: new Date().toISOString() });
     jobLog(db, jobId, 'done', `Complete! ${stats.sent} sent, ${stats.failed} failed out of ${leads.length}.`);
-    logActivity('powermode', `Power Send done: ${stats.sent} emails sent`, null);
+    logActivity('powermode', `Power Send done: ${stats.sent} emails sent`, null, {}, userId);
   } catch (err) {
     jobUpdate(db, jobId, { status: 'error', completed_at: new Date().toISOString() });
     jobLog(db, jobId, 'failed', `Job crashed: ${err.message}`);
@@ -385,14 +384,14 @@ router.get('/power-send/active', asyncHandler(async (req, res) => {
 // POST /api/pitches/power-send/:jobId/dismiss — clear interrupted job so overlay resets
 router.post('/power-send/:jobId/dismiss', asyncHandler(async (req, res) => {
   const db = getDb();
-  db.prepare(`UPDATE power_send_jobs SET status='done', completed_at=COALESCE(completed_at,CURRENT_TIMESTAMP) WHERE id=? AND status='interrupted'`).run(req.params.jobId);
+  db.prepare(`UPDATE power_send_jobs SET status='done', completed_at=COALESCE(completed_at,CURRENT_TIMESTAMP) WHERE id=? AND user_id=? AND status='interrupted'`).run(req.params.jobId, req.user.id);
   res.json({ success: true });
 }));
 
 // GET /api/pitches/power-send/:jobId — job status + log
 router.get('/power-send/:jobId', asyncHandler(async (req, res) => {
   const db = getDb();
-  const job = db.prepare(`SELECT * FROM power_send_jobs WHERE id=?`).get(req.params.jobId);
+  const job = db.prepare(`SELECT * FROM power_send_jobs WHERE id=? AND user_id=?`).get(req.params.jobId, req.user.id);
   if (!job) return res.status(404).json({ success: false, error: 'Job not found' });
   res.json({ success: true, job });
 }));
@@ -403,13 +402,15 @@ router.post('/power-send/:jobId/stop', asyncHandler(async (req, res) => {
   const ctx = activeJobs.get(jobId);
   if (ctx) ctx.stopped = true;
   const db = getDb();
-  db.prepare(`UPDATE power_send_jobs SET status='stopped', completed_at=CURRENT_TIMESTAMP WHERE id=? AND status='running'`).run(jobId);
+  db.prepare(`UPDATE power_send_jobs SET status='stopped', completed_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=? AND status='running'`).run(jobId, req.user.id);
   res.json({ success: true });
 }));
 
 // ─── Get pitch ────────────────────────────────────────────────────────────────
 router.get('/:leadId', asyncHandler(async (req, res) => {
   const db = getDb();
+  const lead = db.prepare('SELECT id FROM leads WHERE id = ? AND user_id = ?').get(req.params.leadId, req.user.id);
+  if (!lead) return res.status(404).json({ success: false, error: 'Lead not found' });
   const pitch = parsePitch(db.prepare('SELECT * FROM pitches WHERE lead_id = ?').get(req.params.leadId));
   if (!pitch) return res.status(404).json({ success: false, error: 'No pitch found' });
   res.json({ success: true, pitch });
@@ -419,6 +420,8 @@ router.get('/:leadId', asyncHandler(async (req, res) => {
 router.put('/:id', asyncHandler(async (req, res) => {
   const db = getDb();
   const { cold_email, email_subject, reddit_dm, custom_offer } = req.body;
+  const existing = db.prepare('SELECT p.id FROM pitches p JOIN leads l ON l.id = p.lead_id WHERE p.id = ? AND l.user_id = ?').get(req.params.id, req.user.id);
+  if (!existing) return res.status(404).json({ success: false, error: 'Pitch not found' });
   db.prepare(`
     UPDATE pitches SET cold_email=COALESCE(?,cold_email), email_subject=COALESCE(?,email_subject),
     reddit_dm=COALESCE(?,reddit_dm), custom_offer=COALESCE(?,custom_offer), updated_at=CURRENT_TIMESTAMP
@@ -431,7 +434,7 @@ router.put('/:id', asyncHandler(async (req, res) => {
 // ─── Rescore ──────────────────────────────────────────────────────────────────
 router.post('/:id/rescore', aiLimiter, asyncHandler(async (req, res) => {
   const db = getDb();
-  const pitch = db.prepare('SELECT * FROM pitches WHERE id = ?').get(req.params.id);
+  const pitch = db.prepare('SELECT p.* FROM pitches p JOIN leads l ON l.id = p.lead_id WHERE p.id = ? AND l.user_id = ?').get(req.params.id, req.user.id);
   if (!pitch) return res.status(404).json({ success: false, error: 'Pitch not found' });
   const emailBody = req.body.body || pitch.cold_email;
   const scoreResult = await claude.scorePitch(emailBody);
@@ -445,6 +448,8 @@ router.post('/suggest-reply/:leadId', aiLimiter, asyncHandler(async (req, res) =
   const db = getDb();
   const { replyText } = req.body;
   if (!replyText) return res.status(400).json({ success: false, error: 'replyText required' });
+  const lead = db.prepare('SELECT id FROM leads WHERE id = ? AND user_id = ?').get(req.params.leadId, req.user.id);
+  if (!lead) return res.status(404).json({ success: false, error: 'Lead not found' });
   const pitch = db.prepare('SELECT * FROM pitches WHERE lead_id = ?').get(req.params.leadId);
   const suggestion = await claude.suggestReplyResponse(pitch?.cold_email || '', replyText);
   res.json({ success: true, suggestion });

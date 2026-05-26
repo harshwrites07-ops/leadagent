@@ -6,7 +6,7 @@ import {
   Search, Youtube, MessageSquare, Flame, Eye,
   CheckSquare, Square, Zap, MailPlus, AlertCircle,
   ChevronRight, Settings, Target, TrendingUp, Play, RotateCcw,
-  ChevronDown, ChevronUp, Mail,
+  ChevronDown, ChevronUp, Mail, Clock,
 } from 'lucide-react';
 import api, { formatNumber, tempLabel, tempClass } from '../utils/api';
 import { useIsMobile } from '../components/ui/Layout';
@@ -116,6 +116,23 @@ const TabBar = ({ active, onChange }) => (
     ))}
   </div>
 );
+
+const SEVERITY_STYLE = {
+  positive: { bg: 'rgba(0,229,160,0.1)',   color: '#00E5A0', border: 'rgba(0,229,160,0.25)' },
+  critical: { bg: 'rgba(255,69,0,0.12)',   color: '#FF4500', border: 'rgba(255,69,0,0.3)' },
+  high:     { bg: 'rgba(245,166,35,0.12)', color: '#F5A623', border: 'rgba(245,166,35,0.3)' },
+  medium:   { bg: 'rgba(113,113,122,0.1)', color: '#71717a', border: 'rgba(113,113,122,0.2)' },
+};
+
+const PainBadge = ({ point }) => {
+  const p = typeof point === 'object' ? point : { label: point, severity: 'medium' };
+  const s = SEVERITY_STYLE[p.severity] || SEVERITY_STYLE.medium;
+  return (
+    <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: s.bg, color: s.color, border: `1px solid ${s.border}`, whiteSpace: 'nowrap' }}>
+      {p.label}
+    </span>
+  );
+};
 
 const ApiKeyError = ({ navigate }) => (
   <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
@@ -243,10 +260,9 @@ const MobileLeadCard = ({ lead, navigate }) => {
               {(Array.isArray(lead.pain_points) ? lead.pain_points : []).length > 0 && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                   {(Array.isArray(lead.pain_points) ? lead.pain_points : []).slice(0, 3).map((p, i) => (
-                    <span key={i} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 4, background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}>
-                      {typeof p === 'object' ? p.label : p}
-                    </span>
+                    <PainBadge key={i} point={p} />
                   ))}
+                  {!lead.email && <PainBadge point={{ label: 'No email', severity: 'medium' }} />}
                 </div>
               )}
               <div style={{ display: 'flex', gap: 8 }}>
@@ -291,13 +307,12 @@ const YTLeadRow = ({ lead, selected, onToggle, onViewDetails, onGeneratePitch })
     <td style={{ ...tdStyle, fontFamily: 'var(--font-mono)', fontSize: 11 }}>{lead.engagement_rate != null ? `${Number(lead.engagement_rate).toFixed(2)}%` : '—'}</td>
     <td style={tdStyle}><TempBadge temp={lead.temperature} /></td>
     <td style={{ ...tdStyle, width: 100 }}><LeadScoreBar score={lead.lead_score ?? 0} /></td>
-    <td style={{ ...tdStyle, maxWidth: 200 }}>
+    <td style={{ ...tdStyle, maxWidth: 220 }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
         {(Array.isArray(lead.pain_points) ? lead.pain_points : []).slice(0, 3).map((p, i) => (
-          <span key={i} style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}>
-            {typeof p === 'object' ? p.label : p}
-          </span>
+          <PainBadge key={i} point={p} />
         ))}
+        {!lead.email && <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: 'rgba(113,113,122,0.08)', color: '#52525b', border: '1px solid rgba(113,113,122,0.15)' }}>No email</span>}
       </div>
     </td>
     <td style={tdStyle}>
@@ -356,14 +371,18 @@ const LeadTable = ({ headers, children }) => (
 );
 
 // ─── YouTube Tab ─────────────────────────────────────────────────────────────
-const YoutubeTab = ({ navigate }) => {
+const YoutubeTab = ({ navigate, onTabChange }) => {
   const isMobile = useIsMobile();
-  const [form, setForm] = useState({ keyword: '', min_subs: 5000, max_subs: 200000, min_views: 1000, max_results: 50, country: '', emailOnly: true });
+  const [form, setForm] = useState({ keyword: '', min_subs: 1000, max_subs: 500000, min_views: 100, max_results: 50, country: '', emailOnly: false });
   const [loading, setLoading] = useState(false);
   const [leads, setLeads] = useState([]);
   const [selected, setSelected] = useState(new Set());
   const [apiError, setApiError] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [quotaError, setQuotaError] = useState(false);
+  const [quotaHours, setQuotaHours] = useState(null);
+  const [progress, setProgress] = useState(null);
+  const [emailFilter, setEmailFilter] = useState(false);
 
   const handleChange = e => {
     const { name, value, type, checked } = e.target;
@@ -375,22 +394,71 @@ const YoutubeTab = ({ navigate }) => {
     e.preventDefault();
     if (!form.keyword.trim()) { toast.error('Enter a keyword first'); return; }
     setLoading(true); setLeads([]); setSelected(new Set()); setApiError(false); setSearched(false);
+    setQuotaError(false); setProgress('Preparing search...'); setEmailFilter(false);
     try {
-      const { data } = await api.post('/leads/scrape/youtube', {
-        keyword: form.keyword, minSubs: form.min_subs, maxSubs: form.max_subs,
-        minViews: form.min_views, maxResults: form.max_results, country: form.country, emailOnly: form.emailOnly,
+      const response = await fetch('/api/leads/scrape/youtube/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          keyword: form.keyword, minSubs: form.min_subs, maxSubs: form.max_subs,
+          minViews: form.min_views, maxResults: form.max_results, country: form.country || undefined,
+          emailOnly: form.emailOnly,
+        }),
       });
-      setLeads(data.leads ?? []); setSearched(true);
-      toast.success(`Found ${data.leads?.length ?? 0} leads!`);
-    } catch (err) {
-      if (err.response?.status === 429 || err.message?.toLowerCase().includes('quota')) {
-        toast.error('YouTube quota exceeded — resets at midnight Pacific Time.', { duration: 8000 });
-      } else if (err.response?.status === 401 || err.message?.toLowerCase().includes('not configured')) {
-        setApiError(true);
-      } else {
-        toast.error(err.message ?? 'Scrape failed');
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || `HTTP ${response.status}`);
       }
-    } finally { setLoading(false); }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          let event;
+          try { event = JSON.parse(line); } catch { continue; }
+
+          if (event.type === 'progress') {
+            setProgress(event.message);
+          } else if (event.type === 'complete') {
+            setLeads(event.leads ?? []);
+            setSearched(true);
+            setProgress(null);
+            const n = event.added ?? 0;
+            if (n > 0) toast.success(`Found ${n} qualified lead${n !== 1 ? 's' : ''}!`);
+            else toast(`0 leads found — try a different keyword or wider filters`, { icon: '🔍' });
+          } else if (event.type === 'error') {
+            setProgress(null);
+            if (event.error_code === 'quota_exhausted') {
+              setQuotaError(true);
+              try { const r = await fetch('/api/scraper/quota-status', { credentials: 'include' }); const d = await r.json(); setQuotaHours(d.hoursToReset); } catch {}
+            } else if (event.upgradeRequired) {
+              toast.error(event.message || 'Usage limit reached');
+            } else if ((event.message || '').toLowerCase().includes('not configured') || (event.message || '').toLowerCase().includes('api key')) {
+              setApiError(true);
+            } else {
+              toast.error(event.message || 'Scrape failed');
+            }
+          }
+        }
+      }
+    } catch (err) {
+      setProgress(null);
+      toast.error(err.message || 'Scrape failed');
+    } finally {
+      setLoading(false);
+      setProgress(null);
+    }
   };
 
   const toggleSelect = id => setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -446,7 +514,27 @@ const YoutubeTab = ({ navigate }) => {
       </form>
 
       {apiError && <ApiKeyError navigate={navigate} />}
-      {loading && <LoadingProgress label="Scanning YouTube channels..." />}
+      {quotaError && !loading && (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+          style={{ ...card, borderColor: 'rgba(245,166,35,0.4)', background: 'rgba(245,166,35,0.06)', display: 'flex', alignItems: 'flex-start', gap: 16, marginTop: 16 }}>
+          <Clock size={20} style={{ color: '#F5A623', flexShrink: 0, marginTop: 2 }} />
+          <div style={{ flex: 1 }}>
+            <p style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: 13, marginBottom: 4 }}>YouTube API quota reached for today</p>
+            <p style={{ color: 'var(--text-secondary)', fontSize: 12, marginBottom: 12 }}>
+              Daily limit resets at midnight Pacific Time{quotaHours ? ` (approx ${quotaHours} hour${quotaHours !== 1 ? 's' : ''} from now)` : ''}. You can:
+            </p>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button onClick={() => onTabChange?.('reddit')} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 6, cursor: 'pointer', fontSize: 12, background: 'rgba(245,166,35,0.12)', border: '1px solid rgba(245,166,35,0.3)', color: '#F5A623', fontFamily: 'var(--font-body)', fontWeight: 500 }}>
+                <MessageSquare size={12} /> Try Reddit Scraper instead
+              </button>
+              <button onClick={() => navigate('/settings')} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 6, cursor: 'pointer', fontSize: 12, background: 'transparent', border: '1px solid var(--border-default)', color: 'var(--text-secondary)', fontFamily: 'var(--font-body)' }}>
+                <Settings size={12} /> Add More API Keys
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      )}
+      {loading && <LoadingProgress label={progress || 'Scanning YouTube channels...'} />}
 
       <AnimatePresence>
         {!loading && searched && leads.length === 0 && !apiError && (
@@ -464,24 +552,38 @@ const YoutubeTab = ({ navigate }) => {
       <AnimatePresence>
         {!loading && leads.length > 0 && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ marginTop: 16 }}>
-            <SummaryBadges leads={leads} />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+              <SummaryBadges leads={leads} />
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
+                <div style={{ position: 'relative', width: 30, height: 16, borderRadius: 8, background: emailFilter ? '#00E5A0' : 'var(--bg-elevated)', border: '1px solid var(--border-default)', transition: 'background 0.2s', cursor: 'pointer', flexShrink: 0 }}
+                  onClick={() => setEmailFilter(f => !f)}>
+                  <div style={{ position: 'absolute', top: 1, left: emailFilter ? 13 : 1, width: 12, height: 12, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.4)' }} />
+                </div>
+                <span style={{ fontSize: 11, color: emailFilter ? '#00E5A0' : 'var(--text-muted)', fontFamily: 'var(--font-mono)', letterSpacing: '0.06em' }}>
+                  HAS EMAIL ({leads.filter(l => l.email).length})
+                </span>
+              </label>
+            </div>
             <BulkActionBar selectedIds={selected} leads={leads}
               onSelectAll={() => setSelected(new Set(leads.map(l => l.id)))}
               onClearAll={() => setSelected(new Set())}
               onBulkPitch={() => toast.promise(api.post('/pitches/generate/bulk', { lead_ids: [...selected] }), { loading: 'Generating...', success: 'Pitches queued!', error: 'Failed' })}
               onBulkQueue={() => toast.promise(api.post('/emails/queue/bulk', { lead_ids: [...selected] }), { loading: 'Adding...', success: 'Added to queue!', error: 'Failed' })}
             />
-            {isMobile ? (
-              <div>{leads.map(lead => <MobileLeadCard key={lead.id} lead={lead} navigate={navigate} />)}</div>
-            ) : (
-              <LeadTable headers={['', 'Channel', 'Subs', 'Avg Views', 'Eng Rate', 'Temp', 'Score', 'Pain Points', 'Actions']}>
-                {leads.map(lead => (
-                  <YTLeadRow key={lead.id} lead={lead} selected={selected.has(lead.id)} onToggle={toggleSelect}
-                    onViewDetails={l => navigate(`/leads/${l.id}`)}
-                    onGeneratePitch={l => navigate(`/pitch-generator?lead=${l.id}`)} />
-                ))}
-              </LeadTable>
-            )}
+            {(() => {
+              const displayed = emailFilter ? leads.filter(l => l.email) : leads;
+              return isMobile ? (
+                <div>{displayed.map(lead => <MobileLeadCard key={lead.id} lead={lead} navigate={navigate} />)}</div>
+              ) : (
+                <LeadTable headers={['', 'Channel', 'Subs', 'Avg Views', 'Eng Rate', 'Temp', 'Score', 'Quality Signals', 'Actions']}>
+                  {displayed.map(lead => (
+                    <YTLeadRow key={lead.id} lead={lead} selected={selected.has(lead.id)} onToggle={toggleSelect}
+                      onViewDetails={l => navigate(`/leads/${l.id}`)}
+                      onGeneratePitch={l => navigate(`/pitch-generator?lead=${l.id}`)} />
+                  ))}
+                </LeadTable>
+              );
+            })()}
           </motion.div>
         )}
       </AnimatePresence>
@@ -996,7 +1098,7 @@ export default function LeadFinder() {
 
       <AnimatePresence mode="wait">
         <motion.div key={activeTab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}>
-          {activeTab === 'youtube'    && <YoutubeTab navigate={navigate} />}
+          {activeTab === 'youtube'    && <YoutubeTab navigate={navigate} onTabChange={setActiveTab} />}
           {activeTab === 'reddit'     && <RedditTab />}
           {activeTab === 'viral'      && <ViralTab />}
           {activeTab === 'competitor' && <CompetitorTab />}
