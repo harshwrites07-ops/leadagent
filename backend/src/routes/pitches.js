@@ -337,7 +337,7 @@ async function runPowerSendJob(jobId, { lead_ids, max_leads = 100, per_account_l
     const finalStatus = ctx.stopped ? 'stopped' : 'done';
     jobUpdate(db, jobId, { status: finalStatus, completed_at: new Date().toISOString() });
     jobLog(db, jobId, 'done', `Complete! ${stats.sent} sent, ${stats.failed} failed out of ${leads.length}.`);
-    logActivity('powermode', `Power Send done: ${stats.sent} emails sent`, null, {}, userId);
+    logActivity('powermode', `Power Send done: ${stats.sent} emails sent`, null, {}, _userId);
   } catch (err) {
     jobUpdate(db, jobId, { status: 'error', completed_at: new Date().toISOString() });
     jobLog(db, jobId, 'failed', `Job crashed: ${err.message}`);

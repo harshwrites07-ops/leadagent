@@ -55,7 +55,8 @@ async function completeWithClaude(prompt, systemPrompt, maxTokens, key) {
 function isQuotaError(err) {
   const msg = (err?.message || err?.toString() || '').toLowerCase();
   return msg.includes('quota') || msg.includes('resource_exhausted') || msg.includes('429') ||
-         msg.includes('rate') || msg.includes('limit') || msg.includes('503') || msg.includes('overloaded');
+         msg.includes('rate') || msg.includes('limit') || msg.includes('503') || msg.includes('overloaded') ||
+         msg.includes('credit') || msg.includes('billing') || msg.includes('payment') || msg.includes('balance');
 }
 
 // Standard complete — Gemini first, auto-falls back to Claude on quota/rate errors
