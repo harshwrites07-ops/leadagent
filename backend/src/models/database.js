@@ -337,6 +337,30 @@ function initSchema() {
   try { db.exec(`CREATE INDEX IF NOT EXISTS idx_pitches_user_id ON pitches(user_id)`); } catch {}
   try { db.exec(`CREATE INDEX IF NOT EXISTS idx_email_queue_user_status ON email_queue(user_id, status, priority, created_at)`); } catch {}
 
+  // One-time: merge orphaned Google-only user into admin (single-user SaaS setup)
+  // Scenario: admin@quelro.com (id=1) has all the data; user logged in via Google, got id=2 with no data.
+  // Fix: copy google_id to admin so next Google login authenticates as id=1.
+  try {
+    const alreadyMerged = db.prepare("SELECT value FROM settings WHERE key='google_merge_done'").get();
+    if (!alreadyMerged) {
+      const admin = db.prepare('SELECT id, google_id FROM users WHERE id=1').get();
+      const userCount = db.prepare('SELECT COUNT(*) as n FROM users').get().n;
+      if (admin && !admin.google_id && userCount === 2) {
+        const orphan = db.prepare('SELECT * FROM users WHERE id != 1 AND google_id IS NOT NULL').get();
+        if (orphan) {
+          const hasLeads = db.prepare('SELECT COUNT(*) as n FROM leads WHERE user_id=?').get(orphan.id).n > 0;
+          const hasEmails = db.prepare('SELECT COUNT(*) as n FROM emails WHERE user_id=?').get(orphan.id).n > 0;
+          if (!hasLeads && !hasEmails) {
+            db.prepare('UPDATE users SET google_id=? WHERE id=1').run(orphan.google_id);
+            db.prepare("UPDATE users SET email=('orphan_'||id||'@merged.internal'), google_id=NULL WHERE id=?").run(orphan.id);
+            db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('google_merge_done', 'true')").run();
+            console.log(`[DB] Merged Google account (user id=${orphan.id}) into admin (id=1) — user must re-login`);
+          }
+        }
+      }
+    }
+  } catch (e) { console.warn('[DB] Google merge migration skip:', e.message); }
+
   // Periodic cleanup of expired password reset tokens (runs every 24h)
   setInterval(() => {
     try { getDb().prepare(`DELETE FROM password_reset_tokens WHERE expires_at < datetime('now')`).run(); } catch {}

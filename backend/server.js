@@ -93,6 +93,7 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
       const email = profile.emails?.[0]?.value;
       if (!email) return done(new Error('No email from Google'));
 
+      // 1. Look up by email
       let user = getUserByEmail(email);
       if (user) {
         if (!user.google_id) {
@@ -101,10 +102,28 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
           db.prepare(`UPDATE users SET last_login=CURRENT_TIMESTAMP WHERE id=?`).run(user.id);
         }
         const updatedUser = getUserById(user.id);
-        console.log(`[Google OAuth] Existing user found: id=${updatedUser.id} email=${email}`);
+        console.log(`[Google OAuth] Existing user found by email: id=${updatedUser.id}`);
         return done(null, updatedUser);
       }
-      // New user via Google
+
+      // 2. Look up by google_id (handles post-merge where email changed)
+      const userByGoogleId = db.prepare('SELECT * FROM users WHERE google_id=?').get(profile.id);
+      if (userByGoogleId) {
+        db.prepare('UPDATE users SET last_login=CURRENT_TIMESTAMP WHERE id=?').run(userByGoogleId.id);
+        console.log(`[Google OAuth] Existing user found by google_id: id=${userByGoogleId.id}`);
+        return done(null, getUserById(userByGoogleId.id));
+      }
+
+      // 3. Link to admin if admin has no google_id yet (single-user SaaS setup)
+      const adminUser = db.prepare('SELECT * FROM users WHERE id=1').get();
+      if (adminUser && !adminUser.google_id) {
+        db.prepare('UPDATE users SET google_id=?, last_login=CURRENT_TIMESTAMP WHERE id=1').run(profile.id);
+        const linked = getUserById(1);
+        console.log(`[Google OAuth] Linked Google account ${email} → admin user id=1`);
+        return done(null, linked);
+      }
+
+      // 4. Create new user
       const result = db.prepare(`
         INSERT INTO users (email, google_id, full_name, email_verified, profile_picture, plan)
         VALUES (?, ?, ?, 1, ?, 'trial')

@@ -316,7 +316,7 @@ async function runPowerSendJob(jobId, { lead_ids, max_leads = 100, per_account_l
           if (sentResult.fromEmail) runCounts[sentResult.fromEmail] = (runCounts[sentResult.fromEmail] || 0) + 1;
 
           db.prepare(`UPDATE leads SET crm_stage='emailed', last_contacted_date=date('now'), follow_up_count=0, follow_up_status='active', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(lead.id);
-          logActivity('email_sent', `Email sent to ${lead.channel_name}`, lead.id, {}, userId);
+          logActivity('email_sent', `Email sent to ${lead.channel_name}`, lead.id, {}, _userId);
           stats.sent++;
           jobUpdate(db, jobId, { sent: stats.sent });
           jobLog(db, jobId, 'sent', `Sent to ${lead.channel_name} (${lead.email})`);
