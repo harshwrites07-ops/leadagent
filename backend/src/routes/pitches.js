@@ -153,7 +153,7 @@ router.post('/generate-and-send', aiLimiter, asyncHandler(async (req, res) => {
         const qr = db.prepare(`INSERT INTO email_queue (user_id,lead_id,subject,body,status) VALUES (?,?,?,?,'pending')`).run(req.user.id, id, result.email_subject, result.email_body);
         db.prepare(`UPDATE email_queue SET status='sending' WHERE id=?`).run(qr.lastInsertRowid);
 
-        const sent = await sendEmail({ to: lead.email, subject: result.email_subject, body: result.email_body, leadId: id });
+        const sent = await sendEmail({ to: lead.email, subject: result.email_subject, body: result.email_body, leadId: id, userId: req.user.id });
         db.prepare(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP,email_id=? WHERE id=?`).run(sent.emailId || null, qr.lastInsertRowid);
         db.prepare(`UPDATE leads SET crm_stage='emailed', last_contacted_date=date('now'), follow_up_count=0, follow_up_status='active', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(id);
         logActivity('email_sent', `Email sent to ${lead.channel_name}`, id, {}, req.user.id);
@@ -310,7 +310,7 @@ async function runPowerSendJob(jobId, { lead_ids, max_leads = 100, per_account_l
           });
 
           const sentResult = await withRetry(
-            () => sendEmail({ to: lead.email, subject: result.email_subject, body: result.email_body, leadId: lead.id, skipInboxes: getSkipInboxes() }),
+            () => sendEmail({ to: lead.email, subject: result.email_subject, body: result.email_body, leadId: lead.id, skipInboxes: getSkipInboxes(), userId: _userId }),
             lead.channel_name
           );
           if (sentResult.fromEmail) runCounts[sentResult.fromEmail] = (runCounts[sentResult.fromEmail] || 0) + 1;
