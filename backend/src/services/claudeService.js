@@ -1,6 +1,6 @@
 const path = require('path');
 const ENV_PATH = path.join(__dirname, '../../../.env');
-const { getSetting } = require('../models/database');
+const { getSetting, getDb } = require('../models/database');
 
 function getGeminiKeys() {
   require('dotenv').config({ path: ENV_PATH, override: true });
@@ -36,13 +36,6 @@ async function completeWithGeminiRotating(prompt, systemPrompt, maxTokens, model
   return null; // all keys exhausted
 }
 
-function getAnthropicKey() {
-  require('dotenv').config({ path: ENV_PATH, override: true });
-  const dbKey = getSetting('anthropic_api_key');
-  const key = (dbKey && dbKey !== 'placeholder') ? dbKey : process.env.ANTHROPIC_API_KEY;
-  return (key && key !== 'placeholder') ? key : null;
-}
-
 // Fast model for pitch generation — 2-4x faster than Pro, same writing quality
 const FAST_MODEL  = process.env.GEMINI_FAST_MODEL  || 'gemini-2.0-flash';
 // Pro model for deep analysis tasks that need reasoning
@@ -66,19 +59,7 @@ async function completeWithGemini(prompt, systemPrompt, maxTokens, key, modelNam
   return result.response.text();
 }
 
-async function completeWithClaude(prompt, systemPrompt, maxTokens, key) {
-  const Anthropic = require('@anthropic-ai/sdk');
-  const client = new Anthropic({ apiKey: key });
-  const msg = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: maxTokens,
-    system: systemPrompt || 'You are an expert outreach copywriter for a video editing agency.',
-    messages: [{ role: 'user', content: prompt }],
-  });
-  return msg.content[0].text;
-}
-
-// Returns true if the error is a recoverable quota/rate error (should fall back to Claude)
+// Returns true if the error is a recoverable quota/rate error
 function isQuotaError(err) {
   const msg = (err?.message || err?.toString() || '').toLowerCase();
   return msg.includes('quota') || msg.includes('resource_exhausted') || msg.includes('429') ||
@@ -86,22 +67,18 @@ function isQuotaError(err) {
          msg.includes('credit') || msg.includes('billing') || msg.includes('payment') || msg.includes('balance');
 }
 
-// Standard complete — Gemini first (rotates all keys), auto-falls back to Claude
+// Standard complete — rotates all Gemini keys
 async function complete(prompt, systemPrompt = '', maxTokens = 1200) {
   const result = await completeWithGeminiRotating(prompt, systemPrompt, maxTokens, FAST_MODEL);
   if (result !== null) return result;
-  const anthropicKey = getAnthropicKey();
-  if (anthropicKey) return completeWithClaude(prompt, systemPrompt, maxTokens, anthropicKey);
-  throw new Error('AI unavailable — Gemini quota exceeded and no Claude fallback key configured. Add an Anthropic key in Settings.');
+  throw new Error('AI unavailable — all Gemini keys exhausted. Add more keys at aistudio.google.com.');
 }
 
-// Smart complete — Gemini first (rotates all keys), auto-falls back to Claude
+// Smart complete — rotates all Gemini keys
 async function completeSmart(prompt, systemPrompt = '', maxTokens = 2000) {
   const result = await completeWithGeminiRotating(prompt, systemPrompt, maxTokens, SMART_MODEL);
   if (result !== null) return result;
-  const anthropicKey = getAnthropicKey();
-  if (anthropicKey) return completeWithClaude(prompt, systemPrompt, maxTokens, anthropicKey);
-  throw new Error('AI unavailable — Gemini quota exceeded and no Claude fallback key configured.');
+  throw new Error('AI unavailable — all Gemini keys exhausted. Add more keys at aistudio.google.com.');
 }
 
 // Quick check: returns which AI provider is currently available
@@ -113,28 +90,12 @@ async function checkAiAvailability() {
       return { ok: true, provider: 'gemini', model: FAST_MODEL };
     } catch (e) {
       if (isQuotaError(e)) {
-        const anthropicKey = getAnthropicKey();
-        if (anthropicKey) {
-          try {
-            await completeWithClaude('Say OK', '', 5, anthropicKey);
-            return { ok: true, provider: 'claude_fallback', model: 'claude-haiku', note: 'Gemini quota exceeded — using Claude' };
-          } catch {}
-        }
-        return { ok: false, error: 'Gemini quota exceeded and no Claude fallback', retry_in: 'Try again tomorrow or add Claude key in Settings' };
+        return { ok: false, error: 'All Gemini keys exhausted', retry_in: 'Keys reset every 60 seconds (free tier) — try again shortly or add more keys at aistudio.google.com' };
       }
       return { ok: false, error: e.message };
     }
   }
-  const anthropicKey = getAnthropicKey();
-  if (anthropicKey) {
-    try {
-      await completeWithClaude('Say OK', '', 5, anthropicKey);
-      return { ok: true, provider: 'claude', model: 'claude-haiku' };
-    } catch (e) {
-      return { ok: false, error: e.message };
-    }
-  }
-  return { ok: false, error: 'No AI API key configured. Add Gemini or Anthropic key in Settings.' };
+  return { ok: false, error: 'No Gemini API key configured. Add keys at aistudio.google.com.' };
 }
 
 // ─── ContentCrafterzz Email Intelligence ──────────────────────────────────────
@@ -271,29 +232,32 @@ Return ONLY valid JSON (no markdown, no backticks):
   "score": <number 1-10>
 }`;
 
-  const keys = getGeminiKeys();
-
   // Up to 2 attempts — retry if score < 8 on first attempt
-  let useClaudeDirect = !keys.length;
   for (let attempt = 0; attempt < 2; attempt++) {
-    let text;
-    if (useClaudeDirect) {
-      const anthropicKey = getAnthropicKey();
-      if (!anthropicKey) throw new Error('All Gemini keys exhausted and no Claude fallback key configured');
-      text = await completeWithClaude(prompt, '', 1400, anthropicKey);
-    } else {
-      const rotated = await completeWithGeminiRotating(prompt, '', 1400, FAST_MODEL);
-      if (rotated !== null) {
-        text = rotated;
-      } else {
-        useClaudeDirect = true;
-        const anthropicKey = getAnthropicKey();
-        if (!anthropicKey) throw new Error('All Gemini keys exhausted and no Claude fallback key configured');
-        text = await completeWithClaude(prompt, '', 1400, anthropicKey);
-      }
+    const rotated = await completeWithGeminiRotating(prompt, '', 1400, FAST_MODEL);
+
+    if (rotated === null) {
+      // All Gemini keys exhausted — return fallback template, never throw
+      let userName = 'Prahvi';
+      try {
+        const user = getDb().prepare('SELECT full_name FROM users WHERE id = ?').get(userId || lead.user_id);
+        if (user?.full_name) userName = user.full_name;
+      } catch {}
+      console.warn('[Email] Using fallback template for:', lead.channel_name);
+      return {
+        key_insight: 'Channel analyzed',
+        custom_offer: 'Professional video editing for your channel',
+        email_subject: 'Quick question about your channel',
+        email_body: `Hi ${lead.channel_name},\n\nI came across your YouTube channel and noticed some interesting patterns in your content growth. I help creators with video editing and wanted to reach out.\n\nWould you be open to a quick 5-minute chat?\n\n${userName}`,
+        subject_variants: ['Quick question about your channel', 'Your content caught my eye', 'Editing help for your channel'],
+        score: 6,
+        pitch_score: 6,
+        pain_point: 'Content quality improvement',
+        angle: 'Direct outreach',
+      };
     }
 
-    const parsed = parsePitchResponse(text, lead);
+    const parsed = parsePitchResponse(rotated, lead);
     if (attempt === 0 && parsed.score && parsed.score < 8) {
       console.log(`[Prahvi] Score ${parsed.score}/10 for ${lead.channel_name}, regenerating...`);
       continue;
@@ -301,7 +265,27 @@ Return ONLY valid JSON (no markdown, no backticks):
     return parsed;
   }
 
-  throw new Error('generateFullPitch exhausted retries');
+  // If both attempts returned low scores, return the last result anyway
+  const finalRotated = await completeWithGeminiRotating(prompt, '', 1400, FAST_MODEL);
+  if (finalRotated) return parsePitchResponse(finalRotated, lead);
+
+  let userName = 'Prahvi';
+  try {
+    const user = getDb().prepare('SELECT full_name FROM users WHERE id = ?').get(userId || lead.user_id);
+    if (user?.full_name) userName = user.full_name;
+  } catch {}
+  console.warn('[Email] Using fallback template for:', lead.channel_name);
+  return {
+    key_insight: 'Channel analyzed',
+    custom_offer: 'Professional video editing for your channel',
+    email_subject: 'Quick question about your channel',
+    email_body: `Hi ${lead.channel_name},\n\nI came across your YouTube channel and noticed some interesting patterns in your content growth. I help creators with video editing and wanted to reach out.\n\nWould you be open to a quick 5-minute chat?\n\n${userName}`,
+    subject_variants: ['Quick question about your channel', 'Your content caught my eye', 'Editing help for your channel'],
+    score: 6,
+    pitch_score: 6,
+    pain_point: 'Content quality improvement',
+    angle: 'Direct outreach',
+  };
 }
 
 function parsePitchResponse(text, lead) {
@@ -662,9 +646,8 @@ Only return the JSON array.`;
 
 async function testKey() {
   try {
-    const geminiKey = getGeminiKey();
     await complete('Say "OK" in one word.', undefined, 10);
-    return { ok: true, provider: geminiKey ? `Gemini (${FAST_MODEL})` : 'Claude Haiku' };
+    return { ok: true, provider: `Gemini (${FAST_MODEL})` };
   } catch (e) {
     return { ok: false, error: e.message };
   }
@@ -692,6 +675,5 @@ module.exports = {
   FAST_MODEL,
   SMART_MODEL,
   getGeminiKey,
-  getAnthropicKey,
   makeGeminiModel,
 };

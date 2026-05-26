@@ -37,7 +37,7 @@ Open `.env` in the root folder and fill in:
 YOUTUBE_API_KEY=        # Google Cloud Console → YouTube Data API v3
 REDDIT_CLIENT_ID=       # reddit.com/prefs/apps → create "script" app
 REDDIT_CLIENT_SECRET=
-ANTHROPIC_API_KEY=      # console.anthropic.com
+GEMINI_API_KEY_1=       # aistudio.google.com → Get API key (add up to 5 for rotation)
 
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
@@ -52,7 +52,7 @@ SMTP_FROM_NAME=Your Name | ContentCrafterzz
 |-----|----------------|
 | YouTube API | [console.cloud.google.com](https://console.cloud.google.com) → APIs & Services → YouTube Data API v3 → Create Credentials |
 | Reddit API | [reddit.com/prefs/apps](https://reddit.com/prefs/apps) → Create App → Choose "script" → use Client ID + Secret |
-| Anthropic API | [console.anthropic.com](https://console.anthropic.com) → API Keys |
+| Gemini API | [aistudio.google.com](https://aistudio.google.com) → Get API key (add up to 5 keys for rotation) |
 | Gmail App Password | Google Account → Security → 2FA must be on → App Passwords → create one |
 
 ### Step 3 — Start the app
@@ -160,7 +160,7 @@ contentcrafterzz-outreach-os/
 | `YOUTUBE_API_KEY` | Yes | YouTube Data API v3 |
 | `REDDIT_CLIENT_ID` | Yes | Reddit app client ID |
 | `REDDIT_CLIENT_SECRET` | Yes | Reddit app client secret |
-| `ANTHROPIC_API_KEY` | Yes | Claude AI |
+| `GEMINI_API_KEY_1` | Yes | Gemini AI (add up to GEMINI_API_KEY_5 for rotation) |
 | `SMTP_HOST` | For sending | Your SMTP server |
 | `SMTP_PORT` | For sending | Usually 587 |
 | `SMTP_USER` | For sending | Your email address |

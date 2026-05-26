@@ -102,7 +102,7 @@ const ADMIN_SETTING_KEYS = [
   'target_niches', 'case_studies', 'services_description',
   'blacklist_keywords', 'blacklist_channels', 'average_deal_value',
   'smtp_host', 'smtp_port', 'smtp_user', 'smtp_from_name', 'smtp_inboxes',
-  'youtube_api_key', 'anthropic_api_key', 'gemini_api_key', 'reddit_client_id', 'reddit_client_secret',
+  'youtube_api_key', 'gemini_api_key', 'reddit_client_id', 'reddit_client_secret',
   'queue_paused',
 ];
 
@@ -130,7 +130,6 @@ router.put('/', requireAdmin, asyncHandler(async (req, res) => {
     setSetting(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
   }
   if (updates.youtube_api_key)      writeToEnv('YOUTUBE_API_KEY',       updates.youtube_api_key);
-  if (updates.anthropic_api_key)    writeToEnv('ANTHROPIC_API_KEY',     updates.anthropic_api_key);
   if (updates.gemini_api_key)       writeToEnv('GEMINI_API_KEY',        updates.gemini_api_key);
   if (updates.reddit_client_id)     writeToEnv('REDDIT_CLIENT_ID',      updates.reddit_client_id);
   if (updates.reddit_client_secret) writeToEnv('REDDIT_CLIENT_SECRET',  updates.reddit_client_secret);
@@ -164,13 +163,6 @@ router.post('/test/reddit', requireAdmin, asyncHandler(async (req, res) => {
   if (req.body.client_id) process.env.REDDIT_CLIENT_ID = req.body.client_id;
   if (req.body.client_secret) process.env.REDDIT_CLIENT_SECRET = req.body.client_secret;
   res.json(await testCredentials());
-}));
-
-// POST /api/settings/test/claude (admin only)
-router.post('/test/claude', requireAdmin, asyncHandler(async (req, res) => {
-  const { testKey } = require('../services/claudeService');
-  if (req.body.key) process.env.ANTHROPIC_API_KEY = req.body.key;
-  res.json(await testKey());
 }));
 
 // POST /api/settings/test/smtp (admin only)

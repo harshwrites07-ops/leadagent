@@ -3,7 +3,7 @@ const router = express.Router();
 const path = require('path');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { getDb, getSetting, setSetting, logActivity } = require('../models/database');
-const { FAST_MODEL, SMART_MODEL, getGeminiKey, makeGeminiModel, checkAiAvailability, getAnthropicKey } = require('../services/claudeService');
+const { FAST_MODEL, SMART_MODEL, getGeminiKey, makeGeminiModel, checkAiAvailability } = require('../services/claudeService');
 const { getAllKeys: getYtKeys, isQuotaExhausted } = require('../services/youtubeService');
 
 const ENV_PATH = path.join(__dirname, '../../../.env');
@@ -14,15 +14,6 @@ function getGeminiChat(systemPrompt) {
   if (!key) return null;
   // Levi uses Flash — fast responses, strong tool use
   return makeGeminiModel(key, FAST_MODEL, systemPrompt);
-}
-
-function getClaudeClient() {
-  require('dotenv').config({ path: ENV_PATH, override: true });
-  const dbKey = getSetting('anthropic_api_key');
-  const key = (dbKey && dbKey !== 'placeholder') ? dbKey : process.env.ANTHROPIC_API_KEY;
-  if (!key || key === 'placeholder') return null;
-  const Anthropic = require('@anthropic-ai/sdk');
-  return new Anthropic({ apiKey: key });
 }
 
 // ── Tools ─────────────────────────────────────────────────────────────────────
@@ -1039,15 +1030,13 @@ router.get('/status', asyncHandler(async (req, res) => {
   const dailyLimit = parseInt(getSetting('daily_send_limit') || '150');
 
   const geminiKey = getGeminiKey();
-  const anthropicKey = getAnthropicKey();
   const ytKeys = getYtKeys();
   const ytExhausted = isQuotaExhausted();
 
   res.json({
     smtp: { configured: inboxes.length > 0, inboxes: inboxes.length, sent_today: sentToday.n, daily_limit: dailyLimit },
     gemini: { configured: !!geminiKey },
-    claude: { configured: !!anthropicKey },
-    ai_available: !!(geminiKey || anthropicKey),
+    ai_available: !!geminiKey,
     youtube: { configured: ytKeys.length > 0, keys: ytKeys.length, exhausted: ytExhausted },
     innertube: { online: true },
   });
@@ -1113,49 +1102,12 @@ router.post('/chat', asyncHandler(async (req, res) => {
 
       return res.json({ reply: 'Mission complete.' });
     } catch (geminiErr) {
-      console.error('[Levi] Gemini error, falling back to Claude:', geminiErr.message);
+      console.error('[Levi] Gemini error:', geminiErr.message);
+      throw new Error('AI unavailable — all Gemini keys exhausted. Add more keys at aistudio.google.com.');
     }
   }
 
-  // ── Claude fallback ────────────────────────────────────────────────────────
-  const client = getClaudeClient();
-  if (!client) throw new Error('No AI API key configured. Add Gemini or Anthropic key in Settings.');
-
-  let history = messages.map(m => ({ role: m.role, content: m.content }));
-
-  for (let round = 0; round < 15; round++) {
-    const response = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1200,
-      system: SYSTEM,
-      tools: TOOLS,
-      messages: history,
-    });
-
-    if (response.stop_reason === 'end_turn') {
-      return res.json({ reply: response.content.find(b => b.type === 'text')?.text || '' });
-    }
-
-    if (response.stop_reason === 'tool_use') {
-      const toolBlocks = response.content.filter(b => b.type === 'tool_use');
-      history.push({ role: 'assistant', content: response.content });
-      // Execute tool calls in parallel
-      const results = await Promise.all(
-        toolBlocks.map(async block => {
-          let output;
-          try { output = await runTool(block.name, block.input, userId); }
-          catch (err) { output = { error: err.message }; }
-          return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(output) };
-        })
-      );
-      history.push({ role: 'user', content: results });
-      continue;
-    }
-
-    return res.json({ reply: response.content.find(b => b.type === 'text')?.text || 'Done.' });
-  }
-
-  return res.json({ reply: 'Mission complete.' });
+  throw new Error('No Gemini API key configured. Add a key in Settings.');
 }));
 
 module.exports = router;

@@ -11,27 +11,19 @@ const { checkUsageLimit, incrementUsage } = require('../services/authService');
 
 const ENV_PATH = path.join(__dirname, '../../../.env');
 
-// Use Claude to rewrite the keyword into one optimised for finding video editing clients
+// Use Gemini to rewrite the keyword into one optimised for finding video editing clients
 async function smartKeyword(rawKeyword) {
-  require('dotenv').config({ path: ENV_PATH, override: true });
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key || key === 'placeholder') return rawKeyword;
+  const { generateWithGemini } = require('../services/geminiService');
   try {
-    const Anthropic = require('@anthropic-ai/sdk');
-    const client = new Anthropic({ apiKey: key });
-    const r = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 60,
-      messages: [{
-        role: 'user',
-        content: `I run a video editing agency targeting YouTube creators. Given the niche keyword "${rawKeyword}", write ONE optimised YouTube search query (4-8 words) that finds solo YouTubers in this niche who clearly need professional video editing. Return only the search query, no quotes, no explanation.`,
-      }],
-    });
-    const result = r.content[0]?.text?.trim().replace(/^["']|["']$/g, '') || rawKeyword;
-    console.log(`[Smart keyword] "${rawKeyword}" → "${result}"`);
-    return result;
+    const result = await generateWithGemini(
+      `I run a video editing agency targeting YouTube creators. Given the niche keyword "${rawKeyword}", write ONE optimised YouTube search query (4-8 words) that finds solo YouTubers in this niche who clearly need professional video editing. Return only the search query, no quotes, no explanation.`
+    );
+    if (!result) return rawKeyword;
+    const cleaned = result.trim().replace(/^["']|["']$/g, '');
+    console.log(`[Smart keyword] "${rawKeyword}" → "${cleaned}"`);
+    return cleaned;
   } catch (e) {
-    console.log(`[Smart keyword] Claude unavailable, using raw keyword: ${e.message}`);
+    console.log(`[Smart keyword] Gemini unavailable, using raw keyword: ${e.message}`);
     return rawKeyword;
   }
 }
@@ -83,25 +75,6 @@ async function expandKeywords(keyword) {
     } catch (e) {
       console.log(`[expandKeywords] Gemini failed: ${e.message}`);
     }
-  }
-
-  // Claude Haiku fallback
-  const anthropicKey = process.env.ANTHROPIC_API_KEY;
-  if (anthropicKey && anthropicKey !== 'placeholder') {
-    try {
-      const Anthropic = require('@anthropic-ai/sdk');
-      const client = new Anthropic({ apiKey: anthropicKey });
-      const r = await client.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 80,
-        messages: [{ role: 'user', content: `Give me 4 YouTube search keywords related to "${keyword}" for finding content creators. Return only keywords, one per line.` }],
-      });
-      const lines = (r.content[0]?.text || '').trim().split('\n')
-        .map(l => l.replace(/^[\d\-\*\•\.]+\s*/, '').trim())
-        .filter(l => l.length > 2 && l.length < 60)
-        .slice(0, 4);
-      if (lines.length > 0) return [keyword, ...lines];
-    } catch {}
   }
 
   return [keyword];
