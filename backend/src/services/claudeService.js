@@ -2,11 +2,38 @@ const path = require('path');
 const ENV_PATH = path.join(__dirname, '../../../.env');
 const { getSetting } = require('../models/database');
 
-function getGeminiKey() {
+function getGeminiKeys() {
   require('dotenv').config({ path: ENV_PATH, override: true });
+  const keys = [];
   const dbKey = getSetting('gemini_api_key');
-  const key = (dbKey && dbKey !== 'placeholder') ? dbKey : process.env.GEMINI_API_KEY;
-  return (key && key !== 'placeholder') ? key : null;
+  if (dbKey && dbKey !== 'placeholder') keys.push(dbKey);
+  for (let i = 1; i <= 5; i++) {
+    const k = process.env[`GEMINI_API_KEY_${i}`] || (i === 1 ? process.env.GEMINI_API_KEY : null);
+    if (k && k !== 'placeholder' && !keys.includes(k)) keys.push(k);
+  }
+  return keys;
+}
+
+function getGeminiKey() {
+  const keys = getGeminiKeys();
+  return keys[0] || null;
+}
+
+async function completeWithGeminiRotating(prompt, systemPrompt, maxTokens, modelName) {
+  const keys = getGeminiKeys();
+  if (!keys.length) return null;
+  for (const key of keys) {
+    try {
+      return await completeWithGemini(prompt, systemPrompt, maxTokens, key, modelName);
+    } catch (e) {
+      if (isQuotaError(e)) {
+        console.warn(`[AI] Gemini key ...${key.slice(-6)} quota/balance hit, trying next key`);
+        continue;
+      }
+      throw e;
+    }
+  }
+  return null; // all keys exhausted
 }
 
 function getAnthropicKey() {
@@ -59,39 +86,19 @@ function isQuotaError(err) {
          msg.includes('credit') || msg.includes('billing') || msg.includes('payment') || msg.includes('balance');
 }
 
-// Standard complete — Gemini first, auto-falls back to Claude on quota/rate errors
+// Standard complete — Gemini first (rotates all keys), auto-falls back to Claude
 async function complete(prompt, systemPrompt = '', maxTokens = 1200) {
-  const geminiKey = getGeminiKey();
-  if (geminiKey) {
-    try {
-      return await completeWithGemini(prompt, systemPrompt, maxTokens, geminiKey, FAST_MODEL);
-    } catch (geminiErr) {
-      if (isQuotaError(geminiErr)) {
-        console.warn('[AI] Gemini quota/rate hit — falling back to Claude:', geminiErr.message?.substring(0, 120));
-      } else {
-        throw geminiErr;
-      }
-    }
-  }
+  const result = await completeWithGeminiRotating(prompt, systemPrompt, maxTokens, FAST_MODEL);
+  if (result !== null) return result;
   const anthropicKey = getAnthropicKey();
   if (anthropicKey) return completeWithClaude(prompt, systemPrompt, maxTokens, anthropicKey);
   throw new Error('AI unavailable — Gemini quota exceeded and no Claude fallback key configured. Add an Anthropic key in Settings.');
 }
 
-// Smart complete — uses the configured smart model, same fallback chain
+// Smart complete — Gemini first (rotates all keys), auto-falls back to Claude
 async function completeSmart(prompt, systemPrompt = '', maxTokens = 2000) {
-  const geminiKey = getGeminiKey();
-  if (geminiKey) {
-    try {
-      return await completeWithGemini(prompt, systemPrompt, maxTokens, geminiKey, SMART_MODEL);
-    } catch (geminiErr) {
-      if (isQuotaError(geminiErr)) {
-        console.warn('[AI] Gemini smart quota/rate hit — falling back to Claude:', geminiErr.message?.substring(0, 120));
-      } else {
-        throw geminiErr;
-      }
-    }
-  }
+  const result = await completeWithGeminiRotating(prompt, systemPrompt, maxTokens, SMART_MODEL);
+  if (result !== null) return result;
   const anthropicKey = getAnthropicKey();
   if (anthropicKey) return completeWithClaude(prompt, systemPrompt, maxTokens, anthropicKey);
   throw new Error('AI unavailable — Gemini quota exceeded and no Claude fallback key configured.');
@@ -264,36 +271,25 @@ Return ONLY valid JSON (no markdown, no backticks):
   "score": <number 1-10>
 }`;
 
-  const key = getGeminiKey();
-  if (!key) {
-    // No Gemini — try Claude fallback
-    const anthropicKey = getAnthropicKey();
-    if (!anthropicKey) throw new Error('No AI API key configured');
-    const text = await completeWithClaude(prompt, '', 1400, anthropicKey);
-    return parsePitchResponse(text, lead);
-  }
+  const keys = getGeminiKeys();
 
   // Up to 2 attempts — retry if score < 8 on first attempt
-  // Once Gemini quota hits, use Claude directly for retries too (skip wasted second Gemini call)
-  let useClaudeDirect = false;
+  let useClaudeDirect = !keys.length;
   for (let attempt = 0; attempt < 2; attempt++) {
     let text;
     if (useClaudeDirect) {
       const anthropicKey = getAnthropicKey();
-      if (!anthropicKey) throw new Error('Gemini quota exceeded and no Claude fallback key configured');
+      if (!anthropicKey) throw new Error('All Gemini keys exhausted and no Claude fallback key configured');
       text = await completeWithClaude(prompt, '', 1400, anthropicKey);
     } else {
-      try {
-        text = await completeWithGemini(prompt, '', 1400, key, FAST_MODEL);
-      } catch (geminiErr) {
-        if (isQuotaError(geminiErr)) {
-          useClaudeDirect = true;
-          const anthropicKey = getAnthropicKey();
-          if (anthropicKey) text = await completeWithClaude(prompt, '', 1400, anthropicKey);
-          else throw new Error('Gemini quota exceeded and no Claude fallback key configured');
-        } else {
-          throw geminiErr;
-        }
+      const rotated = await completeWithGeminiRotating(prompt, '', 1400, FAST_MODEL);
+      if (rotated !== null) {
+        text = rotated;
+      } else {
+        useClaudeDirect = true;
+        const anthropicKey = getAnthropicKey();
+        if (!anthropicKey) throw new Error('All Gemini keys exhausted and no Claude fallback key configured');
+        text = await completeWithClaude(prompt, '', 1400, anthropicKey);
       }
     }
 
