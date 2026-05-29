@@ -257,19 +257,23 @@ router.post('/powermode/start', asyncHandler(async (req, res) => {
 
         for (const lead of (r.value || [])) {
           if (ps.stats.withEmail >= ps.targetCount) { ps.targetReached = true; break; }
+
           ps.total++;
           const t = lead.temperature;
           if (t === 'hot') ps.stats.hot++;
           else if (t === 'warm') ps.stats.warm++;
           else ps.stats.cold++;
-          if (lead.email) ps.stats.withEmail++;
 
+          // Only save leads WITH emails — target mode delivers exactly N email leads
+          if (!lead.email) continue;
+
+          ps.stats.withEmail++;
           ps.recentLeads.unshift({
             channel_name: lead.channel_name,
             subscriber_count: lead.subscriber_count,
             temperature: lead.temperature,
-            email: lead.email || null,
-            hasEmail: !!lead.email,
+            email: lead.email,
+            hasEmail: true,
             channel_id: lead.channel_id,
           });
           if (ps.recentLeads.length > 50) ps.recentLeads.pop();
@@ -278,7 +282,7 @@ router.post('/powermode/start', asyncHandler(async (req, res) => {
             const ir = insert.run({ ...lead, niche, user_id: userId });
             if (ir.changes > 0) {
               ps.saved++;
-              if (lead.email) incrementUsage(userId, 'leads', 1);
+              incrementUsage(userId, 'leads', 1);
             }
           } catch {}
         }
