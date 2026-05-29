@@ -4,6 +4,7 @@ const { getDb, logActivity } = require('../models/database');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { scrapeLimiter, aiLimiter } = require('../middleware/rateLimiter');
 const { detectViralChannels, searchChannels, searchChannelsMulti, getKeyPoolStatus, isQuotaExhausted } = require('../services/youtubeService');
+const { getKeywordsForNiches, getRandomKeywords, totalKeywordCount } = require('../services/masterKeywords');
 
 // ─── Niche keyword maps ────────────────────────────────────────────────────────
 const NICHE_KEYWORDS = {
@@ -60,39 +61,9 @@ function getPowermodeState(userId) {
   return powermodeStates.get(userId);
 }
 
-const POWERMODE_KEYWORDS = [
-  // Business & Entrepreneurship
-  'business coach YouTube', 'entrepreneur channel', 'agency owner YouTube', 'online business tips', 'startup founder vlog',
-  'dropshipping YouTube', 'ecommerce YouTube', 'Amazon FBA channel', 'freelancer YouTube', 'side hustle channel',
-  'make money online YouTube', 'digital marketing YouTube', 'email marketing YouTube', 'SEO YouTube channel',
-  // Finance & Investing
-  'personal finance channel', 'stock market investing', 'passive income ideas', 'financial freedom YouTube', 'investing for beginners',
-  'dividend investing YouTube', 'options trading YouTube', 'budgeting YouTube', 'credit repair YouTube', 'forex trading channel',
-  // Real Estate
-  'real estate investing', 'real estate agent YouTube', 'property investor channel', 'house flipping channel', 'realtor YouTube',
-  'Airbnb investing YouTube', 'wholesaling real estate YouTube', 'commercial real estate YouTube',
-  // Fitness & Health
-  'online fitness coach', 'personal trainer YouTube', 'nutrition coach YouTube', 'weight loss channel', 'gym owner channel',
-  'yoga YouTube channel', 'CrossFit YouTube', 'bodybuilding channel', 'home workout YouTube', 'running coach YouTube',
-  // Coaching & Self-Help
-  'life coach YouTube', 'mindset coach channel', 'productivity YouTube', 'self improvement channel', 'motivation speaker YouTube',
-  'dating coach YouTube', 'relationship advice YouTube', 'confidence coach YouTube', 'career coach YouTube',
-  // SaaS & Tech
-  'SaaS founder YouTube', 'tech founder vlog', 'software demo channel', 'B2B marketing YouTube', 'digital marketing agency',
-  'AI tools YouTube', 'no code YouTube', 'automation YouTube channel', 'web design YouTube',
-  // Education & Courses
-  'course creator YouTube', 'online educator channel', 'skills trainer YouTube', 'eLearning channel', 'teach online YouTube',
-  'Udemy instructor YouTube', 'tutoring YouTube channel', 'exam prep YouTube', 'coding bootcamp YouTube',
-  // Law & Professional
-  'lawyer YouTube channel', 'attorney tips YouTube', 'law firm channel', 'legal education YouTube',
-  'immigration lawyer YouTube', 'estate planning YouTube', 'business law YouTube',
-  // Health & Wellness
-  'doctor YouTube channel', 'therapist channel', 'wellness coach YouTube', 'mental health YouTube',
-  'naturopath YouTube', 'chiropractor YouTube', 'dietitian channel', 'holistic health YouTube',
-  // Podcasts & Media
-  'podcast YouTube channel', 'video podcast channel', 'interview show YouTube',
-  'talk show YouTube', 'business podcast YouTube', 'finance podcast YouTube',
-];
+// Fallback keyword pool (used when no niches specified)
+const POWERMODE_DEFAULT_NICHES = ['business', 'finance', 'fitness', 'education', 'tech', 'health', 'motivation', 'marketing'];
+const KEYWORDS_PER_NICHE = 10;
 
 const LEAD_INSERT_SQL = `
   INSERT OR IGNORE INTO leads
@@ -139,7 +110,7 @@ router.post('/hunt', asyncHandler(async (req, res) => {
       const batch = keywords.slice(kwIdx, kwIdx + 3);
       kwIdx += 3;
       try {
-        const leads = await searchChannelsMulti(batch, { minSubs: 5000, maxSubs: 500000, maxResults: Math.min(remaining, 50), emailOnly: true });
+        const leads = await searchChannelsMulti(batch, { minSubs: 1000, maxSubs: 2000000, maxResults: Math.min(remaining, 50), emailOnly: false });
         hs.found += leads.length;
         for (const lead of leads) {
           try {
@@ -178,34 +149,51 @@ router.post('/powermode/start', asyncHandler(async (req, res) => {
   const country = POWERMODE_COUNTRIES[pmCountryIdx % POWERMODE_COUNTRIES.length];
   pmCountryIdx++;
 
+  // Build keyword list from selected niches (or defaults)
+  const requestedNiches = Array.isArray(req.body?.niches) && req.body.niches.length > 0
+    ? req.body.niches
+    : POWERMODE_DEFAULT_NICHES;
+  const kwObjects = getKeywordsForNiches(requestedNiches, KEYWORDS_PER_NICHE);
+  const keywords = kwObjects.map(k => k.keyword);
+  const kwNicheMap = Object.fromEntries(kwObjects.map(k => [k.keyword, k.niche]));
+
+  console.log(`[PowerMode] Starting — niches: ${requestedNiches.join(', ')} | ${keywords.length} keywords | country: ${country || 'Global'}`);
+
   Object.assign(ps, {
     running: true, startedAt: new Date().toISOString(),
     total: 0, saved: 0,
-    keywordsTotal: POWERMODE_KEYWORDS.length,
+    keywordsTotal: keywords.length,
     keywordsDone: 0, currentKeywords: [],
     recentLeads: [], stats: { hot: 0, warm: 0, cold: 0, withEmail: 0 },
     stopped: false, error: null, country: country || 'Global',
+    niches: requestedNiches,
   });
 
-  res.json({ status: 'started', country: country || 'Global' });
+  res.json({ status: 'started', country: country || 'Global', keywordsTotal: keywords.length, niches: requestedNiches });
 
   ;(async () => {
     const db = getDb();
     const insert = db.prepare(LEAD_INSERT_SQL);
-    const BATCH = 5;
+    const BATCH = 8; // 8 parallel searches per batch
 
-    for (let i = 0; i < POWERMODE_KEYWORDS.length && !ps.stopped; i += BATCH) {
-      const batch = POWERMODE_KEYWORDS.slice(i, i + BATCH);
+    for (let i = 0; i < keywords.length && !ps.stopped; i += BATCH) {
+      const batch = keywords.slice(i, i + BATCH);
       ps.currentKeywords = batch;
 
+      console.log(`[PowerMode] Batch ${Math.floor(i/BATCH)+1}/${Math.ceil(keywords.length/BATCH)} — searching: ${batch.slice(0,3).join(', ')}...`);
+
       const results = await Promise.allSettled(
-        batch.map(kw => searchChannels({ keyword: kw, minSubs: 5000, maxSubs: 500000, maxResults: 50, emailOnly: false, country }))
+        batch.map(kw => searchChannels({ keyword: kw, minSubs: 1000, maxSubs: 2000000, maxResults: 50, emailOnly: false, country }))
       );
 
       ps.keywordsDone += batch.length;
 
-      for (const r of results) {
+      for (let ri = 0; ri < results.length; ri++) {
+        const r = results[ri];
         if (r.status !== 'fulfilled') continue;
+        const kw = batch[ri];
+        const niche = kwNicheMap[kw] || 'general';
+
         for (const lead of (r.value || [])) {
           ps.total++;
           const t = lead.temperature;
@@ -221,20 +209,28 @@ router.post('/powermode/start', asyncHandler(async (req, res) => {
             hasEmail: !!lead.email,
             channel_id: lead.channel_id,
           });
-          if (ps.recentLeads.length > 30) ps.recentLeads.pop();
+          if (ps.recentLeads.length > 50) ps.recentLeads.pop();
 
           try {
-            const ir = insert.run({ ...lead, niche: 'powermode', user_id: userId });
+            const ir = insert.run({ ...lead, niche, user_id: userId });
             if (ir.changes > 0) ps.saved++;
           } catch {}
         }
       }
+
+      console.log(`[PowerMode] Progress: ${ps.keywordsDone}/${ps.keywordsTotal} kw done | ${ps.total} found | ${ps.saved} saved | ${ps.stats.withEmail} emails`);
     }
 
     ps.running = false;
     ps.completedAt = Date.now();
-    if (!ps.stopped) logActivity('powermode', `PowerMode: ${ps.saved} leads found`, null, {}, userId);
-  })().catch(e => { ps.running = false; ps.completedAt = Date.now(); ps.error = e.message; });
+    if (!ps.stopped) {
+      console.log(`[PowerMode] Complete — ${ps.saved} leads saved, ${ps.stats.withEmail} with emails`);
+      logActivity('powermode', `PowerMode: ${ps.saved} leads found (${ps.stats.withEmail} with email)`, null, {}, userId);
+    }
+  })().catch(e => {
+    ps.running = false; ps.completedAt = Date.now(); ps.error = e.message;
+    console.error('[PowerMode] Error:', e.message);
+  });
 }));
 
 // POST /api/scraper/powermode/stop

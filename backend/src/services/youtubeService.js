@@ -72,7 +72,7 @@ async function ytGet(endpoint, params) {
 // ─── Search ────────────────────────────────────────────────────────────────────
 
 async function searchChannels({ keyword, minSubs = 5000, maxSubs = 500000, country, maxResults = 50, emailOnly = false, minViews = 0 }) {
-  maxResults = Math.min(maxResults, 200);
+  maxResults = Math.min(maxResults, 500);
   const targetIds = Math.min(maxResults * 4, 500);
   console.log(`[YouTube] searchChannels — "${keyword}" subs:${minSubs}-${maxSubs} max:${maxResults} minViews:${minViews}`);
 
@@ -223,13 +223,18 @@ async function buildChannelProfile(ch, earlyEmail = null) {
       ? ytGet('/playlistItems', { part: 'contentDetails', playlistId: uploadsPlaylistId, maxResults: 5 })
           .catch(() => ({ data: { items: [] } }))
       : Promise.resolve({ data: { items: [] } }),
-    // Resolve email: use early result if available, otherwise try description then page scrape
+    // Resolve email: use early result if available, otherwise try description → page → website in parallel
     earlyEmail
       ? Promise.resolve(earlyEmail)
       : (async () => {
           const fromDesc = extractEmail(ch.snippet?.description || '');
           if (fromDesc) return fromDesc;
-          return scrapeEmailFromPage(ch.snippet?.customUrl || null, ch.id);
+          const website = extractWebsite(ch.snippet?.description || '', null);
+          const [fromPage, fromSite] = await Promise.all([
+            scrapeEmailFromPage(ch.snippet?.customUrl || null, ch.id),
+            scrapeEmailFromWebsite(website),
+          ]);
+          return fromPage || fromSite || null;
         })(),
   ]);
 
@@ -345,6 +350,36 @@ async function scrapeEmailFromPage(handle, channelId) {
     } catch {}
   }
   return null;
+}
+
+async function scrapeEmailFromWebsite(websiteUrl) {
+  if (!websiteUrl) return null;
+  const timeout = ms => new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms));
+  try {
+    const { data: html } = await Promise.race([
+      axios.get(websiteUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Outreach/1.0)' },
+        timeout: 5000,
+        maxRedirects: 3,
+      }),
+      timeout(5000),
+    ]);
+    // Check linktree sub-links
+    const linktreeLinks = (html.match(/href="(https:\/\/[^"]+)"/g) || [])
+      .map(m => m.match(/href="([^"]+)"/)?.[1])
+      .filter(u => u && !u.includes('linktree.com') && (u.includes('mailto:') || u.match(/\.[a-z]{2,}\//)));
+    for (const link of linktreeLinks.slice(0, 3)) {
+      if (link.startsWith('mailto:')) {
+        const email = link.replace('mailto:', '').split('?')[0].trim().toLowerCase();
+        if (email.includes('@')) return email;
+      }
+    }
+    // Extract emails from page text
+    const all = html.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g) || [];
+    return [...new Set(all)].find(e => !SYSTEM_DOMAINS.some(d => e.toLowerCase().endsWith('@' + d))) || null;
+  } catch {
+    return null;
+  }
 }
 
 function extractWebsite(description, trailer) {
