@@ -5,6 +5,24 @@ const { asyncHandler } = require('../middleware/errorHandler');
 const { scrapeLimiter, aiLimiter } = require('../middleware/rateLimiter');
 const { detectViralChannels, searchChannels, searchChannelsMulti, getKeyPoolStatus, isQuotaExhausted } = require('../services/youtubeService');
 const { getKeywordsForNiches, getRandomKeywords, totalKeywordCount } = require('../services/masterKeywords');
+const { checkUsageLimit, incrementUsage, PLAN_LIMITS } = require('../services/authService');
+
+const PLAN_RUN_LIMITS = {
+  trial:   50,
+  free:    100,
+  starter: 500,
+  pro:     2500,
+  growth:  2500,
+  agency:  10000,
+};
+
+function getRunLimit(user) {
+  if (user.plan === 'agency' && user.plan_status === 'active') return 10000;
+  const effectivePlan = (user.plan_status === 'cancelled' || user.plan_status === 'past_due')
+    ? 'trial'
+    : (user.plan || 'free');
+  return PLAN_RUN_LIMITS[effectivePlan] || PLAN_RUN_LIMITS.free;
+}
 
 // ─── Niche keyword maps ────────────────────────────────────────────────────────
 const NICHE_KEYWORDS = {
@@ -55,7 +73,8 @@ function getPowermodeState(userId) {
       running: false, startedAt: null, total: 0, saved: 0,
       keywordsTotal: 0, keywordsDone: 0, currentKeywords: [],
       recentLeads: [], stats: { hot: 0, warm: 0, cold: 0, withEmail: 0 },
-      stopped: false, error: null,
+      stopped: false, error: null, quotaExhausted: false,
+      targetCount: null, targetReached: false,
     });
   }
   return powermodeStates.get(userId);
@@ -145,19 +164,45 @@ router.post('/powermode/start', asyncHandler(async (req, res) => {
   const ps = getPowermodeState(userId);
   if (ps.running) return res.json({ status: 'already_running', ...ps });
 
+  // Plan limit check
+  const runLimit = getRunLimit(req.user);
+  const usageCheck = checkUsageLimit(req.user, 'leads');
+  const remaining = usageCheck.allowed ? (usageCheck.limit - usageCheck.used) : 0;
+
+  // Target count: user-requested, capped at plan run limit and remaining monthly budget
+  let targetCount = parseInt(req.body?.targetCount) || 100;
+  if (targetCount > runLimit) {
+    return res.status(400).json({
+      success: false,
+      error: `Your ${req.user.plan || 'free'} plan allows up to ${runLimit} leads per run. Upgrade to get more.`,
+      runLimit,
+      upgradeRequired: targetCount > runLimit,
+    });
+  }
+  if (remaining === 0) {
+    return res.status(429).json({
+      success: false,
+      error: `Monthly lead limit reached (${usageCheck.used}/${usageCheck.limit}). Upgrade your plan.`,
+      upgradeRequired: true,
+    });
+  }
+  // Cap at remaining monthly budget
+  targetCount = Math.min(targetCount, remaining);
+
   // Pick next country in rotation
   const country = POWERMODE_COUNTRIES[pmCountryIdx % POWERMODE_COUNTRIES.length];
   pmCountryIdx++;
 
   // Build keyword list from selected niches (or defaults)
+  // Use 30 per niche so we have enough to reach higher targets
   const requestedNiches = Array.isArray(req.body?.niches) && req.body.niches.length > 0
     ? req.body.niches
     : POWERMODE_DEFAULT_NICHES;
-  const kwObjects = getKeywordsForNiches(requestedNiches, KEYWORDS_PER_NICHE);
+  const kwObjects = getKeywordsForNiches(requestedNiches, 30);
   const keywords = kwObjects.map(k => k.keyword);
   const kwNicheMap = Object.fromEntries(kwObjects.map(k => [k.keyword, k.niche]));
 
-  console.log(`[PowerMode] Starting — niches: ${requestedNiches.join(', ')} | ${keywords.length} keywords | country: ${country || 'Global'}`);
+  console.log(`[PowerMode] Starting — target: ${targetCount} leads with email | niches: ${requestedNiches.join(', ')} | ${keywords.length} keywords | country: ${country || 'Global'}`);
 
   Object.assign(ps, {
     running: true, startedAt: new Date().toISOString(),
@@ -165,36 +210,53 @@ router.post('/powermode/start', asyncHandler(async (req, res) => {
     keywordsTotal: keywords.length,
     keywordsDone: 0, currentKeywords: [],
     recentLeads: [], stats: { hot: 0, warm: 0, cold: 0, withEmail: 0 },
-    stopped: false, error: null, country: country || 'Global',
-    niches: requestedNiches,
+    stopped: false, error: null, quotaExhausted: false,
+    country: country || 'Global', niches: requestedNiches,
+    targetCount, targetReached: false,
   });
 
-  res.json({ status: 'started', country: country || 'Global', keywordsTotal: keywords.length, niches: requestedNiches });
+  res.json({ status: 'started', country: country || 'Global', keywordsTotal: keywords.length, niches: requestedNiches, targetCount });
 
   ;(async () => {
     const db = getDb();
     const insert = db.prepare(LEAD_INSERT_SQL);
-    const BATCH = 8; // 8 parallel searches per batch
+    const BATCH = 8;
 
     for (let i = 0; i < keywords.length && !ps.stopped; i += BATCH) {
+      // Stop early if target reached
+      if (ps.stats.withEmail >= ps.targetCount) { ps.targetReached = true; break; }
+
       const batch = keywords.slice(i, i + BATCH);
       ps.currentKeywords = batch;
 
-      console.log(`[PowerMode] Batch ${Math.floor(i/BATCH)+1}/${Math.ceil(keywords.length/BATCH)} — searching: ${batch.slice(0,3).join(', ')}...`);
+      console.log(`[PowerMode] Batch ${Math.floor(i/BATCH)+1} — ${ps.stats.withEmail}/${ps.targetCount} email leads — searching: ${batch.slice(0,3).join(', ')}...`);
 
-      const results = await Promise.allSettled(
-        batch.map(kw => searchChannels({ keyword: kw, minSubs: 1000, maxSubs: 2000000, maxResults: 50, emailOnly: false, country }))
-      );
+      let results;
+      try {
+        results = await Promise.allSettled(
+          batch.map(kw => searchChannels({ keyword: kw, minSubs: 1000, maxSubs: 2000000, maxResults: 50, emailOnly: false, country }))
+        );
+      } catch (e) {
+        if ((e.message || '').toLowerCase().includes('quota')) {
+          ps.quotaExhausted = true;
+          break;
+        }
+        throw e;
+      }
 
       ps.keywordsDone += batch.length;
 
       for (let ri = 0; ri < results.length; ri++) {
         const r = results[ri];
-        if (r.status !== 'fulfilled') continue;
+        if (r.status !== 'fulfilled') {
+          if ((r.reason?.message || '').toLowerCase().includes('quota')) { ps.quotaExhausted = true; }
+          continue;
+        }
         const kw = batch[ri];
         const niche = kwNicheMap[kw] || 'general';
 
         for (const lead of (r.value || [])) {
+          if (ps.stats.withEmail >= ps.targetCount) { ps.targetReached = true; break; }
           ps.total++;
           const t = lead.temperature;
           if (t === 'hot') ps.stats.hot++;
@@ -206,6 +268,7 @@ router.post('/powermode/start', asyncHandler(async (req, res) => {
             channel_name: lead.channel_name,
             subscriber_count: lead.subscriber_count,
             temperature: lead.temperature,
+            email: lead.email || null,
             hasEmail: !!lead.email,
             channel_id: lead.channel_id,
           });
@@ -213,19 +276,32 @@ router.post('/powermode/start', asyncHandler(async (req, res) => {
 
           try {
             const ir = insert.run({ ...lead, niche, user_id: userId });
-            if (ir.changes > 0) ps.saved++;
+            if (ir.changes > 0) {
+              ps.saved++;
+              if (lead.email) incrementUsage(userId, 'leads', 1);
+            }
           } catch {}
         }
+        if (ps.targetReached) break;
       }
 
-      console.log(`[PowerMode] Progress: ${ps.keywordsDone}/${ps.keywordsTotal} kw done | ${ps.total} found | ${ps.saved} saved | ${ps.stats.withEmail} emails`);
+      if (ps.targetReached || ps.quotaExhausted) break;
+      console.log(`[PowerMode] ${ps.stats.withEmail}/${ps.targetCount} email leads | ${ps.keywordsDone}/${ps.keywordsTotal} kw done`);
     }
+
+    // Final target check
+    if (!ps.targetReached && ps.stats.withEmail >= ps.targetCount) ps.targetReached = true;
 
     ps.running = false;
     ps.completedAt = Date.now();
     if (!ps.stopped) {
-      console.log(`[PowerMode] Complete — ${ps.saved} leads saved, ${ps.stats.withEmail} with emails`);
-      logActivity('powermode', `PowerMode: ${ps.saved} leads found (${ps.stats.withEmail} with email)`, null, {}, userId);
+      const summary = ps.targetReached
+        ? `PowerMode: found all ${ps.targetCount} target leads`
+        : ps.quotaExhausted
+          ? `PowerMode: found ${ps.stats.withEmail}/${ps.targetCount} leads (quota exhausted)`
+          : `PowerMode: ${ps.saved} leads found (${ps.stats.withEmail} with email)`;
+      console.log(`[PowerMode] ${summary}`);
+      logActivity('powermode', summary, null, {}, userId);
     }
   })().catch(e => {
     ps.running = false; ps.completedAt = Date.now(); ps.error = e.message;

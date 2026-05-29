@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import Icon from '../components/ui/Icon';
 import api, { formatNumber } from '../utils/api';
+import { useAuth } from '../context/AuthContext';
+
+const PLAN_RUN_LIMITS = { trial: 50, free: 100, starter: 500, pro: 2500, growth: 2500, agency: 10000 };
 
 const NICHES = [
   { id: 'finance',    name: 'Finance',    count: '3.2k', color: 'var(--lime)' },
@@ -37,10 +40,12 @@ function ScorePill({ score }) {
 
 export default function LeadFinder() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [tab, setTab] = useState('youtube');
 
   // PowerMode
   const [selectedNiches, setSelectedNiches] = useState(new Set(['finance']));
+  const [pmTargetCount, setPmTargetCount] = useState(100);
   const [pmRunning, setPmRunning] = useState(false);
   const [pmDone, setPmDone] = useState(false);
   const [pmStatus, setPmStatus] = useState(null);
@@ -85,16 +90,20 @@ export default function LeadFinder() {
             const existing = new Set(prev.map(f => f.name));
             const newOnes = data.recentLeads
               .filter(l => !existing.has(l.channel_name))
-              .map(l => ({ name: l.channel_name, subs: l.subscriber_count, temp: l.temperature }));
-            return [...prev, ...newOnes].slice(-20);
+              .map(l => ({ name: l.channel_name, subs: l.subscriber_count, temp: l.temperature, hasEmail: l.hasEmail, email: l.email }));
+            return [...prev, ...newOnes].slice(-30);
           });
         }
         if (!data.running) {
           setPmPolling(false);
           setPmRunning(false);
           setPmDone(true);
-          if (data.saved > 0 && !data.stopped) {
-            toast.success(`PowerMode complete — ${data.saved} leads found!`);
+          if (data.targetReached) {
+            toast.success(`Found all ${data.targetCount} leads with emails!`);
+          } else if (data.quotaExhausted) {
+            toast(`Found ${data.stats?.withEmail ?? 0}/${data.targetCount} leads — quota reached for today`, { icon: '⚡' });
+          } else if (data.saved > 0 && !data.stopped) {
+            toast.success(`PowerMode complete — ${data.saved} leads saved!`);
           }
         }
       } catch {}
@@ -103,14 +112,22 @@ export default function LeadFinder() {
   }, [pmPolling]);
 
   const handlePowerModeStart = async () => {
+    const runLimit = PLAN_RUN_LIMITS[user?.plan || 'free'] ?? 100;
+    const target = Math.min(pmTargetCount, runLimit);
     try {
       const niches = [...selectedNiches];
-      await api.post('/scraper/powermode/start', { niches });
+      await api.post('/scraper/powermode/start', { niches, targetCount: target });
       setPmRunning(true);
+      setPmDone(false);
       setPmFeed([]);
       setPmPolling(true);
     } catch (e) {
-      toast.error(e.message || 'PowerMode failed to start');
+      const msg = e.response?.data?.error || e.message || 'PowerMode failed to start';
+      if (e.response?.data?.upgradeRequired) {
+        toast.error(msg, { duration: 5000 });
+      } else {
+        toast.error(msg);
+      }
     }
   };
 
@@ -319,17 +336,91 @@ export default function LeadFinder() {
               ))}
             </div>
 
-            <button className="pm__cta" onClick={handlePowerModeStart} disabled={pmRunning}>
+            {/* Target count input */}
+            <div style={{ marginTop: 18, marginBottom: 4 }}>
+              <div className="field__label" style={{ marginBottom: 6 }}>How many leads do you want?</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <input
+                  className="input"
+                  type="number"
+                  min={10}
+                  max={PLAN_RUN_LIMITS[user?.plan || 'free'] ?? 100}
+                  value={pmTargetCount}
+                  onChange={e => setPmTargetCount(Math.max(10, Math.min(parseInt(e.target.value) || 10, PLAN_RUN_LIMITS[user?.plan || 'free'] ?? 100)))}
+                  style={{ width: 100, fontFamily: 'var(--f-mono)', textAlign: 'center' }}
+                  disabled={pmRunning}
+                />
+                <span className="muted" style={{ fontSize: 12 }}>
+                  leads with verified emails · max {(PLAN_RUN_LIMITS[user?.plan || 'free'] ?? 100).toLocaleString()} on {user?.plan || 'free'} plan
+                </span>
+              </div>
+              <div className="muted" style={{ fontSize: 11.5, marginTop: 6, lineHeight: 1.5 }}>
+                We'll keep searching until we find exactly <strong style={{ color: 'var(--lime)' }}>{pmTargetCount}</strong> leads with verified emails.
+              </div>
+            </div>
+
+            <button className="pm__cta" style={{ marginTop: 14 }} onClick={handlePowerModeStart} disabled={pmRunning}>
               {pmRunning
-                ? <><span className="dot dot--pulse" style={{ background: '#0a0a0c', width: 8, height: 8 }} /> Discovering creators...</>
-                : <><Icon name="bolt" size={16} />Launch PowerMode <span className="sub">~ 30 seconds · {selectedNiches.size} niche{selectedNiches.size === 1 ? '' : 's'}</span></>
+                ? <><span className="dot dot--pulse" style={{ background: '#0a0a0c', width: 8, height: 8 }} /> Finding leads with emails...</>
+                : <>
+                    <Icon name="bolt" size={16} />
+                    Find {pmTargetCount} {selectedNiches.size === 1 ? [...selectedNiches].map(id => NICHES.find(n => n.id === id)?.name || id)[0] : `${selectedNiches.size}-niche`} Leads
+                    <span className="sub">with emails · {selectedNiches.size} niche{selectedNiches.size === 1 ? '' : 's'}</span>
+                  </>
               }
             </button>
 
             {(pmRunning || pmDone) && (
               <div className="pm__feed">
+                {/* Target progress bar */}
+                {pmStatus?.targetCount && (
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+                      <span className="mono" style={{ fontSize: 13, fontWeight: 700 }}>
+                        <span style={{ color: 'var(--ok)', fontSize: 22 }}>{pmStatus.stats?.withEmail ?? 0}</span>
+                        <span className="muted"> / {pmStatus.targetCount} leads with emails</span>
+                      </span>
+                      <span className="muted mono" style={{ fontSize: 10 }}>
+                        {pmDone
+                          ? pmStatus.targetReached ? 'Complete' : pmStatus.quotaExhausted ? 'Quota reached' : 'Done'
+                          : `${Math.round(((pmStatus.stats?.withEmail ?? 0) / pmStatus.targetCount) * 100)}%`
+                        }
+                      </span>
+                    </div>
+                    <div style={{ height: 6, borderRadius: 3, background: 'var(--surface-3)', overflow: 'hidden' }}>
+                      <div style={{
+                        height: '100%', borderRadius: 3, transition: 'width .5s ease',
+                        background: pmStatus.targetReached ? 'var(--ok)' : pmStatus.quotaExhausted ? 'var(--warn)' : 'var(--lime)',
+                        width: `${Math.min(100, Math.round(((pmStatus.stats?.withEmail ?? 0) / pmStatus.targetCount) * 100))}%`,
+                      }} />
+                    </div>
+                  </div>
+                )}
+
+                {/* Completion message */}
+                {pmDone && (
+                  <div style={{
+                    padding: '10px 14px', borderRadius: 'var(--r)', marginBottom: 12, fontSize: 13,
+                    background: pmStatus?.targetReached ? 'var(--lime-soft)' : 'var(--surface-2)',
+                    border: `1px solid ${pmStatus?.targetReached ? 'var(--lime-border)' : 'var(--line)'}`,
+                    color: pmStatus?.targetReached ? 'var(--lime)' : 'var(--text-2)',
+                  }}>
+                    {pmStatus?.targetReached
+                      ? `Found all ${pmStatus.targetCount} leads with emails!`
+                      : pmStatus?.quotaExhausted
+                        ? `Found ${pmStatus.stats?.withEmail ?? 0}/${pmStatus.targetCount} leads. Daily quota reached — come back tomorrow.`
+                        : `Found ${pmStatus.stats?.withEmail ?? 0} leads with emails.`
+                    }
+                    {pmStatus?.saved > 0 && (
+                      <button className="btn btn--ghost btn--sm" style={{ marginLeft: 10 }} onClick={() => navigate('/crm')}>
+                        View in CRM <Icon name="arrowR" size={11} />
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 {/* Live stats counters */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 12 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 10 }}>
                   {[
                     { label: 'FOUND', value: pmStatus?.total ?? 0, color: 'var(--lime)' },
                     { label: 'EMAILS', value: pmStatus?.stats?.withEmail ?? 0, color: 'var(--ok)' },
@@ -343,34 +434,33 @@ export default function LeadFinder() {
                   ))}
                 </div>
 
-                {/* Keyword progress bar */}
+                {/* Keyword progress */}
                 {pmRunning && pmStatus?.keywordsTotal > 0 && (
-                  <div style={{ marginBottom: 10 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
                       <span className="muted mono" style={{ fontSize: 10 }}>
                         {pmStatus.currentKeywords?.[0] ? `Searching "${pmStatus.currentKeywords[0]}"...` : 'Starting...'}
                       </span>
-                      <span className="muted mono" style={{ fontSize: 10 }}>{pmStatus.keywordsDone}/{pmStatus.keywordsTotal} keywords</span>
+                      <span className="muted mono" style={{ fontSize: 10 }}>{pmStatus.keywordsDone ?? 0}/{pmStatus.keywordsTotal} keywords</span>
                     </div>
-                    <div style={{ height: 3, borderRadius: 2, background: 'var(--surface-3)', overflow: 'hidden' }}>
-                      <div style={{ height: '100%', background: 'var(--lime)', borderRadius: 2, width: `${Math.round(((pmStatus.keywordsDone ?? 0) / (pmStatus.keywordsTotal ?? 1)) * 100)}%`, transition: 'width .4s ease' }} />
+                    <div style={{ height: 2, borderRadius: 1, background: 'var(--surface-3)', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', background: 'var(--lime)', opacity: .5, borderRadius: 1, width: `${Math.round(((pmStatus.keywordsDone ?? 0) / (pmStatus.keywordsTotal ?? 1)) * 100)}%`, transition: 'width .4s ease' }} />
                     </div>
                   </div>
                 )}
 
-                <div className="row" style={{ marginBottom: 8, justifyContent: 'space-between' }}>
-                  <div className="row" style={{ gap: 8 }}>
-                    <Icon name="bolt" size={12} style={{ color: 'var(--lime)' }} />
-                    <span className="mono" style={{ fontSize: 11, color: 'var(--lime)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Live · streaming results</span>
+                <div className="row" style={{ marginBottom: 6, justifyContent: 'space-between' }}>
+                  <div className="row" style={{ gap: 6 }}>
+                    <Icon name="bolt" size={11} style={{ color: 'var(--lime)' }} />
+                    <span className="mono" style={{ fontSize: 10, color: 'var(--lime)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Live feed</span>
                   </div>
-                  <div className="mono muted" style={{ fontSize: 11 }}>
-                    {pmDone ? `${pmStatus?.saved ?? 0} saved · done` : `${pmStatus?.saved ?? 0} saved so far`}
-                  </div>
+                  <span className="muted mono" style={{ fontSize: 10 }}>{pmStatus?.saved ?? 0} saved to CRM</span>
                 </div>
-                {pmFeed.map((f, i) => (
-                  <div key={i} className={`pm__feed-row ${i === pmFeed.length - 1 && pmRunning ? 'is-new' : ''}`}>
+                {pmFeed.filter(f => f.hasEmail).map((f, i) => (
+                  <div key={i} className={`pm__feed-row ${i === 0 && pmRunning ? 'is-new' : ''}`}>
                     <span className="ts">{new Date().toTimeString().slice(3, 8)}</span>
-                    <span>{f.hasEmail ? '✉' : '✓'} {f.name} · {f.subs >= 1000000 ? `${(f.subs / 1000000).toFixed(1)}M` : f.subs >= 1000 ? `${Math.round(f.subs / 1000)}k` : (f.subs ?? '?')} subs{f.hasEmail ? ' · email found' : ''}</span>
+                    <span style={{ color: 'var(--ok)' }}>✉</span>
+                    <span>{f.name} · {f.subs >= 1000000 ? `${(f.subs / 1000000).toFixed(1)}M` : f.subs >= 1000 ? `${Math.round(f.subs / 1000)}k` : (f.subs ?? '?')} · {f.email || 'email found'}</span>
                   </div>
                 ))}
               </div>
