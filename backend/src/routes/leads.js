@@ -316,28 +316,32 @@ router.post('/scrape/youtube/stream', scrapeLimiter, asyncHandler(async (req, re
     const keywords = await expandKeywords(keyword);
     send({ type: 'progress', stage: 'search', message: `Searching YouTube for: ${keywords.slice(0, 3).join(', ')}${keywords.length > 3 ? ' +more' : ''}`, keywords });
 
-    // Step 2 — Search all variations (InnerTube first, YT Data API fallback)
+    // Step 2 — Search all variations (YouTube Data API primary, InnerTube fallback)
     const perKw = Math.max(15, Math.ceil((maxResults * 2.5) / keywords.length));
     let allChannels;
 
-    send({ type: 'progress', stage: 'search', message: `Searching with InnerTube (no quota limits)...` });
-    console.log(`[SCRAPER] Starting InnerTube search — keywords: ${keywords.join(', ')} | minSubs=${minSubs} maxSubs=${maxSubs} emailOnly=${emailOnly}`);
+    send({ type: 'progress', stage: 'search', message: `Searching YouTube channels...` });
+    console.log(`[SCRAPER] Starting YouTube Data API search — keywords: ${keywords.join(', ')} | minSubs=${minSubs} maxSubs=${maxSubs} emailOnly=${emailOnly}`);
     try {
-      allChannels = await itSearchMulti(keywords, {
-        minSubs, maxSubs, maxResults: perKw, emailOnly, minViews: 0,
-        onProgress: msg => send({ type: 'progress', stage: 'enrich', message: msg }),
-      });
-      console.log(`[SCRAPER] InnerTube returned ${allChannels.length} channels`);
-    } catch (itErr) {
-      console.warn(`[SCRAPER] InnerTube FAILED: ${itErr.message} — falling back to YouTube Data API`);
-      send({ type: 'progress', stage: 'fallback', message: 'InnerTube unavailable — using YouTube Data API...' });
-      try {
-        allChannels = await ytSearchMulti(keywords, { minSubs, maxSubs, country, maxResults: perKw, emailOnly, minViews: 0 });
-        console.log(`[SCRAPER] YT Data API fallback returned ${allChannels.length} channels`);
-      } catch (ytErr) {
-        const isQuota = ytErr.response?.status === 429 || (ytErr.message || '').toLowerCase().includes('quota');
-        if (isQuota) { send({ type: 'error', error_code: 'quota_exhausted', message: 'YouTube API quota exhausted. Resets at midnight Pacific Time.' }); }
-        else { send({ type: 'error', message: ytErr.message || 'YouTube search failed' }); }
+      allChannels = await ytSearchMulti(keywords, { minSubs, maxSubs, country, maxResults: perKw, emailOnly, minViews: 0 });
+      console.log(`[SCRAPER] YouTube Data API returned ${allChannels.length} channels`);
+    } catch (ytErr) {
+      const isQuota = ytErr.response?.status === 429 || (ytErr.message || '').toLowerCase().includes('quota');
+      if (isQuota) {
+        console.warn('[SCRAPER] YouTube Data API quota exhausted — falling back to InnerTube');
+        send({ type: 'progress', stage: 'fallback', message: 'YouTube API quota reached — using InnerTube fallback...' });
+        try {
+          allChannels = await itSearchMulti(keywords, {
+            minSubs, maxSubs, maxResults: perKw, emailOnly, minViews: 0,
+            onProgress: msg => send({ type: 'progress', stage: 'enrich', message: msg }),
+          });
+          console.log(`[SCRAPER] InnerTube fallback returned ${allChannels.length} channels`);
+        } catch (itErr) {
+          send({ type: 'error', error_code: 'quota_exhausted', message: 'YouTube API quota exhausted. Resets at midnight Pacific Time.' });
+          return res.end();
+        }
+      } else {
+        send({ type: 'error', message: ytErr.message || 'YouTube search failed' });
         return res.end();
       }
     }
@@ -369,7 +373,8 @@ router.post('/scrape/youtube/stream', scrapeLimiter, asyncHandler(async (req, re
     `);
 
     for (const ch of allChannels) {
-      if (ch.avg_views < minViews) { skipped++; continue; }
+      if (minViews > 0 && ch.avg_views < minViews) { skipped++; continue; }
+      if (emailOnly && !ch.email) { skipped++; continue; }
       if (blacklistChannels.includes(ch.channel_id)) { skipped++; continue; }
       if (blacklistKeywords.some(kw => ch.channel_name.toLowerCase().includes(kw.toLowerCase()))) { skipped++; continue; }
 
@@ -413,23 +418,24 @@ router.post('/scrape/youtube', scrapeLimiter, asyncHandler(async (req, res) => {
   let channels;
   const perKw = Math.max(15, Math.ceil((maxResults * 2) / keywords.length));
   try {
-    channels = await itSearchMulti(keywords, { minSubs, maxSubs, maxResults: perKw, emailOnly, minViews: 0 });
-  } catch (itErr) {
-    console.warn(`[InnerTube] Failed (${itErr.message}), falling back to YouTube Data API`);
-    try {
-      channels = await ytSearchMulti(keywords, { minSubs, maxSubs, country, maxResults: perKw, emailOnly, minViews: 0 });
-    } catch (ytErr) {
-      const status = ytErr.response?.status;
-      const reason = ytErr.response?.data?.error?.errors?.[0]?.reason;
-      const isQuota = reason === 'quotaExceeded' || reason === 'dailyLimitExceeded' ||
-        status === 429 || (ytErr.message || '').toLowerCase().includes('quota');
-      if (isQuota) {
+    channels = await ytSearchMulti(keywords, { minSubs, maxSubs, country, maxResults: perKw, emailOnly, minViews: 0 });
+  } catch (ytErr) {
+    const status = ytErr.response?.status;
+    const reason = ytErr.response?.data?.error?.errors?.[0]?.reason;
+    const isQuota = reason === 'quotaExceeded' || reason === 'dailyLimitExceeded' ||
+      status === 429 || (ytErr.message || '').toLowerCase().includes('quota');
+    if (isQuota) {
+      console.warn('[SCRAPER] YouTube Data API quota exhausted — falling back to InnerTube');
+      try {
+        channels = await itSearchMulti(keywords, { minSubs, maxSubs, maxResults: perKw, emailOnly, minViews: 0 });
+      } catch (itErr) {
         return res.status(429).json({
           success: false,
           error_code: 'quota_exhausted',
           error: 'YouTube API quota exhausted. Daily limit resets at midnight Pacific Time. Try again tomorrow or add more API keys in Settings.',
         });
       }
+    } else {
       throw ytErr;
     }
   }
@@ -454,9 +460,10 @@ router.post('/scrape/youtube', scrapeLimiter, asyncHandler(async (req, res) => {
   `);
 
   for (const ch of channels) {
+    if (minViews > 0 && ch.avg_views < minViews) { skipped++; continue; }
+    if (emailOnly && !ch.email) { skipped++; continue; }
     if (blacklistChannels.includes(ch.channel_id)) { skipped++; continue; }
     if (blacklistKeywords.some(kw => ch.channel_name.toLowerCase().includes(kw.toLowerCase()))) { skipped++; continue; }
-    if (ch.avg_views < minViews) { skipped++; continue; }
 
     const existing = db.prepare('SELECT id FROM leads WHERE channel_id = ? AND user_id = ?').get(ch.channel_id, req.user.id);
     if (existing) { skipped++; continue; }

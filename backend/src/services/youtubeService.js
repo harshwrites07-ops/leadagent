@@ -71,7 +71,7 @@ async function ytGet(endpoint, params) {
 
 // ─── Search ────────────────────────────────────────────────────────────────────
 
-async function searchChannels({ keyword, minSubs = 5000, maxSubs = 500000, country, maxResults = 50, emailOnly = true, minViews = 0 }) {
+async function searchChannels({ keyword, minSubs = 5000, maxSubs = 500000, country, maxResults = 50, emailOnly = false, minViews = 0 }) {
   maxResults = Math.min(maxResults, 200);
   const targetIds = Math.min(maxResults * 4, 500);
   console.log(`[YouTube] searchChannels — "${keyword}" subs:${minSubs}-${maxSubs} max:${maxResults} minViews:${minViews}`);
@@ -107,7 +107,7 @@ async function searchChannels({ keyword, minSubs = 5000, maxSubs = 500000, count
 
 // Searches multiple keywords in parallel — returns combined deduplicated leads
 async function searchChannelsMulti(keywords, options = {}) {
-  const { minSubs = 5000, maxSubs = 500000, maxResults = 50, emailOnly = true, minViews = 0 } = options;
+  const { minSubs = 5000, maxSubs = 500000, maxResults = 50, emailOnly = false, minViews = 0 } = options;
   const seen = new Set();
 
   const results = await Promise.allSettled(
@@ -129,7 +129,7 @@ async function searchChannelsMulti(keywords, options = {}) {
 
 // ─── Enrich channels — EMAIL-FIRST + PARALLEL ─────────────────────────────────
 
-async function enrichChannels(channelIds, minSubs, maxSubs, maxResults, emailOnly = true, minViews = 0) {
+async function enrichChannels(channelIds, minSubs, maxSubs, maxResults, emailOnly = false, minViews = 0) {
   const leads = [];
 
   for (let i = 0; i < channelIds.length; i += 50) {
