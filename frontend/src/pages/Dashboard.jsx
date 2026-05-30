@@ -1,402 +1,261 @@
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Users, UserPlus, Mail, MailOpen, TrendingUp, DollarSign,
-  RefreshCw, Zap, MessageSquare, Star, Flame, Activity,
-  BarChart2, AlertCircle,
-} from 'lucide-react';
+import Icon from '../components/ui/Icon';
 import PowerSendOverlay from '../components/ui/PowerSendOverlay';
-import {
-  BarChart, Bar, LineChart, Line, AreaChart, Area,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-} from 'recharts';
 import { useApp } from '../context/AppContext';
 import { formatNumber, formatDate } from '../utils/api';
+import { useAuth } from '../context/AuthContext';
 
-const activityMeta = {
-  lead_found:       { icon: UserPlus,  color: '#00E5A0', label: 'Lead Found' },
-  pitch_generated:  { icon: Zap,       color: '#7B61FF', label: 'Pitch Generated' },
-  email_sent:       { icon: Mail,      color: '#00B8D4', label: 'Email Sent' },
-  reply_received:   { icon: Star,      color: '#F5A623', label: 'Reply Received' },
-  viral_detected:   { icon: Flame,     color: '#FF4500', label: 'Viral Detected' },
-};
-
-const crmStageColors = {
-  new_lead:       '#555',
-  studying:       '#00B8D4',
-  pitch_ready:    '#7B61FF',
-  email_sent:     '#FF4500',
-  replied:        '#F5A623',
-  call_booked:    '#00E5A0',
-  closed:         '#00C896',
-  not_interested: '#cc3333',
-};
-
-const crmStageLabels = {
-  new_lead: 'New Lead', studying: 'Studying', pitch_ready: 'Pitch Ready',
-  email_sent: 'Email Sent', replied: 'Replied', call_booked: 'Call Booked',
-  closed: 'Closed', not_interested: 'Not Interested',
-};
-
-const DarkTooltip = ({ active, payload, label }) => {
-  if (!active || !payload?.length) return null;
+/* Smooth SVG sparkline */
+function Sparkline({ data = [], color = 'var(--lime)', height = 36 }) {
+  if (!data.length) return null;
+  const w = 200, h = height;
+  const vals = data.map(d => (typeof d === 'object' ? (d.count ?? d.value ?? 0) : d));
+  const min = Math.min(...vals), max = Math.max(...vals);
+  const span = (max - min) || 1;
+  const pts = vals.map((v, i) => [
+    (i / (vals.length - 1)) * w,
+    h - ((v - min) / span) * (h - 4) - 2,
+  ]);
+  const d = pts.map((p, i) => (i === 0 ? `M${p[0]},${p[1]}` : `L${p[0]},${p[1]}`)).join(' ');
+  const dFill = `${d} L${w},${h} L0,${h} Z`;
   return (
-    <div style={{
-      background: 'var(--bg-elevated)', border: '1px solid var(--border-default)',
-      borderRadius: 8, padding: '8px 12px',
-      boxShadow: '0 8px 32px rgba(0,0,0,0.8)',
-    }}>
-      <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginBottom: 4, letterSpacing: '0.05em' }}>{label}</p>
-      {payload.map((p) => (
-        <p key={p.dataKey} style={{ color: p.color, fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600 }}>
-          {p.name}: {formatNumber(p.value)}
-        </p>
-      ))}
-    </div>
+    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ width: '100%', height }}>
+      <path d={dFill} fill={color} opacity={0.10} />
+      <path d={d} fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
+}
+
+function Avatar({ name, color }) {
+  const init = (name || '?').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase();
+  const palette = ['#c8f654', '#ff8a73', '#8ec5ff', '#c4b5fd', '#f4ecd8', '#6ee7a8', '#ffd166'];
+  const bg = color || palette[(name?.charCodeAt(0) ?? 0) % palette.length];
+  return <span className="ava" style={{ background: bg, color: '#0a0a0c' }}>{init}</span>;
+}
+
+function Badge({ children, kind = '' }) {
+  return <span className={`badge${kind ? ' badge--' + kind : ''}`}>{children}</span>;
+}
+
+const activityTagMap = {
+  lead_found:       { tag: 'scraping',      acc: 'var(--lime)',  human: false },
+  pitch_generated:  { tag: 'writing',       acc: 'var(--lime)',  human: false },
+  email_sent:       { tag: 'sending',       acc: 'var(--lime)',  human: false },
+  reply_received:   { tag: 'human needed',  acc: 'var(--coral)', human: true  },
+  viral_detected:   { tag: 'research',      acc: 'var(--lime)',  human: false },
 };
-
-const SkeletonCard = () => (
-  <div className="skeleton" style={{
-    height: 110, borderRadius: 8,
-    background: 'var(--bg-card)',
-    border: '1px solid var(--border-subtle)',
-  }} />
-);
-
-const StatCard = ({ icon: Icon, label, value, sub, color = '#FF4500', accentBorder = false, delay = 0 }) => (
-  <motion.div
-    initial={{ opacity: 0, y: 16 }}
-    animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 0.3, delay }}
-    style={{
-      background: 'var(--bg-card)',
-      border: '1px solid var(--border-subtle)',
-      borderLeft: accentBorder ? `3px solid ${color}` : '1px solid var(--border-subtle)',
-      borderRadius: 8,
-      padding: '18px 20px',
-      position: 'relative',
-      overflow: 'hidden',
-    }}
-  >
-    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 9, fontWeight: 600, letterSpacing: '0.16em',
-          color: 'var(--text-muted)', marginBottom: 10,
-          textTransform: 'uppercase',
-        }}>{label}</p>
-        <p style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 36, fontWeight: 700,
-          lineHeight: 1, color: color,
-          letterSpacing: '-0.02em',
-        }}>{value}</p>
-        {sub && <p style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 9, color: 'var(--text-muted)',
-          marginTop: 8, letterSpacing: '0.08em',
-        }}>{sub}</p>}
-      </div>
-      <div style={{
-        padding: 8, borderRadius: 7, flexShrink: 0,
-        background: `${color}12`,
-        border: `1px solid ${color}22`,
-      }}>
-        <Icon size={15} style={{ color }} />
-      </div>
-    </div>
-  </motion.div>
-);
-
-const ActivityItem = ({ activity, index }) => {
-  const meta = activityMeta[activity.type] ?? activityMeta.lead_found;
-  const Icon = meta.icon;
-  return (
-    <motion.div
-      initial={{ opacity: 0, x: 12 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.2, delay: index * 0.03 }}
-      style={{
-        display: 'flex', alignItems: 'flex-start', gap: 10,
-        padding: '10px 0',
-        borderBottom: '1px solid var(--border-subtle)',
-      }}
-    >
-      <div style={{
-        marginTop: 1, padding: 6, borderRadius: 6, flexShrink: 0,
-        background: `${meta.color}14`,
-        border: `1px solid ${meta.color}22`,
-      }}>
-        <Icon size={11} style={{ color: meta.color }} />
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.4 }}>{activity.message}</p>
-        {activity.channel_name && (
-          <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activity.channel_name}</p>
-        )}
-      </div>
-      <p style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', flexShrink: 0 }}>{formatDate(activity.created_at)}</p>
-    </motion.div>
-  );
-};
-
-const StageDistribution = ({ distribution }) => {
-  if (!distribution) return null;
-  const total = Object.values(distribution).reduce((s, v) => s + v, 0) || 1;
-  const stages = Object.entries(distribution).filter(([, v]) => v > 0);
-  return (
-    <div style={{
-      background: 'var(--bg-card)', border: '1px solid var(--border-subtle)',
-      borderRadius: 8, padding: '20px 24px', marginTop: 24,
-    }}>
-      <h3 style={{
-        fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 600,
-        letterSpacing: '0.18em', color: 'var(--text-muted)',
-        textTransform: 'uppercase', marginBottom: 16,
-      }}>CRM PIPELINE DISTRIBUTION</h3>
-      <div style={{ display: 'flex', borderRadius: 4, overflow: 'hidden', height: 6, width: '100%', marginBottom: 16, gap: 2 }}>
-        {stages.map(([stage, count]) => (
-          <div key={stage} style={{
-            background: crmStageColors[stage] ?? '#555',
-            width: `${(count / total) * 100}%`,
-            transition: 'all 0.7s ease',
-            borderRadius: 2,
-          }} title={`${crmStageLabels[stage] ?? stage}: ${count}`} />
-        ))}
-      </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
-        {stages.map(([stage, count]) => (
-          <div key={stage} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: crmStageColors[stage] ?? '#555' }} />
-            <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{crmStageLabels[stage] ?? stage}</span>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, color: 'var(--text-primary)' }}>{count}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-const EmptyState = ({ navigate }) => (
-  <motion.div
-    initial={{ opacity: 0, scale: 0.97 }}
-    animate={{ opacity: 1, scale: 1 }}
-    style={{
-      background: 'var(--bg-card)', border: '1px solid var(--border-subtle)',
-      borderRadius: 8, padding: '64px 32px', textAlign: 'center', marginTop: 32,
-    }}
-  >
-    <Activity size={44} style={{ color: 'var(--accent-primary)', margin: '0 auto 16px', opacity: 0.7 }} />
-    <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>
-      Welcome to ContentCrafterzz Outreach OS
-    </h2>
-    <p style={{ fontSize: 14, color: 'var(--text-secondary)', maxWidth: 400, margin: '0 auto 24px', lineHeight: 1.6 }}>
-      Your dashboard will populate once you start finding leads. Head over to Lead Finder to discover your first batch of YouTube or Reddit prospects.
-    </p>
-    <button
-      className="btn-primary"
-      onClick={() => navigate('/leads')}
-      style={{ padding: '10px 24px', borderRadius: 6, cursor: 'pointer' }}
-    >
-      Find Your First Leads
-    </button>
-  </motion.div>
-);
 
 export default function Dashboard() {
   const { dashboardStats, activities, loadingDash, refreshDashboard } = useApp();
+  const { user } = useAuth();
   const navigate = useNavigate();
-  const feedRef = useRef(null);
   const [showPowerOverlay, setShowPowerOverlay] = useState(false);
 
-  useEffect(() => {
-    if (feedRef.current) feedRef.current.scrollTop = 0;
-  }, [activities]);
-
   const s = dashboardStats;
-  const hasData = s && (s.total_leads > 0 || s.emails_today > 0);
-  const revenueRaw = (s?.call_booked ?? 0) * (s?.average_deal_value ?? 2500);
-  const revenue = `$${formatNumber(revenueRaw)}`;
-  const emailLabel = `${s?.emails_today ?? 0}/${s?.emails_month ?? 0}`;
-  const replyRate = s?.reply_rate != null ? `${Number(s.reply_rate).toFixed(1)}%` : '-';
-  const convRate = s?.conversion_rate != null ? `${Number(s.conversion_rate).toFixed(1)}%` : '-';
+  const firstName = user?.full_name?.split(' ')[0] || 'there';
 
-  const sectionTitle = {
-    fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 600,
-    letterSpacing: '0.18em', color: 'var(--text-muted)',
-    textTransform: 'uppercase', marginBottom: 0,
-  };
+  const spark1 = s?.charts?.weekly_emails?.map(d => d.count) || [12, 18, 14, 22, 24, 20, 30, 28, 36, 40, 38, 44, 52, 48, 60];
+  const spark2 = [40, 38, 42, 36, 44, 40, 48, 44, 52, 50, 58, 54, 62, 60, 66];
+  const spark3 = s?.charts?.weekly_replies?.map(d => d.count) || [5, 6, 5, 7, 6, 8, 7, 9, 8, 10, 11, 10, 12, 13, 14];
 
-  const cardStyle = {
-    background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 8,
-  };
+  const emailsSent = formatNumber(s?.emails_month ?? 0);
+  const replyRate = s?.reply_rate != null ? `${Number(s.reply_rate).toFixed(1)}%` : '—';
+  const meetingsBooked = formatNumber(s?.call_booked ?? 0);
+  const deliverability = '98.6%';
+
+  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+  if (loadingDash) {
+    return (
+      <div className="page">
+        <div className="grid g-4" style={{ marginBottom: 24 }}>
+          {[0, 1, 2, 3].map(i => (
+            <div key={i} className="stat" style={{ height: 120, background: 'var(--surface-2)', animation: 'none' }} />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div style={{ maxWidth: 1440, margin: '0 auto' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+    <div className="page">
+      {/* Page header */}
+      <div className="page__head">
         <div>
-          <h1 style={{ fontFamily: 'var(--font-heading)', fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.03em', margin: 0 }}>
-            Dashboard
+          <div className="muted" style={{ fontSize: 11.5, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>
+            {today}
+          </div>
+          <h1 className="page__title">
+            Good morning, {firstName} — <em>your agents shipped {emailsSent} emails.</em>
           </h1>
-          <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginTop: 4, letterSpacing: '0.1em' }}>
-            OUTREACH OS — LIVE OVERVIEW
-          </p>
+          <div className="page__sub">
+            <span style={{ color: 'var(--coral)' }}>{activities.filter(a => a.type === 'reply_received').length} conversations need a human.</span>
+            {' '}Everything else is on autopilot.
+          </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button
-            onClick={refreshDashboard}
-            disabled={loadingDash}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              padding: '8px 16px', borderRadius: 6, cursor: 'pointer',
-              background: 'transparent', border: '1px solid var(--border-default)',
-              color: 'var(--text-secondary)', fontSize: 13,
-              fontFamily: 'var(--font-body)',
-            }}
-          >
-            <RefreshCw size={13} style={{ animation: loadingDash ? 'spin 1s linear infinite' : 'none' }} />
-            Refresh
-          </button>
-          <button
-            onClick={() => setShowPowerOverlay(true)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              height: 40, padding: '0 20px', borderRadius: 7, cursor: 'pointer',
-              background: 'var(--gradient-orange)', color: '#fff', border: 'none',
-              fontSize: 13, fontWeight: 700, fontFamily: 'var(--font-body)',
-              boxShadow: '0 0 20px rgba(255,69,0,0.4)', letterSpacing: '-0.01em',
-            }}
-          >
-            <Zap size={15} /> Power Email
-          </button>
+        <div className="page__actions">
+          <button className="btn btn--ghost" onClick={() => navigate('/leads')}><Icon name="plus" />Import leads</button>
+          <button className="btn btn--primary" onClick={() => setShowPowerOverlay(true)}><Icon name="rocket" size={14} />Power Email</button>
         </div>
       </div>
 
-      {/* Stat cards */}
-      {loadingDash ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 16, marginBottom: 24 }}>
-          {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
+      {/* KPI row */}
+      <div className="grid g-4">
+        <div className="stat">
+          <div className="stat__label">Total leads in DB</div>
+          <div className="stat__value stat__value--mono">{formatNumber(s?.total_leads ?? 0)}</div>
+          <div className="stat__delta stat__delta--up"><Icon name="arrowUp" size={11} />+{s?.leads_today ?? 0} today</div>
+          <div className="stat__spark"><Sparkline data={s?.charts?.weekly_leads?.map(d => d.count) || [0,1,2,1,3,2,4,3,5,4,6,5,8,7,10]} color="var(--lime)" /></div>
         </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 24 }}>
-          <StatCard icon={Users}      label="Total Leads"      value={formatNumber(s?.total_leads ?? 0)} sub="all time"            color="#FF4500" accentBorder delay={0}    />
-          <StatCard icon={UserPlus}   label="Leads Today"      value={formatNumber(s?.leads_today ?? 0)} sub="since midnight"     color="#00E5A0" accentBorder delay={0.05} />
-          <StatCard icon={Mail}       label="Emails Sent"      value={emailLabel}                        sub="today / this month" color="#00B8D4" accentBorder delay={0.1}  />
-          <StatCard icon={MailOpen}   label="Reply Rate"       value={replyRate}                         sub="last 30 days"       color="#F5A623" accentBorder delay={0.15} />
-          <StatCard icon={TrendingUp} label="Conversion"       value={convRate}                          sub="lead → call"        color="#7B61FF" accentBorder delay={0.2}  />
-          <StatCard icon={DollarSign} label="Pipeline"         value={revenue}                           sub={`${s?.call_booked ?? 0} calls`} color="#FF4500" accentBorder delay={0.25} />
+        <div className="stat">
+          <div className="stat__label">Emails sent</div>
+          <div className="stat__value stat__value--mono">{formatNumber(s?.emails_today ?? 0)}<span className="muted" style={{ fontSize: 14, fontWeight: 400 }}> today</span></div>
+          <div className="stat__delta"><Icon name="arrowR" size={11} />{formatNumber(s?.emails_month ?? 0)} this month</div>
+          <div className="stat__spark"><Sparkline data={spark1} /></div>
         </div>
-      )}
+        <div className="stat">
+          <div className="stat__label">Open rate</div>
+          <div className="stat__value">{s?.open_rate != null ? `${Number(s.open_rate).toFixed(1)}%` : '—'}</div>
+          <div className="stat__delta"><Icon name="arrowR" size={11} />reply rate {replyRate}</div>
+          <div className="stat__spark"><Sparkline data={spark2} color="var(--coral)" /></div>
+        </div>
+        <div className="stat">
+          <div className="stat__label">Pipeline value</div>
+          <div className="stat__value stat__value--mono" style={{ color: 'var(--ok)' }}>
+            ${formatNumber(s?.pipeline_value ?? 0)}
+          </div>
+          <div className="stat__delta stat__delta--up"><Icon name="arrowUp" size={11} />{meetingsBooked} calls booked</div>
+          <div className="stat__spark"><Sparkline data={[200,400,350,600,800,750,1000,1200,1100,1400,1600,1800,2000,2200,2400]} color="var(--ok)" /></div>
+        </div>
+      </div>
 
-      {!loadingDash && !hasData && <EmptyState navigate={navigate} />}
-
-      {!loadingDash && hasData && (
-        <div style={{ display: 'flex', gap: 20 }}>
-          {/* Left — Charts */}
-          <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {/* Leads chart */}
-            <div style={{ ...cardStyle, padding: '20px 24px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                <p style={sectionTitle}>LEADS FOUND — WEEKLY</p>
-                <BarChart2 size={14} style={{ color: 'var(--text-muted)' }} />
-              </div>
-              <ResponsiveContainer width="100%" height={160}>
-                <BarChart data={s?.charts?.weekly_leads ?? []} barSize={20}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" vertical={false} />
-                  <XAxis dataKey="day" tick={{ fill: '#555', fontSize: 10 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fill: '#555', fontSize: 10 }} axisLine={false} tickLine={false} width={28} />
-                  <Tooltip content={<DarkTooltip />} />
-                  <Bar dataKey="count" name="Leads" fill="#FF4500" radius={[3, 3, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+      {/* Two-column: agent activity + schedule */}
+      <div className="grid" style={{ gridTemplateColumns: '2fr 1fr', marginTop: 24 }}>
+        {/* Agent activity */}
+        <div className="card">
+          <div className="card__head">
+            <div className="row">
+              <div className="card__title">Agent activity</div>
+              <Badge kind="lime"><span className="dot dot--pulse" />Live</Badge>
             </div>
-
-            {/* Emails chart */}
-            <div style={{ ...cardStyle, padding: '20px 24px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                <p style={sectionTitle}>EMAILS SENT — WEEKLY</p>
-                <Mail size={14} style={{ color: 'var(--text-muted)' }} />
-              </div>
-              <ResponsiveContainer width="100%" height={160}>
-                <AreaChart data={s?.charts?.weekly_emails ?? []}>
-                  <defs>
-                    <linearGradient id="emailGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%"  stopColor="#00E5A0" stopOpacity={0.25} />
-                      <stop offset="95%" stopColor="#00E5A0" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" vertical={false} />
-                  <XAxis dataKey="day" tick={{ fill: '#555', fontSize: 10 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fill: '#555', fontSize: 10 }} axisLine={false} tickLine={false} width={28} />
-                  <Tooltip content={<DarkTooltip />} />
-                  <Area type="monotone" dataKey="count" name="Emails" stroke="#00E5A0" strokeWidth={2} fill="url(#emailGrad)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* Replies chart */}
-            <div style={{ ...cardStyle, padding: '20px 24px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                <p style={sectionTitle}>REPLIES — WEEKLY</p>
-                <MessageSquare size={14} style={{ color: 'var(--text-muted)' }} />
-              </div>
-              <ResponsiveContainer width="100%" height={160}>
-                <BarChart data={s?.charts?.weekly_replies ?? []} barSize={20}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" vertical={false} />
-                  <XAxis dataKey="day" tick={{ fill: '#555', fontSize: 10 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fill: '#555', fontSize: 10 }} axisLine={false} tickLine={false} width={28} />
-                  <Tooltip content={<DarkTooltip />} />
-                  <Bar dataKey="count" name="Replies" fill="#7B61FF" radius={[3, 3, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+            <div className="row">
+              <button className="btn btn--ghost btn--sm">Last 24h</button>
+              <button className="btn btn--ghost btn--sm" onClick={refreshDashboard}>Refresh</button>
             </div>
           </div>
-
-          {/* Right — Activity feed */}
-          <div style={{ ...cardStyle, width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', padding: '20px 20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-              <p style={sectionTitle}>LIVE ACTIVITY</p>
-              <button
-                onClick={refreshDashboard}
-                style={{
-                  background: 'transparent', border: 'none', cursor: 'pointer',
-                  color: 'var(--text-muted)', padding: 4,
-                }}
-              >
-                <RefreshCw size={11} style={{ animation: loadingDash ? 'spin 1s linear infinite' : 'none' }} />
-              </button>
-            </div>
-            <div ref={feedRef} style={{ flex: 1, overflowY: 'auto', maxHeight: 540 }}>
-              <AnimatePresence>
-                {activities.length === 0 ? (
-                  <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '32px 0' }}>No recent activity yet.</p>
-                ) : (
-                  activities.slice(0, 20).map((a, i) => (
-                    <ActivityItem key={a.id ?? i} activity={a} index={i} />
-                  ))
-                )}
-              </AnimatePresence>
-            </div>
+          <div className="card__body" style={{ padding: 0 }}>
+            {activities.length === 0 ? (
+              <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>
+                No activity yet. Start a campaign to see live updates here.
+              </div>
+            ) : activities.slice(0, 5).map((row, i) => {
+              const meta = activityTagMap[row.type] ?? activityTagMap.lead_found;
+              return (
+                <div key={i} style={{ display: 'flex', gap: 14, padding: '14px 16px', borderBottom: i < 4 ? '1px solid var(--line)' : 'none', background: meta.human ? 'var(--coral-soft)' : 'transparent' }}>
+                  <div className="mono" style={{ color: 'var(--text-3)', fontSize: 11, width: 56, flexShrink: 0, paddingTop: 2 }}>{formatDate(row.created_at)}</div>
+                  <div style={{ width: 8, marginTop: 6, flexShrink: 0 }}>
+                    <span className="dot" style={{ color: meta.acc, width: 6, height: 6 }} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="row" style={{ gap: 8, marginBottom: 2 }}>
+                      <span className="mono" style={{ color: meta.acc, fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.06em' }}>{meta.tag}</span>
+                    </div>
+                    <div style={{ fontSize: 13 }}>{row.message}</div>
+                    {row.channel_name && <div className="muted" style={{ fontSize: 11, marginTop: 2, fontFamily: 'var(--f-mono)' }}>{row.channel_name}</div>}
+                  </div>
+                  {meta.human && (
+                    <button className="btn btn--sm btn--coral" style={{ alignSelf: 'center' }} onClick={() => navigate('/email')}>
+                      Reply <Icon name="arrowR" size={11} />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
-      )}
 
-      {loadingDash && (
-        <div style={{ display: 'flex', gap: 20 }}>
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {[160, 160, 160].map((h, i) => (
-              <div key={i} className="skeleton" style={{ height: h + 60, borderRadius: 8, background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }} />
+        {/* Quick stats */}
+        <div className="card">
+          <div className="card__head">
+            <div className="card__title">Pipeline at a glance</div>
+            <button className="btn btn--ghost btn--sm" onClick={() => navigate('/crm')}>View CRM</button>
+          </div>
+          <div className="card__body" style={{ padding: 0 }}>
+            {s?.stage_distribution && Object.entries(s.stage_distribution).filter(([, v]) => v > 0).map(([stage, count], i, arr) => {
+              const stageLabels = { new_lead: 'New Lead', studying: 'Studying', pitch_ready: 'Pitch Ready', email_sent: 'Email Sent', replied: 'Replied', call_booked: 'Call Booked', closed: 'Closed', not_interested: 'Not Interested' };
+              const stageColors = { new_lead: 'var(--text-4)', studying: 'var(--sky)', pitch_ready: 'var(--violet)', email_sent: 'var(--lime)', replied: 'var(--coral)', call_booked: 'var(--ok)', closed: 'var(--ok)', not_interested: 'var(--bad)' };
+              return (
+                <div key={stage} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: i < arr.length - 1 ? '1px solid var(--line)' : 'none' }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: stageColors[stage] || 'var(--text-4)', flexShrink: 0 }} />
+                  <div style={{ flex: 1, fontSize: 12.5 }}>{stageLabels[stage] || stage}</div>
+                  <span className="mono" style={{ fontSize: 12 }}>{count}</span>
+                </div>
+              );
+            })}
+            {(!s?.stage_distribution || Object.values(s.stage_distribution).every(v => v === 0)) && (
+              <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--text-3)', fontSize: 12 }}>
+                No leads in pipeline yet.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom row: Inbox + Stats */}
+      <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', marginTop: 24 }}>
+        <div className="card">
+          <div className="card__head">
+            <div className="row">
+              <div className="card__title">Inbox needs attention</div>
+              {activities.filter(a => a.type === 'reply_received').length > 0 && (
+                <Badge kind="coral"><span className="dot dot--pulse-coral" />{activities.filter(a => a.type === 'reply_received').length} unread</Badge>
+              )}
+            </div>
+            <button className="btn btn--ghost btn--sm" onClick={() => navigate('/email')}>View inbox <Icon name="chev" size={11} /></button>
+          </div>
+          <div className="card__body" style={{ padding: 0 }}>
+            {activities.filter(a => a.type === 'reply_received').length === 0 ? (
+              <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--text-3)', fontSize: 12 }}>
+                All caught up. No pending replies.
+              </div>
+            ) : activities.filter(a => a.type === 'reply_received').slice(0, 3).map((row, i, arr) => (
+              <div key={i} style={{ display: 'flex', gap: 12, padding: 14, borderBottom: i < arr.length - 1 ? '1px solid var(--line)' : 'none' }}>
+                <Avatar name={row.channel_name || 'Unknown'} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="row" style={{ justifyContent: 'space-between', marginBottom: 2 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500 }}>{row.channel_name || 'Creator'}</div>
+                    <Badge kind="coral">replied</Badge>
+                  </div>
+                  <div style={{ fontSize: 12.5, color: 'var(--text-2)' }}>{row.message}</div>
+                </div>
+              </div>
             ))}
           </div>
-          <div className="skeleton" style={{ width: 300, borderRadius: 8, background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }} />
         </div>
-      )}
 
-      {!loadingDash && hasData && <StageDistribution distribution={s?.stage_distribution} />}
+        <div className="card">
+          <div className="card__head">
+            <div className="card__title">Stats overview</div>
+            <Badge kind="ok"><Icon name="check" size={11} />Live data</Badge>
+          </div>
+          <div className="card__body">
+            <div className="grid g-2" style={{ gap: 16 }}>
+              {[
+                { l: 'Total leads', v: formatNumber(s?.total_leads ?? 0) },
+                { l: 'Leads today',  v: formatNumber(s?.leads_today ?? 0) },
+                { l: 'Emails today', v: formatNumber(s?.emails_today ?? 0) },
+                { l: 'Conversion',   v: s?.conversion_rate != null ? `${Number(s.conversion_rate).toFixed(1)}%` : '—' },
+              ].map((m, i) => (
+                <div key={i} style={{ padding: 12, border: '1px solid var(--line)', borderRadius: 'var(--r)', background: 'var(--bg-2)' }}>
+                  <div className="mono muted" style={{ fontSize: 10.5, marginBottom: 6 }}>{m.l.toUpperCase()}</div>
+                  <div className="mono" style={{ fontSize: 20, letterSpacing: '-0.02em' }}>{m.v}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
 
       {showPowerOverlay && (
         <PowerSendOverlay maxLeads={100} onClose={() => { setShowPowerOverlay(false); refreshDashboard(); }} />

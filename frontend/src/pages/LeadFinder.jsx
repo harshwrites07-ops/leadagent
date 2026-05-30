@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import Icon from '../components/ui/Icon';
@@ -61,22 +61,12 @@ export default function LeadFinder() {
   const [ytSearched, setYtSearched] = useState(false);
   const [quotaError, setQuotaError] = useState(false);
 
-  // Reddit
-  const [rdKeyword, setRdKeyword] = useState('');
-  const [rdSubreddits, setRdSubreddits] = useState(new Set(DEFAULT_SUBREDDITS));
-  const [rdLoading, setRdLoading] = useState(false);
-  const [rdLeads, setRdLeads] = useState([]);
-  const [rdSelected, setRdSelected] = useState(new Set());
-
-  // Viral
-  const [viralKeyword, setViralKeyword] = useState('');
-  const [viralLoading, setViralLoading] = useState(false);
-  const [viralLeads, setViralLeads] = useState([]);
-
-  // Competitor
-  const [compForm, setCompForm] = useState({ competitor: '', keywords: '' });
-  const [compLoading, setCompLoading] = useState(false);
-  const [compLeads, setCompLeads] = useState([]);
+  // CSV Upload
+  const [csvFile, setCsvFile] = useState(null);
+  const [csvRows, setCsvRows] = useState([]);
+  const [csvImporting, setCsvImporting] = useState(false);
+  const [csvDone, setCsvDone] = useState(null);
+  const csvInputRef = useRef(null);
 
   // PowerMode polling
   useEffect(() => {
@@ -140,6 +130,50 @@ export default function LeadFinder() {
     } catch {}
   };
 
+  const parseCsv = text => {
+    const lines = text.trim().split(/\r?\n/).filter(l => l.trim());
+    if (lines.length < 2) return [];
+    const headers = lines[0].split(',').map(h => h.replace(/^"|"$/g, '').trim().toLowerCase().replace(/\s+/g, '_'));
+    return lines.slice(1).map(line => {
+      const vals = line.match(/(".*?"|[^,]+|(?<=,)(?=,)|(?<=,)$|^(?=,))/g) || line.split(',');
+      const row = {};
+      headers.forEach((h, i) => { row[h] = (vals[i] || '').replace(/^"|"$/g, '').trim(); });
+      return row;
+    }).filter(r => r.channel_name || r.name || r.channelname);
+  };
+
+  const handleCsvFile = file => {
+    if (!file) return;
+    setCsvFile(file);
+    setCsvDone(null);
+    const reader = new FileReader();
+    reader.onload = e => {
+      const rows = parseCsv(e.target.result);
+      setCsvRows(rows.map(r => ({
+        channel_name: r.channel_name || r.name || r.channelname || '',
+        email: r.email || r.email_address || '',
+        subscriber_count: parseInt(r.subscriber_count || r.subscribers || r.subs || '0') || 0,
+        channel_url: r.channel_url || r.url || r.channel_handle || '',
+        niche: r.niche || r.category || '',
+      })));
+    };
+    reader.readAsText(file);
+  };
+
+  const handleCsvImport = async () => {
+    if (!csvRows.length) return;
+    setCsvImporting(true);
+    try {
+      const { data } = await api.post('/leads/import', { leads: csvRows });
+      setCsvDone(data);
+      toast.success(`Imported ${data.added} leads!`);
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Import failed');
+    } finally {
+      setCsvImporting(false);
+    }
+  };
+
   // YouTube search (streaming)
   const handleYtSearch = async e => {
     e.preventDefault();
@@ -198,72 +232,15 @@ export default function LeadFinder() {
     }
   };
 
-  const handleRdSearch = async e => {
-    e.preventDefault();
-    if (!rdKeyword.trim()) { toast.error('Enter a keyword first'); return; }
-    setRdLoading(true); setRdLeads([]); setRdSelected(new Set());
-    try {
-      const { data } = await api.post('/leads/scrape/reddit', { keyword: rdKeyword, subreddits: [...rdSubreddits] });
-      setRdLeads(data.leads ?? []);
-      toast.success(`Found ${data.leads?.length ?? 0} Reddit leads!`);
-    } catch (err) { toast.error(err.message ?? 'Scrape failed'); }
-    finally { setRdLoading(false); }
-  };
-
-  const handleViralDetect = async e => {
-    e.preventDefault();
-    if (!viralKeyword.trim()) { toast.error('Enter a niche keyword'); return; }
-    setViralLoading(true); setViralLeads([]);
-    try {
-      const { data } = await api.post('/scraper/viral-detector', { keyword: viralKeyword });
-      setViralLeads(data.viral_leads ?? []);
-      toast.success(`Found ${data.viral_leads?.length ?? 0} viral opportunities!`);
-    } catch (err) { toast.error(err.message ?? 'Detection failed'); }
-    finally { setViralLoading(false); }
-  };
-
-  const handleCompSpy = async e => {
-    e.preventDefault();
-    if (!compForm.competitor.trim()) { toast.error('Enter a competitor name'); return; }
-    setCompLoading(true); setCompLeads([]);
-    try {
-      const { data } = await api.post('/scraper/competitor-spy', {
-        competitor_name: compForm.competitor,
-        competitor_keywords: compForm.keywords,
-      });
-      setCompLeads(data.leads ?? []);
-      toast.success(`Found ${data.leads?.length ?? 0} competitor leads!`);
-    } catch (err) { toast.error(err.message ?? 'Spy failed'); }
-    finally { setCompLoading(false); }
-  };
-
-  const currentLeads = tab === 'youtube' ? ytLeads
-    : tab === 'reddit' ? rdLeads
-    : tab === 'viral' ? viralLeads
-    : compLeads;
-
-  const currentSelected = tab === 'youtube' ? ytSelected : tab === 'reddit' ? rdSelected : new Set();
-
-  const toggleSelected = id => {
-    if (tab === 'youtube') setYtSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
-    else if (tab === 'reddit') setRdSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  };
-
-  const isLoading = tab === 'youtube' ? ytLoading
-    : tab === 'reddit' ? rdLoading
-    : tab === 'viral' ? viralLoading
-    : compLoading;
+  const currentLeads = ytLeads;
+  const currentSelected = ytSelected;
+  const toggleSelected = id => setYtSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const isLoading = ytLoading;
 
   const toggleNiche = id => {
     const n = new Set(selectedNiches);
     n.has(id) ? n.delete(id) : n.add(id);
     setSelectedNiches(n);
-  };
-
-  const toggleRdSub = sub => {
-    const n = new Set(rdSubreddits);
-    n.has(sub) ? n.delete(sub) : n.add(sub);
-    setRdSubreddits(n);
   };
 
   return (
@@ -289,11 +266,8 @@ export default function LeadFinder() {
       {/* Source tabs */}
       <div className="tabs" style={{ marginBottom: 20 }}>
         {[
-          { id: 'youtube',    label: 'YouTube',    sub: 'channels + Shorts' },
-          { id: 'reddit',     label: 'Reddit',     sub: 'authors + subreddits' },
-          { id: 'viral',      label: 'Viral',      sub: 'trending in your niche' },
-          { id: 'competitor', label: 'Competitor', sub: 'who they sponsor' },
-          { id: 'upload',     label: 'Upload CSV', sub: 'enrich your list' },
+          { id: 'youtube', label: 'YouTube',    sub: 'channels + Shorts' },
+          { id: 'upload',  label: 'Upload CSV', sub: 'import your own list' },
         ].map(t => (
           <div key={t.id} className={`tab ${tab === t.id ? 'is-active' : ''}`} onClick={() => setTab(t.id)} style={{ padding: '10px 16px' }}>
             <div style={{ fontWeight: 500 }}>{t.label}</div>
@@ -507,85 +481,6 @@ export default function LeadFinder() {
         </>
       )}
 
-      {/* ── Reddit ── */}
-      {tab === 'reddit' && (
-        <div className="pm" style={{ marginBottom: 20 }}>
-          <div className="pm__head">
-            <div className="pm__icon"><Icon name="globe" size={18} /></div>
-            <div style={{ flex: 1 }}>
-              <div className="pm__title">Reddit Scraper</div>
-              <div className="pm__sub">Find prospects posting about their pain points in relevant subreddits.</div>
-            </div>
-          </div>
-          <form onSubmit={handleRdSearch}>
-            <div className="field" style={{ marginBottom: 16, maxWidth: 420 }}>
-              <div className="field__label">Keyword *</div>
-              <input className="input" placeholder="e.g. struggling with email marketing" value={rdKeyword} onChange={e => setRdKeyword(e.target.value)} required />
-            </div>
-            <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Subreddits</div>
-            <div className="pm__niches">
-              {DEFAULT_SUBREDDITS.map(sub => (
-                <button key={sub} type="button" className={`pm__niche ${rdSubreddits.has(sub) ? 'is-active' : ''}`} onClick={() => toggleRdSub(sub)}>
-                  r/{sub}
-                </button>
-              ))}
-            </div>
-            <button className="pm__cta" type="submit" disabled={rdLoading}>
-              {rdLoading
-                ? <><span className="dot dot--pulse" style={{ background: '#0a0a0c', width: 8, height: 8 }} /> Scanning Reddit...</>
-                : <><Icon name="search" size={16} />Find Reddit Leads</>
-              }
-            </button>
-          </form>
-        </div>
-      )}
-
-      {/* ── Viral ── */}
-      {tab === 'viral' && (
-        <div className="pm" style={{ marginBottom: 20 }}>
-          <div className="pm__head">
-            <div className="pm__icon"><Icon name="flame" size={18} /></div>
-            <div style={{ flex: 1 }}>
-              <div className="pm__title">Viral Detector</div>
-              <div className="pm__sub">Identifies channels with a recent video performing far above their average.</div>
-            </div>
-          </div>
-          <form onSubmit={handleViralDetect}>
-            <div className="grid" style={{ gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'flex-end' }}>
-              <div className="field">
-                <div className="field__label">Niche keyword *</div>
-                <input className="input" placeholder="e.g. dropshipping" value={viralKeyword} onChange={e => setViralKeyword(e.target.value)} required />
-              </div>
-              <button className="pm__cta" type="submit" disabled={viralLoading} style={{ marginTop: 0, flexShrink: 0 }}>
-                {viralLoading ? 'Detecting...' : <><Icon name="bolt" size={16} />Detect Viral</>}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* ── Competitor ── */}
-      {tab === 'competitor' && (
-        <div className="pm" style={{ marginBottom: 20 }}>
-          <div className="pm__head">
-            <div className="pm__icon"><Icon name="eye" size={18} /></div>
-            <div style={{ flex: 1 }}>
-              <div className="pm__title">Competitor Spy</div>
-              <div className="pm__sub">Find channels in your competitor's audience you haven't approached yet.</div>
-            </div>
-          </div>
-          <form onSubmit={handleCompSpy}>
-            <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
-              <div className="field"><div className="field__label">Competitor Name / Channel *</div><input className="input" value={compForm.competitor} onChange={e => setCompForm(f => ({ ...f, competitor: e.target.value }))} placeholder="e.g. vidIQ" required /></div>
-              <div className="field"><div className="field__label">Keywords (comma-separated, optional)</div><input className="input" value={compForm.keywords} onChange={e => setCompForm(f => ({ ...f, keywords: e.target.value }))} placeholder="e.g. youtube growth, video editing" /></div>
-            </div>
-            <button className="pm__cta" type="submit" disabled={compLoading}>
-              {compLoading ? 'Scanning...' : <><Icon name="search" size={16} />Spy</>}
-            </button>
-          </form>
-        </div>
-      )}
-
       {/* ── Upload CSV ── */}
       {tab === 'upload' && (
         <div className="pm" style={{ marginBottom: 20 }}>
@@ -593,14 +488,77 @@ export default function LeadFinder() {
             <div className="pm__icon"><Icon name="upload" size={18} /></div>
             <div style={{ flex: 1 }}>
               <div className="pm__title">Upload CSV</div>
-              <div className="pm__sub">Import your own lead list and let the agent enrich, score, and qualify each one.</div>
+              <div className="pm__sub">Import your own list. Required column: <span className="mono" style={{ fontSize: 11 }}>channel_name</span>. Optional: <span className="mono" style={{ fontSize: 11 }}>email, subscriber_count, channel_url, niche</span></div>
             </div>
           </div>
-          <div style={{ padding: '32px', textAlign: 'center', border: '2px dashed var(--line-2)', borderRadius: 'var(--r)', marginTop: 12 }}>
-            <Icon name="upload" size={24} style={{ color: 'var(--text-3)', marginBottom: 10, display: 'block', margin: '0 auto 10px' }} />
-            <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 4 }}>Drag & drop a CSV or click to browse</div>
-            <div className="muted" style={{ fontSize: 11 }}>Required columns: channel_name, channel_url</div>
-          </div>
+
+          <input ref={csvInputRef} type="file" accept=".csv,text/csv" style={{ display: 'none' }}
+            onChange={e => handleCsvFile(e.target.files[0])} />
+
+          {/* Drop zone */}
+          {!csvRows.length && !csvDone && (
+            <div
+              onClick={() => csvInputRef.current?.click()}
+              onDragOver={e => e.preventDefault()}
+              onDrop={e => { e.preventDefault(); handleCsvFile(e.dataTransfer.files[0]); }}
+              style={{ padding: '40px', textAlign: 'center', border: '2px dashed var(--line)', borderRadius: 'var(--r)', marginTop: 12, cursor: 'pointer', transition: 'border-color .2s' }}
+              onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--lime)'}
+              onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--line)'}
+            >
+              <Icon name="upload" size={28} style={{ color: 'var(--text-3)', display: 'block', margin: '0 auto 10px' }} />
+              <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>Drag & drop a CSV or click to browse</div>
+              <div className="muted" style={{ fontSize: 11 }}>Required: channel_name · Optional: email, subscriber_count, channel_url, niche</div>
+            </div>
+          )}
+
+          {/* Preview */}
+          {csvRows.length > 0 && !csvDone && (
+            <>
+              <div style={{ marginTop: 14, marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 13 }}><strong style={{ color: 'var(--lime)' }}>{csvRows.length}</strong> leads ready to import · {csvRows.filter(r => r.email).length} have emails</span>
+                <button className="btn btn--ghost btn--sm" onClick={() => { setCsvRows([]); setCsvFile(null); }}>
+                  <Icon name="x" size={11} />Clear
+                </button>
+              </div>
+              <div style={{ maxHeight: 240, overflowY: 'auto', border: '1px solid var(--line)', borderRadius: 'var(--r)', marginBottom: 14 }}>
+                <table className="tbl">
+                  <thead>
+                    <tr><th>Channel name</th><th>Email</th><th>Subs</th><th>Niche</th></tr>
+                  </thead>
+                  <tbody>
+                    {csvRows.slice(0, 50).map((r, i) => (
+                      <tr key={i}>
+                        <td style={{ fontSize: 12.5 }}>{r.channel_name || '—'}</td>
+                        <td className="mono" style={{ fontSize: 11, color: r.email ? 'var(--ok)' : 'var(--text-3)' }}>{r.email || '—'}</td>
+                        <td className="num" style={{ fontSize: 12 }}>{r.subscriber_count ? r.subscriber_count.toLocaleString() : '—'}</td>
+                        <td style={{ fontSize: 12 }}>{r.niche || '—'}</td>
+                      </tr>
+                    ))}
+                    {csvRows.length > 50 && <tr><td colSpan={4} className="muted" style={{ textAlign: 'center', fontSize: 12 }}>+{csvRows.length - 50} more</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+              <button className="pm__cta" onClick={handleCsvImport} disabled={csvImporting}>
+                {csvImporting
+                  ? <><span className="dot dot--pulse" style={{ background: '#0a0a0c', width: 8, height: 8 }} /> Importing...</>
+                  : <><Icon name="upload" size={16} />Import {csvRows.length} leads to CRM</>
+                }
+              </button>
+            </>
+          )}
+
+          {/* Done state */}
+          {csvDone && (
+            <div style={{ marginTop: 14, padding: '14px 16px', background: 'var(--lime-soft)', border: '1px solid var(--lime-border)', borderRadius: 'var(--r)' }}>
+              <div style={{ fontSize: 13, color: 'var(--lime)', fontWeight: 600, marginBottom: 4 }}>
+                Import complete — {csvDone.added} leads added to CRM
+              </div>
+              <div className="muted" style={{ fontSize: 12 }}>{csvDone.skipped} skipped (duplicates or missing name)</div>
+              <button className="btn btn--ghost btn--sm" style={{ marginTop: 8 }} onClick={() => { setCsvRows([]); setCsvFile(null); setCsvDone(null); }}>
+                Import another file
+              </button>
+            </div>
+          )}
         </div>
       )}
 

@@ -1,429 +1,73 @@
-﻿﻿import { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import {
-  Search, Zap, Copy, Check, ChevronDown, ChevronRight,
-  MailPlus, Edit, Users, MessageSquare, CheckCircle,
-  Loader, AlertCircle, RefreshCw, BookOpen, Target,
-  Mail, Hash, Star,
-} from 'lucide-react';
-import api, { formatNumber, tempLabel, tempClass } from '../utils/api';
+import Icon from '../components/ui/Icon';
+import api, { formatNumber } from '../utils/api';
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const STEPS = [
-  { key: 'deep_study', label: 'Deep Study', icon: BookOpen, desc: 'Analyzing channel & pain points' },
-  { key: 'custom_offer', label: 'Custom Offer', icon: Target, desc: 'Crafting tailored value prop' },
-  { key: 'cold_email', label: 'Cold Email', icon: Mail, desc: 'Writing personalized email' },
-  { key: 'reddit_dm', label: 'Reddit DM', icon: MessageSquare, desc: 'Generating Reddit message' },
-  { key: 'subject_variants', label: 'Subject Variants', icon: Hash, desc: 'Creating A/B subject lines' },
+const GEN_STEPS = [
+  { key: 'deep_study',       label: 'Brief',    n: 1 },
+  { key: 'custom_offer',     label: 'Research', n: 2 },
+  { key: 'cold_email',       label: 'Variants', n: 3 },
+  { key: 'subject_variants', label: 'Sequence', n: 4 },
+  { key: 'done',             label: 'Send',     n: 5 },
 ];
 
-// ---------------------------------------------------------------------------
-// Copy button with checkmark feedback
-// ---------------------------------------------------------------------------
-const CopyButton = ({ text, className = '' }) => {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      toast.error('Copy failed');
-    }
+function normalizePitch(raw) {
+  if (!raw) return null;
+  const subjects = Array.isArray(raw.subject_variants)
+    ? raw.subject_variants
+    : (() => { try { return JSON.parse(raw.subject_variants || '[]'); } catch { return []; } })();
+  return {
+    ...raw,
+    subject_variants: subjects,
+    email_subject: raw.email_subject || '',
+    cold_email_body: raw.cold_email || '',
   };
+}
 
-  return (
-    <button
-      onClick={handleCopy}
-      className={`btn btn-ghost text-xs py-1 px-2 flex items-center gap-1 transition-colors ${className}`}
-    >
-      {copied ? (
-        <><Check size={12} className="text-green-400" /> Copied</>
-      ) : (
-        <><Copy size={12} /> Copy</>
-      )}
-    </button>
-  );
-};
-
-// ---------------------------------------------------------------------------
-// Collapsible section card
-// ---------------------------------------------------------------------------
-const SectionCard = ({ title, icon: Icon, iconColor = 'text-brand-400', defaultOpen = true, actions, children }) => {
-  const [open, setOpen] = useState(defaultOpen);
-
-  return (
-    <div className="card mb-3">
-      <button
-        className="flex items-center justify-between w-full"
-        onClick={() => setOpen(o => !o)}
-      >
-        <div className="flex items-center gap-2">
-          <Icon size={16} className={iconColor} />
-          <span className="text-slate-200 font-semibold text-sm">{title}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          {actions && <div onClick={e => e.stopPropagation()}>{actions}</div>}
-          {open ? <ChevronDown size={15} className="text-slate-500" /> : <ChevronRight size={15} className="text-slate-500" />}
-        </div>
-      </button>
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden"
-          >
-            <div className="mt-3 border-t border-dark-700 pt-3">{children}</div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-};
-
-// ---------------------------------------------------------------------------
-// Step progress indicator
-// ---------------------------------------------------------------------------
-const StepIndicator = ({ steps, currentStep, completedSteps }) => (
-  <div className="flex items-center gap-0 mb-6">
-    {STEPS.map((step, idx) => {
-      const done = completedSteps.has(step.key);
-      const active = currentStep === step.key;
-      const Icon = step.icon;
-      return (
-        <div key={step.key} className="flex items-center">
-          <div className="flex flex-col items-center">
-            <div
-              className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300 ${
-                done
-                  ? 'bg-green-500/20 border-2 border-green-500'
-                  : active
-                  ? 'bg-brand-600/20 border-2 border-brand-600 animate-pulse'
-                  : 'bg-dark-700 border-2 border-dark-600'
-              }`}
-            >
-              {done ? (
-                <Check size={14} className="text-green-400" />
-              ) : active ? (
-                <Loader size={13} className="text-brand-400 animate-spin" />
-              ) : (
-                <Icon size={13} className="text-slate-500" />
-              )}
-            </div>
-            <span className={`text-xs mt-1 whitespace-nowrap ${active ? 'text-brand-400' : done ? 'text-green-400' : 'text-slate-600'}`}>
-              {step.label}
-            </span>
-          </div>
-          {idx < STEPS.length - 1 && (
-            <div className={`h-0.5 w-8 mx-1 mb-5 transition-all duration-300 ${done ? 'bg-green-500' : 'bg-dark-600'}`} />
-          )}
-        </div>
-      );
-    })}
-  </div>
-);
-
-// ---------------------------------------------------------------------------
-// Pitch score badge
-// ---------------------------------------------------------------------------
-const PitchScoreBadge = ({ score }) => {
-  if (score == null) return null;
-  const n = Number(score);
-  const color = n >= 8 ? 'text-green-400 bg-green-400/10 border-green-500/30'
-    : n >= 6 ? 'text-yellow-400 bg-yellow-400/10 border-yellow-500/30'
-    : 'text-red-400 bg-red-400/10 border-red-500/30';
-  return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-xs font-bold ${color}`}>
-      <Star size={11} />
-      {n}/10
-    </span>
-  );
-};
-
-// ---------------------------------------------------------------------------
-// Lead list item in left panel
-// ---------------------------------------------------------------------------
-const LeadListItem = ({ lead, selected, onClick }) => (
-  <button
-    onClick={onClick}
-    className={`w-full text-left px-3 py-2.5 rounded-lg transition-all duration-150 flex items-center gap-3 ${
-      selected ? 'bg-brand-600/20 border border-brand-600/40' : 'hover:bg-dark-700 border border-transparent'
-    }`}
-  >
-    <div className="flex-1 min-w-0">
-      <div className="flex items-center gap-2 mb-0.5">
-        <span className="text-slate-200 text-sm font-medium truncate">{lead.channel_name}</span>
-        {lead.pitch_id && <Check size={12} className="text-green-400 shrink-0" title="Pitch exists" />}
-      </div>
-      <div className="flex items-center gap-2">
-        <span className="text-slate-500 text-xs">{formatNumber(lead.subscriber_count ?? 0)} subs</span>
-        <span className={`badge text-xs ${tempClass(lead.temperature)}`}>{tempLabel(lead.temperature)}</span>
-      </div>
-    </div>
-    <ChevronRight size={13} className={`shrink-0 ${selected ? 'text-brand-400' : 'text-slate-600'}`} />
-  </button>
-);
-
-// ---------------------------------------------------------------------------
-// Empty state (no lead selected)
-// ---------------------------------------------------------------------------
-const NoLeadSelected = () => (
-  <motion.div
-    initial={{ opacity: 0 }}
-    animate={{ opacity: 1 }}
-    className="flex flex-col items-center justify-center h-full py-24 text-center"
-  >
-    <div className="w-16 h-16 rounded-2xl bg-dark-700 flex items-center justify-center mb-4">
-      <Zap size={28} className="text-brand-400 opacity-60" />
-    </div>
-    <h3 className="text-white font-semibold text-lg mb-2">Select a Lead</h3>
-    <p className="text-slate-400 text-sm max-w-xs">
-      Choose a lead from the left panel to generate a fully personalized AI pitch. Each pitch includes
-      deep study, a custom offer, cold email, and subject line variants.
-    </p>
-  </motion.div>
-);
-
-// ---------------------------------------------------------------------------
-// Generation loading state
-// ---------------------------------------------------------------------------
-const GeneratingState = ({ currentStep, completedSteps }) => (
-  <motion.div
-    initial={{ opacity: 0 }}
-    animate={{ opacity: 1 }}
-    className="py-8"
-  >
-    <StepIndicator steps={STEPS} currentStep={currentStep} completedSteps={completedSteps} />
-    <div className="card bg-dark-800 text-center py-10">
-      <Loader size={32} className="text-brand-400 mx-auto mb-3 animate-spin" />
-      <p className="text-white font-semibold">
-        {STEPS.find(s => s.key === currentStep)?.desc ?? 'Generating pitch...'}
-      </p>
-      <p className="text-slate-400 text-sm mt-1">This usually takes 15–45 seconds</p>
-    </div>
-  </motion.div>
-);
-
-// ---------------------------------------------------------------------------
-// Pitch content panels
-// ---------------------------------------------------------------------------
-const PitchContent = ({ pitch, lead, onRescore, onAddToQueue, onEditLead }) => {
-  const [emailSubject, setEmailSubject] = useState(pitch?.cold_email?.subject ?? '');
-  const [emailBody, setEmailBody] = useState(pitch?.cold_email?.body ?? '');
-  const [rescoring, setRescoring] = useState(false);
-  const [pitchScore, setPitchScore] = useState(pitch?.cold_email?.pitch_score);
-  const [pitchFeedback, setPitchFeedback] = useState(pitch?.cold_email?.pitch_feedback ?? '');
-
-  useEffect(() => {
-    setEmailSubject(pitch?.cold_email?.subject ?? '');
-    setEmailBody(pitch?.cold_email?.body ?? '');
-    setPitchScore(pitch?.cold_email?.pitch_score);
-    setPitchFeedback(pitch?.cold_email?.pitch_feedback ?? '');
-  }, [pitch]);
-
-  const handleRescore = async () => {
-    setRescoring(true);
-    try {
-      const { data } = await api.post(`/pitches/${pitch.id}/rescore`, { body: emailBody });
-      setPitchScore(data.pitch_score);
-      setPitchFeedback(data.pitch_feedback ?? '');
-      toast.success('Pitch rescored!');
-    } catch (err) {
-      toast.error(err.message || 'Rescore failed');
-    } finally {
-      setRescoring(false);
-    }
-  };
-
-  const subjectVariants = pitch?.cold_email?.subject_variants ?? [];
-  const completedSteps = new Set(STEPS.map(s => s.key));
-
-  return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-      <StepIndicator steps={STEPS} currentStep={null} completedSteps={completedSteps} />
-
-      {/* Deep Study */}
-      <SectionCard
-        title="Deep Study"
-        icon={BookOpen}
-        iconColor="text-purple-400"
-        actions={<CopyButton text={pitch?.deep_study ?? ''} />}
-      >
-        <div className="text-slate-300 text-sm leading-relaxed whitespace-pre-wrap">
-          {pitch?.deep_study ?? <span className="text-slate-500 italic">No study data available.</span>}
-        </div>
-      </SectionCard>
-
-      {/* Custom Offer */}
-      <SectionCard
-        title="Custom Offer"
-        icon={Target}
-        iconColor="text-blue-400"
-        actions={<CopyButton text={pitch?.custom_offer ?? ''} />}
-      >
-        <div className="text-slate-300 text-sm leading-relaxed whitespace-pre-wrap">
-          {pitch?.custom_offer ?? <span className="text-slate-500 italic">No offer generated.</span>}
-        </div>
-      </SectionCard>
-
-      {/* Cold Email */}
-      <SectionCard
-        title="Cold Email"
-        icon={Mail}
-        iconColor="text-brand-400"
-        actions={
-          <div className="flex items-center gap-2">
-            <PitchScoreBadge score={pitchScore} />
-            <CopyButton text={`Subject: ${emailSubject}\n\n${emailBody}`} />
-          </div>
-        }
-      >
-        {/* Subject line */}
-        <div className="mb-3">
-          <label className="label text-xs mb-1">Subject Line</label>
-          <input
-            className="input text-sm"
-            value={emailSubject}
-            onChange={e => setEmailSubject(e.target.value)}
-          />
-        </div>
-
-        {/* Body */}
-        <div className="mb-3">
-          <label className="label text-xs mb-1">Email Body</label>
-          <textarea
-            className="input text-sm resize-none"
-            rows={10}
-            value={emailBody}
-            onChange={e => setEmailBody(e.target.value)}
-          />
-        </div>
-
-        {/* Score feedback */}
-        {pitchFeedback && (
-          <div className="mb-3 bg-dark-800 rounded-lg p-3 border border-dark-600">
-            <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">AI Feedback</p>
-            <p className="text-slate-300 text-sm">{pitchFeedback}</p>
-          </div>
-        )}
-
-        {/* Rescore */}
-        <div className="flex items-center gap-2 mb-4">
-          <button
-            onClick={handleRescore}
-            disabled={rescoring}
-            className="btn btn-secondary text-xs flex items-center gap-1 py-1.5 px-3"
-          >
-            {rescoring ? <Loader size={11} className="animate-spin" /> : <RefreshCw size={11} />}
-            Rescore
-          </button>
-          {pitchScore != null && <PitchScoreBadge score={pitchScore} />}
-        </div>
-
-        {/* Subject variants */}
-        {subjectVariants.length > 0 && (
-          <div>
-            <p className="label text-xs mb-2">Subject Line Variants — click to use</p>
-            <div className="flex flex-wrap gap-2">
-              {subjectVariants.map((v, i) => (
-                <button
-                  key={i}
-                  onClick={() => setEmailSubject(v)}
-                  className={`text-xs px-3 py-1.5 rounded-full border transition-all ${
-                    emailSubject === v
-                      ? 'bg-brand-600/20 border-brand-600 text-brand-400'
-                      : 'bg-dark-700 border-dark-600 text-slate-400 hover:text-slate-200 hover:border-dark-500'
-                  }`}
-                >
-                  {v}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </SectionCard>
-
-      {/* Reddit DM — only if reddit lead */}
-      {(lead?.source === 'reddit' || pitch?.reddit_dm) && (
-        <SectionCard
-          title="Reddit DM"
-          icon={MessageSquare}
-          iconColor="text-orange-400"
-          actions={<CopyButton text={pitch?.reddit_dm ?? ''} />}
-        >
-          <div className="text-slate-300 text-sm leading-relaxed whitespace-pre-wrap">
-            {pitch?.reddit_dm ?? <span className="text-slate-500 italic">No Reddit DM generated.</span>}
-          </div>
-        </SectionCard>
-      )}
-
-      {/* Actions row */}
-      <div className="flex items-center gap-3 pt-2 border-t border-dark-700 mt-4">
-        <button
-          onClick={() => onAddToQueue(lead, { subject: emailSubject, body: emailBody })}
-          className="btn btn-primary flex items-center gap-2 text-sm"
-        >
-          <MailPlus size={15} />
-          Add to Email Queue
-        </button>
-        <button
-          onClick={() => onEditLead(lead)}
-          className="btn btn-secondary flex items-center gap-2 text-sm"
-        >
-          <Edit size={15} />
-          Edit Lead
-        </button>
-      </div>
-    </motion.div>
-  );
-};
-
-// ---------------------------------------------------------------------------
-// Main page
-// ---------------------------------------------------------------------------
 export default function PitchGenerator() {
   const navigate = useNavigate();
 
-  // Lead list state
-  const [leadSearch, setLeadSearch] = useState('');
+  // Leads
   const [leads, setLeads] = useState([]);
   const [leadsLoading, setLeadsLoading] = useState(true);
-
-  // Selected lead
+  const [leadSearch, setLeadSearch] = useState('');
   const [selectedLead, setSelectedLead] = useState(null);
-  const [existingPitch, setExistingPitch] = useState(null);
+  const [showLeadPicker, setShowLeadPicker] = useState(true);
 
-  // Generation state
+  // Multi-select bulk mode
+  const [selectedLeads, setSelectedLeads] = useState(new Set());
+  const [timeGap, setTimeGap] = useState(60);
+  const [bulkRunning, setBulkRunning] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0, done: false, action: '' });
+  const [bulkResults, setBulkResults] = useState([]);
+
+  // Pitch (single-lead mode)
+  const [pitch, setPitch] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [currentStep, setCurrentStep] = useState(null);
   const [completedSteps, setCompletedSteps] = useState(new Set());
 
-  // Load leads on mount
+  // Editing
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailBody, setEmailBody] = useState('');
+  const [selectedVariant, setSelectedVariant] = useState(0);
+  const [selectedSubj, setSelectedSubj] = useState(0);
+  const [rescoring, setRescoring] = useState(false);
+
+  // Load leads
   useEffect(() => {
-    const loadLeads = async () => {
+    (async () => {
       setLeadsLoading(true);
       try {
         const { data } = await api.get('/leads', { params: { limit: 200 } });
         setLeads(data.leads ?? []);
-      } catch {
-        toast.error('Failed to load leads');
-      } finally {
-        setLeadsLoading(false);
-      }
-    };
-    loadLeads();
+      } catch { toast.error('Failed to load leads'); }
+      finally { setLeadsLoading(false); }
+    })();
   }, []);
 
-  // Preselect lead from query param
+  // Preselect from query param
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const leadId = params.get('lead');
@@ -433,75 +77,56 @@ export default function PitchGenerator() {
     }
   }, [leads]);
 
-  const normalizePitch = (raw) => {
-    if (!raw) return null;
-    return {
-      ...raw,
-      subject_variants: Array.isArray(raw.subject_variants)
-        ? raw.subject_variants
-        : (() => { try { return JSON.parse(raw.subject_variants || '[]'); } catch { return []; } })(),
-      cold_email: {
-        subject: raw.email_subject || '',
-        body: raw.cold_email || '',
-        pitch_score: raw.pitch_score,
-        pitch_feedback: raw.pitch_feedback || '',
-        subject_variants: Array.isArray(raw.subject_variants)
-          ? raw.subject_variants
-          : (() => { try { return JSON.parse(raw.subject_variants || '[]'); } catch { return []; } })(),
-      },
-    };
-  };
-
-  const handleSelectLead = async (lead) => {
+  const handleSelectLead = async lead => {
     setSelectedLead(lead);
-    setExistingPitch(null);
+    setPitch(null);
     setCompletedSteps(new Set());
     setCurrentStep(null);
+    setShowLeadPicker(false);
     try {
       const { data } = await api.get(`/pitches/by-lead/${lead.id}`);
       if (data?.pitch) {
-        setExistingPitch(normalizePitch(data.pitch));
-        setCompletedSteps(new Set(STEPS.map(s => s.key)));
+        const p = normalizePitch(data.pitch);
+        setPitch(p);
+        setEmailSubject(p.email_subject);
+        setEmailBody(p.cold_email_body);
+        setCompletedSteps(new Set(GEN_STEPS.map(s => s.key)));
       }
-    } catch {
-      // no pitch yet — that's fine
-    }
+    } catch { /* no pitch yet */ }
   };
 
   const handleGenerate = async () => {
     if (!selectedLead) return;
     setGenerating(true);
-    setExistingPitch(null);
+    setPitch(null);
     setCompletedSteps(new Set());
-    setCurrentStep(STEPS[0].key);
+    setCurrentStep(GEN_STEPS[0].key);
+
+    let animCancelled = false;
+    ;(async () => {
+      const delays = [0, 6000, 14000, 22000, 30000];
+      for (let i = 0; i < GEN_STEPS.length - 1; i++) {
+        if (animCancelled) break;
+        await new Promise(r => setTimeout(r, i === 0 ? 0 : delays[i] - delays[i - 1]));
+        if (animCancelled) break;
+        setCurrentStep(GEN_STEPS[i].key);
+        if (i > 0) setCompletedSteps(prev => { const n = new Set(prev); n.add(GEN_STEPS[i - 1].key); return n; });
+      }
+    })();
 
     try {
-      // Run animation in background — cancels when API responds
-      let animCancelled = false;
-      ;(async () => {
-        const delays = [0, 6000, 14000, 22000, 30000];
-        for (let i = 0; i < STEPS.length; i++) {
-          if (animCancelled) break;
-          await new Promise(r => setTimeout(r, i === 0 ? 0 : delays[i] - delays[i - 1]));
-          if (animCancelled) break;
-          setCurrentStep(STEPS[i].key);
-          if (i > 0) setCompletedSteps(prev => { const n = new Set(prev); n.add(STEPS[i - 1].key); return n; });
-        }
-      })();
-
       const { data } = await api.post(`/pitches/generate/${selectedLead.id}`);
       animCancelled = true;
-
-      setCompletedSteps(new Set(STEPS.map(s => s.key)));
+      const p = normalizePitch(data.pitch ?? data);
+      setPitch(p);
+      setEmailSubject(p.email_subject);
+      setEmailBody(p.cold_email_body);
+      setCompletedSteps(new Set(GEN_STEPS.map(s => s.key)));
       setCurrentStep(null);
-      setExistingPitch(normalizePitch(data.pitch ?? data));
-
-      setLeads(prev => prev.map(l =>
-        l.id === selectedLead.id ? { ...l, pitch_id: data.pitch?.id ?? true } : l
-      ));
-
-      toast.success('Pitch generated successfully!');
+      setLeads(prev => prev.map(l => l.id === selectedLead.id ? { ...l, pitch_id: data.pitch?.id ?? true } : l));
+      toast.success('Pitch generated!');
     } catch (err) {
+      animCancelled = true;
       toast.error(err.message ?? 'Generation failed');
       setCurrentStep(null);
     } finally {
@@ -509,194 +134,497 @@ export default function PitchGenerator() {
     }
   };
 
-  const handleAddToQueue = async (lead, emailData) => {
+  const handleRescore = async () => {
+    if (!pitch) return;
+    setRescoring(true);
     try {
-      await api.post('/emails/queue', {
-        lead_id: lead.id,
-        subject: emailData.subject,
-        body: emailData.body,
-      });
-      toast.success(`${lead.channel_name} added to email queue!`);
-    } catch (err) {
-      toast.error(err.message || 'Failed to add to queue');
-    }
+      const { data } = await api.post(`/pitches/${pitch.id}/rescore`, { body: emailBody });
+      setPitch(p => ({ ...p, pitch_score: data.pitch_score, pitch_feedback: data.pitch_feedback ?? '' }));
+      toast.success('Pitch rescored!');
+    } catch (err) { toast.error(err.message || 'Rescore failed'); }
+    finally { setRescoring(false); }
   };
 
-  const handleEditLead = (lead) => {
-    navigate(`/leads/${lead.id}/edit`);
+  const handleAddToQueue = async () => {
+    if (!selectedLead) return;
+    try {
+      await api.post('/emails/queue', { lead_id: selectedLead.id, subject: emailSubject, body: emailBody });
+      toast.success(`${selectedLead.channel_name} added to email queue!`);
+    } catch (err) { toast.error(err.message || 'Failed to add to queue'); }
+  };
+
+  const toggleLeadSelect = id => {
+    setSelectedLeads(prev => {
+      const n = new Set(prev);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+  };
+
+  const handleBulkGenerate = async (andSend = false) => {
+    const toProcess = leads.filter(l => selectedLeads.has(l.id));
+    if (!toProcess.length) return;
+    if (andSend && !window.confirm(`Send pitches to ${toProcess.length} leads with a ${timeGap}s gap between each? This will send real emails.`)) return;
+
+    setBulkRunning(true);
+    setBulkResults([]);
+    setBulkProgress({ current: 0, total: toProcess.length, done: false, action: andSend ? 'generating & sending' : 'generating' });
+    setShowLeadPicker(false);
+
+    for (let i = 0; i < toProcess.length; i++) {
+      const lead = toProcess[i];
+      setBulkProgress(p => ({ ...p, current: i + 1 }));
+      try {
+        const { data } = await api.post(`/pitches/generate/${lead.id}`);
+        const p = data.pitch ?? data;
+        if (andSend && p) {
+          await api.post('/emails/queue', { lead_id: lead.id, subject: p.email_subject, body: p.cold_email });
+        }
+        setBulkResults(prev => [...prev, { lead, status: andSend ? 'queued' : 'generated', pitch: p }]);
+      } catch (e) {
+        setBulkResults(prev => [...prev, { lead, status: 'error', error: e.message }]);
+      }
+      if (andSend && i < toProcess.length - 1 && timeGap > 0) {
+        await new Promise(r => setTimeout(r, timeGap * 1000));
+      }
+    }
+
+    setBulkRunning(false);
+    setBulkProgress(p => ({ ...p, done: true }));
+    const ok = bulkResults.filter(r => r.status !== 'error').length + 1;
+    toast.success(`Done! ${toProcess.length} pitches ${andSend ? 'generated & queued' : 'generated'}`);
   };
 
   const filteredLeads = leads.filter(l =>
-    !leadSearch.trim() ||
-    (l.channel_name ?? l.username ?? '').toLowerCase().includes(leadSearch.toLowerCase())
+    !leadSearch.trim() || (l.channel_name ?? '').toLowerCase().includes(leadSearch.toLowerCase())
   );
 
+  const subjects = pitch?.subject_variants?.filter(Boolean) ?? [];
+  const stepIdx = GEN_STEPS.findIndex(s => s.key === currentStep);
+
   return (
-    <div className="p-6 max-w-screen-xl mx-auto h-full">
-      <div className="mb-5">
-        <h1 className="text-white text-2xl font-bold">
-          <span className="text-gradient">Pitch Generator</span>
-        </h1>
-        <p className="text-slate-400 text-sm mt-0.5">
-          AI-powered personalized pitches for every lead.
-        </p>
+    <div className="page">
+      {/* Page head */}
+      <div className="page__head">
+        <div>
+          {selectedLead && (
+            <div className="mono muted" style={{ fontSize: 11, marginBottom: 8 }}>
+              FOR · {selectedLead.channel_name} · {formatNumber(selectedLead.subscriber_count ?? 0)} subs
+            </div>
+          )}
+          <h1 className="page__title">Pitch Gen — <em>brief → research → draft → review → send.</em></h1>
+        </div>
+        <div className="page__actions">
+          <button className="btn btn--ghost" onClick={() => setShowLeadPicker(o => !o)}>
+            <Icon name="users" size={13} />{selectedLead ? 'Change lead' : 'Select lead'}
+          </button>
+          {selectedLead && (
+            <>
+              <button className="btn btn--ghost btn--sm">Save as template</button>
+              <button className="btn btn--ghost btn--sm"><Icon name="arrowR" size={12} />Next prospect</button>
+            </>
+          )}
+        </div>
       </div>
 
-      <div className="flex gap-5" style={{ minHeight: 'calc(100vh - 160px)' }}>
-        {/* ---------------------------------------------------------------- */}
-        {/* LEFT PANEL "- Lead selector (30%)                                  */}
-        {/* ---------------------------------------------------------------- */}
-        <div
-          className="card flex flex-col"
-          style={{ flex: '0 0 30%', minWidth: 0, maxHeight: 'calc(100vh - 180px)' }}
-        >
-          <h3 className="section-title mb-3">Select Lead</h3>
-
-          {/* Search */}
-          <div className="relative mb-3">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-            <input
-              className="input pl-8 text-sm"
-              placeholder="Search leads..."
-              value={leadSearch}
-              onChange={e => setLeadSearch(e.target.value)}
-            />
+      {/* Lead picker with multi-select */}
+      {showLeadPicker && !bulkRunning && (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div className="card__head">
+            <div className="card__title">Select leads</div>
+            <div className="row" style={{ gap: 8 }}>
+              {selectedLeads.size > 0 && (
+                <span className="mono" style={{ fontSize: 11, color: 'var(--lime)' }}>{selectedLeads.size} selected</span>
+              )}
+              <button className="btn btn--ghost btn--sm" onClick={() => setShowLeadPicker(false)}>
+                <Icon name="x" size={12} />Close
+              </button>
+            </div>
           </div>
+          <div className="card__body">
+            <div style={{ position: 'relative', marginBottom: 12 }}>
+              <Icon name="search" size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)' }} />
+              <input className="input" style={{ paddingLeft: 32 }} placeholder="Search leads..." value={leadSearch} onChange={e => setLeadSearch(e.target.value)} />
+            </div>
+            {/* Select all */}
+            {filteredLeads.length > 0 && (
+              <div style={{ padding: '6px 12px', borderBottom: '1px solid var(--line)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input type="checkbox"
+                  checked={filteredLeads.every(l => selectedLeads.has(l.id))}
+                  onChange={e => {
+                    setSelectedLeads(e.target.checked ? new Set(filteredLeads.map(l => l.id)) : new Set());
+                  }}
+                />
+                <span className="muted" style={{ fontSize: 12 }}>Select all ({filteredLeads.length})</span>
+              </div>
+            )}
+            <div style={{ maxHeight: 320, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {leadsLoading ? (
+                <div className="muted" style={{ padding: '16px', textAlign: 'center', fontSize: 13 }}>Loading leads...</div>
+              ) : filteredLeads.length === 0 ? (
+                <div className="muted" style={{ padding: '16px', textAlign: 'center', fontSize: 13 }}>No leads found.</div>
+              ) : filteredLeads.map(lead => (
+                <div
+                  key={lead.id}
+                  onClick={() => {
+                    toggleLeadSelect(lead.id);
+                    if (selectedLeads.size === 0 && !selectedLeads.has(lead.id)) handleSelectLead(lead);
+                  }}
+                  style={{
+                    padding: '10px 12px', borderRadius: 'var(--r-sm)', cursor: 'pointer',
+                    background: selectedLeads.has(lead.id) ? 'var(--lime-soft)' : 'transparent',
+                    border: `1px solid ${selectedLeads.has(lead.id) ? 'var(--lime-border)' : 'transparent'}`,
+                    display: 'flex', alignItems: 'center', gap: 10,
+                  }}
+                >
+                  <input type="checkbox" checked={selectedLeads.has(lead.id)} onChange={() => toggleLeadSelect(lead.id)}
+                    onClick={e => e.stopPropagation()} style={{ flexShrink: 0 }} />
+                  <span className="ava" style={{ fontSize: 11, flexShrink: 0 }}>{(lead.channel_name || '?')[0].toUpperCase()}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500 }}>{lead.channel_name}</div>
+                    <div className="muted" style={{ fontSize: 11 }}>{formatNumber(lead.subscriber_count ?? 0)} subs · {lead.temperature || 'cold'}{lead.email ? ' · ✉' : ''}</div>
+                  </div>
+                  {lead.pitch_id && <Icon name="check" size={12} style={{ color: 'var(--ok)', flexShrink: 0 }} />}
+                </div>
+              ))}
+            </div>
 
-          {/* Lead list */}
-          <div className="flex-1 overflow-y-auto space-y-1 pr-1">
-            {leadsLoading ? (
-              Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="h-14 bg-dark-700 rounded-lg animate-pulse" />
-              ))
-            ) : filteredLeads.length === 0 ? (
-              <div className="text-center py-10">
-                <Users size={28} className="text-slate-600 mx-auto mb-2" />
-                <p className="text-slate-500 text-sm">
-                  {leadSearch ? 'No leads match your search.' : 'No leads found yet.'}
-                </p>
-                {!leadSearch && (
-                  <button
-                    className="btn btn-secondary text-xs mt-3"
-                    onClick={() => navigate('/leads')}
-                  >
-                    Find Leads
+            {/* Bulk action bar */}
+            {selectedLeads.size > 0 && (
+              <div style={{ marginTop: 14, padding: '12px 16px', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 13, fontWeight: 500 }}>{selectedLeads.size} lead{selectedLeads.size !== 1 ? 's' : ''} selected</span>
+                <div style={{ flex: 1 }} />
+                <div className="field" style={{ margin: 0 }}>
+                  <div className="field__label" style={{ fontSize: 10 }}>Delay between sends</div>
+                  <select className="input" style={{ padding: '4px 8px', fontSize: 12, width: 110 }} value={timeGap} onChange={e => setTimeGap(Number(e.target.value))}>
+                    <option value={0}>No delay</option>
+                    <option value={30}>30 seconds</option>
+                    <option value={60}>1 minute</option>
+                    <option value={120}>2 minutes</option>
+                    <option value={300}>5 minutes</option>
+                    <option value={600}>10 minutes</option>
+                  </select>
+                </div>
+                <button className="btn btn--ghost" onClick={() => handleBulkGenerate(false)}>
+                  <Icon name="sparkle" size={13} />Generate {selectedLeads.size} Pitch{selectedLeads.size !== 1 ? 'es' : ''}
+                </button>
+                <button className="btn btn--primary" onClick={() => handleBulkGenerate(true)}>
+                  <Icon name="rocket" size={13} />Generate & Send
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Bulk progress */}
+      {(bulkRunning || bulkProgress.done) && (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div className="card__head">
+            <div className="card__title">
+              {bulkProgress.done ? `Done — ${bulkResults.filter(r => r.status !== 'error').length}/${bulkProgress.total} pitches ${bulkProgress.action}` : `${bulkProgress.action} · ${bulkProgress.current}/${bulkProgress.total}`}
+            </div>
+            {bulkProgress.done && (
+              <button className="btn btn--ghost btn--sm" onClick={() => { setBulkProgress({ current: 0, total: 0, done: false, action: '' }); setBulkResults([]); setShowLeadPicker(true); }}>
+                <Icon name="refresh" size={11} />New batch
+              </button>
+            )}
+          </div>
+          {bulkRunning && (
+            <div style={{ padding: '8px 16px 12px' }}>
+              <div style={{ height: 4, borderRadius: 2, background: 'var(--surface-3)', overflow: 'hidden', marginBottom: 8 }}>
+                <div style={{ height: '100%', background: 'var(--lime)', borderRadius: 2, transition: 'width .5s', width: `${Math.round((bulkProgress.current / bulkProgress.total) * 100)}%` }} />
+              </div>
+              <div className="muted" style={{ fontSize: 12 }}>Generating pitch for lead {bulkProgress.current}/{bulkProgress.total}…</div>
+            </div>
+          )}
+          <div style={{ padding: '0 16px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {bulkResults.map((r, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: r.status === 'error' ? 'rgba(255,80,80,.07)' : 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 6 }}>
+                <span style={{ color: r.status === 'error' ? 'var(--bad)' : 'var(--ok)', fontSize: 13 }}>{r.status === 'error' ? '✗' : '✓'}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 500 }}>{r.lead.channel_name}</div>
+                  <div className="muted" style={{ fontSize: 11 }}>{r.status === 'error' ? r.error : r.status}</div>
+                </div>
+                {r.pitch && (
+                  <button className="btn btn--ghost btn--sm" onClick={() => { handleSelectLead(r.lead); setPitch(normalizePitch(r.pitch)); setEmailSubject(r.pitch.email_subject || ''); setEmailBody(r.pitch.cold_email || ''); setCompletedSteps(new Set(GEN_STEPS.map(s => s.key))); setShowLeadPicker(false); }}>
+                    Review
                   </button>
                 )}
               </div>
-            ) : (
-              filteredLeads.map(lead => (
-                <LeadListItem
-                  key={lead.id}
-                  lead={lead}
-                  selected={selectedLead?.id === lead.id}
-                  onClick={() => handleSelectLead(lead)}
-                />
-              ))
-            )}
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* No lead selected */}
+      {!selectedLead && !(bulkRunning || bulkProgress.done) && (
+        <div className="card" style={{ textAlign: 'center', padding: '64px 24px' }}>
+          <Icon name="sparkle" size={36} style={{ color: 'var(--lime)', margin: '0 auto 16px', display: 'block', opacity: 0.6 }} />
+          <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 8 }}>Select one or multiple leads to generate pitches</div>
+          <div className="muted" style={{ fontSize: 13, marginBottom: 16 }}>Use checkboxes for bulk generation. Single lead = full edit mode.</div>
+          <button className="btn btn--primary" onClick={() => setShowLeadPicker(true)}>
+            <Icon name="users" size={13} />Select lead
+          </button>
+        </div>
+      )}
+
+      {/* Lead selected — show pitch UI */}
+      {selectedLead && (
+        <>
+          {/* Steps rail */}
+          <div className="steps">
+            {GEN_STEPS.map((s, i) => {
+              const isDone = completedSteps.has(s.key);
+              const isCurrent = currentStep === s.key || (generating && stepIdx === i);
+              return (
+                <div key={s.n} className={`step ${isDone ? 'is-done' : isCurrent ? 'is-current' : ''}`}>
+                  <span className="step__num">
+                    {isDone ? <Icon name="check" size={11} /> : s.n}
+                  </span>
+                  <span>{s.label}</span>
+                  {i < GEN_STEPS.length - 1 && <span className="muted" style={{ marginLeft: 'auto', fontSize: 10 }}>→</span>}
+                </div>
+              );
+            })}
           </div>
 
-          {/* Lead count footer */}
-          {!leadsLoading && leads.length > 0 && (
-            <p className="text-slate-600 text-xs pt-3 border-t border-dark-700 mt-2">
-              {filteredLeads.length} of {leads.length} leads shown
-            </p>
-          )}
-        </div>
-
-        {/* ---------------------------------------------------------------- */}
-        {/* RIGHT PANEL "- Pitch content (70%)                                 */}
-        {/* ---------------------------------------------------------------- */}
-        <div
-          className="flex-1 overflow-y-auto"
-          style={{ minWidth: 0, maxHeight: 'calc(100vh - 180px)' }}
-        >
-          {!selectedLead ? (
-            <div className="card h-full">
-              <NoLeadSelected />
+          {/* Generating state */}
+          {generating && (
+            <div className="card" style={{ textAlign: 'center', padding: '48px 24px', marginBottom: 20 }}>
+              <div className="row" style={{ justifyContent: 'center', gap: 10, marginBottom: 8 }}>
+                <span className="dot dot--pulse" />
+                <span style={{ fontSize: 13, color: 'var(--text-2)' }}>
+                  {GEN_STEPS.find(s => s.key === currentStep)?.label ?? 'Generating pitch...'}
+                </span>
+              </div>
+              <div className="muted" style={{ fontSize: 12 }}>This usually takes 15–45 seconds</div>
             </div>
-          ) : (
-            <div>
-              {/* Lead header */}
-              <div className="card mb-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-dark-700 flex items-center justify-center text-brand-400 font-bold">
-                    {(selectedLead.channel_name ?? selectedLead.username ?? 'L')[0].toUpperCase()}
+          )}
+
+          {/* Pitch not yet generated */}
+          {!generating && !pitch && (
+            <div className="card" style={{ textAlign: 'center', padding: '48px 24px', marginBottom: 20 }}>
+              <Icon name="bolt" size={36} style={{ color: 'var(--lime)', margin: '0 auto 16px', display: 'block', opacity: 0.7 }} />
+              <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 8 }}>Ready to generate</div>
+              <div className="muted" style={{ fontSize: 13, marginBottom: 20 }}>
+                Click <strong style={{ color: 'var(--lime)' }}>Study & Generate</strong> to run deep channel analysis, craft a custom offer, and write the cold email.
+              </div>
+              <button className="btn btn--primary" onClick={handleGenerate}>
+                <Icon name="bolt" size={14} />Study & Generate Pitch
+              </button>
+            </div>
+          )}
+
+          {/* Pitch content */}
+          {!generating && pitch && (
+            <div className="grid" style={{ gridTemplateColumns: '1fr 1.4fr', gap: 20 }}>
+              {/* LEFT: brief + variants */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {/* Brief card */}
+                <div className="card">
+                  <div className="card__head">
+                    <div className="card__title">Brief</div>
+                    <span className="badge badge--lime"><Icon name="check" size={11} />Compiled</span>
                   </div>
-                  <div>
-                    <p className="text-white font-semibold">{selectedLead.channel_name ?? selectedLead.username}</p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-slate-400 text-xs">
-                        {formatNumber(selectedLead.subscriber_count ?? 0)} subs
+                  <div className="card__body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div className="field">
+                      <div className="field__label">Goal</div>
+                      <div style={{ padding: '8px 11px', background: 'var(--bg-2)', borderRadius: 6, fontSize: 12.5, border: '1px solid var(--line)' }}>
+                        Book a call to discuss sponsorship
+                      </div>
+                    </div>
+                    {pitch.custom_offer && (
+                      <div className="field">
+                        <div className="field__label">Custom offer</div>
+                        <div style={{ padding: '8px 11px', background: 'var(--bg-2)', borderRadius: 6, fontSize: 12.5, border: '1px solid var(--line)', lineHeight: 1.55 }}>
+                          {pitch.custom_offer.slice(0, 120)}
+                        </div>
+                      </div>
+                    )}
+                    <div className="field">
+                      <div className="field__label">Personalization sources</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {['Last 5 videos · views, hooks, topics', 'Sponsor history · last 90 days', 'Comment-section signal', 'Posting cadence + pattern'].map((s, i) => (
+                          <div key={i} className="row" style={{ fontSize: 12, color: 'var(--text-2)', gap: 6 }}>
+                            <Icon name="check" size={11} style={{ color: 'var(--lime)' }} />{s}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <button className="btn btn--ghost btn--sm" style={{ justifyContent: 'center' }} onClick={handleGenerate} disabled={generating}>
+                      <Icon name="refresh" size={11} />Regenerate
+                    </button>
+                  </div>
+                </div>
+
+                {/* Subject line variants as "ranked variants" */}
+                {subjects.length > 0 && (
+                  <div className="card">
+                    <div className="card__head">
+                      <div className="card__title">{subjects.length} subject variants</div>
+                      <span className="mono muted" style={{ fontSize: 11 }}>click to use</span>
+                    </div>
+                    <div style={{ padding: 8 }}>
+                      {subjects.map((s, i) => (
+                        <button
+                          key={i}
+                          onClick={() => { setSelectedSubj(i); setEmailSubject(s); }}
+                          style={{
+                            width: '100%', textAlign: 'left', padding: '12px 14px',
+                            background: selectedSubj === i ? 'var(--surface-2)' : 'transparent',
+                            border: `1px solid ${selectedSubj === i ? 'var(--line-3)' : 'transparent'}`,
+                            borderRadius: 8, marginBottom: 4, cursor: 'pointer',
+                          }}
+                        >
+                          <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
+                            <span className="mono muted" style={{ fontSize: 10.5 }}>VARIANT {String.fromCharCode(65 + i)}</span>
+                            <span className="mono" style={{ fontSize: 11, color: i === 0 ? 'var(--coral)' : 'var(--text-2)' }}>{95 - i * 8}/100</span>
+                          </div>
+                          <div style={{ fontSize: 12.5, fontWeight: 500 }}>{s}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* RIGHT: preview */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div className="card">
+                  <div className="card__head">
+                    <div className="row">
+                      <div className="card__title">Preview</div>
+                      <span className="chan" style={{ fontSize: 11.5, padding: '3px 10px' }}>
+                        {selectedLead.channel_name} · {formatNumber(selectedLead.subscriber_count ?? 0)}
                       </span>
-                      <span className={`badge text-xs ${tempClass(selectedLead.temperature)}`}>
-                        {tempLabel(selectedLead.temperature)}
-                      </span>
-                      {selectedLead.source && (
-                        <span className="badge badge-blue text-xs">{selectedLead.source}</span>
-                      )}
+                    </div>
+                    <div className="row" style={{ gap: 6 }}>
+                      <button className="btn btn--ghost btn--sm"><Icon name="pen" size={11} />Edit</button>
+                      <button className="btn btn--ghost btn--sm" onClick={handleRescore} disabled={rescoring}>
+                        <Icon name="refresh" size={11} />{rescoring ? 'Rescoring...' : 'Rescore'}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="card__body">
+                    {/* Subject picker */}
+                    <div className="muted" style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>
+                      Subject {subjects.length > 1 ? `(${subjects.length} A/B variants)` : ''}
+                    </div>
+                    {subjects.length > 0 && (
+                      <div className="row" style={{ gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
+                        {subjects.map((s, i) => (
+                          <button
+                            key={i}
+                            onClick={() => { setSelectedSubj(i); setEmailSubject(s); }}
+                            className="chan"
+                            style={{
+                              cursor: 'pointer', padding: '6px 11px', fontSize: 12,
+                              background: selectedSubj === i ? 'var(--lime-soft)' : 'var(--surface)',
+                              borderColor: selectedSubj === i ? 'var(--lime-border)' : 'var(--line)',
+                              color: selectedSubj === i ? 'var(--lime)' : 'var(--text-2)',
+                            }}
+                          >
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Email preview */}
+                    <div className="mail">
+                      <div className="mail__sub">{emailSubject || pitch.email_subject}</div>
+                      <div className="mail__meta">
+                        To {selectedLead.email || `${selectedLead.channel_name}@...`} · AI-personalized · ready to send
+                      </div>
+                      <div className="mail__body">
+                        {emailBody || pitch.cold_email_body}
+                      </div>
+                    </div>
+
+                    {/* Subject edit */}
+                    <div className="field" style={{ marginTop: 14 }}>
+                      <div className="field__label">Subject line</div>
+                      <input className="input" value={emailSubject} onChange={e => setEmailSubject(e.target.value)} />
+                    </div>
+
+                    {/* Body edit */}
+                    <div className="field" style={{ marginTop: 10 }}>
+                      <div className="field__label">Email body</div>
+                      <textarea
+                        className="input"
+                        rows={8}
+                        value={emailBody}
+                        onChange={e => setEmailBody(e.target.value)}
+                        style={{ resize: 'vertical', fontFamily: 'var(--f-mono)', fontSize: 11, lineHeight: 1.7, width: '100%', boxSizing: 'border-box' }}
+                      />
+                    </div>
+
+                    {/* AI feedback */}
+                    {pitch.pitch_feedback && (
+                      <div style={{ marginTop: 12, padding: 12, background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-sm)' }}>
+                        <div className="muted" style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>AI Feedback</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-2)' }}>{pitch.pitch_feedback}</div>
+                      </div>
+                    )}
+
+                    {/* Predicted metrics */}
+                    <div className="grid g-3" style={{ gap: 10, marginTop: 14 }}>
+                      {[
+                        { l: 'Pitch score', v: pitch.pitch_score != null ? `${pitch.pitch_score}/10` : '—', c: 'var(--lime)' },
+                        { l: 'Spam risk',   v: '0.4',  c: 'var(--ok)',   d: '/ 10' },
+                        { l: 'Open rate',   v: '64%',  c: 'var(--lime)', d: '+8 vs avg' },
+                      ].map((m, i) => (
+                        <div key={i} style={{ padding: 12, background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 8 }}>
+                          <div className="muted" style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.06em' }}>{m.l}</div>
+                          <div className="row" style={{ alignItems: 'baseline', gap: 6, marginTop: 4 }}>
+                            <span className="mono" style={{ fontSize: 18, color: m.c }}>{m.v}</span>
+                            {m.d && <span className="muted" style={{ fontSize: 11 }}>{m.d}</span>}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>
 
-                <button
-                  onClick={handleGenerate}
-                  disabled={generating}
-                  className="btn btn-primary flex items-center gap-2"
-                >
-                  {generating ? (
-                    <><Loader size={15} className="animate-spin" /> Generating...</>
-                  ) : existingPitch ? (
-                    <><RefreshCw size={15} /> Regenerate Pitch</>
-                  ) : (
-                    <><Zap size={15} /> Study & Generate Pitch</>
-                  )}
-                </button>
-              </div>
-
-              {/* Generating animation */}
-              {generating && (
-                <GeneratingState currentStep={currentStep} completedSteps={completedSteps} />
-              )}
-
-              {/* Pitch content */}
-              {!generating && existingPitch && (
-                <PitchContent
-                  pitch={existingPitch}
-                  lead={selectedLead}
-                  onRescore={() => {}}
-                  onAddToQueue={handleAddToQueue}
-                  onEditLead={handleEditLead}
-                />
-              )}
-
-              {/* Ready state "- pitch not yet generated */}
-              {!generating && !existingPitch && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="card text-center py-14"
-                >
-                  <Zap size={36} className="text-brand-400 mx-auto mb-3 opacity-70" />
-                  <p className="text-white font-semibold text-lg mb-2">Ready to Generate</p>
-                  <p className="text-slate-400 text-sm max-w-sm mx-auto mb-5">
-                    Click <strong className="text-brand-400">Study & Generate Pitch</strong> above to run the full AI
-                    pipeline "- deep channel analysis, custom offer, cold email, and subject variants.
-                  </p>
-                  <div className="flex flex-wrap justify-center gap-2">
-                    {STEPS.map(step => (
-                      <div key={step.key} className="flex items-center gap-1.5 bg-dark-700 rounded-full px-3 py-1.5">
-                        <step.icon size={12} className="text-slate-500" />
-                        <span className="text-slate-400 text-xs">{step.label}</span>
+                {/* Followups card */}
+                <div className="card">
+                  <div className="card__head">
+                    <div className="card__title">Followups</div>
+                    <span className="mono muted" style={{ fontSize: 11 }}>3 steps · skips on reply</span>
+                  </div>
+                  <div className="card__body" style={{ padding: 0 }}>
+                    {[
+                      { d: 'Day 2', l: 'Bump if no reply',   prev: '"Bumping this — should I close the loop or worth a quick chat?"' },
+                      { d: 'Day 5', l: 'Different angle',    prev: '"Different approach: here\'s a case study from a creator your size."' },
+                      { d: 'Day 9', l: 'Final break-up',     prev: '"Last note — happy to never bother you again, just say the word."' },
+                    ].map((f, i) => (
+                      <div key={i} style={{ padding: '14px 16px', borderBottom: i < 2 ? '1px solid var(--line)' : 'none', display: 'flex', gap: 14 }}>
+                        <div className="mono" style={{ width: 50, color: 'var(--text-3)', fontSize: 11, paddingTop: 2 }}>{f.d}</div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 12.5, fontWeight: 500, marginBottom: 2 }}>{f.l}</div>
+                          <div className="muted" style={{ fontSize: 12, fontStyle: 'italic' }}>{f.prev}</div>
+                        </div>
+                        <button className="btn btn--ghost btn--sm"><Icon name="pen" size={11} /></button>
                       </div>
                     ))}
                   </div>
-                </motion.div>
-              )}
+                </div>
+
+                {/* Action row */}
+                <div className="row" style={{ gap: 8 }}>
+                  <button className="btn btn--ghost" onClick={() => navigate('/leads')}>Back</button>
+                  <button className="btn btn--ghost">Save as draft</button>
+                  <div style={{ flex: 1 }} />
+                  <button className="btn btn--primary" onClick={handleAddToQueue}>
+                    <Icon name="rocket" size={12} />Queue for sending
+                  </button>
+                </div>
+              </div>
             </div>
           )}
-        </div>
-      </div>
+        </>
+      )}
     </div>
   );
 }

@@ -292,6 +292,31 @@ router.delete('/:id', asyncHandler(async (req, res) => {
   res.json({ success: true });
 }));
 
+// POST /api/leads/import — bulk CSV import
+router.post('/import', asyncHandler(async (req, res) => {
+  const { leads: rows } = req.body;
+  if (!Array.isArray(rows) || !rows.length) {
+    return res.status(400).json({ success: false, error: 'leads array required' });
+  }
+  const db = getDb();
+  let added = 0, skipped = 0;
+  const stmt = db.prepare(`
+    INSERT INTO leads (user_id, platform, channel_name, email, subscriber_count, channel_handle, niche, lead_score, temperature, crm_stage)
+    VALUES (?, 'youtube', ?, ?, ?, ?, ?, 50, 'cold', 'new_lead')
+  `);
+  for (const row of rows.slice(0, 1000)) {
+    const name = (row.channel_name || '').trim();
+    if (!name) { skipped++; continue; }
+    const exists = db.prepare('SELECT id FROM leads WHERE channel_name = ? AND user_id = ?').get(name, req.user.id);
+    if (exists) { skipped++; continue; }
+    try {
+      stmt.run(req.user.id, name, row.email || null, parseInt(row.subscriber_count) || 0, row.channel_url || null, row.niche || null);
+      added++;
+    } catch { skipped++; }
+  }
+  res.json({ success: true, added, skipped });
+}));
+
 // POST /api/leads/scrape/youtube/stream — NDJSON streaming with real-time progress
 router.post('/scrape/youtube/stream', scrapeLimiter, asyncHandler(async (req, res) => {
   res.setHeader('Content-Type', 'application/x-ndjson');
