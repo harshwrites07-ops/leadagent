@@ -263,7 +263,7 @@ export default function CRM() {
               ) : (
                 <div style={{ textAlign: 'center', padding: '24px 0' }}>
                   <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>No pitch yet.</div>
-                  <button className="btn btn--ghost btn--sm" onClick={() => navigate(`/pitch-generator?lead=${selected.id}`)}>
+                  <button className="btn btn--ghost btn--sm" onClick={() => navigate(`/pitch?lead=${selected.id}`)}>
                     <Icon name="sparkle" size={11} />Generate pitch
                   </button>
                 </div>
@@ -291,7 +291,7 @@ export default function CRM() {
             <button className="btn btn--sm" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setDetailTab('Notes')}>
               <Icon name="pen" size={11} />Note
             </button>
-            <button className="btn btn--sm" style={{ flex: 1, justifyContent: 'center' }} onClick={() => navigate(`/pitch-generator?lead=${selected.id}`)}>
+            <button className="btn btn--sm" style={{ flex: 1, justifyContent: 'center' }} onClick={() => navigate(`/pitch?lead=${selected.id}`)}>
               <Icon name="sparkle" size={11} />Pitch
             </button>
             <button className="btn btn--coral btn--sm" style={{ flex: 1, justifyContent: 'center' }} onClick={() => navigate('/email')}>

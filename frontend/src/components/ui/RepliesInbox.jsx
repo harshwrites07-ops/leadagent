@@ -187,7 +187,7 @@ function ReplyRow({ reply, onOpen }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-0.5">
           <p className="text-sm font-semibold truncate" style={{ color: 'var(--text)' }}>{reply.channel_name || reply.lead_email}</p>
-          <span className="badge badge-purple text-xs flex-shrink-0">REPLIED</span>
+          <span className="badge badge--coral text-xs flex-shrink-0">REPLIED</span>
         </div>
         <p className="text-xs truncate" style={{ color: 'var(--text-2)' }}>{reply.reply_subject || reply.subject || 'No subject'}</p>
         <p className={`text-xs truncate mt-0.5${!hasContent ? ' italic' : ''}`} style={{ color: hasContent ? 'var(--text-3)' : 'var(--text-4)' }}>{preview}</p>
@@ -310,11 +310,11 @@ export default function RepliesInbox({ onClose }) {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button onClick={sync} disabled={syncing} className="btn btn-primary flex items-center gap-2 text-sm">
+                    <button onClick={sync} disabled={syncing} className="btn btn--primary flex items-center gap-2 text-sm">
                       <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
                       {syncing ? 'Syncing...' : 'Sync Replies'}
                     </button>
-                    <button onClick={onClose} className="btn btn-ghost p-2"><X size={18} /></button>
+                    <button onClick={onClose} className="btn btn--ghost p-2"><X size={18} /></button>
                   </div>
                 </div>
 
@@ -337,7 +337,7 @@ export default function RepliesInbox({ onClose }) {
                       <Mail size={40} style={{ color: 'var(--text-4)' }} />
                       <p className="font-medium" style={{ color: 'var(--text-2)' }}>No replies yet</p>
                       <p className="text-sm text-center" style={{ color: 'var(--text-3)' }}>Click "Sync Replies" to check your Gmail inboxes</p>
-                      <button onClick={sync} disabled={syncing} className="btn btn-primary">
+                      <button onClick={sync} disabled={syncing} className="btn btn--primary">
                         <RefreshCw size={14} className={syncing ? 'animate-spin mr-2' : 'mr-2'} /> Check Gmail Now
                       </button>
                     </div>

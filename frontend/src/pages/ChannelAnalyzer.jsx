@@ -118,7 +118,7 @@ function ResultDossier({ result, navigate }) {
               <Icon name="mail" size={12} />Send Email
             </button>
           )}
-          <button className="btn btn--coral" onClick={() => navigate(`/pitch-generator?lead=${result.lead_id}`)}>
+          <button className="btn btn--coral" onClick={() => navigate(`/pitch?lead=${result.lead_id}`)}>
             <Icon name="sparkle" size={12} />Draft pitch
           </button>
         </div>
@@ -336,7 +336,7 @@ export default function ChannelAnalyzer() {
           </button>
         )}
         {results.length > 0 && (
-          <button className="btn btn--coral" onClick={() => navigate(`/pitch-generator?lead=${results[0]?.lead_id}`)}>
+          <button className="btn btn--coral" onClick={() => navigate(`/pitch?lead=${results[0]?.lead_id}`)}>
             <Icon name="sparkle" size={12} />Draft pitch with this brief
           </button>
         )}

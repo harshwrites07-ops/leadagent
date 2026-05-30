@@ -659,7 +659,7 @@ export default function LeadFinder() {
                             <Icon name="eye" size={12} />
                           </button>
                         )}
-                        <button className="btn btn--ghost btn--sm" title="Pitch" onClick={() => navigate(`/pitch-generator?lead=${lead.id}`)}>
+                        <button className="btn btn--ghost btn--sm" title="Pitch" onClick={() => navigate(`/pitch?lead=${lead.id}`)}>
                           <Icon name="sparkle" size={12} />
                         </button>
                       </div>
