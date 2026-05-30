@@ -127,6 +127,7 @@ router.post('/generate-and-send', aiLimiter, asyncHandler(async (req, res) => {
 
   const db = getDb();
   const { sendEmail } = require('../services/emailService');
+  const { incrementUsage } = require('../services/authService');
   const ids = leadIds.slice(0, 20);
   const results = [];
   const CONCURRENCY = 5;
@@ -156,6 +157,7 @@ router.post('/generate-and-send', aiLimiter, asyncHandler(async (req, res) => {
         const sent = await sendEmail({ to: lead.email, subject: result.email_subject, body: result.email_body, leadId: id, userId: req.user.id });
         db.prepare(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP,email_id=? WHERE id=?`).run(sent.emailId || null, qr.lastInsertRowid);
         db.prepare(`UPDATE leads SET crm_stage='emailed', last_contacted_date=date('now'), follow_up_count=0, follow_up_status='active', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(id);
+        incrementUsage(req.user.id, 'emails', 1);
         logActivity('email_sent', `Email sent to ${lead.channel_name}`, id, {}, req.user.id);
         return { id, success: true, channel_name: lead.channel_name, email: lead.email };
       })

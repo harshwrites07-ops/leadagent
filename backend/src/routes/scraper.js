@@ -231,25 +231,18 @@ router.post('/powermode/start', asyncHandler(async (req, res) => {
 
       console.log(`[PowerMode] Batch ${Math.floor(i/BATCH)+1} — ${ps.stats.withEmail}/${ps.targetCount} email leads — searching: ${batch.slice(0,3).join(', ')}...`);
 
-      let results;
-      try {
-        results = await Promise.allSettled(
-          batch.map(kw => searchChannels({ keyword: kw, minSubs: 1000, maxSubs: 2000000, maxResults: 50, emailOnly: false, country }))
-        );
-      } catch (e) {
-        if ((e.message || '').toLowerCase().includes('quota')) {
-          ps.quotaExhausted = true;
-          break;
-        }
-        throw e;
-      }
+      // Promise.allSettled never throws — inspect individual rejections
+      const results = await Promise.allSettled(
+        batch.map(kw => searchChannels({ keyword: kw, minSubs: 1000, maxSubs: 2000000, maxResults: 50, emailOnly: false, country }))
+      );
 
       ps.keywordsDone += batch.length;
 
       for (let ri = 0; ri < results.length; ri++) {
         const r = results[ri];
         if (r.status !== 'fulfilled') {
-          if ((r.reason?.message || '').toLowerCase().includes('quota')) { ps.quotaExhausted = true; }
+          const msg = (r.reason?.message || r.reason?.response?.data?.error?.message || '').toLowerCase();
+          if (msg.includes('quota') || r.reason?.response?.status === 429) ps.quotaExhausted = true;
           continue;
         }
         const kw = batch[ri];
@@ -343,11 +336,11 @@ router.post('/viral-detector', scrapeLimiter, asyncHandler(async (req, res) => {
       INSERT INTO leads (
         user_id, platform, channel_id, channel_name, channel_handle, subscriber_count, avg_views,
         engagement_rate, upload_frequency_days, recent_videos, pain_points, lead_score,
-        temperature, niche, thumbnail_url, channel_description
+        temperature, niche, thumbnail_url, channel_description, crm_stage
       ) VALUES (
         @user_id, 'youtube', @channel_id, @channel_name, @channel_handle, @subscriber_count, @avg_views,
         @engagement_rate, @upload_frequency_days, @recent_videos, @pain_points, @lead_score,
-        'hot', @niche, @thumbnail_url, @channel_description
+        'hot', @niche, @thumbnail_url, @channel_description, 'new_lead'
       )
     `).run({
       user_id: userId,

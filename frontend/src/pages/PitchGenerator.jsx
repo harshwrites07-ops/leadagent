@@ -176,9 +176,9 @@ export default function PitchGenerator() {
       setBulkProgress(p => ({ ...p, current: i + 1 }));
       try {
         const { data } = await api.post(`/pitches/generate/${lead.id}`);
-        const p = data.pitch ?? data;
+        const p = normalizePitch(data.pitch ?? data);
         if (andSend && p) {
-          await api.post('/emails/queue', { lead_id: lead.id, subject: p.email_subject, body: p.cold_email });
+          await api.post('/emails/queue', { lead_id: lead.id, subject: p.email_subject, body: p.cold_email_body });
         }
         setBulkResults(prev => [...prev, { lead, status: andSend ? 'queued' : 'generated', pitch: p }]);
       } catch (e) {
@@ -191,7 +191,6 @@ export default function PitchGenerator() {
 
     setBulkRunning(false);
     setBulkProgress(p => ({ ...p, done: true }));
-    const ok = bulkResults.filter(r => r.status !== 'error').length + 1;
     toast.success(`Done! ${toProcess.length} pitches ${andSend ? 'generated & queued' : 'generated'}`);
   };
 

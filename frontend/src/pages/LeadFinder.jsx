@@ -472,9 +472,9 @@ export default function LeadFinder() {
                 <Icon name="clock" size={18} style={{ color: 'var(--warn)', flexShrink: 0 }} />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>YouTube API quota reached for today</div>
-                  <div className="muted" style={{ fontSize: 12 }}>Daily limit resets at midnight Pacific Time. Try Reddit Scraper instead.</div>
+                  <div className="muted" style={{ fontSize: 12 }}>Daily limit resets at midnight Pacific Time. Add more API keys in Settings to continue.</div>
                 </div>
-                <button className="btn btn--ghost btn--sm" onClick={() => setTab('reddit')}>Try Reddit</button>
+                <button className="btn btn--ghost btn--sm" onClick={() => navigate('/settings')}>Add API Key</button>
               </div>
             </div>
           )}
@@ -609,103 +609,48 @@ export default function LeadFinder() {
                   {tab !== 'viral' && (
                     <th style={{ width: 32 }}>
                       <input type="checkbox" onChange={e => {
-                        if (tab === 'youtube') setYtSelected(e.target.checked ? new Set(ytLeads.map(l => l.id)) : new Set());
-                        else if (tab === 'reddit') setRdSelected(e.target.checked ? new Set(rdLeads.map(l => l.id)) : new Set());
+                        setYtSelected(e.target.checked ? new Set(ytLeads.map(l => l.id)) : new Set());
                       }} />
                     </th>
                   )}
-                  <th>
-                    {tab === 'reddit' ? 'User' : 'Creator'}
-                  </th>
-                  {tab === 'reddit' && <><th>Subreddit</th><th>Post Title</th></>}
-                  {tab === 'viral' && <><th className="num">Viral Multiplier</th><th>Viral Video</th><th>Urgency</th></>}
-                  {(tab === 'youtube' || tab === 'competitor') && (
-                    <><th>Niche</th><th className="num">Subs</th><th className="num">Est. CPM</th><th>Last upload</th></>
-                  )}
+                  <th>Creator</th>
+                  <th>Niche</th><th className="num">Subs</th><th className="num">Est. CPM</th><th>Last upload</th>
                   <th>Email</th>
-                  {tab !== 'viral' && tab !== 'reddit' && <th className="num">Score</th>}
+                  <th className="num">Score</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
                 {currentLeads.map((lead, i) => (
                   <tr key={lead.id || i}>
-                    {tab !== 'viral' && (
-                      <td>
-                        <input type="checkbox" checked={currentSelected.has(lead.id)} onChange={() => toggleSelected(lead.id)} />
-                      </td>
-                    )}
                     <td>
-                      <div className="row" style={{ cursor: 'pointer', gap: 8 }} onClick={() => tab !== 'viral' && navigate(`/leads/${lead.id}`)}>
+                      <input type="checkbox" checked={currentSelected.has(lead.id)} onChange={() => toggleSelected(lead.id)} />
+                    </td>
+                    <td>
+                      <div className="row" style={{ cursor: 'pointer', gap: 8 }} onClick={() => navigate(`/leads/${lead.id}`)}>
                         <span className="ava" style={{ fontSize: 11, flexShrink: 0 }}>
-                          {((tab === 'reddit' ? (lead.reddit_username || lead.channel_name) : lead.channel_name) || '?')[0].toUpperCase()}
+                          {(lead.channel_name || '?')[0].toUpperCase()}
                         </span>
                         <div>
-                          <div style={{ fontSize: 13, fontWeight: 500 }}>
-                            {tab === 'reddit' ? `u/${lead.reddit_username || lead.channel_name}` : lead.channel_name}
-                          </div>
+                          <div style={{ fontSize: 13, fontWeight: 500 }}>{lead.channel_name}</div>
                           {lead.email && <span className="mono" style={{ fontSize: 9, color: 'var(--ok)', letterSpacing: '.08em' }}>EMAIL FOUND</span>}
                         </div>
                       </div>
                     </td>
-
-                    {tab === 'reddit' && (
-                      <>
-                        <td>
-                          <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: 'var(--lime-soft)', color: 'var(--lime)', border: '1px solid var(--lime-border)', fontFamily: 'var(--f-mono)' }}>
-                            r/{lead.reddit_subreddit || '—'}
-                          </span>
-                        </td>
-                        <td style={{ maxWidth: 200 }}>
-                          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12 }}>
-                            {lead.reddit_post_title || '—'}
-                          </div>
-                        </td>
-                      </>
-                    )}
-
-                    {tab === 'viral' && (
-                      <>
-                        <td className="num">
-                          <span className="mono" style={{ color: 'var(--coral)', fontSize: 14, fontWeight: 700 }}>
-                            {lead.viral_multiplier ?? '—'}x
-                          </span>
-                        </td>
-                        <td style={{ maxWidth: 240 }}>
-                          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12 }}>
-                            {lead.viral_video_title}
-                          </div>
-                        </td>
-                        <td>
-                          <span style={{ fontSize: 9, padding: '2px 8px', borderRadius: 99, background: 'var(--coral-soft)', color: 'var(--coral)', border: '1px solid var(--coral-border)', fontFamily: 'var(--f-mono)', fontWeight: 700 }}>
-                            URGENT
-                          </span>
-                        </td>
-                      </>
-                    )}
-
-                    {(tab === 'youtube' || tab === 'competitor') && (
-                      <>
-                        <td>
-                          <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: 'var(--lime-soft)', color: 'var(--lime)', border: '1px solid var(--lime-border)' }}>
-                            {lead.niche || 'General'}
-                          </span>
-                        </td>
-                        <td className="num">{formatNumber(lead.subscriber_count ?? 0)}</td>
-                        <td className="num" style={{ color: 'var(--lime)' }}>{lead.cpm ? `$${lead.cpm}` : '—'}</td>
-                        <td className="muted" style={{ fontSize: 11.5 }}>
-                          {lead.days_since_upload ? `${lead.days_since_upload}d ago` : '—'}
-                        </td>
-                      </>
-                    )}
+                    <td>
+                      <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: 'var(--lime-soft)', color: 'var(--lime)', border: '1px solid var(--lime-border)' }}>
+                        {lead.niche || 'General'}
+                      </span>
+                    </td>
+                    <td className="num">{formatNumber(lead.subscriber_count ?? 0)}</td>
+                    <td className="num" style={{ color: 'var(--lime)' }}>{lead.cpm ? `$${lead.cpm}` : '—'}</td>
+                    <td className="muted" style={{ fontSize: 11.5 }}>{lead.days_since_upload ? `${lead.days_since_upload}d ago` : '—'}</td>
 
                     <td className="mono" style={{ color: lead.email ? 'var(--ok)' : 'var(--text-3)', fontSize: 13 }}>
                       {lead.email ? '✓' : '–'}
                     </td>
 
-                    {tab !== 'viral' && tab !== 'reddit' && (
-                      <td className="num"><ScorePill score={lead.lead_score ?? 0} /></td>
-                    )}
+                    <td className="num"><ScorePill score={lead.lead_score ?? 0} /></td>
 
                     <td>
                       <div className="row" style={{ gap: 4, justifyContent: 'flex-end' }}>

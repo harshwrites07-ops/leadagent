@@ -221,7 +221,7 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
                     <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: warmup.color, letterSpacing: '0.12em' }}>{warmup.label.toUpperCase()}</span>
                   </div>
                   <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>
-                    Safe max: <strong style={{ color: 'var(--text-primary)' }}>{warmup.perInbox * INBOX_COUNT}/day</strong>
+                    Safe max: <strong style={{ color: 'var(--text-primary)' }}>{warmup.perInbox * (inboxes.length || INBOX_COUNT)}/day</strong>
                     <span style={{ color: 'var(--text-muted)', margin: '0 6px' }}>·</span>
                     {warmup.desc}
                     {sentToday > 0 && <span style={{ color: 'var(--text-muted)', marginLeft: 8 }}>({sentToday} sent today)</span>}

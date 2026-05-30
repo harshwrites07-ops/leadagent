@@ -309,26 +309,27 @@ async function buildChannelProfile(ch, earlyEmail = null) {
 
 // ─── Utilities ─────────────────────────────────────────────────────────────────
 
+const SKIP_EMAIL_DOMAINS = new Set([
+  'youtube.com', 'google.com', 'googlemail.com', 'googleapis.com',
+  'gstatic.com', 'ggpht.com', 'ytimg.com', 'sentry.io', 'example.com',
+]);
+
 function extractEmail(text) {
-  // Match all emails in text, then pick the cleanest one
   const all = [...text.matchAll(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g)].map(m => m[0]);
   for (const raw of all) {
-    // Strip known garbage prefixes that creep in from surrounding text
-    // e.g. "ninfo@..." (letter+lowercase), "CONTACT-foo@...", "-foo@..."
     let email = raw;
-    email = email.replace(/^[^a-zA-Z0-9]+/, '');            // strip leading non-alphanumeric
-    email = email.replace(/^[A-Z]{2,}-/i, '');              // strip ALL-CAPS- prefix like CONTACT-, EMAIL-
-    // If starts with single lowercase letter + capital (scraping artifact: "nFoo@" → "foo@")
+    email = email.replace(/^[^a-zA-Z0-9]+/, '');
+    email = email.replace(/^[A-Z]{2,}-/i, '');
     if (/^[a-z][A-Z]/.test(email)) email = email.slice(1);
-    // Validate the cleaned result
-    if (/^[a-zA-Z0-9][a-zA-Z0-9._%+\-]{1,}@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/.test(email)) {
-      return email.toLowerCase();
-    }
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._%+\-]{1,}@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/.test(email)) continue;
+    const domain = email.split('@')[1]?.toLowerCase();
+    if (domain && SKIP_EMAIL_DOMAINS.has(domain)) continue;
+    return email.toLowerCase();
   }
   return null;
 }
 
-const SYSTEM_DOMAINS = ['youtube.com', 'google.com', 'googlemail.com', 'googleapis.com', 'gstatic.com', 'ggpht.com', 'ytimg.com', 'sentry.io'];
+const SYSTEM_DOMAINS = [...SKIP_EMAIL_DOMAINS];
 
 async function scrapeEmailFromPage(handle, channelId) {
   const urls = [];
@@ -345,7 +346,7 @@ async function scrapeEmailFromPage(handle, channelId) {
         timeout: 8000,
       });
       const all = html.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g) || [];
-      const valid = [...new Set(all)].find(e => !SYSTEM_DOMAINS.some(d => e.toLowerCase().endsWith('@' + d)));
+      const valid = [...new Set(all)].find(e => !SKIP_EMAIL_DOMAINS.has(e.toLowerCase().split('@')[1]));
       if (valid) return valid;
     } catch {}
   }
@@ -354,16 +355,12 @@ async function scrapeEmailFromPage(handle, channelId) {
 
 async function scrapeEmailFromWebsite(websiteUrl) {
   if (!websiteUrl) return null;
-  const timeout = ms => new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms));
   try {
-    const { data: html } = await Promise.race([
-      axios.get(websiteUrl, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Outreach/1.0)' },
-        timeout: 5000,
-        maxRedirects: 3,
-      }),
-      timeout(5000),
-    ]);
+    const { data: html } = await axios.get(websiteUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Outreach/1.0)' },
+      timeout: 5000,
+      maxRedirects: 3,
+    });
     // Check linktree sub-links
     const linktreeLinks = (html.match(/href="(https:\/\/[^"]+)"/g) || [])
       .map(m => m.match(/href="([^"]+)"/)?.[1])

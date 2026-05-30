@@ -43,7 +43,20 @@
       "Bash(Get-ChildItem csaas-extracted *)",
       "Bash(Select-Object FullName)",
       "PowerShell(Move-Item \"c:\\\\Users\\\\it\\\\contentcrafterzz-outreach-os\\\\csaas-extracted\" \"c:\\\\Users\\\\it\\\\contentcrafterzz-outreach-os\\\\design-reference\" -Force)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(git gc *)",
+      "Bash(wmic logicaldisk *)",
+      "Bash(du -sh node_modules)",
+      "Bash(du -sh frontend/node_modules)",
+      "Bash(du -sh backend/node_modules)",
+      "Bash(du -sh design-reference)",
+      "Bash(ls -lh backend/*.db)",
+      "Bash(rm -f \"c:/Users/it/contentcrafterzz-outreach-os/design-reference/screenshots/\"*.png \"c:/Users/it/contentcrafterzz-outreach-os/design-reference/uploads/\"*.png && df -h / 2>/dev/null | tail -1)",
+      "Bash(npm cache *)",
+      "Bash(git checkout *)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\it\\contentcrafterzz-outreach-os\\design-reference\\screenshots"
     ]
   }
 }

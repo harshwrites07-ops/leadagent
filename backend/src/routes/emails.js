@@ -284,7 +284,7 @@ router.post('/send-now/:queueId', asyncHandler(async (req, res) => {
   db.prepare(`UPDATE email_queue SET status = 'sending' WHERE id = ?`).run(item.id);
 
   try {
-    const result = await sendEmail({ to: item.email, subject: item.subject, body: item.body, leadId: item.lead_id });
+    const result = await sendEmail({ to: item.email, subject: item.subject, body: item.body, leadId: item.lead_id, userId: req.user.id });
     db.prepare(`UPDATE email_queue SET status='sent', sent_at=CURRENT_TIMESTAMP, email_id=? WHERE id=?`)
       .run(result.emailId, item.id);
     res.json({ success: true, result });
@@ -438,13 +438,17 @@ router.post('/replies/fetch', asyncHandler(async (req, res) => {
 // Returns: per-inbox bounce-back detections + DB-level spam risk indicators
 router.get('/spam-report', asyncHandler(async (req, res) => {
   const db = getDb();
-  const inboxes = getInboxes();
+  const uid = req.user.id;
 
-  // DB stats per inbox
+  // Use user's connected Gmail accounts; fall back to global SMTP inboxes
+  const gmailAccounts = db.prepare(`SELECT email FROM gmail_accounts WHERE user_id = ? AND status IN ('active','sending')`).all(uid);
+  const inboxes = gmailAccounts.length > 0 ? gmailAccounts : getInboxes();
+
+  // DB stats per inbox — always filtered by this user's emails
   const perInbox = inboxes.map(inbox => {
-    const sent = db.prepare(`SELECT COUNT(*) as c FROM emails WHERE from_email=? AND DATE(sent_at) >= DATE('now','-30 days')`).get(inbox.email);
-    const bounced = db.prepare(`SELECT COUNT(*) as c FROM emails WHERE from_email=? AND status='bounced' AND DATE(sent_at) >= DATE('now','-30 days')`).get(inbox.email);
-    const opened = db.prepare(`SELECT COUNT(*) as c FROM emails WHERE from_email=? AND (status='opened' OR opened_at IS NOT NULL) AND DATE(sent_at) >= DATE('now','-30 days')`).get(inbox.email);
+    const sent    = db.prepare(`SELECT COUNT(*) as c FROM emails WHERE from_email=? AND user_id=? AND DATE(sent_at) >= DATE('now','-30 days')`).get(inbox.email, uid);
+    const bounced = db.prepare(`SELECT COUNT(*) as c FROM emails WHERE from_email=? AND user_id=? AND status='bounced' AND DATE(sent_at) >= DATE('now','-30 days')`).get(inbox.email, uid);
+    const opened  = db.prepare(`SELECT COUNT(*) as c FROM emails WHERE from_email=? AND user_id=? AND (status='opened' OR opened_at IS NOT NULL) AND DATE(sent_at) >= DATE('now','-30 days')`).get(inbox.email, uid);
     const sentCount = sent?.c || 0;
     const bouncedCount = bounced?.c || 0;
     const openedCount = opened?.c || 0;

@@ -309,8 +309,17 @@ router.post('/import', asyncHandler(async (req, res) => {
     if (!name) { skipped++; continue; }
     const exists = db.prepare('SELECT id FROM leads WHERE channel_name = ? AND user_id = ?').get(name, req.user.id);
     if (exists) { skipped++; continue; }
+    // Normalise channel_url → bare @handle for scrapeEmailFromPage compatibility
+    let handle = row.channel_url || row.channel_handle || null;
+    if (handle) {
+      try {
+        const u = new URL(handle);
+        const parts = u.pathname.split('/').filter(Boolean);
+        handle = parts.find(p => p.startsWith('@')) || parts[parts.length - 1] || handle;
+      } catch { /* not a URL, use as-is */ }
+    }
     try {
-      stmt.run(req.user.id, name, row.email || null, parseInt(row.subscriber_count) || 0, row.channel_url || null, row.niche || null);
+      stmt.run(req.user.id, name, row.email || null, parseInt(row.subscriber_count) || 0, handle, row.niche || null);
       added++;
     } catch { skipped++; }
   }
