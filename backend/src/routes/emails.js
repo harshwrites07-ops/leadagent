@@ -31,25 +31,19 @@ router.get('/', asyncHandler(async (req, res) => {
   res.json({ success: true, emails, total: total.count });
 }));
 
-// GET /api/emails/inboxes — inbox list from user's connected Gmail accounts
+// GET /api/emails/inboxes — ONLY the user's own connected Gmail accounts (no admin SMTP fallback)
 router.get('/inboxes', asyncHandler(async (req, res) => {
   const db = getDb();
   const uid = req.user.id;
 
-  // User-connected Gmail accounts only
   const gmailAccounts = db.prepare(
-    `SELECT email FROM gmail_accounts WHERE user_id = ? AND status IN ('active','sending')`
+    `SELECT email FROM gmail_accounts WHERE user_id = ? AND status = 'active'`
   ).all(uid);
 
-  // Fallback: global SMTP inboxes (admin-configured) if user has none
-  const inboxList = gmailAccounts.length > 0
-    ? gmailAccounts
-    : getInboxes();
-
-  const result = inboxList.map(inbox => {
+  const result = gmailAccounts.map(inbox => {
     const sentRow   = db.prepare(`SELECT COUNT(*) as c FROM emails WHERE from_email=? AND user_id=? AND DATE(sent_at)>=DATE('now','-30 days')`).get(inbox.email, uid);
     const bounceRow = db.prepare(`SELECT COUNT(*) as c FROM emails WHERE from_email=? AND user_id=? AND status='bounced' AND DATE(sent_at)>=DATE('now','-30 days')`).get(inbox.email, uid);
-    const openRow   = db.prepare(`SELECT COUNT(*) as c FROM emails WHERE from_email=? AND user_id=? AND status='opened'`).get(inbox.email, uid);
+    const openRow   = db.prepare(`SELECT COUNT(*) as c FROM emails WHERE from_email=? AND user_id=? AND (status='opened' OR opened_at IS NOT NULL)`).get(inbox.email, uid);
     const sentCount    = sentRow?.c   || 0;
     const bouncedCount = bounceRow?.c || 0;
     const openedCount  = openRow?.c   || 0;
@@ -440,12 +434,11 @@ router.get('/spam-report', asyncHandler(async (req, res) => {
   const db = getDb();
   const uid = req.user.id;
 
-  // Use user's connected Gmail accounts; fall back to global SMTP inboxes
-  const gmailAccounts = db.prepare(`SELECT email FROM gmail_accounts WHERE user_id = ? AND status IN ('active','sending')`).all(uid);
-  const inboxes = gmailAccounts.length > 0 ? gmailAccounts : getInboxes();
+  // Only the user's own connected Gmail accounts — never admin SMTP inboxes
+  const gmailAccounts = db.prepare(`SELECT email FROM gmail_accounts WHERE user_id = ? AND status = 'active'`).all(uid);
 
-  // DB stats per inbox — always filtered by this user's emails
-  const perInbox = inboxes.map(inbox => {
+  // DB stats per inbox — all queries scoped to this user
+  const perInbox = gmailAccounts.map(inbox => {
     const sent    = db.prepare(`SELECT COUNT(*) as c FROM emails WHERE from_email=? AND user_id=? AND DATE(sent_at) >= DATE('now','-30 days')`).get(inbox.email, uid);
     const bounced = db.prepare(`SELECT COUNT(*) as c FROM emails WHERE from_email=? AND user_id=? AND status='bounced' AND DATE(sent_at) >= DATE('now','-30 days')`).get(inbox.email, uid);
     const opened  = db.prepare(`SELECT COUNT(*) as c FROM emails WHERE from_email=? AND user_id=? AND (status='opened' OR opened_at IS NOT NULL) AND DATE(sent_at) >= DATE('now','-30 days')`).get(inbox.email, uid);
