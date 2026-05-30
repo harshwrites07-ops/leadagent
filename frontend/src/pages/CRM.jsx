@@ -1,719 +1,304 @@
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
-import {
-  Search, Wand2, Mail, StickyNote, X, ChevronDown,
-  Copy, Check, Clock, Users, Activity, Plus,
-  Trash2, ArrowRight, RefreshCw, Zap,
-  ExternalLink, CheckSquare, Square, AlignLeft, Download,
-} from 'lucide-react';
-import PowerSendOverlay from '../components/ui/PowerSendOverlay';
-import {
-  DndContext, closestCenter, KeyboardSensor, PointerSensor,
-  useSensor, useSensors, DragOverlay, useDroppable,
-} from '@dnd-kit/core';
-import {
-  SortableContext, verticalListSortingStrategy, useSortable,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-import api, { formatNumber, formatDate, tempLabel, tempClass, stageLabel } from '../utils/api';
-import ConfirmModal from '../components/ui/ConfirmModal';
+import Icon from '../components/ui/Icon';
+import api, { formatNumber, formatDate } from '../utils/api';
 
 const STAGES = [
-  { key: 'new_lead',     label: 'New Lead',    color: '#6B7280' },
-  { key: 'studying',     label: 'Studying',    color: '#00B8D4' },
-  { key: 'pitch_ready',  label: 'Pitch Ready', color: '#7B61FF' },
-  { key: 'emailed',      label: 'Emailed',     color: '#FF4500' },
-  { key: 'opened',       label: 'Opened',      color: '#F5A623' },
-  { key: 'replied',      label: 'Replied',     color: '#00E5A0' },
-  { key: 'call_booked',  label: 'Call Booked', color: '#00C896' },
-  { key: 'closed_won',   label: 'Closed Won',  color: '#00E5A0' },
-  { key: 'closed_lost',  label: 'Closed Lost', color: '#FF4444' },
+  { id: 'new_lead',       label: 'Discovered',  color: 'var(--text-3)' },
+  { id: 'studying',       label: 'Enriched',    color: 'var(--sky)' },
+  { id: 'pitch_ready',    label: 'Pitch Ready', color: 'var(--violet)' },
+  { id: 'email_sent',     label: 'Sent',        color: 'var(--lime-dim)' },
+  { id: 'replied',        label: 'Replied',     color: 'var(--coral)' },
+  { id: 'call_booked',    label: 'Call Booked', color: 'var(--ok)' },
+  { id: 'closed',         label: 'Won',         color: 'var(--ok)' },
+  { id: 'not_interested', label: 'Lost',        color: 'var(--text-4)' },
 ];
 
-const TEMP_FILTERS  = [{ key: 'all', label: 'ALL' }, { key: 'hot', label: 'Hot' }, { key: 'warm', label: 'Warm' }, { key: 'cold', label: 'Cold' }];
-const PLAT_FILTERS  = [{ key: 'all', label: 'ALL' }, { key: 'youtube', label: 'YouTube' }, { key: 'reddit', label: 'Reddit' }];
-const DETAIL_TABS   = ['Pitch', 'Emails', 'Notes', 'Timeline'];
-
-const inputSt = {
-  background: 'var(--bg-elevated)', border: '1px solid var(--border-default)',
-  borderRadius: 6, padding: '8px 12px', color: 'var(--text-primary)',
-  fontSize: 13, fontFamily: 'var(--font-body)', outline: 'none', width: '100%', boxSizing: 'border-box',
+const NICHE_COLORS = {
+  Finance: 'var(--lime)', Tech: 'var(--sky)', Fitness: 'var(--coral)',
+  Cooking: 'var(--cream)', Gaming: 'var(--violet)', Design: 'var(--sky)',
+  Travel: 'var(--coral)', Beauty: 'var(--coral)', Education: 'var(--lime)',
+  Business: 'var(--cream)',
 };
 
-const CopyButton = ({ text }) => {
-  const [copied, setCopied] = useState(false);
-  const handle = async () => {
-    try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000); }
-    catch { toast.error('Copy failed'); }
-  };
-  return (
-    <button onClick={handle} style={{
-      display: 'flex', alignItems: 'center', gap: 4,
-      padding: '4px 10px', borderRadius: 5, fontSize: 11, cursor: 'pointer',
-      background: copied ? 'rgba(0,229,160,0.12)' : 'var(--bg-elevated)',
-      color: copied ? '#00E5A0' : 'var(--text-muted)',
-      border: `1px solid ${copied ? 'rgba(0,229,160,0.3)' : 'var(--border-subtle)'}`,
-    }}>
-      {copied ? <><Check size={11} /> Copied</> : <><Copy size={11} /> Copy</>}
-    </button>
-  );
-};
-
-const initials = (name = '') => name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase() || '??';
-const daysInStage = movedAt => {
-  if (!movedAt) return null;
-  const diff = Math.floor((Date.now() - new Date(movedAt).getTime()) / 86400000);
-  return diff === 0 ? 'today' : `${diff}d`;
-};
-
-const TempBadge = ({ temp }) => {
-  const colors = { hot: ['rgba(255,69,0,0.12)', '#FF4500', 'rgba(255,69,0,0.3)'], warm: ['rgba(245,166,35,0.12)', '#F5A623', 'rgba(245,166,35,0.3)'], cold: ['rgba(0,184,212,0.12)', '#00B8D4', 'rgba(0,184,212,0.3)'] };
-  const [bg, color, border] = colors[temp] || colors.cold;
-  return <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 99, background: bg, color, border: `1px solid ${border}`, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em' }}>{(temp || 'cold').toUpperCase()}</span>;
-};
-
-// ─── Lead Card ────────────────────────────────────────────────────────────────
-const LeadCard = ({ lead, onClick, onPitch, onEmail, onNote, selected, onToggleSelect }) => (
-  <div style={{
-    background: selected ? 'rgba(255,69,0,0.06)' : 'var(--bg-card)',
-    border: `1px solid ${selected ? 'rgba(255,69,0,0.3)' : 'var(--border-subtle)'}`,
-    borderRadius: 8, padding: 12, cursor: 'pointer',
-    transition: 'all 0.15s',
-  }}
-    onMouseEnter={e => { if (!selected) e.currentTarget.style.background = 'var(--bg-card-hover)'; }}
-    onMouseLeave={e => { if (!selected) e.currentTarget.style.background = 'var(--bg-card)'; }}>
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 8 }}>
-      <button onClick={e => { e.stopPropagation(); onToggleSelect(lead.id); }} style={{ marginTop: 2, background: 'none', border: 'none', cursor: 'pointer', color: selected ? 'var(--accent-primary)' : 'var(--text-muted)', flexShrink: 0 }}>
-        {selected ? <CheckSquare size={13} /> : <Square size={13} />}
-      </button>
-      <div onClick={() => onClick(lead)} style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--bg-elevated)', overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}>
-        {lead.thumbnail_url ? <img src={lead.thumbnail_url} alt={lead.channel_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span>{initials(lead.channel_name)}</span>}
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }} onClick={() => onClick(lead)}>
-        <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lead.channel_name}</p>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 3, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 99, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em', background: lead.platform === 'youtube' ? 'rgba(0,184,212,0.12)' : 'rgba(123,97,255,0.12)', color: lead.platform === 'youtube' ? '#00B8D4' : '#7B61FF', border: `1px solid ${lead.platform === 'youtube' ? 'rgba(0,184,212,0.3)' : 'rgba(123,97,255,0.3)'}` }}>
-            {lead.platform === 'youtube' ? 'YT' : 'RD'}
-          </span>
-          {lead.temperature && <TempBadge temp={lead.temperature} />}
-          {lead.exported_at && (
-            <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 99, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.06em', background: 'rgba(113,113,122,0.1)', color: '#71717a', border: '1px solid rgba(113,113,122,0.2)' }}>EXPORTED</span>
-          )}
-        </div>
-      </div>
-    </div>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 11, color: 'var(--text-muted)', marginBottom: 8, paddingLeft: 21 }}>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><Users size={10} /> {formatNumber(lead.subscriber_count || 0)}</span>
-      {lead.email_count > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><Mail size={10} /> {lead.email_count}</span>}
-      {daysInStage(lead.updated_at) && <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><Clock size={10} /> {daysInStage(lead.updated_at)}</span>}
-    </div>
-    <div style={{ display: 'flex', gap: 4, paddingLeft: 21 }}>
-      {[
-        { icon: Wand2, label: 'Pitch', fn: onPitch },
-        { icon: Mail,  label: 'Email', fn: onEmail },
-        { icon: StickyNote, label: 'Note', fn: onNote },
-      ].map(({ icon: Icon, label, fn }) => (
-        <button key={label} onClick={e => { e.stopPropagation(); fn(lead); }} style={{
-          display: 'flex', alignItems: 'center', gap: 3, padding: '3px 8px',
-          borderRadius: 5, fontSize: 10, cursor: 'pointer',
-          background: 'transparent', border: '1px solid var(--border-subtle)',
-          color: 'var(--text-muted)', fontFamily: 'var(--font-body)',
-          transition: 'all 0.1s',
-        }}>
-          <Icon size={10} /> {label}
-        </button>
-      ))}
-    </div>
-  </div>
-);
-
-// ─── Kanban Column ────────────────────────────────────────────────────────────
-const KanbanColumn = ({ stage, leads, onCardClick, onPitch, onEmail, onNote, selectedIds, onToggleSelect, onSelectAllInColumn }) => {
-  const allSelected = leads.length > 0 && leads.every(l => selectedIds.has(l.id));
-  const { setNodeRef, isOver } = useDroppable({ id: stage.key });
-  return (
-  <div style={{
-    display: 'flex', flexDirection: 'column', borderRadius: 8, minWidth: 248, maxWidth: 264, minHeight: 200,
-    background: 'var(--bg-surface)', border: `1px solid var(--border-subtle)`,
-    borderTop: `2px solid ${stage.color}`,
-  }}>
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px 8px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <button onClick={() => onSelectAllInColumn(stage.key, leads)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: allSelected ? 'var(--accent-primary)' : 'var(--text-muted)', padding: 0, display: 'flex', alignItems: 'center' }}>
-          {allSelected ? <CheckSquare size={11} /> : <Square size={11} />}
-        </button>
-        <div style={{ width: 6, height: 6, borderRadius: '50%', background: stage.color, boxShadow: `0 0 6px ${stage.color}` }} />
-        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-body)' }}>{stage.label}</span>
-      </div>
-      <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 99, background: `${stage.color}18`, color: stage.color, border: `1px solid ${stage.color}30`, fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
-        {leads.length}
-      </span>
-    </div>
-    <SortableContext items={leads.map(l => l.id)} strategy={verticalListSortingStrategy}>
-      <div ref={setNodeRef} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '0 8px 8px', overflowY: 'auto', flex: 1, maxHeight: 'calc(100vh - 240px)', minHeight: 80, borderRadius: 4, transition: 'background 0.15s', background: isOver ? `${stage.color}08` : 'transparent' }}>
-        {leads.map(lead => (
-          <LeadCard key={lead.id} lead={lead} onClick={onCardClick} onPitch={onPitch} onEmail={onEmail} onNote={onNote}
-            selected={selectedIds.has(lead.id)} onToggleSelect={onToggleSelect} />
-        ))}
-        {leads.length === 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 0', gap: 6, color: isOver ? stage.color : 'var(--text-muted)', transition: 'color 0.15s' }}>
-            <AlignLeft size={16} />
-            <p style={{ fontSize: 11 }}>Drop leads here</p>
-          </div>
-        )}
-      </div>
-    </SortableContext>
-  </div>
-);
-};
-
-// ─── Lead Detail Panel ────────────────────────────────────────────────────────
-const LeadDetailPanel = ({ lead, onClose, onRefresh }) => {
-  const [activeTab, setActiveTab] = useState('Pitch');
-  const [pitch, setPitch] = useState(null);
-  const [emails, setEmails] = useState([]);
-  const [notes, setNotes] = useState([]);
-  const [timeline, setTimeline] = useState([]);
-  const [newNote, setNewNote] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [savingNote, setSavingNote] = useState(false);
-  const [stage, setStage] = useState(lead?.crm_stage || 'new_lead');
-  const [addingQueue, setAddingQueue] = useState(false);
-  const [generatingPitch, setGeneratingPitch] = useState(false);
-
-  useEffect(() => {
-    if (!lead) return;
-    setStage(lead.crm_stage || 'new_lead');
-    setPitch(null); setEmails([]); setNotes([]); setTimeline([]);
-    const load = async () => {
-      setLoading(true);
-      try {
-        const [histRes, pitchRes] = await Promise.allSettled([
-          api.get(`/crm/${lead.id}/history`),
-          api.get(`/pitches/by-lead/${lead.id}`),
-        ]);
-        if (histRes.status === 'fulfilled') { const d = histRes.value.data; setEmails(d.emails || []); setNotes(d.notes || []); setTimeline(d.timeline || d.activities || []); }
-        if (pitchRes.status === 'fulfilled') setPitch(pitchRes.value.data.pitch);
-      } finally { setLoading(false); }
-    };
-    load();
-  }, [lead?.id]);
-
-  if (!lead) return null;
-
-  const handleAddNote = async () => {
-    if (!newNote.trim()) return;
-    setSavingNote(true);
-    try {
-      await api.post(`/crm/${lead.id}/note`, { note: newNote.trim() });
-      setNotes(prev => [{ id: Date.now(), content: newNote.trim(), created_at: new Date().toISOString() }, ...prev]);
-      setNewNote('');
-      toast.success('Note saved');
-    } catch (err) { toast.error(err.message || 'Failed to save note'); }
-    finally { setSavingNote(false); }
-  };
-
-  const handleMoveStage = async newStage => {
-    try {
-      await api.put(`/crm/${lead.id}/stage`, { stage: newStage });
-      setStage(newStage);
-      toast.success(`Moved to ${stageLabel(newStage)}`);
-      onRefresh();
-    } catch (err) { toast.error(err.message || 'Failed to move stage'); }
-  };
-
-  const handleAddToQueue = async () => {
-    setAddingQueue(true);
-    try { await api.post('/emails/queue', { lead_id: lead.id }); toast.success('Added to email queue'); }
-    catch (err) { toast.error(err.message || 'Failed'); }
-    finally { setAddingQueue(false); }
-  };
-
-  const handleGeneratePitch = async () => {
-    setGeneratingPitch(true);
-    try {
-      const { data } = await api.post(`/pitches/generate/${lead.id}`);
-      setPitch(data.pitch); toast.success('Pitch generated!'); onRefresh();
-    } catch (err) { toast.error(err.message || 'Failed'); }
-    finally { setGeneratingPitch(false); }
-  };
-
-  const panelInputSt = { ...inputSt, fontSize: 12 };
-
-  return (
-    <motion.div initial={{ x: '100%', opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: '100%', opacity: 0 }}
-      transition={{ type: 'spring', damping: 26, stiffness: 300 }}
-      style={{ position: 'fixed', right: 0, top: 0, height: '100vh', width: 460, background: 'var(--bg-surface)', borderLeft: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', zIndex: 40, boxShadow: '-8px 0 32px rgba(0,0,0,0.5)' }}>
-
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
-        <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--bg-elevated)', overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>
-          {lead.thumbnail_url ? <img src={lead.thumbnail_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span>{initials(lead.channel_name)}</span>}
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <h2 style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, color: 'var(--text-primary)', fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>{lead.channel_name}</h2>
-            {lead.platform === 'youtube' && (lead.channel_handle || lead.channel_id) && (
-              <a href={lead.channel_handle ? `https://youtube.com/${lead.channel_handle}` : `https://youtube.com/channel/${lead.channel_id}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-muted)', flexShrink: 0 }}>
-                <ExternalLink size={13} />
-              </a>
-            )}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
-            <TempBadge temp={lead.temperature} />
-            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{formatNumber(lead.subscriber_count || 0)} subs</span>
-            {lead.email && <span style={{ fontSize: 11, color: '#00E5A0', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 180 }}>{lead.email}</span>}
-          </div>
-        </div>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }}><X size={16} /></button>
-      </div>
-
-      {/* Tabs */}
-      <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
-        {DETAIL_TABS.map(t => (
-          <button key={t} onClick={() => setActiveTab(t)} style={{
-            flex: 1, padding: '10px 0', fontSize: 12, fontWeight: 500, cursor: 'pointer',
-            background: 'none', border: 'none', borderBottom: `2px solid ${activeTab === t ? 'var(--accent-primary)' : 'transparent'}`,
-            color: activeTab === t ? 'var(--accent-primary)' : 'var(--text-muted)',
-            marginBottom: -1, transition: 'all 0.15s',
-          }}>{t}</button>
-        ))}
-      </div>
-
-      {/* Content */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
-        {loading ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {[1, 2, 3].map(i => <div key={i} className="skeleton" style={{ height: 60, borderRadius: 6, background: 'var(--bg-elevated)' }} />)}
-          </div>
-        ) : (
-          <>
-            {activeTab === 'Pitch' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {pitch ? (
-                  <>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                        <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>Cold Email</p>
-                        <CopyButton text={`Subject: ${pitch.email_subject}\n\n${pitch.cold_email}`} />
-                      </div>
-                      {pitch.email_subject && <p style={{ fontSize: 11, color: 'var(--accent-primary)', fontFamily: 'var(--font-mono)', marginBottom: 8 }}>Subject: {pitch.email_subject}</p>}
-                      <pre style={{ background: 'var(--bg-elevated)', borderRadius: 6, padding: '10px 12px', fontSize: 11, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', fontFamily: 'var(--font-mono)', lineHeight: 1.7, border: '1px solid var(--border-subtle)' }}>{pitch.cold_email}</pre>
-                    </div>
-                    {pitch.reddit_dm && (
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                          <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>Reddit DM</p>
-                          <CopyButton text={pitch.reddit_dm} />
-                        </div>
-                        <pre style={{ background: 'var(--bg-elevated)', borderRadius: 6, padding: '10px 12px', fontSize: 11, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', fontFamily: 'var(--font-mono)', lineHeight: 1.7, border: '1px solid var(--border-subtle)' }}>{pitch.reddit_dm}</pre>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px 0', gap: 12 }}>
-                    <Wand2 size={26} style={{ color: 'var(--text-muted)' }} />
-                    <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No pitch generated yet</p>
-                    <button onClick={handleGeneratePitch} disabled={generatingPitch} style={{ padding: '8px 20px', borderRadius: 6, cursor: 'pointer', background: 'var(--gradient-orange)', color: '#fff', border: 'none', fontSize: 13 }}>
-                      {generatingPitch ? 'Generating...' : 'Generate Pitch'}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {activeTab === 'Emails' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {emails.length === 0
-                  ? <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '32px 0' }}>No emails sent yet</p>
-                  : emails.map(email => (
-                    <div key={email.id} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 6, padding: '10px 12px' }}>
-                      <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{email.subject}</p>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                        <span>{formatDate(email.sent_at)}</span>
-                        {email.opened_at && <span style={{ color: '#00E5A0' }}>Opened</span>}
-                        {email.replied_at && <span style={{ color: '#7B61FF' }}>Replied</span>}
-                      </div>
-                    </div>
-                  ))
-                }
-              </div>
-            )}
-
-            {activeTab === 'Notes' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div>
-                  <textarea value={newNote} onChange={e => setNewNote(e.target.value)} placeholder="Add a note..."
-                    style={{ ...panelInputSt, height: 80, resize: 'none', fontFamily: 'var(--font-body)', lineHeight: 1.6 }} />
-                  <button onClick={handleAddNote} disabled={savingNote || !newNote.trim()}
-                    style={{ marginTop: 8, width: '100%', padding: '8px', borderRadius: 6, cursor: 'pointer', background: 'var(--gradient-orange)', color: '#fff', border: 'none', fontSize: 12, opacity: (savingNote || !newNote.trim()) ? 0.6 : 1 }}>
-                    {savingNote ? 'Saving...' : 'Save Note'}
-                  </button>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {notes.map(note => (
-                    <div key={note.id} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 6, padding: '10px 12px' }}>
-                      <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>{note.content}</p>
-                      <p style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4, fontFamily: 'var(--font-mono)' }}>{formatDate(note.created_at)}</p>
-                    </div>
-                  ))}
-                  {notes.length === 0 && <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '16px 0' }}>No notes yet</p>}
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'Timeline' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {timeline.length === 0
-                  ? <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '32px 0' }}>No activity yet</p>
-                  : timeline.map((event, i) => (
-                    <div key={event.id || i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                      <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent-primary)', marginTop: 6, flexShrink: 0 }} />
-                      <div>
-                        <p style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{event.description || event.type}</p>
-                        <p style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: 2 }}>{formatDate(event.created_at)}</p>
-                      </div>
-                    </div>
-                  ))
-                }
-              </div>
-            )}
-          </>
-        )}
-      </div>
-
-      {/* Quick actions */}
-      <div style={{ flexShrink: 0, padding: '12px 20px', borderTop: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={handleGeneratePitch} disabled={generatingPitch} style={{
-            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-            padding: '8px', borderRadius: 6, cursor: 'pointer', fontSize: 12,
-            background: 'transparent', border: '1px solid var(--border-default)', color: 'var(--text-secondary)',
-          }}>
-            <Wand2 size={13} /> {generatingPitch ? 'Generating...' : 'Gen Pitch'}
-          </button>
-          <button onClick={handleAddToQueue} disabled={addingQueue} style={{
-            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-            padding: '8px', borderRadius: 6, cursor: 'pointer', fontSize: 12,
-            background: 'var(--gradient-orange)', color: '#fff', border: 'none',
-          }}>
-            <Mail size={13} /> {addingQueue ? 'Adding...' : 'Add to Queue'}
-          </button>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>Move to:</span>
-          <select value={stage} onChange={e => handleMoveStage(e.target.value)} style={{ ...inputSt, fontSize: 12, padding: '6px 10px', flex: 1 }}>
-            {STAGES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
-          </select>
-        </div>
-      </div>
-    </motion.div>
-  );
-};
-
-// ─── Bulk Action Bar ──────────────────────────────────────────────────────────
-const BulkActionBar = ({ count, onMoveStage, onGenPitches, onAddQueue, onGenAndSend, onDelete, onClear, genSending }) => {
-  const [showStageMenu, setShowStageMenu] = useState(false);
-  return (
-    <motion.div initial={{ y: 80, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 80, opacity: 0 }}
-      style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 50, background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 10, padding: '10px 20px', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 8px 32px rgba(0,0,0,0.6)', flexWrap: 'wrap', maxWidth: 780 }}>
-      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{count} selected</span>
-      <div style={{ width: 1, height: 20, background: 'var(--border-default)' }} />
-      <div style={{ position: 'relative' }}>
-        <button onClick={() => setShowStageMenu(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 6, cursor: 'pointer', background: 'transparent', border: '1px solid var(--border-default)', color: 'var(--text-secondary)', fontSize: 12 }}>
-          <ArrowRight size={13} /> Move Stage <ChevronDown size={11} />
-        </button>
-        {showStageMenu && (
-          <div style={{ position: 'absolute', bottom: '100%', marginBottom: 6, left: 0, background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 8, padding: '4px 0', minWidth: 160, boxShadow: '0 8px 24px rgba(0,0,0,0.7)', zIndex: 10 }}>
-            {STAGES.map(s => (
-              <button key={s.key} onClick={() => { onMoveStage(s.key); setShowStageMenu(false); }} style={{ width: '100%', textAlign: 'left', padding: '8px 12px', fontSize: 12, color: 'var(--text-secondary)', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{ width: 6, height: 6, borderRadius: '50%', background: s.color }} />{s.label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-      {[
-        { icon: Wand2, label: 'Gen Pitches', fn: onGenPitches },
-        { icon: Mail,  label: 'Add to Queue', fn: onAddQueue },
-      ].map(({ icon: Icon, label, fn }) => (
-        <button key={label} onClick={fn} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 6, cursor: 'pointer', background: 'transparent', border: '1px solid var(--border-default)', color: 'var(--text-secondary)', fontSize: 12 }}>
-          <Icon size={13} /> {label}
-        </button>
-      ))}
-      <button onClick={onGenAndSend} disabled={genSending} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px', borderRadius: 6, cursor: genSending ? 'not-allowed' : 'pointer', background: 'var(--gradient-orange)', color: '#fff', border: 'none', fontSize: 12, opacity: genSending ? 0.7 : 1, whiteSpace: 'nowrap' }}>
-        {genSending ? <><RefreshCw size={13} style={{ animation: 'spin 1s linear infinite' }} /> Working...</> : <><Zap size={13} /> Generate & Send All</>}
-      </button>
-      <button onClick={onDelete} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 6, cursor: 'pointer', background: 'rgba(255,68,68,0.12)', border: '1px solid rgba(255,68,68,0.3)', color: '#FF4444', fontSize: 12 }}>
-        <Trash2 size={13} /> Delete
-      </button>
-      <button onClick={onClear} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }}><X size={15} /></button>
-    </motion.div>
-  );
-};
-
-// ─── Main CRM ─────────────────────────────────────────────────────────────────
 export default function CRM() {
   const navigate = useNavigate();
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [tempFilter, setTempFilter] = useState('all');
-  const [platformFilter, setPlatformFilter] = useState('all');
-  const [selectedPanel, setSelectedPanel] = useState(null);
-  const [selectedIds, setSelectedIds] = useState(new Set());
-  const [activeId, setActiveId] = useState(null);
-  const [genSending, setGenSending] = useState(false);
-  const [showPowerOverlay, setShowPowerOverlay] = useState(false);
-  const [powerLeadIds, setPowerLeadIds] = useState(null);
-  const [confirmModal, setConfirmModal] = useState(null);
-  const [exportCount, setExportCount] = useState({ new: 0, total: 0 });
-  const [exporting, setExporting] = useState(null); // 'new' | 'all' | null
+  const [selected, setSelected] = useState(null);
+  const [leadHistory, setLeadHistory] = useState([]);
+  const [leadPitch, setLeadPitch] = useState(null);
+  const [newNote, setNewNote] = useState('');
+  const [detailTab, setDetailTab] = useState('Timeline');
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }), useSensor(KeyboardSensor));
+  const columns = STAGES.map(s => ({
+    ...s,
+    leads: leads.filter(l => (l.crm_stage || l.stage) === s.id),
+  }));
 
-  const fetchLeads = useCallback(async () => {
+  const loadLeads = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await api.get('/crm', { params: { search: search || undefined, temperature: tempFilter !== 'all' ? tempFilter : undefined, platform: platformFilter !== 'all' ? platformFilter : undefined } });
-      setLeads(data.leads || []);
-    } catch (err) { toast.error(err.message || 'Failed to load CRM leads'); }
+      const { data } = await api.get('/crm');
+      setLeads(data.leads || data || []);
+    } catch { toast.error('Failed to load CRM'); }
     finally { setLoading(false); }
-  }, [search, tempFilter, platformFilter]);
-
-  const fetchExportCount = useCallback(async () => {
-    try {
-      const { data } = await api.get('/leads/export/count');
-      setExportCount({ new: data.new || 0, total: data.total || 0 });
-    } catch { /* non-critical */ }
   }, []);
 
-  useEffect(() => { const t = setTimeout(fetchLeads, search ? 350 : 0); return () => clearTimeout(t); }, [fetchLeads, search]);
-  useEffect(() => { fetchExportCount(); }, [fetchExportCount]);
+  useEffect(() => { loadLeads(); }, [loadLeads]);
 
-  const grouped = STAGES.reduce((acc, s) => { acc[s.key] = leads.filter(l => (l.crm_stage || 'new_lead') === s.key); return acc; }, {});
-
-  const handleDragStart = ({ active }) => setActiveId(active.id);
-  const handleDragEnd = async ({ active, over }) => {
-    setActiveId(null);
-    if (!over) return;
-    const targetStage = STAGES.find(s => grouped[s.key].some(l => l.id === over.id) || s.key === over.id);
-    if (!targetStage) return;
-    const lead = leads.find(l => l.id === active.id);
-    if (!lead || lead.crm_stage === targetStage.key) return;
-    setLeads(prev => prev.map(l => l.id === active.id ? { ...l, crm_stage: targetStage.key } : l));
-    try { await api.put(`/crm/${active.id}/stage`, { stage: targetStage.key }); toast.success(`Moved to ${targetStage.label}`); }
-    catch (err) { toast.error(err.message || 'Failed'); fetchLeads(); }
-  };
-
-  const toggleSelect = id => setSelectedIds(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
-  const clearSelection = () => setSelectedIds(new Set());
-  const selectAll = () => setSelectedIds(new Set(leads.map(l => l.id)));
-  const selectAllInColumn = (stageKey, columnLeads) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      const allSelected = columnLeads.length > 0 && columnLeads.every(l => prev.has(l.id));
-      if (allSelected) { columnLeads.forEach(l => next.delete(l.id)); }
-      else { columnLeads.forEach(l => next.add(l.id)); }
-      return next;
-    });
-  };
-
-  const exportLeads = async (filter) => {
-    if (filter === 'new' && exportCount.new === 0) {
-      toast.error('No new leads to export');
-      return;
-    }
-    setExporting(filter);
+  const handleSelectLead = async lead => {
+    setSelected(lead);
+    setLeadHistory([]);
+    setLeadPitch(null);
+    setDetailTab('Timeline');
     try {
-      const response = await api.get('/leads/export/csv', {
-        params: { filter },
-        responseType: 'blob',
-      });
-      const count = parseInt(response.headers['x-export-count'] || '0', 10);
-      const date = new Date().toISOString().split('T')[0];
-      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'text/csv' }));
+      const [histRes, pitchRes] = await Promise.allSettled([
+        api.get(`/crm/${lead.id}/history`),
+        api.get(`/pitches/by-lead/${lead.id}`),
+      ]);
+      if (histRes.status === 'fulfilled') setLeadHistory(histRes.value.data.history || histRes.value.data || []);
+      if (pitchRes.status === 'fulfilled') setLeadPitch(pitchRes.value.data.pitch);
+    } catch {}
+  };
+
+  const handleAddNote = async () => {
+    if (!newNote.trim() || !selected) return;
+    try {
+      await api.post(`/crm/${selected.id}/note`, { note: newNote.trim() });
+      setNewNote('');
+      toast.success('Note added');
+      handleSelectLead(selected);
+    } catch (err) { toast.error(err.message || 'Failed'); }
+  };
+
+  const handleMoveStage = async (leadId, stage) => {
+    try {
+      await api.put(`/crm/${leadId}/stage`, { stage });
+      setLeads(prev => prev.map(l => l.id === leadId ? { ...l, crm_stage: stage, stage } : l));
+      if (selected?.id === leadId) setSelected(s => ({ ...s, crm_stage: stage, stage }));
+      toast.success('Stage updated');
+    } catch (err) { toast.error(err.message || 'Failed'); }
+  };
+
+  const handleExportCsv = async () => {
+    try {
+      const response = await api.get('/leads/export/csv', { responseType: 'blob' });
+      const url = URL.createObjectURL(response.data);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `leads-export-${date}.csv`;
-      document.body.appendChild(a);
+      a.download = `crm_export_${new Date().toISOString().slice(0, 10)}.csv`;
       a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-      toast.success(`${count} lead${count !== 1 ? 's' : ''} exported successfully`);
-      // Refresh count and mark badges in local state
-      await fetchExportCount();
-      // Update exported_at locally so badges appear immediately without a full reload
-      if (filter === 'new') {
-        setLeads(prev => prev.map(l => l.exported_at ? l : { ...l, exported_at: new Date().toISOString() }));
-      }
-    } catch (err) {
-      toast.error(err.response?.data?.error || err.message || 'Export failed');
-    } finally {
-      setExporting(null);
-    }
+    } catch { toast.error('Export failed'); }
   };
 
-  const openPowerSend = () => {
-    const ids = selectedIds.size > 0 ? [...selectedIds] : null;
-    setPowerLeadIds(ids);
-    setShowPowerOverlay(true);
-  };
-
-  const bulkMoveStage = async stage => {
-    const ids = [...selectedIds];
-    try { await Promise.all(ids.map(id => api.put(`/crm/${id}/stage`, { stage }))); setLeads(prev => prev.map(l => selectedIds.has(l.id) ? { ...l, crm_stage: stage } : l)); toast.success(`Moved ${ids.length} leads`); clearSelection(); }
-    catch (err) { toast.error(err.message || 'Bulk move failed'); }
-  };
-  const bulkGenPitches = async () => { const ids = [...selectedIds]; try { await api.post('/pitches/bulk-generate', { lead_ids: ids }); toast.success(`Generating pitches for ${ids.length} leads`); clearSelection(); } catch (err) { toast.error(err.message || 'Failed'); } };
-  const bulkAddQueue = async () => { const ids = [...selectedIds]; try { await api.post('/emails/queue/bulk', { lead_ids: ids }); toast.success(`Added ${ids.length} leads to queue`); clearSelection(); } catch (err) { toast.error(err.message || 'Failed'); } };
-  const bulkGenerateAndSend = () => {
-    const ids = [...selectedIds];
-    if (!ids.length) return;
-    setConfirmModal({
-      title: 'Generate & Send All',
-      message: `Study, generate pitch, and send emails to ${ids.length} leads in one shot? This will use AI credits and email quota.`,
-      confirmLabel: 'Send All',
-      danger: false,
-      onConfirm: async () => {
-        setConfirmModal(null);
-        setGenSending(true);
-        try {
-          toast.loading(`Studying leads & generating emails...`, { id: 'gen-send' });
-          const { data } = await api.post('/pitches/generate-and-send', { lead_ids: ids });
-          const sent = data.sent || 0;
-          const failed = (data.total || 0) - sent;
-          toast.success(`Done! ${sent} emails sent${failed > 0 ? `, ${failed} failed` : ''}.`, { id: 'gen-send' });
-          clearSelection(); fetchLeads();
-        } catch (err) { toast.error(err.response?.data?.error || err.message || 'Failed', { id: 'gen-send' }); }
-        finally { setGenSending(false); }
-      },
-    });
-  };
-  const bulkDelete = () => {
-    setConfirmModal({
-      title: 'Delete leads',
-      message: `Delete ${selectedIds.size} leads? This cannot be undone.`,
-      confirmLabel: 'Delete',
-      onConfirm: async () => {
-        setConfirmModal(null);
-        const ids = [...selectedIds];
-        try { await api.delete('/crm/bulk', { data: { lead_ids: ids } }); setLeads(prev => prev.filter(l => !selectedIds.has(l.id))); toast.success(`Deleted ${ids.length} leads`); clearSelection(); }
-        catch (err) { toast.error(err.message || 'Delete failed'); }
-      },
-    });
-  };
-
-  const activeLead = activeId ? leads.find(l => l.id === activeId) : null;
-
-  const filterBtnSt = (active) => ({
-    padding: '6px 12px', borderRadius: 6, fontSize: 11, fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s',
-    ...(active
-      ? { background: 'rgba(255,69,0,0.1)', color: 'var(--accent-primary)', border: '1px solid rgba(255,69,0,0.2)' }
-      : { background: 'transparent', color: 'var(--text-muted)', border: '1px solid transparent' }),
-  });
+  const totalValue = leads.reduce((sum, l) => sum + (l.deal_value || 0), 0);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-      {confirmModal && <ConfirmModal {...confirmModal} onCancel={() => setConfirmModal(null)} />}
-      {/* Top bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-        <div style={{ position: 'relative', flex: '1 1 200px', maxWidth: 280 }}>
-          <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search leads..."
-            style={{ ...inputSt, paddingLeft: 32, flex: 1 }} />
+    <div className="page page--bleed" style={{ padding: '24px 24px 0', maxWidth: 'none' }}>
+      <div className="page__head">
+        <div>
+          <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>
+            Pipeline · {leads.length} creators{totalValue > 0 ? ` · $${(totalValue / 1000).toFixed(1)}k open value` : ''}
+          </div>
+          <h1 className="page__title">CRM — <em>drag a creator from cold to closed.</em></h1>
         </div>
-        <div style={{ display: 'flex', gap: 2, background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 7, padding: 3 }}>
-          {TEMP_FILTERS.map(f => <button key={f.key} onClick={() => setTempFilter(f.key)} style={filterBtnSt(tempFilter === f.key)}>{f.label}</button>)}
+        <div className="page__actions">
+          <button className="btn btn--ghost btn--sm"><Icon name="filter" size={12} />Filter</button>
+          <button className="btn btn--ghost btn--sm"><Icon name="search" size={12} />Search</button>
+          <button className="btn btn--ghost btn--sm" onClick={handleExportCsv}><Icon name="arrowDown" size={12} />Export</button>
         </div>
-        <div style={{ display: 'flex', gap: 2, background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 7, padding: 3 }}>
-          {PLAT_FILTERS.map(f => <button key={f.key} onClick={() => setPlatformFilter(f.key)} style={filterBtnSt(platformFilter === f.key)}>{f.label}</button>)}
-        </div>
-        <button onClick={fetchLeads} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 6, cursor: 'pointer', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', fontSize: 12 }}>
-          <RefreshCw size={12} /> Refresh
-        </button>
-        <button
-          onClick={() => exportLeads('new')}
-          disabled={exportCount.new === 0 || exporting === 'new'}
-          title={exportCount.new === 0 ? 'No new leads to export' : `Export ${exportCount.new} unexported leads`}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 6, cursor: exportCount.new === 0 ? 'not-allowed' : 'pointer', background: exportCount.new > 0 ? 'rgba(59,130,246,0.12)' : 'transparent', border: `1px solid ${exportCount.new > 0 ? 'rgba(59,130,246,0.3)' : 'var(--border-subtle)'}`, color: exportCount.new > 0 ? '#3b82f6' : 'var(--text-muted)', fontSize: 12, fontWeight: 600, opacity: exporting === 'new' ? 0.6 : 1, whiteSpace: 'nowrap' }}>
-          <Download size={12} />
-          {exporting === 'new' ? 'Exporting...' : `Export New${exportCount.new > 0 ? ` (${exportCount.new})` : ''}`}
-        </button>
-        <button
-          onClick={() => exportLeads('all')}
-          disabled={exporting === 'all'}
-          title="Export all leads to CSV"
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 6, cursor: 'pointer', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', fontSize: 12, opacity: exporting === 'all' ? 0.6 : 1, whiteSpace: 'nowrap' }}>
-          <Download size={12} />
-          {exporting === 'all' ? 'Exporting...' : 'Export All'}
-        </button>
-        <button onClick={selectedIds.size === leads.length && leads.length > 0 ? clearSelection : selectAll} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 6, cursor: 'pointer', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', fontSize: 12 }}>
-          {selectedIds.size === leads.length && leads.length > 0 ? <><CheckSquare size={12} style={{ color: 'var(--accent-primary)' }} /> Deselect All</> : <><Square size={12} /> Select All ({leads.length})</>}
-        </button>
-        <button onClick={openPowerSend} style={{ display: 'flex', alignItems: 'center', gap: 7, height: 36, padding: '0 16px', borderRadius: 7, cursor: 'pointer', background: 'var(--gradient-orange)', color: '#fff', border: 'none', fontSize: 12, fontWeight: 700, boxShadow: '0 0 16px rgba(255,69,0,0.35)', whiteSpace: 'nowrap' }}>
-          <Zap size={13} /> Power Email
-        </button>
       </div>
 
-      {/* Kanban board */}
       {loading ? (
-        <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 16 }}>
-          {STAGES.map(s => <div key={s.key} className="skeleton" style={{ flexShrink: 0, width: 248, height: 300, borderRadius: 8, background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }} />)}
+        <div style={{ padding: '48px', textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>
+          <span className="dot dot--pulse" style={{ marginRight: 8, display: 'inline-block' }} />Loading pipeline...
         </div>
       ) : (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-          <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 16, flex: 1, minHeight: 0 }}>
-            {STAGES.map(stage => (
-              <KanbanColumn key={stage.key} stage={stage} leads={grouped[stage.key] || []}
-                onCardClick={setSelectedPanel} onPitch={l => navigate(`/pitch-generator?lead=${l.id}`)}
-                onEmail={() => navigate('/email-sender')} onNote={setSelectedPanel}
-                selectedIds={selectedIds} onToggleSelect={toggleSelect}
-                onSelectAllInColumn={selectAllInColumn} />
-            ))}
-          </div>
-          <DragOverlay>
-            {activeLead ? (
-              <div style={{ background: 'var(--bg-elevated)', border: '1px solid rgba(255,69,0,0.4)', borderRadius: 8, padding: 12, width: 240, opacity: 0.9, boxShadow: '0 8px 24px rgba(0,0,0,0.6)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--bg-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)' }}>
-                    {initials(activeLead.channel_name)}
+        <div className="kb">
+          {columns.map(col => {
+            const colValue = col.leads.reduce((sum, l) => sum + (l.deal_value || 0), 0);
+            return (
+              <div key={col.id} className="kb__col">
+                <div className="kb__col-head">
+                  <div className="kb__col-title">
+                    <span className="swatch" style={{ background: col.color }} />
+                    {col.label}
+                    <span className="count">{col.leads.length}</span>
                   </div>
-                  <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeLead.channel_name}</p>
+                  <div className="kb__col-value">
+                    {colValue > 0 ? `$${(colValue / 1000).toFixed(1)}k` : '—'}
+                  </div>
                 </div>
+                <div className="kb__list">
+                  {col.leads.map((lead, i) => {
+                    const isHot = lead.temperature === 'hot' || col.id === 'replied' || col.id === 'call_booked';
+                    const nicheColor = NICHE_COLORS[lead.niche] || 'var(--text-3)';
+                    return (
+                      <div
+                        key={lead.id || i}
+                        className="kb__card"
+                        onClick={() => handleSelectLead(lead)}
+                        style={isHot ? { borderColor: 'var(--coral-border)' } : undefined}
+                      >
+                        <div className="kb__card-head">
+                          <span className="ava" style={{ fontSize: 10, width: 26, height: 26, minWidth: 26, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-3)', color: '#0a0a0c' }}>
+                            {(lead.channel_name || '?')[0].toUpperCase()}
+                          </span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div className="kb__card-name">{lead.channel_name}</div>
+                            <div className="kb__card-meta">
+                              {lead.channel_handle || ''} · {formatNumber(lead.subscriber_count ?? 0)}
+                            </div>
+                          </div>
+                          {isHot && (
+                            <span className="dot dot--pulse-coral" style={{ background: 'var(--coral)', width: 7, height: 7, marginTop: 4, flexShrink: 0 }} />
+                          )}
+                        </div>
+                        <div className="kb__card-foot">
+                          <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: 'var(--bg-2)', color: nicheColor, border: `1px solid ${nicheColor}22` }}>
+                            {lead.niche || 'General'}
+                          </span>
+                          {lead.deal_value ? (
+                            <span className="kb__card-value">${(lead.deal_value / 1000).toFixed(1)}k</span>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <button className="kb__add" onClick={() => navigate('/leads')}>
+                  <Icon name="plus" size={11} /> Add
+                </button>
               </div>
-            ) : null}
-          </DragOverlay>
-        </DndContext>
+            );
+          })}
+        </div>
       )}
 
-      <AnimatePresence>
-        {selectedPanel && (
-          <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 30 }}
-              onClick={() => setSelectedPanel(null)} />
-            <LeadDetailPanel lead={selectedPanel} onClose={() => setSelectedPanel(null)} onRefresh={fetchLeads} />
-          </>
-        )}
-      </AnimatePresence>
+      {/* Slide-in lead detail */}
+      {selected && (
+        <div style={{
+          position: 'fixed', top: 0, right: 0, bottom: 28, width: 440,
+          background: 'var(--bg-2)', borderLeft: '1px solid var(--line)',
+          zIndex: 20, overflowY: 'auto', padding: '24px 26px',
+        }}>
+          <div className="row" style={{ marginBottom: 16 }}>
+            <button className="btn btn--ghost btn--sm" onClick={() => setSelected(null)}>
+              <Icon name="x" size={12} />Close
+            </button>
+            <div style={{ flex: 1 }} />
+            <button className="btn btn--ghost btn--sm" onClick={() => navigate(`/analyzer`)}>
+              <Icon name="eye" size={12} />Open in Analyzer
+            </button>
+          </div>
 
-      <AnimatePresence>
-        {selectedIds.size > 0 && (
-          <BulkActionBar count={selectedIds.size} onMoveStage={bulkMoveStage} onGenPitches={bulkGenPitches}
-            onAddQueue={bulkAddQueue} onGenAndSend={bulkGenerateAndSend} onDelete={bulkDelete}
-            onClear={clearSelection} genSending={genSending} />
-        )}
-      </AnimatePresence>
+          <div className="row" style={{ gap: 14, marginBottom: 18 }}>
+            <span className="ava" style={{ fontSize: 14, width: 44, height: 44, minWidth: 44, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-3)', color: '#0a0a0c' }}>
+              {(selected.channel_name || '?')[0].toUpperCase()}
+            </span>
+            <div>
+              <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: '-0.01em' }}>{selected.channel_name}</div>
+              <div className="mono muted" style={{ fontSize: 11.5 }}>
+                {selected.channel_handle || ''} · {formatNumber(selected.subscriber_count ?? 0)}
+              </div>
+              <div className="row" style={{ gap: 6, marginTop: 6 }}>
+                <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: 'var(--bg-2)', color: NICHE_COLORS[selected.niche] || 'var(--text-3)', border: '1px solid var(--line)' }}>
+                  {selected.niche || 'General'}
+                </span>
+                {selected.email && <span className="badge badge--lime">email found</span>}
+              </div>
+            </div>
+          </div>
 
-      {showPowerOverlay && (
-        <PowerSendOverlay
-          leadIds={powerLeadIds}
-          maxLeads={100}
-          onClose={() => { setShowPowerOverlay(false); clearSelection(); fetchLeads(); }}
-        />
+          <div className="field" style={{ marginBottom: 14 }}>
+            <div className="field__label">Stage</div>
+            <select
+              className="input"
+              value={selected.crm_stage || selected.stage || 'new_lead'}
+              onChange={e => handleMoveStage(selected.id, e.target.value)}
+              style={{ fontSize: 12 }}
+            >
+              {STAGES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+            </select>
+          </div>
+
+          <div className="tabs" style={{ marginBottom: 14 }}>
+            {['Timeline', 'Pitch', 'Notes'].map(t => (
+              <div key={t} className={`tab ${detailTab === t ? 'is-active' : ''}`} onClick={() => setDetailTab(t)}>
+                {t}
+              </div>
+            ))}
+          </div>
+
+          {detailTab === 'Timeline' && (
+            <>
+              <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>Timeline</div>
+              {leadHistory.length === 0 ? (
+                <div className="muted" style={{ fontSize: 12 }}>No activity recorded yet.</div>
+              ) : leadHistory.map((e, i) => (
+                <div key={i} className="row" style={{ gap: 12, padding: '10px 0', borderBottom: '1px dashed var(--line)' }}>
+                  <span style={{ color: e.type === 'reply' ? 'var(--coral)' : e.type === 'open' ? 'var(--lime)' : 'var(--text-3)', width: 16, display: 'grid', placeItems: 'center' }}>
+                    <Icon name={e.type === 'reply' ? 'reply' : e.type === 'open' ? 'eye' : e.type === 'note' ? 'pen' : 'mail'} size={13} />
+                  </span>
+                  <div style={{ flex: 1, fontSize: 12.5 }}>{e.description || e.event || '—'}</div>
+                  <span className="mono muted" style={{ fontSize: 10.5 }}>{formatDate(e.created_at || e.timestamp)}</span>
+                </div>
+              ))}
+            </>
+          )}
+
+          {detailTab === 'Pitch' && (
+            <>
+              {leadPitch ? (
+                <>
+                  <div style={{ fontSize: 11, color: 'var(--lime)', fontFamily: 'var(--f-mono)', marginBottom: 8 }}>
+                    Subject: {leadPitch.email_subject || '—'}
+                  </div>
+                  <pre style={{ fontSize: 11, color: 'var(--text-2)', whiteSpace: 'pre-wrap', fontFamily: 'var(--f-mono)', lineHeight: 1.6, background: 'var(--bg-2)', borderRadius: 'var(--r-sm)', padding: '10px 12px', border: '1px solid var(--line)', maxHeight: 400, overflowY: 'auto' }}>
+                    {leadPitch.cold_email || '—'}
+                  </pre>
+                </>
+              ) : (
+                <div style={{ textAlign: 'center', padding: '24px 0' }}>
+                  <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>No pitch yet.</div>
+                  <button className="btn btn--ghost btn--sm" onClick={() => navigate(`/pitch-generator?lead=${selected.id}`)}>
+                    <Icon name="sparkle" size={11} />Generate pitch
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+
+          {detailTab === 'Notes' && (
+            <div>
+              <textarea
+                className="input"
+                rows={3}
+                placeholder="Add a note..."
+                value={newNote}
+                onChange={e => setNewNote(e.target.value)}
+                style={{ fontFamily: 'var(--f-sans)', fontSize: 12, resize: 'vertical', width: '100%', boxSizing: 'border-box', marginBottom: 8 }}
+              />
+              <button className="btn btn--ghost btn--sm" onClick={handleAddNote}>
+                <Icon name="pen" size={11} />Save note
+              </button>
+            </div>
+          )}
+
+          <div className="row" style={{ gap: 6, marginTop: 20 }}>
+            <button className="btn btn--sm" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setDetailTab('Notes')}>
+              <Icon name="pen" size={11} />Note
+            </button>
+            <button className="btn btn--sm" style={{ flex: 1, justifyContent: 'center' }} onClick={() => navigate(`/pitch-generator?lead=${selected.id}`)}>
+              <Icon name="sparkle" size={11} />Pitch
+            </button>
+            <button className="btn btn--coral btn--sm" style={{ flex: 1, justifyContent: 'center' }} onClick={() => navigate('/email')}>
+              <Icon name="reply" size={11} />Reply
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

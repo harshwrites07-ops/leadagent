@@ -17,15 +17,15 @@ export default class ErrorBoundary extends Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a0a0f', color: '#e2e8f0', fontFamily: 'monospace', textAlign: 'center', padding: '2rem' }}>
+        <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', color: 'var(--text)', fontFamily: 'var(--f-mono)', textAlign: 'center', padding: '2rem' }}>
           <div>
-            <h2 style={{ color: '#f87171', marginBottom: '1rem', fontSize: '1.5rem' }}>Something went wrong</h2>
-            <p style={{ color: '#94a3b8', marginBottom: '1.5rem', maxWidth: 400 }}>
+            <h2 style={{ color: 'var(--bad)', marginBottom: '1rem', fontSize: '1.5rem' }}>Something went wrong</h2>
+            <p style={{ color: 'var(--text-3)', marginBottom: '1.5rem', maxWidth: 400 }}>
               {this.state.error?.message || 'An unexpected error occurred.'}
             </p>
             <button
               onClick={() => { this.setState({ hasError: false, error: null }); window.location.reload(); }}
-              style={{ background: '#6366f1', color: 'white', border: 'none', padding: '0.6rem 1.5rem', borderRadius: '8px', cursor: 'pointer', fontSize: '1rem' }}
+              style={{ background: 'var(--lime)', color: 'var(--bg)', border: 'none', padding: '0.6rem 1.5rem', borderRadius: '8px', cursor: 'pointer', fontSize: '1rem', fontWeight: 700 }}
             >
               Reload App
             </button>

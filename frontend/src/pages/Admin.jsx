@@ -121,7 +121,7 @@ export default function Admin() {
                       <button onClick={() => resetUsage(u.id)} disabled={!!actionLoading} title="Reset usage" style={styles.iconBtn}>
                         <RefreshCw size={12} />
                       </button>
-                      <button onClick={() => banUser(u.id, u.plan_status === 'banned')} disabled={!!actionLoading} title={u.plan_status === 'banned' ? 'Unban' : 'Ban'} style={{ ...styles.iconBtn, color: u.plan_status === 'banned' ? '#00E5A0' : '#FF8C00' }}>
+                      <button onClick={() => banUser(u.id, u.plan_status === 'banned')} disabled={!!actionLoading} title={u.plan_status === 'banned' ? 'Unban' : 'Ban'} style={{ ...styles.iconBtn, color: u.plan_status === 'banned' ? 'var(--ok)' : '#FF8C00' }}>
                         <Ban size={12} />
                       </button>
                       {u.id !== user.id && (

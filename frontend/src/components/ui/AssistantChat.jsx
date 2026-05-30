@@ -51,15 +51,15 @@ function Message({ msg }) {
       <div style={{
         width: 26, height: 26, borderRadius: '50%', flexShrink: 0, display: 'flex',
         alignItems: 'center', justifyContent: 'center', marginTop: 2,
-        background: isUser ? '#1a1a1a' : 'linear-gradient(135deg, #FF4500, #FF8C00)',
-        border: isUser ? '1px solid #2a2a2a' : 'none',
+        background: isUser ? 'var(--surface-2)' : 'var(--lime)',
+        border: isUser ? '1px solid var(--line)' : 'none',
       }}>
         {isUser ? <User size={12} color="#aaa" /> : <Bot size={12} color="#fff" />}
       </div>
       <div style={{
         maxWidth: '82%', borderRadius: 14, padding: '8px 12px', fontSize: 12,
-        background: isUser ? '#FF4500' : '#141414',
-        color: isUser ? '#fff' : '#ccc',
+        background: isUser ? 'var(--coral)' : 'var(--surface)',
+        color: isUser ? '#0a0a0c' : 'var(--text-2)',
         borderTopRightRadius: isUser ? 4 : 14,
         borderTopLeftRadius: isUser ? 14 : 4,
         lineHeight: 1.5,
@@ -72,7 +72,7 @@ function Message({ msg }) {
 }
 
 // Animated sound wave for listening / speaking
-function VoiceWave({ color = '#FF4500', bars = 5 }) {
+function VoiceWave({ color = 'var(--lime)', bars = 5 }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 2, height: 20 }}>
       {Array.from({ length: bars }).map((_, i) => (
@@ -326,8 +326,8 @@ export default function AssistantChat() {
         title="Open Captain Levi — Outreach OS"
         style={{
           ...posStyle, width: 56, height: 56, borderRadius: '50%', zIndex: 9999,
-          background: 'linear-gradient(135deg, #FF4500, #FF8C00)',
-          boxShadow: '0 8px 32px rgba(255,69,0,0.4)',
+          background: 'var(--lime)',
+          boxShadow: '0 8px 32px rgba(200,246,84,0.3)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           border: 'none', cursor: 'pointer', transition: 'transform 0.15s',
         }}
@@ -337,7 +337,7 @@ export default function AssistantChat() {
         <Bot size={22} color="#fff" />
         <span style={{
           position: 'absolute', top: -2, right: -2, width: 14, height: 14,
-          borderRadius: '50%', background: '#00E5A0', border: '2px solid #080808',
+          borderRadius: '50%', background: 'var(--ok)', border: '2px solid var(--bg)',
         }} />
       </button>
     );
@@ -350,7 +350,7 @@ export default function AssistantChat() {
         ...posStyle, zIndex: 9999, width: 390,
         display: 'flex', flexDirection: 'column',
         background: '#0d0d0d', border: '1px solid #1e1e1e', borderRadius: 18,
-        boxShadow: '0 24px 60px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,69,0,0.08)',
+        boxShadow: '0 24px 60px rgba(0,0,0,0.8), 0 0 0 1px rgba(var(--lime-rgb),0.08)',
         overflow: 'hidden',
         height: minimized ? 'auto' : 560,
         transition: 'height 0.2s ease',
@@ -362,15 +362,15 @@ export default function AssistantChat() {
         style={{
           display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
           flexShrink: 0, borderBottom: minimized ? 'none' : '1px solid #1a1a1a',
-          background: 'linear-gradient(135deg, rgba(255,69,0,0.12), rgba(255,140,0,0.06))',
+          background: 'rgba(200,246,84,0.06)',
           cursor: 'grab', userSelect: 'none',
         }}
       >
         <div style={{
           width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
-          background: 'linear-gradient(135deg, #FF4500, #FF8C00)',
+          background: 'var(--lime)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: speaking ? '0 0 12px rgba(255,69,0,0.7)' : 'none',
+          boxShadow: speaking ? '0 0 12px rgba(200,246,84,0.7)' : 'none',
           transition: 'box-shadow 0.3s',
         }}>
           {speaking ? <Radio size={16} color="#fff" /> : <Bot size={17} color="#fff" />}
@@ -379,10 +379,10 @@ export default function AssistantChat() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <p style={{ fontSize: 13, fontWeight: 700, color: '#fff', margin: 0 }}>Captain Levi</p>
             {speaking
-              ? <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 20, fontWeight: 700, background: 'rgba(255,69,0,0.2)', color: '#FF4500', border: '1px solid rgba(255,69,0,0.4)' }}>SPEAKING</span>
+              ? <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 20, fontWeight: 700, background: 'rgba(200,246,84,0.15)', color: 'var(--lime)', border: '1px solid rgba(200,246,84,0.3)' }}>SPEAKING</span>
               : listening
-              ? <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 20, fontWeight: 700, background: 'rgba(0,229,160,0.15)', color: '#00E5A0', border: '1px solid rgba(0,229,160,0.3)' }}>LISTENING</span>
-              : <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 20, fontWeight: 700, background: 'rgba(0,229,160,0.15)', color: '#00E5A0', border: '1px solid rgba(0,229,160,0.3)' }}>LIVE</span>
+              ? <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 20, fontWeight: 700, background: 'rgba(var(--ok-rgb),0.15)', color: 'var(--ok)', border: '1px solid rgba(var(--ok-rgb),0.3)' }}>LISTENING</span>
+              : <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 20, fontWeight: 700, background: 'rgba(var(--ok-rgb),0.15)', color: 'var(--ok)', border: '1px solid rgba(var(--ok-rgb),0.3)' }}>LIVE</span>
             }
           </div>
           <p style={{ fontSize: 10, color: '#555', margin: 0 }}>
@@ -396,7 +396,7 @@ export default function AssistantChat() {
           <button
             onClick={() => { setVoiceOut(v => !v); if (speaking) stopSpeaking(); }}
             title={voiceOut ? 'Mute voice' : 'Unmute voice'}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: voiceOut ? '#FF4500' : '#444' }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: voiceOut ? 'var(--lime)' : 'var(--text-4)' }}
           >
             {voiceOut ? <Volume2 size={14} /> : <VolumeX size={14} />}
           </button>
@@ -424,28 +424,28 @@ export default function AssistantChat() {
 
             {/* Listening indicator */}
             {listening && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: 'rgba(0,229,160,0.06)', border: '1px solid rgba(0,229,160,0.2)', borderRadius: 12 }}>
-                <VoiceWave color="#00E5A0" bars={6} />
-                <span style={{ fontSize: 11, color: '#00E5A0' }}>Listening... speak now</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: 'rgba(var(--ok-rgb),0.06)', border: '1px solid rgba(var(--ok-rgb),0.2)', borderRadius: 12 }}>
+                <VoiceWave color="var(--ok)" bars={6} />
+                <span style={{ fontSize: 11, color: 'var(--ok)' }}>Listening... speak now</span>
               </div>
             )}
 
             {/* Speaking indicator */}
             {speaking && !listening && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: 'rgba(255,69,0,0.06)', border: '1px solid rgba(255,69,0,0.2)', borderRadius: 12 }}>
-                <VoiceWave color="#FF4500" bars={6} />
-                <span style={{ fontSize: 11, color: '#FF4500' }}>Captain Levi is speaking</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: 'rgba(200,246,84,0.06)', border: '1px solid rgba(200,246,84,0.2)', borderRadius: 12 }}>
+                <VoiceWave color="var(--lime)" bars={6} />
+                <span style={{ fontSize: 11, color: 'var(--lime)' }}>Captain Levi is speaking</span>
                 <button onClick={stopSpeaking} style={{ marginLeft: 'auto', fontSize: 10, color: '#555', background: 'none', border: 'none', cursor: 'pointer' }}>stop</button>
               </div>
             )}
 
             {loading && (
               <div style={{ display: 'flex', gap: 8 }}>
-                <div style={{ width: 26, height: 26, borderRadius: '50%', flexShrink: 0, background: 'linear-gradient(135deg, #FF4500, #FF8C00)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Bot size={12} color="#fff" />
+                <div style={{ width: 26, height: 26, borderRadius: '50%', flexShrink: 0, background: 'var(--lime)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Bot size={12} color="#0a0a0c" />
                 </div>
-                <div style={{ background: '#141414', border: '1px solid #1e1e1e', borderRadius: 14, borderTopLeftRadius: 4, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Loader2 size={12} color="#FF4500" style={{ animation: 'spin 1s linear infinite' }} />
+                <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 14, borderTopLeftRadius: 4, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Loader2 size={12} style={{ color: 'var(--lime)', animation: 'spin 1s linear infinite' }} />
                   <span style={{ fontSize: 11, color: '#555' }}>Thinking...</span>
                 </div>
               </div>
@@ -461,7 +461,7 @@ export default function AssistantChat() {
                   fontSize: 10, padding: '4px 10px', borderRadius: 20, cursor: 'pointer',
                   background: 'transparent', border: '1px solid #222', color: '#555', transition: 'all 0.15s',
                 }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,69,0,0.4)'; e.currentTarget.style.color = '#FF4500'; }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(200,246,84,0.4)'; e.currentTarget.style.color = 'var(--lime)'; }}
                   onMouseLeave={e => { e.currentTarget.style.borderColor = '#222'; e.currentTarget.style.color = '#555'; }}
                 >{s}</button>
               ))}
@@ -479,15 +479,15 @@ export default function AssistantChat() {
                   title={listening ? 'Stop listening' : 'Speak to Captain Levi'}
                   style={{
                     flexShrink: 0, width: 36, height: 36, borderRadius: 10, border: 'none',
-                    background: listening ? 'rgba(0,229,160,0.15)' : '#111',
+                    background: listening ? 'rgba(var(--ok-rgb),0.15)' : '#111',
                     cursor: loading ? 'default' : 'pointer',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    boxShadow: listening ? '0 0 0 2px rgba(0,229,160,0.5)' : '0 0 0 1px #222',
+                    boxShadow: listening ? '0 0 0 2px rgba(var(--ok-rgb),0.5)' : '0 0 0 1px #222',
                     transition: 'all 0.2s',
                   }}
                 >
                   {listening
-                    ? <MicOff size={15} color="#00E5A0" />
+                    ? <MicOff size={15} color="var(--ok)" />
                     : <Mic size={15} color={loading ? '#333' : '#888'} />
                   }
                 </button>
@@ -503,9 +503,9 @@ export default function AssistantChat() {
                 style={{
                   flex: 1, background: '#111', border: '1px solid #222', borderRadius: 10,
                   padding: '8px 12px', color: '#fff', fontSize: 12, outline: 'none', fontFamily: 'inherit',
-                  borderColor: listening ? 'rgba(0,229,160,0.4)' : '#222',
+                  borderColor: listening ? 'rgba(var(--ok-rgb),0.4)' : '#222',
                 }}
-                onFocus={e => { if (!listening) e.target.style.borderColor = 'rgba(255,69,0,0.5)'; }}
+                onFocus={e => { if (!listening) e.target.style.borderColor = 'rgba(var(--lime-rgb),0.5)'; }}
                 onBlur={e => { if (!listening) e.target.style.borderColor = '#222'; }}
               />
 
@@ -514,7 +514,7 @@ export default function AssistantChat() {
                 disabled={!input.trim() || loading || listening}
                 style={{
                   flexShrink: 0, width: 36, height: 36, borderRadius: 10, border: 'none',
-                  background: input.trim() && !loading && !listening ? 'linear-gradient(135deg, #FF4500, #FF8C00)' : '#1a1a1a',
+                  background: input.trim() && !loading && !listening ? 'var(--lime)' : 'var(--surface-2)',
                   cursor: input.trim() && !loading && !listening ? 'pointer' : 'default',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s',
                 }}

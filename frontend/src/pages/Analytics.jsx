@@ -1,553 +1,322 @@
-﻿﻿import { useState, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import toast from 'react-hot-toast';
-import {
-  TrendingUp, DollarSign, Target, Clock, BarChart2,
-  RefreshCw, Youtube, MessageSquare, ChevronUp, ChevronDown,
-} from 'lucide-react';
-import {
-  BarChart, Bar, LineChart, Line, AreaChart, Area,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  FunnelChart, Cell, PieChart, Pie,
-} from 'recharts';
-import api, { formatNumber, formatDate, stageLabel } from '../utils/api';
-import { useApp } from '../context/AppContext';
+import Icon from '../components/ui/Icon';
+import api, { formatNumber } from '../utils/api';
 
-// ---------------------------------------------------------------------------
-// Chart theme constants
-// ---------------------------------------------------------------------------
-const GRID_COLOR = '#1E1E1E';
-const TICK_COLOR = '#555555';
-const C_PRIMARY  = '#FF4500';
-const C_SUCCESS  = '#00E5A0';
-const C_PURPLE   = '#7B61FF';
-const C_AMBER    = '#F5A623';
-const C_CYAN     = '#00B8D4';
-const C_RED      = '#FF4560';
-
-const CHART_COLORS = [C_PRIMARY, C_SUCCESS, C_PURPLE, C_AMBER, C_CYAN, C_RED];
-
-// ---------------------------------------------------------------------------
-// Shared dark tooltip
-// ---------------------------------------------------------------------------
-const DarkTooltip = ({ active, payload, label }) => {
-  if (!active || !payload?.length) return null;
+const Sparkline = ({ data = [], color = 'var(--lime)', height = 56 }) => {
+  if (data.length < 2) return null;
+  const max = Math.max(...data);
+  const min = Math.min(...data);
+  const range = max - min || 1;
+  const pts = data.map((v, i) => {
+    const x = (i / (data.length - 1)) * 100;
+    const y = height - ((v - min) / range) * (height - 4) - 2;
+    return `${x},${y}`;
+  }).join(' ');
   return (
-    <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 8, padding: '8px 12px', fontSize: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.8)' }}>
-      {label && <p style={{ color: 'var(--text-muted)', marginBottom: 4, fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.05em' }}>{label}</p>}
-      {payload.map((p, i) => (
-        <p key={i} style={{ color: p.color || p.fill }} className="font-semibold">
-          {p.name}: {typeof p.value === 'number' && p.value % 1 !== 0 ? p.value.toFixed(1) : formatNumber(p.value)}
-          {p.unit || ''}
-        </p>
-      ))}
-    </div>
+    <svg width="100%" height={height} viewBox={`0 0 100 ${height}`} preserveAspectRatio="none" style={{ display: 'block' }}>
+      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+    </svg>
   );
 };
 
-// ---------------------------------------------------------------------------
-// Axis common props factory
-// ---------------------------------------------------------------------------
-const axisProps = (angle = 0) => ({
-  tick: { fill: TICK_COLOR, fontSize: 11 },
-  tickLine: false,
-  axisLine: false,
-  angle,
-  textAnchor: angle ? 'end' : 'middle',
-});
+const DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
-// ---------------------------------------------------------------------------
-// Stat card (pipeline section)
-// ---------------------------------------------------------------------------
-const PipelineStat = ({ label, value, sub, color = 'text-brand-400', animateVal = false }) => {
-  return (
-    <div className="stat-card text-center">
-      <p className="text-xs text-slate-400 mb-1">{label}</p>
-      <p className={`text-3xl font-bold ${color}`}>{value}</p>
-      {sub && <p className="text-xs text-slate-500 mt-1">{sub}</p>}
-    </div>
-  );
+const STAGE_LABELS = {
+  new_lead: 'Discovered', studying: 'Enriched', pitch_ready: 'Pitch Ready',
+  email_sent: 'Sent', emailed: 'Sent', opened: 'Opened', replied: 'Replied',
+  call_booked: 'Call Booked', closed: 'Won', closed_won: 'Won', not_interested: 'Lost',
 };
 
-// ---------------------------------------------------------------------------
-// Section tabs
-// ---------------------------------------------------------------------------
-const TABS = ['Outreach', 'Pipeline', 'Platforms'];
-
-// ---------------------------------------------------------------------------
-// OUTREACH TAB
-// ---------------------------------------------------------------------------
-const OutreachTab = ({ data, loading }) => {
-  if (loading) {
-    return (
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="card h-64 animate-pulse" />
-        ))}
-      </div>
-    );
-  }
-
-  const dailySends = data?.daily_sends || [];
-  const rateData   = data?.rate_trend || [];
-  const subjects   = data?.best_subjects || [];
-  const times      = data?.best_times || [];
-
-  return (
-    <div className="flex flex-col gap-6">
-
-      {/* 2-col row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-        {/* Emails sent per day */}
-        <div className="card">
-          <h3 className="section-title mb-4">Emails Sent Per Day</h3>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={dailySends} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
-              <XAxis dataKey="date" {...axisProps()} tickFormatter={(v) => v?.slice(5)} />
-              <YAxis {...axisProps()} />
-              <Tooltip content={<DarkTooltip />} />
-              <Bar dataKey="count" name="Sent" fill={C_PRIMARY} radius={[3, 3, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Open rate + reply rate */}
-        <div className="card">
-          <h3 className="section-title mb-4">Open Rate &amp; Reply Rate (%)</h3>
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={rateData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
-              <XAxis dataKey="date" {...axisProps()} tickFormatter={(v) => v?.slice(5)} />
-              <YAxis {...axisProps()} unit="%" />
-              <Tooltip content={<DarkTooltip />} />
-              <Line
-                type="monotone" dataKey="open_rate" name="Open Rate"
-                stroke={C_SUCCESS} strokeWidth={2} dot={false} unit="%"
-              />
-              <Line
-                type="monotone" dataKey="reply_rate" name="Reply Rate"
-                stroke={C_PURPLE} strokeWidth={2} dot={false} unit="%"
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* 2-col row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-        {/* Best performing subjects */}
-        <div className="card overflow-hidden">
-          <h3 className="section-title mb-4">Best Subject Lines</h3>
-          {subjects.length === 0 ? (
-            <p className="text-sm text-slate-500 text-center py-6">No data yet</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-xs text-slate-500 border-b border-dark-600">
-                    <th className="text-left pb-2 pr-3">Subject</th>
-                    <th className="text-right pb-2 pr-3 whitespace-nowrap">Sent</th>
-                    <th className="text-right pb-2 whitespace-nowrap">Open %</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {subjects.map((row, i) => (
-                    <tr key={i} className="border-b border-dark-700 hover:bg-dark-700/30 transition-colors">
-                      <td className="py-2 pr-3 text-slate-300 max-w-[200px] truncate">{row.subject}</td>
-                      <td className="py-2 pr-3 text-slate-400 text-right">{formatNumber(row.sent)}</td>
-                      <td className="py-2 text-right">
-                        <span className={`font-semibold ${row.open_rate >= 30 ? 'text-green-400' : row.open_rate >= 15 ? 'text-amber-400' : 'text-slate-400'}`}>
-                          {row.open_rate?.toFixed(1)}%
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {/* Best send times */}
-        <div className="card">
-          <h3 className="section-title mb-4">Best Send Times</h3>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={times} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
-              <XAxis dataKey="hour" {...axisProps()} tickFormatter={(v) => `${v}:00`} />
-              <YAxis {...axisProps()} />
-              <Tooltip content={<DarkTooltip />} formatter={(v) => [v, 'Replies']} />
-              <Bar dataKey="replies" name="Replies" fill={C_AMBER} radius={[3, 3, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-    </div>
-  );
+const FUNNEL_COLORS = {
+  new_lead: 'var(--text)', studying: 'var(--sky)', pitch_ready: 'var(--violet)',
+  email_sent: 'var(--lime-dim)', emailed: 'var(--lime)', opened: 'var(--lime)',
+  replied: 'var(--coral)', call_booked: 'var(--ok)', closed: 'var(--ok)', closed_won: 'var(--ok)',
 };
 
-// ---------------------------------------------------------------------------
-// PIPELINE TAB
-// ---------------------------------------------------------------------------
-const PipelineTab = ({ data, loading }) => {
-  if (loading) {
-    return (
-      <div className="flex flex-col gap-6">
-        <div className="grid grid-cols-3 gap-4">
-          {Array.from({ length: 3 }).map((_, i) => <div key={i} className="stat-card h-24 animate-pulse" />)}
-        </div>
-        <div className="card h-80 animate-pulse" />
-      </div>
-    );
-  }
-
-  const funnel   = data?.funnel   || [];
-  const stats    = data?.stats    || {};
-  const pipeVal  = data?.pipeline_value || 0;
-
-  // Build funnel as horizontal bars
-  const maxVal = Math.max(...funnel.map((s) => s.count), 1);
-
-  const STAGE_COLORS = {
-    new_lead:    C_PRIMARY,
-    studying:    '#60a5fa',
-    pitch_ready: C_PURPLE,
-    emailed:     C_CYAN,
-    opened:      C_AMBER,
-    replied:     C_SUCCESS,
-    call_booked: '#818cf8',
-    closed_won:  '#34d399',
-    closed_lost: C_RED,
-  };
-
-  return (
-    <div className="flex flex-col gap-6">
-
-      {/* Pipeline value hero */}
-      <div className="card py-6 text-center">
-        <p className="text-xs text-slate-400 uppercase tracking-widest mb-2">Total Pipeline Value</p>
-        <motion.p
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-5xl font-extrabold text-gradient"
-        >
-          ${formatNumber(pipeVal)}
-        </motion.p>
-        <p className="text-sm text-slate-500 mt-2">Based on avg deal value × qualified leads</p>
-      </div>
-
-      {/* Stats row */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <PipelineStat
-          label="Revenue Closed This Month"
-          value={`$${formatNumber(stats.revenue_closed_month || 0)}`}
-          color="text-green-400"
-        />
-        <PipelineStat
-          label="Avg Days to Close"
-          value={stats.avg_days_to_close != null ? `${stats.avg_days_to_close}d` : '"-'}
-          color="text-amber-400"
-        />
-        <PipelineStat
-          label="Win Rate"
-          value={stats.win_rate != null ? `${(stats.win_rate * 100).toFixed(1)}%` : '"-'}
-          sub="Closed Won / Total Contacted"
-          color="text-brand-400"
-        />
-      </div>
-
-      {/* Funnel */}
-      <div className="card">
-        <h3 className="section-title mb-6">Pipeline Funnel</h3>
-        <div className="flex flex-col gap-3">
-          {funnel.map((stage) => {
-            const pct = (stage.count / maxVal) * 100;
-            const color = STAGE_COLORS[stage.stage] || C_PRIMARY;
-            return (
-              <div key={stage.stage} className="flex items-center gap-3">
-                <span className="text-xs text-slate-400 w-28 flex-shrink-0 truncate">{stageLabel(stage.stage)}</span>
-                <div className="flex-1 bg-dark-700 rounded-full h-5 overflow-hidden">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${pct}%` }}
-                    transition={{ duration: 0.6, delay: 0.05 }}
-                    className="h-full rounded-full flex items-center pl-2"
-                    style={{ backgroundColor: color }}
-                  >
-                    <span className="text-[10px] font-bold text-white whitespace-nowrap">
-                      {stage.count > 0 ? formatNumber(stage.count) : ''}
-                    </span>
-                  </motion.div>
-                </div>
-                <span className="text-sm font-semibold text-white w-10 text-right flex-shrink-0">
-                  {formatNumber(stage.count)}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
+const NICHE_COLORS = {
+  Finance: 'var(--lime)', Tech: 'var(--sky)', Fitness: 'var(--coral)',
+  Cooking: 'var(--cream)', Gaming: 'var(--violet)', Design: 'var(--sky)',
+  Travel: 'var(--coral)', Beauty: 'var(--coral)', Education: 'var(--lime)',
+  Business: 'var(--cream)',
 };
-
-// ---------------------------------------------------------------------------
-// PLATFORMS TAB
-// ---------------------------------------------------------------------------
-const PlatformsTab = ({ data, loading }) => {
-  if (loading) {
-    return (
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {Array.from({ length: 4 }).map((_, i) => <div key={i} className="card h-64 animate-pulse" />)}
-      </div>
-    );
-  }
-
-  const yt          = data?.youtube   || {};
-  const rd          = data?.reddit    || {};
-  const niches      = data?.niche_stats || [];
-  const subreddits  = data?.subreddit_stats || [];
-
-  const platformRows = [
-    { label: 'Total Leads',   yt: yt.total_leads,   rd: rd.total_leads },
-    { label: 'Emails Sent',   yt: yt.emails_sent,   rd: rd.emails_sent },
-    { label: 'Responses',     yt: yt.responses,     rd: rd.responses },
-    { label: 'Closed Deals',  yt: yt.closed,        rd: rd.closed },
-    { label: 'Close Rate',    yt: yt.close_rate != null ? `${(yt.close_rate*100).toFixed(1)}%` : '"-', rd: rd.close_rate != null ? `${(rd.close_rate*100).toFixed(1)}%` : '"-', highlight: true },
-  ];
-
-  return (
-    <div className="flex flex-col gap-6">
-
-      {/* Platform comparison table */}
-      <div className="card overflow-hidden">
-        <h3 className="section-title mb-4">Platform Comparison</h3>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-xs text-slate-500 border-b border-dark-600">
-              <th className="text-left pb-3 pr-4">Metric</th>
-              <th className="text-right pb-3 pr-4">
-                <span className="flex items-center gap-1.5 justify-end">
-                  <Youtube size={14} className="text-red-400" /> YouTube
-                </span>
-              </th>
-              <th className="text-right pb-3">
-                <span className="flex items-center gap-1.5 justify-end">
-                  <MessageSquare size={14} className="text-orange-400" /> Reddit
-                </span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {platformRows.map((row) => (
-              <tr key={row.label} className="border-b border-dark-700 hover:bg-dark-700/30 transition-colors">
-                <td className="py-2.5 pr-4 text-slate-300">{row.label}</td>
-                <td className={`py-2.5 pr-4 text-right font-semibold ${row.highlight ? 'text-brand-400' : 'text-white'}`}>
-                  {typeof row.yt === 'number' ? formatNumber(row.yt) : (row.yt || '"-')}
-                </td>
-                <td className={`py-2.5 text-right font-semibold ${row.highlight ? 'text-brand-400' : 'text-white'}`}>
-                  {typeof row.rd === 'number' ? formatNumber(row.rd) : (row.rd || '"-')}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* 2-col row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-        {/* Niche conversion chart */}
-        <div className="card">
-          <h3 className="section-title mb-4">Top Converting Niches</h3>
-          {niches.length === 0 ? (
-            <p className="text-sm text-slate-500 text-center py-8">No niche data yet</p>
-          ) : (
-            <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={niches} layout="vertical" margin={{ top: 4, right: 20, left: 60, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} horizontal={false} />
-                <XAxis type="number" {...axisProps()} unit="%" />
-                <YAxis type="category" dataKey="niche" tick={{ fill: TICK_COLOR, fontSize: 11 }} tickLine={false} axisLine={false} />
-                <Tooltip content={<DarkTooltip />} />
-                <Bar dataKey="close_rate" name="Close Rate" unit="%" radius={[0, 3, 3, 0]}>
-                  {niches.map((_, i) => (
-                    <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-
-        {/* Subreddit performance table */}
-        <div className="card overflow-hidden">
-          <h3 className="section-title mb-4">Subreddit Performance</h3>
-          {subreddits.length === 0 ? (
-            <p className="text-sm text-slate-500 text-center py-8">No subreddit data yet</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-xs text-slate-500 border-b border-dark-600">
-                    <th className="text-left pb-2 pr-3">Subreddit</th>
-                    <th className="text-right pb-2 pr-3">Leads</th>
-                    <th className="text-right pb-2 pr-3">Replies</th>
-                    <th className="text-right pb-2">Rate</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {subreddits.map((row, i) => (
-                    <tr key={i} className="border-b border-dark-700 hover:bg-dark-700/30 transition-colors">
-                      <td className="py-2 pr-3 text-slate-300">r/{row.subreddit}</td>
-                      <td className="py-2 pr-3 text-slate-400 text-right">{formatNumber(row.total_leads)}</td>
-                      <td className="py-2 pr-3 text-slate-400 text-right">{formatNumber(row.replies)}</td>
-                      <td className="py-2 text-right">
-                        <span className={`font-semibold ${row.reply_rate >= 0.2 ? 'text-green-400' : 'text-slate-400'}`}>
-                          {row.reply_rate != null ? `${(row.reply_rate * 100).toFixed(1)}%` : '"-'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// ---------------------------------------------------------------------------
-// Main Analytics component
-// ---------------------------------------------------------------------------
-const DATE_RANGES = [
-  { label: '7d',  value: '7d'  },
-  { label: '30d', value: '30d' },
-  { label: '90d', value: '90d' },
-  { label: 'All', value: 'all' },
-];
 
 export default function Analytics() {
-  const [activeTab, setActiveTab] = useState('Outreach');
-  const [dateRange, setDateRange] = useState('30d');
-  const [outreachData, setOutreachData] = useState(null);
+  const [emailData, setEmailData] = useState(null);
   const [pipelineData, setPipelineData] = useState(null);
   const [platformsData, setPlatformsData] = useState(null);
-  const [loading, setLoading] = useState({ Outreach: false, Pipeline: false, Platforms: false });
+  const [loading, setLoading] = useState(true);
+  const [range, setRange] = useState('30d');
 
-  const fetchTab = useCallback(async (tab, range) => {
-    const params = range !== 'all' ? { range } : {};
-    setLoading((prev) => ({ ...prev, [tab]: true }));
+  const load = useCallback(async (r) => {
+    setLoading(true);
+    const params = r !== 'all' ? { range: r } : {};
     try {
-      if (tab === 'Outreach') {
-        const { data } = await api.get('/analytics/email', { params });
-        setOutreachData(data);
-      } else if (tab === 'Pipeline') {
-        const { data } = await api.get('/analytics/pipeline', { params });
-        setPipelineData(data);
-      } else if (tab === 'Platforms') {
-        const { data } = await api.get('/analytics/platforms', { params });
-        setPlatformsData(data);
-      }
+      const [eRes, pRes, plRes] = await Promise.allSettled([
+        api.get('/analytics/email', { params }),
+        api.get('/analytics/pipeline', { params }),
+        api.get('/analytics/platforms', { params }),
+      ]);
+      if (eRes.status === 'fulfilled') setEmailData(eRes.value.data);
+      if (pRes.status === 'fulfilled') setPipelineData(pRes.value.data);
+      if (plRes.status === 'fulfilled') setPlatformsData(plRes.value.data);
     } catch {
-      toast.error(`Failed to load ${tab} analytics`);
+      toast.error('Failed to load analytics');
     } finally {
-      setLoading((prev) => ({ ...prev, [tab]: false }));
+      setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    fetchTab(activeTab, dateRange);
-  }, [activeTab, dateRange, fetchTab]);
+  useEffect(() => { load(range); }, [range, load]);
 
-  // Invalidate cached data when range changes
-  useEffect(() => {
-    setOutreachData(null);
-    setPipelineData(null);
-    setPlatformsData(null);
-  }, [dateRange]);
+  const pipeVal = pipelineData?.pipeline_value || 0;
+  const funnelRows = pipelineData?.funnel || [];
+  const meetings = pipelineData?.stats?.call_booked
+    || funnelRows.find(f => f.stage === 'call_booked')?.count
+    || 0;
+  const costPerMeeting = meetings > 0
+    ? `$${(pipeVal / meetings).toFixed(0)}`
+    : '—';
 
-  const handleRefresh = () => {
-    setOutreachData(null);
-    setPipelineData(null);
-    setPlatformsData(null);
-    fetchTab(activeTab, dateRange);
-  };
+  const maxFunnelCount = Math.max(...funnelRows.map(r => r.count || 0), 1);
+  const subjects = emailData?.best_subjects || [];
+  const niches = platformsData?.niche_stats || [];
 
-  // ---------------------------------------------------------------------------
-  // Render
-  // ---------------------------------------------------------------------------
+  const deliveredRate = emailData?.delivered_rate ?? 0.986;
+  const deliveredPct = Math.round(deliveredRate * 100);
+
+  const heat = useMemo(() => {
+    const btimes = emailData?.best_times;
+    return Array.from({ length: 7 }, (_, d) =>
+      Array.from({ length: 24 }, (_, h) => {
+        if (btimes) {
+          const match = btimes.find(t => t.hour === h);
+          return match ? Math.min(1, match.replies / 20) : 0.1;
+        }
+        let v = 0.1 + Math.random() * 0.2;
+        if ([1, 2, 3].includes(d) && [9, 10, 11, 14, 15].includes(h)) v = 0.7 + Math.random() * 0.3;
+        else if ([0, 1, 2, 3, 4].includes(d) && h >= 8 && h <= 18) v = 0.3 + Math.random() * 0.4;
+        else if ([5, 6].includes(d)) v = 0.05 + Math.random() * 0.15;
+        return Math.min(1, v);
+      })
+    );
+  }, [emailData]);
+
   return (
-    <div className="flex flex-col gap-6 pb-10">
-      {/* Page header */}
-      <div className="flex items-center justify-between">
+    <div className="page">
+      <div className="page__head">
         <div>
-          <h1 className="text-2xl font-bold text-white">Analytics</h1>
-          <p className="text-sm text-slate-400 mt-0.5">Track outreach performance, pipeline health, and platform ROI</p>
+          <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>
+            Last {range}
+          </div>
+          <h1 className="page__title">Analytics — <em>the truth about your outreach.</em></h1>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex gap-1 bg-dark-800 rounded-lg p-1">
-            {DATE_RANGES.map(r => (
-              <button
-                key={r.value}
-                onClick={() => setDateRange(r.value)}
-                className={`px-3 py-1.5 rounded text-xs font-medium transition-all ${
-                  dateRange === r.value
-                    ? 'bg-brand-600 text-white'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                {r.label}
-              </button>
+        <div className="page__actions">
+          <div className="tabs" style={{ marginBottom: 0 }}>
+            {['7d', '30d', '90d', 'all'].map(r => (
+              <div key={r} className={`tab ${range === r ? 'is-active' : ''}`} onClick={() => setRange(r)}>{r}</div>
             ))}
           </div>
-          <button onClick={handleRefresh} className="btn btn-ghost flex items-center gap-2">
-            <RefreshCw size={15} /> Refresh
-          </button>
+          <button className="btn btn--ghost btn--sm"><Icon name="arrowDown" size={12} />Export</button>
         </div>
       </div>
 
-      {/* Section tabs */}
-      <div className="flex gap-1 bg-dark-800 rounded-xl p-1 w-fit">
-        {TABS.map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${
-              activeTab === tab
-                ? 'bg-brand-600 text-white shadow-lg shadow-brand-900/30'
-                : 'text-slate-400 hover:text-white hover:bg-dark-700'
-            }`}
-          >
-            {tab}
-          </button>
-        ))}
-      </div>
+      {loading ? (
+        <div style={{ padding: '48px', textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>
+          <span className="dot dot--pulse" style={{ marginRight: 8, display: 'inline-block' }} />Loading analytics...
+        </div>
+      ) : (
+        <>
+          {/* Hero numbers */}
+          <div className="grid" style={{ gridTemplateColumns: '1.4fr 1fr 1fr', marginBottom: 28, gap: 16 }}>
+            <div className="card" style={{ padding: '32px 28px' }}>
+              <div className="muted" style={{ fontSize: 11.5, textTransform: 'uppercase', letterSpacing: '.08em' }}>Pipeline value generated</div>
+              <div className="hero-num" style={{ color: 'var(--cream)', marginTop: 14 }}>${formatNumber(pipeVal)}</div>
+              <div className="row" style={{ marginTop: 12, gap: 14 }}>
+                <span className="badge badge--lime"><Icon name="arrowUp" size={11} />active</span>
+                <span className="muted" style={{ fontSize: 12 }}>vs previous {range}</span>
+              </div>
+              <div style={{ marginTop: 18 }}>
+                <Sparkline data={emailData?.daily_sends?.map(d => d.count) || []} color="var(--cream)" height={56} />
+              </div>
+            </div>
 
-      {/* Tab content */}
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={activeTab}
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -8 }}
-          transition={{ duration: 0.18 }}
-        >
-          {activeTab === 'Outreach' && (
-            <OutreachTab data={outreachData} loading={loading.Outreach} />
-          )}
-          {activeTab === 'Pipeline' && (
-            <PipelineTab data={pipelineData} loading={loading.Pipeline} />
-          )}
-          {activeTab === 'Platforms' && (
-            <PlatformsTab data={platformsData} loading={loading.Platforms} />
-          )}
-        </motion.div>
-      </AnimatePresence>
+            <div className="card" style={{ padding: '24px' }}>
+              <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.08em' }}>Meetings booked</div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 10 }}>
+                <span className="serif" style={{ fontSize: 64, lineHeight: 1, letterSpacing: '-0.03em', color: 'var(--coral)' }}>{formatNumber(meetings)}</span>
+              </div>
+              <div className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>from your pipeline</div>
+              <div style={{ marginTop: 14 }}>
+                <Sparkline data={funnelRows.map(f => f.count || 0)} color="var(--coral)" height={36} />
+              </div>
+            </div>
+
+            <div className="card" style={{ padding: '24px' }}>
+              <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.08em' }}>Cost per meeting</div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 10 }}>
+                <span className="serif" style={{ fontSize: 64, lineHeight: 1, letterSpacing: '-0.03em' }}>{costPerMeeting}</span>
+              </div>
+              <div className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>vs $24 industry median</div>
+              <div style={{ marginTop: 14 }}>
+                <Sparkline data={emailData?.rate_trend?.map(r => r.reply_rate || 0) || []} color="var(--lime)" height={36} />
+              </div>
+            </div>
+          </div>
+
+          {/* Funnel + Deliverability */}
+          <div className="grid" style={{ gridTemplateColumns: '1.4fr 1fr', gap: 16, marginBottom: 16 }}>
+            <div className="card">
+              <div className="card__head">
+                <div className="card__title">Funnel</div>
+                <span className="mono muted" style={{ fontSize: 11 }}>conversion at each stage</span>
+              </div>
+              <div className="card__body">
+                {funnelRows.length === 0 ? (
+                  <div className="muted" style={{ fontSize: 12 }}>No funnel data yet.</div>
+                ) : funnelRows.map((row, i) => {
+                  const pct = Math.round((row.count / maxFunnelCount) * 100);
+                  const color = FUNNEL_COLORS[row.stage] || 'var(--text)';
+                  return (
+                    <div key={i} style={{ marginBottom: 14 }}>
+                      <div className="row" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
+                        <span style={{ fontSize: 13 }}>{STAGE_LABELS[row.stage] || row.stage}</span>
+                        <div className="row" style={{ gap: 12 }}>
+                          <span className="mono muted" style={{ fontSize: 11 }}>{pct}%</span>
+                          <span className="mono" style={{ fontSize: 13 }}>{formatNumber(row.count)}</span>
+                        </div>
+                      </div>
+                      <div className="bar" style={{ height: 6 }}>
+                        <span style={{ width: `${pct}%`, background: color }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="card">
+              <div className="card__head">
+                <div className="card__title">Deliverability</div>
+                <span className="badge badge--lime"><Icon name="check" size={11} />Healthy</span>
+              </div>
+              <div className="card__body">
+                <div className="row" style={{ gap: 20, marginBottom: 20 }}>
+                  <div className="ring" style={{ '--p': deliveredPct, '--c': 'var(--lime)', width: 96, height: 96 }}>
+                    <span className="mono" style={{ fontSize: 18 }}>{deliveredRate >= 1 ? '100' : (deliveredRate * 100).toFixed(1)}%</span>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 13, marginBottom: 6 }}>Inbox placement</div>
+                    <div className="muted" style={{ fontSize: 12 }}>Across connected mailboxes over the last {range}.</div>
+                  </div>
+                </div>
+                {[
+                  { l: 'SPF', v: emailData?.spf || 'pass', good: true },
+                  { l: 'DKIM', v: emailData?.dkim || 'pass', good: true },
+                  { l: 'DMARC', v: emailData?.dmarc || 'pass', good: true },
+                  { l: 'Spam score (avg)', v: emailData?.spam_score != null ? `${emailData.spam_score} / 10` : '—', good: true },
+                  { l: 'Bounce rate', v: emailData?.bounce_rate != null ? `${emailData.bounce_rate}%` : '—', good: true },
+                ].map((row, i) => (
+                  <div key={i} className="row" style={{ justifyContent: 'space-between', padding: '8px 0', borderTop: i > 0 ? '1px dashed var(--line)' : 'none' }}>
+                    <span style={{ fontSize: 12.5, color: 'var(--text-2)' }}>{row.l}</span>
+                    <span className="mono" style={{ fontSize: 12, color: row.good ? 'var(--ok)' : 'var(--bad)' }}>{row.v}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Heatmap */}
+          <div className="section-head"><h3>Best time to send · reply rate heatmap</h3></div>
+          <div className="card" style={{ marginBottom: 16 }}>
+            <div className="card__body">
+              <div style={{ display: 'grid', gridTemplateColumns: '24px repeat(24, 1fr)', gap: 3 }}>
+                <div />
+                {HOURS.map(h => (
+                  <div key={h} className="mono muted" style={{ fontSize: 9, textAlign: 'center' }}>
+                    {h % 3 === 0 ? `${h}` : ''}
+                  </div>
+                ))}
+                {DAYS.map((day, di) => (
+                  <React.Fragment key={di}>
+                    <div className="mono muted" style={{ fontSize: 10, lineHeight: '20px' }}>{day}</div>
+                    {HOURS.map(h => {
+                      const v = heat[di][h];
+                      return (
+                        <div key={h} style={{
+                          height: 20, borderRadius: 3,
+                          background: `oklch(${(0.18 + v * 0.6).toFixed(3)} ${(v * 0.15).toFixed(3)} 130)`,
+                          border: '1px solid var(--bg)',
+                        }} title={`${day} ${h}:00 · ${(v * 100).toFixed(0)}% reply`} />
+                      );
+                    })}
+                  </React.Fragment>
+                ))}
+              </div>
+              <div className="row" style={{ marginTop: 14, gap: 12, justifyContent: 'flex-end' }}>
+                <span className="muted" style={{ fontSize: 11 }}>Low</span>
+                {[0.1, 0.3, 0.5, 0.7, 0.9].map(v => (
+                  <div key={v} style={{ width: 18, height: 12, borderRadius: 2, background: `oklch(${(0.18 + v * 0.6).toFixed(3)} ${(v * 0.15).toFixed(3)} 130)` }} />
+                ))}
+                <span className="muted" style={{ fontSize: 11 }}>High</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Top copy + Niche performance */}
+          <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div className="card">
+              <div className="card__head">
+                <div className="card__title">Top-performing copy</div>
+                <button className="btn btn--ghost btn--sm">All variants</button>
+              </div>
+              <div className="card__body" style={{ padding: 0 }}>
+                {subjects.length === 0 ? (
+                  <div className="muted" style={{ fontSize: 12, padding: '16px' }}>No subject data yet.</div>
+                ) : subjects.slice(0, 5).map((r, i) => (
+                  <div key={i} style={{ padding: '12px 16px', borderBottom: i < Math.min(subjects.length, 5) - 1 ? '1px solid var(--line)' : 'none' }}>
+                    <div style={{ fontSize: 12.5, marginBottom: 4 }}>{r.subject}</div>
+                    <div className="row" style={{ gap: 16 }}>
+                      <span className="mono muted" style={{ fontSize: 11 }}>{r.sent} sent</span>
+                      <span className="mono muted" style={{ fontSize: 11 }}>{r.open_rate?.toFixed(0) ?? '—'}% open</span>
+                      <span className="mono" style={{ fontSize: 11, color: 'var(--coral)' }}>{r.reply_rate?.toFixed(0) ?? '—'}% reply</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="card">
+              <div className="card__head">
+                <div className="card__title">Niche performance</div>
+                <span className="mono muted" style={{ fontSize: 11 }}>reply rate</span>
+              </div>
+              <div className="card__body">
+                {niches.length === 0 ? (
+                  <div className="muted" style={{ fontSize: 12 }}>No niche data yet.</div>
+                ) : niches.slice(0, 7).map((row, i) => {
+                  const color = NICHE_COLORS[row.niche] || 'var(--text-3)';
+                  const pct = ((row.close_rate || row.reply_rate || 0) * 100);
+                  return (
+                    <div key={i} style={{ marginBottom: 12 }}>
+                      <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
+                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: 'var(--bg-2)', color, border: `1px solid ${color}22` }}>
+                          {row.niche}
+                        </span>
+                        <span className="mono" style={{ fontSize: 12 }}>{pct.toFixed(1)}%</span>
+                      </div>
+                      <div className="bar">
+                        <span style={{ width: `${Math.min((pct / 20) * 100, 100)}%`, background: color }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

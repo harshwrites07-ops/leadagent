@@ -1,104 +1,33 @@
-import { useState, useRef, useCallback } from 'react';
-import * as XLSX from 'xlsx';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import {
-  Search, Upload, List, Loader2, Copy, Check, Users, Eye,
-  TrendingUp, Clock, Mail, MessageSquare, BookOpen, Star,
-  ChevronDown, ChevronUp, Download, Zap, AlertCircle,
-  Youtube, ExternalLink, BarChart2, Calendar,
-} from 'lucide-react';
+import Icon from '../components/ui/Icon';
 import api, { formatNumber } from '../utils/api';
 
-function parseFileUrls(file) {
-  return new Promise((resolve, reject) => {
-    if (file.name.endsWith('.csv')) {
-      const reader = new FileReader();
-      reader.onload = e => {
-        const urls = e.target.result.split('\n').map(l => l.split(',')[0].replace(/["']/g, '').trim()).filter(v => v && v.length > 3);
-        resolve(urls);
-      };
-      reader.onerror = reject;
-      reader.readAsText(file);
-    } else {
-      const reader = new FileReader();
-      reader.onload = e => {
-        try {
-          const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
-          const ws = wb.Sheets[wb.SheetNames[0]];
-          const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
-          const urls = rows.map(r => String(r[0] || '').trim()).filter(v => v && v.length > 3);
-          resolve(urls);
-        } catch (err) { reject(err); }
-      };
-      reader.onerror = reject;
-      reader.readAsArrayBuffer(file);
-    }
-  });
-}
-
-function exportToCsv(results) {
-  const rows = [['Channel', 'Subscribers', 'Avg Views', 'Email Found', 'Subject', 'Email Body', 'Instagram DM']];
-  results.forEach(r => {
-    rows.push([r.channel.channel_name, r.channel.subscriber_count, r.channel.avg_views, r.channel.email || '', r.email.subject, r.email.body.replace(/\n/g, ' '), r.dm.replace(/\n/g, ' ')]);
-  });
-  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `channel_analyzer_${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
-}
-
-function CopyButton({ text, label = 'Copy' }) {
+function CopyButton({ text }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
-    try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000); }
-    catch { toast.error('Copy failed'); }
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { toast.error('Copy failed'); }
   };
   return (
-    <button onClick={copy} style={{
-      display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 5, cursor: 'pointer',
-      fontSize: 11, fontFamily: 'var(--font-mono)',
-      background: copied ? 'rgba(0,229,160,0.12)' : 'var(--bg-elevated)',
-      color: copied ? '#00E5A0' : 'var(--text-secondary)',
-      border: `1px solid ${copied ? 'rgba(0,229,160,0.3)' : 'var(--border-default)'}`,
-      transition: 'all 0.15s',
-    }}>
-      {copied ? <Check size={11} /> : <Copy size={11} />}
-      {copied ? 'Copied!' : label}
+    <button className="btn btn--ghost btn--sm" onClick={copy}>
+      <Icon name={copied ? 'check' : 'copy'} size={11} style={{ color: copied ? 'var(--ok)' : undefined }} />
+      {copied ? 'Copied!' : 'Copy'}
     </button>
   );
 }
 
-function StatBadge({ icon: Icon, label, value, color = 'var(--text-secondary)' }) {
-  return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-      padding: '10px 14px', background: 'var(--bg-elevated)',
-      border: '1px solid var(--border-subtle)', borderRadius: 8, minWidth: 80,
-    }}>
-      <Icon size={13} style={{ color, marginBottom: 2 }} />
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color }}>{value}</span>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: 'var(--text-muted)', textAlign: 'center', letterSpacing: '0.08em' }}>{label}</span>
-    </div>
-  );
-}
-
-const tempColors = {
-  hot:  { bg: 'rgba(255,69,0,0.1)',   color: '#FF4500', border: 'rgba(255,69,0,0.3)' },
-  warm: { bg: 'rgba(245,166,35,0.1)', color: '#F5A623', border: 'rgba(245,166,35,0.3)' },
-  cold: { bg: 'rgba(0,184,212,0.1)',  color: '#00B8D4', border: 'rgba(0,184,212,0.3)' },
-};
-
-function ResultCard({ result, index }) {
+function ResultDossier({ result, navigate }) {
   const [studyOpen, setStudyOpen] = useState(false);
   const [savedCrm, setSavedCrm] = useState(false);
   const { channel, deep_study, email, dm, subject_variants } = result;
 
   const painPoints = (() => { try { return JSON.parse(channel.pain_points || '[]'); } catch { return []; } })();
   const recentVideos = (() => { try { return JSON.parse(channel.recent_videos || '[]'); } catch { return []; } })();
-  const tc = tempColors[channel.temperature] || tempColors.cold;
 
   const handleSaveCrm = async () => {
     try {
@@ -115,197 +44,202 @@ function ResultCard({ result, index }) {
         setSavedCrm(true);
       }
       await api.post(`/emails/queue/${result.lead_id}`, {
-        subject: email?.subject || result.email?.subject,
-        body: email?.body || result.email?.body,
+        subject: email?.subject, body: email?.body,
       });
       toast.success(`Email queued for ${channel.channel_name}`);
     } catch (e) { toast.error(e.response?.data?.error || e.message); }
   };
 
-  const sectionLabel = {
-    fontFamily: 'var(--font-mono)', fontSize: 8, fontWeight: 600,
-    letterSpacing: '0.16em', color: 'var(--text-muted)', textTransform: 'uppercase',
-    display: 'flex', alignItems: 'center', gap: 6,
-  };
-
-  const divider = { borderTop: '1px solid var(--border-subtle)', padding: '16px 20px' };
+  const scoreNum = channel.lead_score ?? 0;
+  const scoreBadge = scoreNum >= 90 ? 'coral' : scoreNum >= 80 ? 'lime' : '';
 
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: index * 0.05 }}
-      style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 8, overflow: 'hidden' }}>
+    <div className="dossier">
+      {/* Hero (left, sticky) */}
+      <div className="dossier__hero">
+        <div className="dossier__channel-img">
+          {channel.thumbnail_url
+            ? <img src={channel.thumbnail_url} alt={channel.channel_name} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'var(--r-md)' }} />
+            : (channel.channel_name || '?')[0].toUpperCase()
+          }
+        </div>
 
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, padding: '20px 20px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
-        {channel.thumbnail_url
-          ? <img src={channel.thumbnail_url} alt={channel.channel_name} style={{ width: 52, height: 52, borderRadius: 10, objectFit: 'cover', flexShrink: 0 }} />
-          : <div style={{ width: 52, height: 52, borderRadius: 10, background: 'var(--bg-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Youtube size={22} style={{ color: '#FF4500' }} /></div>
-        }
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
-            <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>{channel.channel_name}</h3>
-            <span style={{ padding: '2px 8px', borderRadius: 99, fontSize: 9, fontWeight: 700, fontFamily: 'var(--font-mono)', background: tc.bg, color: tc.color, border: `1px solid ${tc.border}` }}>
-              {channel.temperature?.toUpperCase()}
+        <div className="row" style={{ gap: 6, marginBottom: 6 }}>
+          <span className={`badge badge--${scoreBadge || 'lime'}`}>
+            {scoreBadge === 'coral' ? 'A+' : scoreNum >= 80 ? 'A' : 'B'} score · {scoreNum}
+          </span>
+          {channel.temperature && (
+            <span className={`badge badge--${channel.temperature === 'hot' ? 'coral' : channel.temperature === 'warm' ? 'warn' : ''}`}>
+              {channel.temperature}
             </span>
-            <span style={{ padding: '2px 8px', borderRadius: 99, fontSize: 9, fontFamily: 'var(--font-mono)', background: 'rgba(255,69,0,0.1)', color: 'var(--accent-primary)', border: '1px solid rgba(255,69,0,0.2)' }}>
-              SCORE: {channel.lead_score}
-            </span>
-          </div>
-          {channel.channel_handle && <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>{channel.channel_handle}</p>}
-          {channel.email && (
-            <p style={{ fontSize: 11, color: '#00E5A0', display: 'flex', alignItems: 'center', gap: 4 }}>
-              <Mail size={10} /> {channel.email}
-            </p>
           )}
         </div>
-        <a href={`https://youtube.com/${channel.channel_handle || 'channel/' + channel.channel_id}`} target="_blank" rel="noreferrer"
-          style={{ color: 'var(--text-muted)', flexShrink: 0, transition: 'color 0.15s' }}>
-          <ExternalLink size={14} />
-        </a>
-      </div>
 
-      {/* Stats */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '14px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
-        <StatBadge icon={Users}    label="Subscribers" value={formatNumber(channel.subscriber_count)} color="#FF4500" />
-        <StatBadge icon={Eye}      label="Avg Views"   value={formatNumber(channel.avg_views)}        color="#00E5A0" />
-        <StatBadge icon={TrendingUp} label="Engagement" value={`${channel.engagement_rate}%`}         color="#F5A623" />
-        <StatBadge icon={Clock}    label="Upload Freq" value={channel.upload_frequency_days ? `${channel.upload_frequency_days}d` : 'N/A'} color="#7B61FF" />
-        <StatBadge icon={Calendar} label="Since Upload" value={channel.days_since_upload != null ? `${channel.days_since_upload}d` : 'N/A'} color="#00B8D4" />
-        <StatBadge icon={BarChart2} label="Total Videos" value={formatNumber(channel.total_videos)}   color="var(--text-secondary)" />
-      </div>
-
-      {/* Pain points */}
-      {painPoints.length > 0 && (
-        <div style={{ ...divider, borderTop: '1px solid var(--border-subtle)' }}>
-          <p style={sectionLabel}>Pain Points Detected</p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-            {painPoints.map((p, i) => (
-              <span key={i} style={{
-                padding: '2px 8px', borderRadius: 99, fontSize: 10, fontFamily: 'var(--font-mono)',
-                ...(p.severity === 'critical'
-                  ? { background: 'rgba(255,69,0,0.1)', color: '#FF4500', border: '1px solid rgba(255,69,0,0.3)' }
-                  : p.severity === 'high'
-                  ? { background: 'rgba(245,166,35,0.1)', color: '#F5A623', border: '1px solid rgba(245,166,35,0.3)' }
-                  : { background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }),
-              }}>
-                {p.label}
-              </span>
-            ))}
+        <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: '-0.01em' }}>{channel.channel_name}</div>
+        <div className="mono muted" style={{ fontSize: 11.5 }}>{channel.channel_handle || ''}</div>
+        {channel.description && (
+          <div className="muted" style={{ fontSize: 12.5, lineHeight: 1.55, marginTop: 10 }}>
+            {channel.description.slice(0, 160)}
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Recent videos */}
-      {recentVideos.length > 0 && (
-        <div style={{ ...divider }}>
-          <p style={sectionLabel}>Last {recentVideos.length} Videos</p>
-          <div style={{ marginTop: 8, maxHeight: 130, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {recentVideos.map((v, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                <span style={{ fontSize: 11, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{v.title}</span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', flexShrink: 0 }}>{formatNumber(v.views)} views</span>
+        <div className="dossier__metric-grid">
+          <div className="dossier__metric"><div className="dossier__metric-l">Subs</div><div className="dossier__metric-v">{formatNumber(channel.subscriber_count ?? 0)}</div></div>
+          <div className="dossier__metric"><div className="dossier__metric-l">Avg views</div><div className="dossier__metric-v">{formatNumber(channel.avg_views ?? 0)}</div></div>
+          <div className="dossier__metric"><div className="dossier__metric-l">Engagement</div><div className="dossier__metric-v">{channel.engagement_rate != null ? `${channel.engagement_rate}%` : '—'}</div></div>
+          <div className="dossier__metric"><div className="dossier__metric-l">Upload rate</div><div className="dossier__metric-v">{channel.upload_frequency_days ? `${channel.upload_frequency_days}d` : '—'}</div></div>
+          <div className="dossier__metric"><div className="dossier__metric-l">Last upload</div><div className="dossier__metric-v">{channel.days_since_upload != null ? `${channel.days_since_upload}d` : '—'}</div></div>
+          <div className="dossier__metric"><div className="dossier__metric-l">Videos</div><div className="dossier__metric-v">{formatNumber(channel.total_videos ?? 0)}</div></div>
+        </div>
+
+        {channel.email && (
+          <>
+            <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', marginTop: 18, marginBottom: 8 }}>Contact</div>
+            <div style={{ padding: 10, background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 8, fontFamily: 'var(--f-mono)', fontSize: 11.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span>{channel.email}</span>
+              <Icon name="check" size={11} style={{ color: 'var(--ok)' }} />
+            </div>
+            <div className="muted" style={{ fontSize: 10.5, marginTop: 6 }}>Verified via Hunter · Apollo · domain MX check</div>
+          </>
+        )}
+
+        <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <button
+            className="btn btn--primary"
+            disabled={savedCrm}
+            onClick={handleSaveCrm}
+            style={savedCrm ? { background: 'rgba(var(--ok-rgb),0.1)', color: 'var(--ok)', borderColor: 'rgba(var(--ok-rgb),0.3)' } : {}}
+          >
+            <Icon name={savedCrm ? 'check' : 'star'} size={12} />
+            {savedCrm ? 'In CRM' : 'Save to CRM'}
+          </button>
+          {channel.email && (
+            <button className="btn btn--ghost" onClick={handleSendEmail}>
+              <Icon name="mail" size={12} />Send Email
+            </button>
+          )}
+          <button className="btn btn--coral" onClick={() => navigate(`/pitch-generator?lead=${result.lead_id}`)}>
+            <Icon name="sparkle" size={12} />Draft pitch
+          </button>
+        </div>
+      </div>
+
+      {/* Body (right) */}
+      <div>
+        {/* What the agent learned */}
+        {deep_study && (
+          <div className="dossier__section">
+            <h3>
+              What the agent learned{' '}
+              <span className="muted">Gemini · AI analysis</span>
+            </h3>
+            <button
+              onClick={() => setStudyOpen(o => !o)}
+              className="btn btn--ghost btn--sm"
+              style={{ marginBottom: studyOpen ? 12 : 0 }}
+            >
+              <Icon name={studyOpen ? 'chevd' : 'chev'} size={11} />
+              {studyOpen ? 'Collapse' : 'Read full analysis'}
+            </button>
+            {studyOpen && (
+              <pre style={{ fontSize: 12, color: 'var(--text-2)', whiteSpace: 'pre-wrap', fontFamily: 'var(--f-mono)', lineHeight: 1.7, background: 'var(--bg-2)', borderRadius: 'var(--r)', padding: '12px 14px', border: '1px solid var(--line)', marginTop: 8 }}>
+                {deep_study}
+              </pre>
+            )}
+          </div>
+        )}
+
+        {/* Recommended angles (subject variants) */}
+        {subject_variants?.filter(Boolean).length > 0 && (
+          <div className="dossier__section">
+            <h3>Recommended angles <span className="muted">ranked by predicted reply rate</span></h3>
+            {subject_variants.filter(Boolean).map((s, i) => (
+              <div key={i} className={`angle ${i === 0 ? 'angle--top' : ''}`}>
+                <div className="angle__head">
+                  <span className="angle__score">{95 - i * 8}/100</span>
+                  <span style={{ fontSize: 13, fontWeight: 500, flex: 1 }}>{s}</span>
+                  {i === 0 && <span className="badge badge--coral">Recommended</span>}
+                  <CopyButton text={s} />
+                </div>
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
 
-      {/* AI Deep Study */}
-      <div style={{ borderTop: '1px solid var(--border-subtle)' }}>
-        <button onClick={() => setStudyOpen(o => !o)} style={{
-          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '12px 20px', background: 'transparent', border: 'none', cursor: 'pointer',
-          transition: 'background 0.15s',
-        }}
-          onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-elevated)'}
-          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <BookOpen size={12} style={{ color: '#7B61FF' }} />
-            <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', letterSpacing: '0.1em' }}>AI DEEP STUDY</span>
-          </div>
-          {studyOpen ? <ChevronUp size={12} style={{ color: 'var(--text-muted)' }} /> : <ChevronDown size={12} style={{ color: 'var(--text-muted)' }} />}
-        </button>
-        {studyOpen && (
-          <div style={{ padding: '0 20px 16px' }}>
-            <pre style={{ fontSize: 11, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', fontFamily: 'var(--font-mono)', lineHeight: 1.7, background: 'var(--bg-elevated)', borderRadius: 6, padding: '12px 14px', border: '1px solid var(--border-subtle)' }}>{deep_study}</pre>
+        {/* Recent uploads */}
+        {recentVideos.length > 0 && (
+          <div className="dossier__section">
+            <h3>Recent uploads <span className="muted">last {recentVideos.length}</span></h3>
+            {recentVideos.map((v, i) => (
+              <div key={i} className="vid-row">
+                <div className="vid-thumb">▶</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="vid-title">{v.title}</div>
+                  <div className="vid-meta">{formatNumber(v.views)} views</div>
+                </div>
+                <div className="muted mono" style={{ fontSize: 10.5, alignSelf: 'center' }}>
+                  <Icon name="eye" size={11} />
+                </div>
+              </div>
+            ))}
           </div>
         )}
-      </div>
 
-      {/* Subject variants */}
-      <div style={divider}>
-        <p style={sectionLabel}><Star size={10} /> Subject Line Variants</p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
-          {subject_variants.filter(Boolean).map((s, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', width: 14, flexShrink: 0 }}>{i + 1}.</span>
-              <span style={{ fontSize: 12, color: 'var(--text-primary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s}</span>
-              <CopyButton text={s} label="" />
+        {/* Pain points / Audience signal */}
+        {painPoints.length > 0 && (
+          <div className="dossier__section">
+            <h3>Audience signal <span className="muted">from comment analysis</span></h3>
+            <div className="row" style={{ gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+              {painPoints.map((p, i) => (
+                <span key={i} className="chan" style={{ padding: '4px 9px', fontSize: 11.5 }}>
+                  {typeof p === 'object' ? p.label : p}
+                </span>
+              ))}
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Email body */}
-      <div style={divider}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-          <p style={sectionLabel}><Mail size={10} /> Cold Email</p>
-          <CopyButton text={`Subject: ${email.subject}\n\n${email.body}`} label="Copy Email" />
-        </div>
-        {email.subject && (
-          <p style={{ fontSize: 11, color: 'var(--accent-primary)', marginBottom: 8, fontFamily: 'var(--font-mono)' }}>Subject: {email.subject}</p>
+          </div>
         )}
-        <textarea style={{
-          width: '100%', boxSizing: 'border-box',
-          background: 'var(--bg-elevated)', border: '1px solid var(--border-default)',
-          borderRadius: 6, padding: '10px 12px', fontSize: 11, color: 'var(--text-secondary)',
-          fontFamily: 'var(--font-mono)', lineHeight: 1.7, resize: 'vertical',
-          outline: 'none',
-        }} rows={8} defaultValue={email.body} />
-      </div>
 
-      {/* Instagram DM */}
-      <div style={divider}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-          <p style={sectionLabel}><MessageSquare size={10} /> Instagram DM</p>
-          <CopyButton text={dm} label="Copy DM" />
-        </div>
-        <textarea style={{
-          width: '100%', boxSizing: 'border-box',
-          background: 'var(--bg-elevated)', border: '1px solid var(--border-default)',
-          borderRadius: 6, padding: '10px 12px', fontSize: 11, color: 'var(--text-secondary)',
-          fontFamily: 'var(--font-mono)', lineHeight: 1.7, resize: 'vertical',
-          outline: 'none',
-        }} rows={4} defaultValue={dm} />
-      </div>
+        {/* Cold email */}
+        {email?.body && (
+          <div className="dossier__section">
+            <div className="row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
+              <h3 style={{ margin: 0 }}>Cold email</h3>
+              <CopyButton text={`Subject: ${email.subject}\n\n${email.body}`} />
+            </div>
+            {email.subject && (
+              <div className="mono" style={{ fontSize: 11, color: 'var(--lime)', marginBottom: 8 }}>Subject: {email.subject}</div>
+            )}
+            <textarea
+              className="input"
+              rows={8}
+              defaultValue={email.body}
+              style={{ fontFamily: 'var(--f-mono)', fontSize: 11, lineHeight: 1.7, resize: 'vertical', width: '100%', boxSizing: 'border-box' }}
+            />
+          </div>
+        )}
 
-      {/* Actions */}
-      <div style={{ display: 'flex', gap: 10, padding: '14px 20px' }}>
-        <button onClick={handleSaveCrm} disabled={savedCrm} style={{
-          flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-          padding: '9px 16px', borderRadius: 6, cursor: savedCrm ? 'default' : 'pointer',
-          fontSize: 12, fontFamily: 'var(--font-body)', fontWeight: 500,
-          ...(savedCrm
-            ? { background: 'rgba(0,229,160,0.1)', color: '#00E5A0', border: '1px solid rgba(0,229,160,0.3)' }
-            : { background: 'var(--gradient-orange)', color: '#fff', border: 'none' }),
-        }}>
-          {savedCrm ? <><Check size={12} /> In CRM</> : <><Star size={12} /> Save to CRM</>}
-        </button>
-        {channel.email && (
-          <button onClick={handleSendEmail} style={{
-            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-            padding: '9px 16px', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontFamily: 'var(--font-body)',
-            background: 'transparent', border: '1px solid var(--border-default)', color: 'var(--text-secondary)',
-          }}>
-            <Mail size={12} /> Send Email
-          </button>
+        {/* Instagram DM */}
+        {dm && (
+          <div className="dossier__section">
+            <div className="row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
+              <h3 style={{ margin: 0 }}>Instagram DM</h3>
+              <CopyButton text={dm} />
+            </div>
+            <textarea
+              className="input"
+              rows={4}
+              defaultValue={dm}
+              style={{ fontFamily: 'var(--f-mono)', fontSize: 11, lineHeight: 1.7, resize: 'vertical', width: '100%', boxSizing: 'border-box' }}
+            />
+          </div>
         )}
       </div>
-    </motion.div>
+    </div>
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ChannelAnalyzer() {
+  const navigate = useNavigate();
   const [mode, setMode] = useState('single');
   const [singleUrl, setSingleUrl] = useState('');
   const [pasteText, setPasteText] = useState('');
@@ -323,15 +257,33 @@ export default function ChannelAnalyzer() {
     return fileUrls;
   };
 
-  const handleFileChange = async (e) => {
+  const handleFileChange = async e => {
     const file = e.target.files?.[0];
     if (!file) return;
     setFileName(file.name);
     try {
-      const urls = await parseFileUrls(file);
-      setFileUrls(urls);
-      toast.success(`Loaded ${urls.length} channels from ${file.name}`);
-    } catch { toast.error('Could not parse file — check the format'); }
+      const { default: XLSX } = await import('xlsx');
+      const reader = new FileReader();
+      reader.onload = ev => {
+        try {
+          const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array' });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+          const urls = rows.map(r => String(r[0] || '').trim()).filter(v => v && v.length > 3);
+          setFileUrls(urls);
+          toast.success(`Loaded ${urls.length} channels from ${file.name}`);
+        } catch { toast.error('Could not parse file'); }
+      };
+      reader.readAsArrayBuffer(file);
+    } catch {
+      const reader = new FileReader();
+      reader.onload = ev => {
+        const urls = ev.target.result.split('\n').map(l => l.split(',')[0].replace(/["']/g, '').trim()).filter(v => v && v.length > 3);
+        setFileUrls(urls);
+        toast.success(`Loaded ${urls.length} channels from ${file.name}`);
+      };
+      reader.readAsText(file);
+    }
   };
 
   const handleProcess = useCallback(async () => {
@@ -355,182 +307,186 @@ export default function ChannelAnalyzer() {
 
   const urlCount = getUrlList().length;
 
-  const inputStyle = {
-    background: 'var(--bg-elevated)', border: '1px solid var(--border-default)',
-    borderRadius: 6, padding: '9px 12px', color: 'var(--text-primary)',
-    fontSize: 13, fontFamily: 'var(--font-body)', width: '100%', boxSizing: 'border-box', outline: 'none',
+  const exportToCsv = () => {
+    const rows = [['Channel', 'Subscribers', 'Avg Views', 'Email Found', 'Subject', 'Email Body', 'Instagram DM']];
+    results.forEach(r => {
+      rows.push([r.channel.channel_name, r.channel.subscriber_count, r.channel.avg_views, r.channel.email || '', r.email?.subject || '', (r.email?.body || '').replace(/\n/g, ' '), (r.dm || '').replace(/\n/g, ' ')]);
+    });
+    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `channel_analyzer_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
   };
 
   return (
-    <div style={{ maxWidth: 960, margin: '0 auto', paddingBottom: 64 }}>
-      {/* Header */}
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontFamily: 'var(--font-heading)', fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.03em', margin: 0 }}>Channel Analyzer</h1>
-        <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginTop: 4, letterSpacing: '0.1em' }}>
-          SCRAPE YOUTUBE CHANNEL — AI OUTREACH EMAILS + INSTAGRAM DMS
-        </p>
+    <div className="page">
+      {/* Page nav */}
+      <div className="row" style={{ marginBottom: 20, gap: 8 }}>
+        <button className="btn btn--ghost btn--sm" onClick={() => navigate('/leads')}>
+          <Icon name="chev" size={12} style={{ transform: 'rotate(180deg)' }} />Back to Lead Finder
+        </button>
+        <span className="muted" style={{ fontSize: 12 }}>·</span>
+        <span className="mono muted" style={{ fontSize: 11.5 }}>Channel Analyzer · AI-powered dossier</span>
+        <div style={{ flex: 1 }} />
+        {results.length > 0 && (
+          <button className="btn btn--ghost btn--sm" onClick={exportToCsv}>
+            <Icon name="download" size={12} />Export CSV
+          </button>
+        )}
+        {results.length > 0 && (
+          <button className="btn btn--coral" onClick={() => navigate(`/pitch-generator?lead=${results[0]?.lead_id}`)}>
+            <Icon name="sparkle" size={12} />Draft pitch with this brief
+          </button>
+        )}
       </div>
 
       {/* Input card */}
-      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '20px 24px', marginBottom: 16 }}>
-        {/* Mode tabs */}
-        <div style={{ display: 'flex', gap: 4, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', padding: 3, borderRadius: 7, width: 'fit-content', marginBottom: 20 }}>
-          {[
-            { key: 'single', icon: Search, label: 'Single URL' },
-            { key: 'paste',  icon: List,   label: 'Paste Multiple' },
-            { key: 'file',   icon: Upload, label: 'Upload File' },
-          ].map(({ key, icon: Icon, label }) => (
-            <button key={key} onClick={() => setMode(key)} style={{
-              display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 5,
-              fontSize: 12, fontWeight: 500, fontFamily: 'var(--font-body)', border: 'none', cursor: 'pointer',
-              transition: 'all 0.15s',
-              ...(mode === key
-                ? { background: 'var(--bg-card)', color: 'var(--text-primary)', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }
-                : { background: 'transparent', color: 'var(--text-muted)' }),
-            }}>
-              <Icon size={13} /> {label}
-            </button>
-          ))}
-        </div>
-
-        {mode === 'single' && (
-          <div style={{ marginBottom: 16 }}>
-            <input style={inputStyle} placeholder="https://youtube.com/@MrBeast  or  @handle  or  channel URL"
-              value={singleUrl} onChange={e => setSingleUrl(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && !processing && handleProcess()} />
-            <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, fontFamily: 'var(--font-mono)', letterSpacing: '0.06em' }}>
-              Accepts: full YouTube URL, @handle, /channel/UC..., or custom URL
-            </p>
+      {(!results.length && !processing) && (
+        <div className="pm" style={{ marginBottom: 20 }}>
+          <div className="pm__head">
+            <div className="pm__icon"><Icon name="eye" size={18} /></div>
+            <div style={{ flex: 1 }}>
+              <div className="pm__title">Channel Analyzer</div>
+              <div className="pm__sub">Paste a YouTube URL. The agent scrapes, enriches, and writes your outreach.</div>
+            </div>
           </div>
-        )}
 
-        {mode === 'paste' && (
-          <div style={{ marginBottom: 16 }}>
-            <textarea style={{ ...inputStyle, fontFamily: 'var(--font-mono)', fontSize: 12, lineHeight: 1.7, resize: 'vertical' }}
-              rows={6} placeholder={'https://youtube.com/@MrBeast\nhttps://youtube.com/@mkbhd\n@veritasium'}
-              value={pasteText} onChange={e => setPasteText(e.target.value)} />
-            <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, fontFamily: 'var(--font-mono)' }}>
-              {getUrlList().length} channels detected · One URL per line
-            </p>
+          {/* Mode tabs */}
+          <div className="tabs" style={{ marginBottom: 16 }}>
+            {[
+              { key: 'single', label: 'Single URL',      sub: 'one channel' },
+              { key: 'paste',  label: 'Paste Multiple',  sub: 'line by line' },
+              { key: 'file',   label: 'Upload File',     sub: '.xlsx · .csv' },
+            ].map(t => (
+              <div key={t.key} className={`tab ${mode === t.key ? 'is-active' : ''}`} onClick={() => setMode(t.key)} style={{ padding: '8px 14px' }}>
+                <div style={{ fontWeight: 500, fontSize: 13 }}>{t.label}</div>
+                <div className="muted" style={{ fontSize: 10.5, marginTop: 1 }}>{t.sub}</div>
+              </div>
+            ))}
           </div>
-        )}
 
-        {mode === 'file' && (
-          <div onClick={() => fileRef.current?.click()} style={{
-            border: '2px dashed var(--border-default)', borderRadius: 8, padding: '32px 24px',
-            textAlign: 'center', cursor: 'pointer', marginBottom: 16, transition: 'all 0.15s',
-          }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent-primary)'; e.currentTarget.style.background = 'rgba(255,69,0,0.03)'; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-default)'; e.currentTarget.style.background = 'transparent'; }}>
-            <Upload size={26} style={{ color: 'var(--text-muted)', margin: '0 auto 12px' }} />
-            {fileName ? (
-              <>
-                <p style={{ color: 'var(--text-primary)', fontWeight: 500, fontSize: 13 }}>{fileName}</p>
-                <p style={{ color: '#00E5A0', fontSize: 11, marginTop: 4, fontFamily: 'var(--font-mono)' }}>{fileUrls.length} channels loaded</p>
-              </>
-            ) : (
-              <>
-                <p style={{ color: 'var(--text-secondary)', fontSize: 13, fontWeight: 500 }}>Drop your Excel or CSV file here</p>
-                <p style={{ color: 'var(--text-muted)', fontSize: 11, marginTop: 4 }}>Column A = YouTube URL or @handle · .xlsx and .csv supported</p>
-              </>
-            )}
-            <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} onChange={handleFileChange} />
-          </div>
-        )}
+          {mode === 'single' && (
+            <div className="field" style={{ marginBottom: 16 }}>
+              <div className="field__label">YouTube URL or @handle</div>
+              <input
+                className="input"
+                placeholder="https://youtube.com/@MrBeast  or  @handle  or  channel URL"
+                value={singleUrl}
+                onChange={e => setSingleUrl(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && !processing && handleProcess()}
+              />
+              <div className="muted" style={{ fontSize: 10.5, marginTop: 4 }}>Accepts: full YouTube URL, @handle, /channel/UC..., or custom URL</div>
+            </div>
+          )}
 
-        {/* Actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button onClick={handleProcess} disabled={processing || urlCount === 0} style={{
-            display: 'flex', alignItems: 'center', gap: 8, padding: '10px 24px', borderRadius: 6,
-            cursor: (processing || urlCount === 0) ? 'not-allowed' : 'pointer',
-            background: 'var(--gradient-orange)', color: '#fff', border: 'none',
-            fontSize: 13, fontWeight: 500, fontFamily: 'var(--font-body)',
-            opacity: (processing || urlCount === 0) ? 0.6 : 1,
-          }}>
+          {mode === 'paste' && (
+            <div className="field" style={{ marginBottom: 16 }}>
+              <div className="field__label">Channel URLs — one per line</div>
+              <textarea
+                className="input"
+                rows={6}
+                placeholder={'https://youtube.com/@MrBeast\nhttps://youtube.com/@mkbhd\n@veritasium'}
+                value={pasteText}
+                onChange={e => setPasteText(e.target.value)}
+                style={{ fontFamily: 'var(--f-mono)', fontSize: 12, lineHeight: 1.7, resize: 'vertical', width: '100%', boxSizing: 'border-box' }}
+              />
+              <div className="muted" style={{ fontSize: 10.5, marginTop: 4 }}>{getUrlList().length} channels detected</div>
+            </div>
+          )}
+
+          {mode === 'file' && (
+            <div
+              onClick={() => fileRef.current?.click()}
+              style={{ border: '2px dashed var(--line-2)', borderRadius: 'var(--r)', padding: '32px 24px', textAlign: 'center', cursor: 'pointer', marginBottom: 16 }}
+            >
+              <Icon name="upload" size={26} style={{ color: 'var(--text-3)', margin: '0 auto 12px', display: 'block' }} />
+              {fileName ? (
+                <>
+                  <div style={{ color: 'var(--text)', fontWeight: 500, fontSize: 13 }}>{fileName}</div>
+                  <div className="mono" style={{ color: 'var(--ok)', fontSize: 11, marginTop: 4 }}>{fileUrls.length} channels loaded</div>
+                </>
+              ) : (
+                <>
+                  <div style={{ color: 'var(--text-2)', fontSize: 13, fontWeight: 500 }}>Drop your Excel or CSV file here</div>
+                  <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Column A = YouTube URL or @handle · .xlsx and .csv supported</div>
+                </>
+              )}
+              <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} onChange={handleFileChange} />
+            </div>
+          )}
+
+          <button className="pm__cta" onClick={handleProcess} disabled={processing || urlCount === 0}>
             {processing
-              ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Analyzing {progress.current}/{progress.total}...</>
-              : <><Zap size={14} /> Analyze {urlCount > 1 ? `${urlCount} Channels` : 'Channel'}</>
+              ? <><span className="dot dot--pulse" style={{ background: '#0a0a0c', width: 8, height: 8 }} /> Analyzing {progress.current}/{progress.total}...</>
+              : <><Icon name="bolt" size={16} />Analyze {urlCount > 1 ? `${urlCount} Channels` : 'Channel'}</>
             }
           </button>
-          {results.length > 0 && (
-            <button onClick={() => exportToCsv(results)} style={{
-              display: 'flex', alignItems: 'center', gap: 6, padding: '10px 18px', borderRadius: 6,
-              cursor: 'pointer', background: 'transparent', border: '1px solid var(--border-default)',
-              color: 'var(--text-secondary)', fontSize: 12, fontFamily: 'var(--font-body)',
-            }}>
-              <Download size={13} /> Export {results.length} Results
-            </button>
-          )}
         </div>
+      )}
 
-        {/* Progress bar */}
-        {processing && progress.total > 1 && (
-          <div style={{ marginTop: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>Analyzing channel {progress.current} of {progress.total}</span>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>{Math.round((progress.current / progress.total) * 100)}%</span>
-            </div>
-            <div style={{ width: '100%', height: 3, background: 'var(--border-subtle)', borderRadius: 99, overflow: 'hidden' }}>
-              <motion.div style={{ height: '100%', background: 'var(--gradient-orange)', borderRadius: 99 }}
-                animate={{ width: `${(progress.current / progress.total) * 100}%` }}
-                transition={{ duration: 0.4 }} />
-            </div>
+      {/* Progress */}
+      {processing && (
+        <div className="card" style={{ marginBottom: 20, textAlign: 'center', padding: '48px 24px' }}>
+          <div className="row" style={{ justifyContent: 'center', gap: 10, marginBottom: 12 }}>
+            <span className="dot dot--pulse" />
+            <span style={{ fontSize: 13, color: 'var(--text-2)' }}>Scraping channel data... ({progress.current}/{progress.total})</span>
           </div>
-        )}
-      </div>
+          {progress.total > 1 && (
+            <div style={{ maxWidth: 400, margin: '0 auto' }}>
+              <div style={{ height: 3, background: 'var(--line)', borderRadius: 99, overflow: 'hidden' }}>
+                <div style={{ height: '100%', background: 'var(--lime)', borderRadius: 99, width: `${(progress.current / progress.total) * 100}%`, transition: 'width 0.4s' }} />
+              </div>
+            </div>
+          )}
+          <div className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>This takes 5–15 seconds per channel</div>
+        </div>
+      )}
 
       {/* Errors */}
       {errors.length > 0 && (
-        <div style={{ background: 'rgba(255,69,0,0.05)', border: '1px solid rgba(255,69,0,0.25)', borderRadius: 8, padding: '14px 20px', marginBottom: 16 }}>
-          <p style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: '#FF4500', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <AlertCircle size={12} /> {errors.length} error{errors.length > 1 ? 's' : ''}
-          </p>
+        <div className="card" style={{ borderColor: 'var(--coral-border)', background: 'var(--coral-soft)', marginBottom: 16 }}>
+          <div className="row" style={{ gap: 6, marginBottom: 8 }}>
+            <Icon name="x" size={12} style={{ color: 'var(--coral)' }} />
+            <span className="mono" style={{ fontSize: 11, color: 'var(--coral)' }}>{errors.length} error{errors.length > 1 ? 's' : ''}</span>
+          </div>
           {errors.map((e, i) => (
-            <p key={i} style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-              <span style={{ color: 'var(--text-secondary)' }}>{e.url}:</span> {e.error}
-            </p>
+            <div key={i} className="muted" style={{ fontSize: 11 }}>
+              <span style={{ color: 'var(--text-2)' }}>{e.url}: </span>{e.error}
+            </div>
           ))}
         </div>
       )}
 
-      {/* Loading state */}
-      {processing && results.length === 0 && (
-        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '48px 24px', textAlign: 'center', marginBottom: 16 }}>
-          <Loader2 size={30} style={{ color: 'var(--accent-primary)', margin: '0 auto 16px', animation: 'spin 1s linear infinite' }} />
-          <p style={{ color: 'var(--text-primary)', fontWeight: 600, marginBottom: 4 }}>Scraping channel data...</p>
-          <p style={{ color: 'var(--text-muted)', fontSize: 12 }}>This takes 5–15 seconds per channel</p>
-        </div>
+      {/* Results — single dossier layout */}
+      {results.length === 1 && (
+        <ResultDossier result={results[0]} navigate={navigate} />
       )}
 
-      {/* Results */}
-      {results.length > 0 && (
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <p style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.18em' }}>
-              {results.length} CHANNEL{results.length > 1 ? 'S' : ''} ANALYZED
-            </p>
-            {results.length > 1 && (
-              <button onClick={() => exportToCsv(results)} style={{
-                display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 5, cursor: 'pointer',
-                background: 'transparent', border: '1px solid var(--border-subtle)',
-                color: 'var(--text-muted)', fontSize: 11, fontFamily: 'var(--font-mono)',
-              }}>
-                <Download size={11} /> Export All as CSV
-              </button>
-            )}
+      {/* Results — multiple cards */}
+      {results.length > 1 && (
+        <>
+          <div className="section-head">
+            <h3>{results.length} channels analyzed</h3>
+            <button className="btn btn--ghost btn--sm" onClick={exportToCsv}>
+              <Icon name="download" size={11} />Export All CSV
+            </button>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: results.length > 1 ? 'repeat(auto-fit, minmax(440px, 1fr))' : '1fr', gap: 20 }}>
-            {results.map((r, i) => <ResultCard key={r.lead_id ?? i} result={r} index={i} />)}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))', gap: 20 }}>
+            {results.map((r, i) => (
+              <ResultDossier key={r.lead_id ?? i} result={r} navigate={navigate} />
+            ))}
           </div>
-        </div>
+        </>
       )}
 
       {/* Empty state */}
       {!processing && results.length === 0 && errors.length === 0 && (
-        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '48px 24px', textAlign: 'center', opacity: 0.6 }}>
-          <Youtube size={38} style={{ color: '#FF4500', margin: '0 auto 16px', opacity: 0.5 }} />
-          <p style={{ color: 'var(--text-secondary)', fontSize: 13 }}>Enter a YouTube channel URL above and click Analyze</p>
-          <p style={{ color: 'var(--text-muted)', fontSize: 11, marginTop: 4 }}>Works with @handles, channel URLs, and bulk uploads</p>
+        <div className="card" style={{ textAlign: 'center', padding: '48px 24px', opacity: 0.6 }}>
+          <Icon name="youtube" size={38} style={{ color: 'var(--coral)', margin: '0 auto 16px', display: 'block', opacity: 0.5 }} />
+          <div style={{ color: 'var(--text-2)', fontSize: 13 }}>Enter a YouTube channel URL above and click Analyze</div>
+          <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Works with @handles, channel URLs, and bulk uploads</div>
         </div>
       )}
     </div>

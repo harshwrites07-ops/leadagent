@@ -18,11 +18,11 @@ const INBOX_COUNT = 4;
 
 const WARMUP_STAGES = [
   { maxDays: 7,    perInbox: 20,  gap: 300, label: 'Week 1 — Warming',  color: '#00B8D4', desc: '20/inbox · 5 min gap' },
-  { maxDays: 14,   perInbox: 30,  gap: 180, label: 'Week 2 — Building', color: '#7B61FF', desc: '30/inbox · 3 min gap' },
-  { maxDays: 21,   perInbox: 40,  gap: 120, label: 'Week 3 — Growing',  color: '#F5A623', desc: '40/inbox · 2 min gap' },
+  { maxDays: 14,   perInbox: 30,  gap: 180, label: 'Week 2 — Building', color: 'var(--lime)', desc: '30/inbox · 3 min gap' },
+  { maxDays: 21,   perInbox: 40,  gap: 120, label: 'Week 3 — Growing',  color: 'var(--warn)', desc: '40/inbox · 2 min gap' },
   { maxDays: 30,   perInbox: 60,  gap: 60,  label: 'Month 1 — Strong',  color: '#FF6B35', desc: '60/inbox · 1 min gap' },
   { maxDays: 60,   perInbox: 100, gap: 30,  label: 'Month 2 — Trusted', color: '#00C853', desc: '100/inbox · 30s gap'  },
-  { maxDays: 9999, perInbox: 150, gap: 0,   label: 'Established',       color: '#00E5A0', desc: '150/inbox · no gap'   },
+  { maxDays: 9999, perInbox: 150, gap: 0,   label: 'Established',       color: 'var(--ok)', desc: '150/inbox · no gap'   },
 ];
 
 function getWarmupStage(firstSentDate) {
@@ -31,10 +31,10 @@ function getWarmupStage(firstSentDate) {
   return WARMUP_STAGES.find(s => days <= s.maxDays) || WARMUP_STAGES[WARMUP_STAGES.length - 1];
 }
 
-const DOT_COLORS = { start: '#00B8D4', studying: '#7B61FF', generated: '#F5A623', sent: '#00E5A0', failed: '#FF4444', done: '#00E5A0', waiting: '#FF9500', info: '#888' };
+const DOT_COLORS = { start: '#00B8D4', studying: 'var(--lime)', generated: 'var(--warn)', sent: 'var(--ok)', failed: '#FF4444', done: 'var(--ok)', waiting: '#FF9500', info: '#888' };
 
 function FeedItem({ item }) {
-  const color = item.type === 'failed' ? '#FF6666' : item.type === 'sent' || item.type === 'done' ? '#00E5A0' : item.type === 'waiting' ? '#FF9500' : 'var(--text-secondary)';
+  const color = item.type === 'failed' ? '#FF6666' : item.type === 'sent' || item.type === 'done' ? 'var(--ok)' : item.type === 'waiting' ? '#FF9500' : 'var(--text-secondary)';
   const time = new Date(item.time).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, minHeight: 18 }}>
@@ -177,13 +177,13 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
   const pct = stats.total > 0 ? Math.round(((stats.sent + stats.failed) / stats.total) * 100) : 0;
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.88)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-      <div style={{ width: '100%', maxWidth: 580, background: 'var(--bg-surface)', borderRadius: 14, border: '1px solid rgba(255,69,0,0.2)', overflow: 'hidden', boxShadow: '0 0 60px rgba(255,69,0,0.15)' }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.88)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div style={{ width: '100%', maxWidth: 560, maxHeight: 'calc(100vh - 32px)', background: 'var(--bg-surface)', borderRadius: 14, border: '1px solid rgba(var(--lime-rgb),0.2)', boxShadow: '0 0 60px rgba(var(--lime-rgb),0.1)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid var(--border-subtle)', background: 'rgba(255,69,0,0.04)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid var(--border-subtle)', background: 'rgba(var(--lime-rgb),0.04)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--gradient-orange)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 20px rgba(255,69,0,0.5)', flexShrink: 0 }}>
+            <div style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--gradient-orange)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 20px rgba(var(--lime-rgb),0.4)', flexShrink: 0 }}>
               <Zap size={20} color="#fff" />
             </div>
             <div>
@@ -193,9 +193,9 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {phase === 'running' && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(0,229,160,0.1)', border: '1px solid rgba(0,229,160,0.3)', borderRadius: 6, padding: '4px 10px' }}>
-                <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#00E5A0', animation: 'pulse 1.5s infinite' }} />
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: '#00E5A0', letterSpacing: '0.1em' }}>RUNNING IN BACKGROUND</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(var(--ok-rgb),0.1)', border: '1px solid rgba(var(--ok-rgb),0.3)', borderRadius: 6, padding: '4px 10px' }}>
+                <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--ok)', animation: 'pulse 1.5s infinite' }} />
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--ok)', letterSpacing: '0.1em' }}>RUNNING IN BACKGROUND</span>
               </div>
             )}
             <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }}>
@@ -206,14 +206,15 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
 
         {/* Confirm phase */}
         {phase === 'confirm' && (
-          <div style={{ padding: 28, display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+          <div style={{ flex: 1, overflowY: 'auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
             <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.75, margin: 0 }}>
-              Generate hyper-personalized pitches with <strong style={{ color: '#7B61FF' }}>Prahvi AI</strong> and send via 4-account rotation. <strong style={{ color: 'var(--text-primary)' }}>Runs in background — close this window anytime.</strong>
+              Generate hyper-personalized pitches with <strong style={{ color: 'var(--lime)' }}>Prahvi AI</strong> and send via 4-account rotation. <strong style={{ color: 'var(--text-primary)' }}>Runs in background — close this window anytime.</strong>
             </p>
 
             {/* Warmup banner */}
             {warmup && (
-              <div style={{ background: 'rgba(0,229,160,0.06)', border: '1px solid rgba(0,229,160,0.25)', borderRadius: 10, padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div style={{ background: 'rgba(var(--ok-rgb),0.06)', border: '1px solid rgba(var(--ok-rgb),0.25)', borderRadius: 10, padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: warmup.color, boxShadow: `0 0 6px ${warmup.color}` }} />
@@ -226,7 +227,7 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
                     {sentToday > 0 && <span style={{ color: 'var(--text-muted)', marginLeft: 8 }}>({sentToday} sent today)</span>}
                   </p>
                 </div>
-                <button onClick={applySafeDefaults} style={{ padding: '8px 14px', borderRadius: 7, background: 'rgba(0,229,160,0.15)', border: '1px solid rgba(0,229,160,0.35)', color: '#00E5A0', fontSize: 11, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'var(--font-mono)', letterSpacing: '0.06em' }}>
+                <button onClick={applySafeDefaults} style={{ padding: '8px 14px', borderRadius: 7, background: 'rgba(var(--ok-rgb),0.15)', border: '1px solid rgba(var(--ok-rgb),0.35)', color: 'var(--ok)', fontSize: 11, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'var(--font-mono)', letterSpacing: '0.06em' }}>
                   APPLY SAFE MAX
                 </button>
               </div>
@@ -234,11 +235,11 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
 
             {/* Count selector */}
             {!leadIds && (
-              <div style={{ background: 'var(--bg-card)', border: '1px solid rgba(255,69,0,0.25)', borderRadius: 10, padding: '16px 18px' }}>
+              <div style={{ background: 'var(--bg-card)', border: '1px solid rgba(var(--lime-rgb),0.25)', borderRadius: 10, padding: '16px 18px' }}>
                 <p style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.14em', marginBottom: 10 }}>HOW MANY EMAILS TO SEND?</p>
                 <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
                   {[10, 25, 50, 100, 200, 500].map(n => (
-                    <button key={n} onClick={() => setCount(n)} style={{ flex: 1, padding: '7px 0', borderRadius: 7, fontSize: 13, fontWeight: 700, cursor: 'pointer', background: count === n ? 'var(--gradient-orange)' : 'var(--bg-elevated)', border: count === n ? 'none' : '1px solid var(--border-default)', color: count === n ? '#fff' : 'var(--text-secondary)', boxShadow: count === n ? '0 0 14px rgba(255,69,0,0.35)' : 'none', transition: 'all 0.15s' }}>
+                    <button key={n} onClick={() => setCount(n)} style={{ flex: 1, padding: '7px 0', borderRadius: 7, fontSize: 13, fontWeight: 700, cursor: 'pointer', background: count === n ? 'var(--gradient-orange)' : 'var(--bg-elevated)', border: count === n ? 'none' : '1px solid var(--border-default)', color: count === n ? '#fff' : 'var(--text-secondary)', boxShadow: count === n ? '0 0 14px rgba(var(--lime-rgb),0.3)' : 'none', transition: 'all 0.15s' }}>
                       {n}
                     </button>
                   ))}
@@ -252,8 +253,8 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
             )}
 
             {/* Delivery Controls */}
-            <div style={{ border: '1px solid rgba(255,69,0,0.2)', borderRadius: 10, overflow: 'hidden' }}>
-              <button onClick={() => setShowAdvanced(v => !v)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 18px', background: 'rgba(255,69,0,0.05)', border: 'none', cursor: 'pointer' }}>
+            <div style={{ border: '1px solid rgba(var(--lime-rgb),0.2)', borderRadius: 10, overflow: 'hidden' }}>
+              <button onClick={() => setShowAdvanced(v => !v)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 18px', background: 'rgba(var(--lime-rgb),0.05)', border: 'none', cursor: 'pointer' }}>
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.14em', color: 'var(--accent-primary)' }}>DELIVERY CONTROLS</span>
                 {showAdvanced ? <ChevronUp size={14} color="var(--text-muted)" /> : <ChevronDown size={14} color="var(--text-muted)" />}
               </button>
@@ -272,7 +273,7 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
                     <p style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.12em', marginBottom: 8 }}>GAP BETWEEN EMAILS</p>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                       {GAP_PRESETS.map(({ label, secs }) => (
-                        <button key={secs} onClick={() => setGapSeconds(secs)} style={{ padding: '6px 12px', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer', background: gapSeconds === secs ? 'var(--gradient-orange)' : 'var(--bg-elevated)', border: gapSeconds === secs ? 'none' : '1px solid var(--border-default)', color: gapSeconds === secs ? '#fff' : 'var(--text-secondary)', boxShadow: gapSeconds === secs ? '0 0 10px rgba(255,69,0,0.3)' : 'none' }}>
+                        <button key={secs} onClick={() => setGapSeconds(secs)} style={{ padding: '6px 12px', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer', background: gapSeconds === secs ? 'var(--gradient-orange)' : 'var(--bg-elevated)', border: gapSeconds === secs ? 'none' : '1px solid var(--border-default)', color: gapSeconds === secs ? '#fff' : 'var(--text-secondary)', boxShadow: gapSeconds === secs ? '0 0 10px rgba(var(--lime-rgb),0.25)' : 'none' }}>
                           {label}
                         </button>
                       ))}
@@ -284,7 +285,7 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                         {inboxes.map((inbox, idx) => {
                           const skipped = skipInboxes.includes(inbox.email);
-                          const riskColor = inbox.bounceRate >= 8 ? '#FF4444' : inbox.bounceRate >= 4 ? '#FF9500' : '#00E5A0';
+                          const riskColor = inbox.bounceRate >= 8 ? '#FF4444' : inbox.bounceRate >= 4 ? '#FF9500' : 'var(--ok)';
                           const toggle = () => setSkipInboxes(prev =>
                             prev.includes(inbox.email) ? prev.filter(e => e !== inbox.email) : [...prev, inbox.email]
                           );
@@ -293,7 +294,7 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
                               <div style={{ width: 16, height: 16, borderRadius: 4, border: `2px solid ${skipped ? '#666' : 'var(--accent-primary)'}`, background: skipped ? 'transparent' : 'var(--accent-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                                 {!skipped && <span style={{ color: '#fff', fontSize: 10, lineHeight: 1 }}>✓</span>}
                               </div>
-                              <span style={{ flex: 1, fontSize: 12, color: skipped ? 'var(--text-muted)' : 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>Inbox {idx + 1}</span>
+                              <span style={{ flex: 1, fontSize: 12, color: skipped ? 'var(--text-muted)' : 'var(--text-primary)', fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inbox.email}</span>
                               {inbox.sentCount > 0 && (
                                 <span style={{ fontSize: 10, color: riskColor, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
                                   {inbox.bounceRate}% bounce
@@ -324,14 +325,16 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
               ))}
             </div>
 
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={onClose} style={{ flex: 1, padding: '12px', borderRadius: 8, cursor: 'pointer', background: 'transparent', border: '1px solid var(--border-default)', color: 'var(--text-secondary)', fontSize: 13 }}>
-                Cancel
-              </button>
-              <button onClick={startPowerSend} style={{ flex: 2, padding: '12px', borderRadius: 8, cursor: 'pointer', background: 'var(--gradient-orange)', color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 0 24px rgba(255,69,0,0.35)' }}>
-                <Zap size={16} /> Fire {effectiveCount} Emails
-              </button>
-            </div>
+          </div>
+          {/* Sticky send button */}
+          <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-surface)', display: 'flex', gap: 10, flexShrink: 0 }}>
+            <button onClick={onClose} style={{ flex: 1, padding: '11px', borderRadius: 8, cursor: 'pointer', background: 'transparent', border: '1px solid var(--border-default)', color: 'var(--text-secondary)', fontSize: 13 }}>
+              Cancel
+            </button>
+            <button onClick={startPowerSend} style={{ flex: 2, padding: '11px', borderRadius: 8, cursor: 'pointer', background: 'var(--gradient-orange)', color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 0 24px rgba(var(--lime-rgb),0.3)' }}>
+              <Zap size={16} /> Fire {effectiveCount} Emails
+            </button>
+          </div>
           </div>
         )}
 
@@ -343,12 +346,12 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
               <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 6px' }}>Job Interrupted</p>
               <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 }}>
                 The server restarted while the job was running.<br />
-                <strong style={{ color: '#00E5A0' }}>{stats.sent} emails were already sent</strong> — they won't be re-sent.
+                <strong style={{ color: 'var(--ok)' }}>{stats.sent} emails were already sent</strong> — they won't be re-sent.
               </p>
             </div>
             <div style={{ display: 'flex', gap: 10, width: '100%' }}>
               <button onClick={dismissInterrupted} style={{ flex: 1, padding: '12px', borderRadius: 8, cursor: 'pointer', background: 'transparent', border: '1px solid var(--border-default)', color: 'var(--text-secondary)', fontSize: 13 }}>Close</button>
-              <button onClick={resumeJob} style={{ flex: 2, padding: '12px', borderRadius: 8, cursor: 'pointer', background: 'var(--gradient-orange)', color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 0 20px rgba(255,69,0,0.3)' }}>
+              <button onClick={resumeJob} style={{ flex: 2, padding: '12px', borderRadius: 8, cursor: 'pointer', background: 'var(--gradient-orange)', color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 0 20px rgba(var(--lime-rgb),0.25)' }}>
                 <Zap size={16} /> Resume Remaining
               </button>
             </div>
@@ -363,8 +366,8 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
               {[
                 { label: 'STUDIED',   val: stats.studied,   color: '#00B8D4' },
-                { label: 'GENERATED', val: stats.generated, color: '#7B61FF' },
-                { label: 'SENT',      val: stats.sent,      color: '#00E5A0' },
+                { label: 'GENERATED', val: stats.generated, color: 'var(--lime)' },
+                { label: 'SENT',      val: stats.sent,      color: 'var(--ok)' },
                 { label: 'FAILED',    val: stats.failed,    color: '#FF4444' },
               ].map(({ label, val, color }) => (
                 <div key={label} style={{ background: 'var(--bg-card)', border: `1px solid ${color}30`, borderRadius: 8, padding: '14px 0', textAlign: 'center' }}>
@@ -396,7 +399,7 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
 
             {phase === 'running' && (
               <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={onClose} style={{ flex: 1, padding: '12px', borderRadius: 8, cursor: 'pointer', background: 'rgba(0,229,160,0.1)', border: '1px solid rgba(0,229,160,0.3)', color: '#00E5A0', fontSize: 13, fontWeight: 600 }}>
+                <button onClick={onClose} style={{ flex: 1, padding: '12px', borderRadius: 8, cursor: 'pointer', background: 'rgba(var(--ok-rgb),0.1)', border: '1px solid rgba(var(--ok-rgb),0.3)', color: 'var(--ok)', fontSize: 13, fontWeight: 600 }}>
                   Close Window (job keeps running)
                 </button>
                 <button onClick={stopJob} style={{ flex: 1, padding: '12px', borderRadius: 8, cursor: 'pointer', background: 'rgba(255,68,68,0.1)', border: '1px solid rgba(255,68,68,0.3)', color: '#FF6666', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
@@ -406,7 +409,7 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
             )}
 
             {phase === 'done' && (
-              <button onClick={onClose} style={{ padding: '12px', borderRadius: 8, cursor: 'pointer', background: 'var(--gradient-orange)', color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, boxShadow: '0 0 20px rgba(255,69,0,0.3)' }}>
+              <button onClick={onClose} style={{ padding: '12px', borderRadius: 8, cursor: 'pointer', background: 'var(--gradient-orange)', color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, boxShadow: '0 0 20px rgba(var(--lime-rgb),0.25)' }}>
                 Done — Close
               </button>
             )}

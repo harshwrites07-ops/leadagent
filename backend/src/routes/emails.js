@@ -31,18 +31,33 @@ router.get('/', asyncHandler(async (req, res) => {
   res.json({ success: true, emails, total: total.count });
 }));
 
-// GET /api/emails/inboxes — inbox list with 30-day bounce stats from DB (no IMAP)
+// GET /api/emails/inboxes — inbox list from user's connected Gmail accounts
 router.get('/inboxes', asyncHandler(async (req, res) => {
   const db = getDb();
-  const inboxList = getInboxes();
+  const uid = req.user.id;
+
+  // User-connected Gmail accounts only
+  const gmailAccounts = db.prepare(
+    `SELECT email FROM gmail_accounts WHERE user_id = ? AND status IN ('active','sending')`
+  ).all(uid);
+
+  // Fallback: global SMTP inboxes (admin-configured) if user has none
+  const inboxList = gmailAccounts.length > 0
+    ? gmailAccounts
+    : getInboxes();
+
   const result = inboxList.map(inbox => {
-    const totRow = db.prepare(`SELECT COUNT(*) as c FROM emails WHERE from_email=? AND DATE(sent_at) >= DATE('now','-30 days')`).get(inbox.email);
-    const bounceRow = db.prepare(`SELECT COUNT(*) as c FROM emails WHERE from_email=? AND status='bounced' AND DATE(sent_at) >= DATE('now','-30 days')`).get(inbox.email);
-    const sentCount = totRow?.c || 0;
+    const sentRow   = db.prepare(`SELECT COUNT(*) as c FROM emails WHERE from_email=? AND user_id=? AND DATE(sent_at)>=DATE('now','-30 days')`).get(inbox.email, uid);
+    const bounceRow = db.prepare(`SELECT COUNT(*) as c FROM emails WHERE from_email=? AND user_id=? AND status='bounced' AND DATE(sent_at)>=DATE('now','-30 days')`).get(inbox.email, uid);
+    const openRow   = db.prepare(`SELECT COUNT(*) as c FROM emails WHERE from_email=? AND user_id=? AND status='opened'`).get(inbox.email, uid);
+    const sentCount    = sentRow?.c   || 0;
     const bouncedCount = bounceRow?.c || 0;
+    const openedCount  = openRow?.c   || 0;
     const bounceRate = sentCount > 0 ? parseFloat(((bouncedCount / sentCount) * 100).toFixed(1)) : 0;
-    return { email: inbox.email, sentCount, bouncedCount, bounceRate };
+    const openRate   = sentCount > 0 ? parseFloat(((openedCount  / sentCount) * 100).toFixed(1)) : 0;
+    return { email: inbox.email, sentCount, bouncedCount, openedCount, bounceRate, openRate };
   });
+
   res.json({ success: true, inboxes: result });
 }));
 

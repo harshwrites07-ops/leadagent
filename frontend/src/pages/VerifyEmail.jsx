@@ -35,8 +35,8 @@ export default function VerifyEmail() {
         )}
         {status === 'success' && (
           <>
-            <div style={{ ...styles.iconWrap, background: 'rgba(0,229,160,0.08)', border: '1px solid rgba(0,229,160,0.2)' }}>
-              <CheckCircle size={28} color="#00E5A0" />
+            <div style={{ ...styles.iconWrap, background: 'rgba(var(--ok-rgb),0.08)', border: '1px solid rgba(var(--ok-rgb),0.2)' }}>
+              <CheckCircle size={28} color="var(--ok)" />
             </div>
             <h2 style={styles.title}>Email verified!</h2>
             <p style={styles.subtitle}>Redirecting to the app...</p>

@@ -27,10 +27,10 @@ function TestButton({ onClick, status }) {
       display: 'flex', alignItems: 'center', gap: 5,
       padding: '7px 14px', borderRadius: 6, cursor: 'pointer', fontSize: 12, flexShrink: 0,
       background: 'transparent', border: '1px solid var(--border-default)',
-      color: status === 'ok' ? '#00E5A0' : status === 'error' ? '#FF4444' : 'var(--text-secondary)',
+      color: status === 'ok' ? 'var(--ok)' : status === 'error' ? '#FF4444' : 'var(--text-secondary)',
     }}>
       {status === 'loading' && <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} />}
-      {status === 'ok' && <CheckCircle2 size={11} style={{ color: '#00E5A0' }} />}
+      {status === 'ok' && <CheckCircle2 size={11} style={{ color: 'var(--ok)' }} />}
       {status === 'error' && <XCircle size={11} style={{ color: '#FF4444' }} />}
       {!status && <Bot size={11} />}
       Test
@@ -111,7 +111,7 @@ function ToggleGroup({ options, value, onChange }) {
         <button key={opt.value} onClick={() => onChange(opt.value)} style={{
           padding: '6px 16px', borderRadius: 5, fontSize: 12, fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s', border: 'none',
           ...(value === opt.value
-            ? { background: 'rgba(255,69,0,0.1)', color: 'var(--accent-primary)', outline: '1px solid rgba(255,69,0,0.2)' }
+            ? { background: 'rgba(var(--lime-rgb),0.1)', color: 'var(--accent-primary)', outline: '1px solid rgba(var(--lime-rgb),0.2)' }
             : { background: 'transparent', color: 'var(--text-muted)' }),
         }}>{opt.label}</button>
       ))}
@@ -121,7 +121,7 @@ function ToggleGroup({ options, value, onChange }) {
 
 function Toggle({ checked, onChange }) {
   return (
-    <div onClick={onChange} style={{ position: 'relative', width: 36, height: 20, borderRadius: 10, background: checked ? '#FF4500' : 'var(--bg-elevated)', border: '1px solid var(--border-default)', transition: 'background 0.2s', cursor: 'pointer', flexShrink: 0 }}>
+    <div onClick={onChange} style={{ position: 'relative', width: 36, height: 20, borderRadius: 10, background: checked ? 'var(--coral)' : 'var(--bg-elevated)', border: '1px solid var(--border-default)', transition: 'background 0.2s', cursor: 'pointer', flexShrink: 0 }}>
       <div style={{ position: 'absolute', top: 2, left: checked ? 16 : 2, width: 14, height: 14, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.4)' }} />
     </div>
   );
@@ -237,13 +237,13 @@ export default function AdminSettings() {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <h1 style={{ fontFamily: 'var(--font-heading)', fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.03em', margin: 0 }}>Admin Settings</h1>
-            <span style={{ fontSize: 9, padding: '2px 8px', borderRadius: 4, background: 'rgba(255,69,0,0.1)', color: 'var(--accent-primary)', fontFamily: 'var(--font-mono)', border: '1px solid rgba(255,69,0,0.2)' }}>ADMIN</span>
+            <span style={{ fontSize: 9, padding: '2px 8px', borderRadius: 4, background: 'rgba(var(--lime-rgb),0.1)', color: 'var(--accent-primary)', fontFamily: 'var(--font-mono)', border: '1px solid rgba(var(--lime-rgb),0.2)' }}>ADMIN</span>
           </div>
           <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginTop: 4, letterSpacing: '0.1em' }}>SYSTEM CONFIGURATION — NOT VISIBLE TO USERS</p>
         </div>
         {dirty && (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#F5A623', background: 'rgba(245,166,35,0.1)', padding: '4px 12px', borderRadius: 99, border: '1px solid rgba(245,166,35,0.2)', fontFamily: 'var(--font-mono)' }}>
-            <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#F5A623' }} />
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--warn)', background: 'rgba(var(--warn-rgb),0.1)', padding: '4px 12px', borderRadius: 99, border: '1px solid rgba(var(--warn-rgb),0.2)', fontFamily: 'var(--font-mono)' }}>
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--warn)' }} />
             UNSAVED CHANGES
           </span>
         )}
@@ -338,7 +338,7 @@ export default function AdminSettings() {
             <div>
               <label style={labelSt}>Daily Sending Limit (per user, no Gmail)</label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <input type="range" min="10" max="500" step="10" value={local.daily_send_limit || 150} onChange={e => set('daily_send_limit', e.target.value)} style={{ flex: 1, accentColor: '#FF4500' }} />
+                <input type="range" min="10" max="500" step="10" value={local.daily_send_limit || 150} onChange={e => set('daily_send_limit', e.target.value)} style={{ flex: 1, accentColor: 'var(--coral)' }} />
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-primary)', minWidth: 32 }}>{local.daily_send_limit || 150}</span>
               </div>
             </div>
@@ -435,7 +435,7 @@ export default function AdminSettings() {
           background: dirty ? 'var(--gradient-orange)' : 'var(--bg-elevated)',
           color: dirty ? '#fff' : 'var(--text-muted)',
           border: dirty ? 'none' : '1px solid var(--border-default)',
-          fontSize: 13, fontWeight: 600, boxShadow: dirty ? '0 4px 16px rgba(255,69,0,0.35)' : 'none',
+          fontSize: 13, fontWeight: 600, boxShadow: dirty ? '0 4px 16px rgba(var(--lime-rgb),0.3)' : 'none',
           transition: 'all 0.2s',
         }}>
           {saving ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Saving...</> : <><Save size={14} /> Save Settings</>}

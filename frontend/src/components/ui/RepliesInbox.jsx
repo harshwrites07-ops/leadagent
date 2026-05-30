@@ -50,22 +50,22 @@ function ConversationView({ reply, onBack, onReplySent }) {
   return (
     <div className="flex flex-col h-full">
       {/* Conversation header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-dark-600 flex-shrink-0">
-        <button onClick={onBack} className="p-1.5 rounded-lg hover:bg-dark-600 transition-colors text-slate-400 hover:text-white">
+      <div className="flex items-center gap-3 px-4 py-3 flex-shrink-0" style={{ borderBottom: '1px solid var(--line)' }}>
+        <button onClick={onBack} className="p-1.5 rounded-lg transition-colors" style={{ color: 'var(--text-2)' }}>
           <ArrowLeft size={16} />
         </button>
-        <div className="w-8 h-8 rounded-full bg-dark-600 overflow-hidden flex-shrink-0 flex items-center justify-center text-xs font-bold text-slate-300">
+        <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center text-xs font-bold" style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}>
           {reply.thumbnail_url
             ? <img src={reply.thumbnail_url} alt={reply.channel_name} className="w-full h-full object-cover" />
             : <span>{(reply.channel_name || '??').slice(0, 2).toUpperCase()}</span>
           }
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-bold text-white truncate">{reply.channel_name || reply.lead_email}</p>
-          <p className="text-xs text-slate-500 truncate">{reply.reply_from || reply.lead_email}</p>
+          <p className="text-sm font-bold truncate" style={{ color: 'var(--text)' }}>{reply.channel_name || reply.lead_email}</p>
+          <p className="text-xs truncate" style={{ color: 'var(--text-3)' }}>{reply.reply_from || reply.lead_email}</p>
         </div>
         <div className="text-right flex-shrink-0">
-          <p className="text-xs text-slate-500">via</p>
+          <p className="text-xs" style={{ color: 'var(--text-3)' }}>via</p>
           <p className="text-xs font-semibold" style={{ color: '#a78bfa' }}>{reply.from_email}</p>
         </div>
       </div>
@@ -73,53 +73,53 @@ function ConversationView({ reply, onBack, onReplySent }) {
       {/* Thread */}
       <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4">
         {/* Subject */}
-        <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold text-center">
+        <p className="text-xs uppercase tracking-wider font-semibold text-center" style={{ color: 'var(--text-3)' }}>
           {reply.reply_subject || reply.subject || 'No subject'}
         </p>
 
         {/* Original email — sent bubble */}
         <div className="flex flex-col items-end gap-1">
-          <div className="flex items-center gap-2 text-xs text-slate-500">
+          <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-3)' }}>
             <span>{reply.from_email}</span>
             <span>·</span>
             <span>{reply.sent_at ? formatDate(reply.sent_at) : '—'}</span>
           </div>
-          <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-dark-600 border border-dark-500 px-4 py-3">
-            <p className="text-sm text-slate-300 whitespace-pre-wrap leading-relaxed">{reply.body || 'Email body not available'}</p>
+          <div className="max-w-[85%] rounded-2xl rounded-tr-sm px-4 py-3" style={{ background: 'var(--surface-2)', border: '1px solid var(--line)' }}>
+            <p className="text-sm whitespace-pre-wrap leading-relaxed" style={{ color: 'var(--text-2)' }}>{reply.body || 'Email body not available'}</p>
           </div>
-          <span className="text-xs text-slate-600">You</span>
+          <span className="text-xs" style={{ color: 'var(--text-4)' }}>You</span>
         </div>
 
         {/* Their reply — received bubble */}
         {reply.reply_body ? (
           <div className="flex flex-col items-start gap-1">
-            <div className="flex items-center gap-2 text-xs text-slate-500">
+            <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-3)' }}>
               <span>{reply.reply_from || reply.lead_email}</span>
               <span>·</span>
               <span>{reply.replied_at ? formatDate(reply.replied_at) : '—'}</span>
             </div>
             <div className="max-w-[85%] rounded-2xl rounded-tl-sm border px-4 py-3"
-              style={{ background: 'rgba(124,58,237,0.12)', borderColor: 'rgba(124,58,237,0.3)' }}>
-              <p className="text-sm text-white whitespace-pre-wrap leading-relaxed">{reply.reply_body}</p>
+              style={{ background: 'rgba(var(--lime-rgb),0.1)', borderColor: 'rgba(var(--lime-rgb),0.25)' }}>
+              <p className="text-sm whitespace-pre-wrap leading-relaxed" style={{ color: 'var(--text)' }}>{reply.reply_body}</p>
             </div>
-            <span className="text-xs text-slate-600">{reply.channel_name || 'Them'}</span>
+            <span className="text-xs" style={{ color: 'var(--text-4)' }}>{reply.channel_name || 'Them'}</span>
           </div>
         ) : (
           <div className="text-center py-4">
-            <p className="text-xs text-slate-500 italic">Reply content not synced yet — click Sync Replies</p>
+            <p className="text-xs italic" style={{ color: 'var(--text-3)' }}>Reply content not synced yet — click Sync Replies</p>
           </div>
         )}
 
         {/* My sent replies */}
         {mySentReplies.map((r, i) => (
           <div key={i} className="flex flex-col items-end gap-1">
-            <div className="flex items-center gap-2 text-xs text-slate-500">
+            <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-3)' }}>
               <span>{reply.from_email}</span>
               <span>·</span>
               <span>{r.sent_at ? formatDate(r.sent_at) : 'Just now'}</span>
             </div>
-            <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-dark-600 border border-dark-500 px-4 py-3">
-              <p className="text-sm text-slate-300 whitespace-pre-wrap leading-relaxed">{r.body}</p>
+            <div className="max-w-[85%] rounded-2xl rounded-tr-sm px-4 py-3" style={{ background: 'var(--surface-2)', border: '1px solid var(--line)' }}>
+              <p className="text-sm whitespace-pre-wrap leading-relaxed" style={{ color: 'var(--text-2)' }}>{r.body}</p>
             </div>
             <div className="flex items-center gap-1 text-xs text-green-400">
               <Check size={11} /> Sent
@@ -131,14 +131,15 @@ function ConversationView({ reply, onBack, onReplySent }) {
       </div>
 
       {/* Compose area */}
-      <div className="flex-shrink-0 border-t border-dark-600 bg-dark-700">
+      <div className="flex-shrink-0" style={{ borderTop: '1px solid var(--line)', background: 'var(--surface-2)' }}>
         {sendError && (
           <div className="px-4 pt-2 text-xs text-red-400">{sendError}</div>
         )}
         <div className="flex items-end gap-3 p-3">
           <textarea
             ref={textareaRef}
-            className="flex-1 bg-dark-600 border border-dark-500 rounded-xl text-sm text-white px-4 py-3 resize-none outline-none placeholder-slate-500 focus:border-purple-500/50 transition-colors"
+            className="flex-1 rounded-xl text-sm px-4 py-3 resize-none outline-none transition-colors"
+            style={{ background: 'var(--surface)', border: '1px solid var(--line)', color: 'var(--text)' }}
             rows={3}
             placeholder={`Reply to ${reply.channel_name || 'them'}… (Ctrl+Enter to send)`}
             value={replyBody}
@@ -149,13 +150,13 @@ function ConversationView({ reply, onBack, onReplySent }) {
             onClick={sendReply}
             disabled={sending || !replyBody.trim()}
             className="flex-shrink-0 p-3 rounded-xl transition-colors disabled:opacity-40"
-            style={{ background: replyBody.trim() ? 'rgba(124,58,237,0.8)' : 'rgba(124,58,237,0.2)', color: '#fff' }}
+            style={{ background: replyBody.trim() ? 'var(--lime)' : 'rgba(var(--lime-rgb),0.2)', color: 'var(--bg)' }}
             title="Send reply (Ctrl+Enter)"
           >
             <Send size={18} className={sending ? 'animate-pulse' : ''} />
           </button>
         </div>
-        <p className="text-xs text-slate-600 pb-2 px-4">Sending from {reply.from_email}</p>
+        <p className="text-xs pb-2 px-4" style={{ color: 'var(--text-4)' }}>Sending from {reply.from_email}</p>
       </div>
     </div>
   );
@@ -171,10 +172,13 @@ function ReplyRow({ reply, onOpen }) {
 
   return (
     <div
-      className="flex items-center gap-3 py-3 px-4 rounded-xl cursor-pointer hover:bg-dark-600 transition-colors border border-transparent hover:border-dark-500"
+      className="flex items-center gap-3 py-3 px-4 rounded-xl cursor-pointer transition-colors border"
+      style={{ borderColor: 'transparent' }}
+      onMouseEnter={e => { e.currentTarget.style.background = 'var(--hover)'; e.currentTarget.style.borderColor = 'var(--line)'; }}
+      onMouseLeave={e => { e.currentTarget.style.background = ''; e.currentTarget.style.borderColor = 'transparent'; }}
       onClick={() => onOpen(reply)}
     >
-      <div className="w-10 h-10 rounded-full bg-dark-600 overflow-hidden flex-shrink-0 flex items-center justify-center text-xs font-bold text-slate-300">
+      <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center text-xs font-bold" style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}>
         {reply.thumbnail_url
           ? <img src={reply.thumbnail_url} alt={reply.channel_name} className="w-full h-full object-cover" />
           : <span>{initials}</span>
@@ -182,16 +186,16 @@ function ReplyRow({ reply, onOpen }) {
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-0.5">
-          <p className="text-sm font-semibold text-white truncate">{reply.channel_name || reply.lead_email}</p>
+          <p className="text-sm font-semibold truncate" style={{ color: 'var(--text)' }}>{reply.channel_name || reply.lead_email}</p>
           <span className="badge badge-purple text-xs flex-shrink-0">REPLIED</span>
         </div>
-        <p className="text-xs text-slate-400 truncate">{reply.reply_subject || reply.subject || 'No subject'}</p>
-        <p className={`text-xs truncate mt-0.5 ${hasContent ? 'text-slate-500' : 'text-slate-600 italic'}`}>{preview}</p>
+        <p className="text-xs truncate" style={{ color: 'var(--text-2)' }}>{reply.reply_subject || reply.subject || 'No subject'}</p>
+        <p className={`text-xs truncate mt-0.5${!hasContent ? ' italic' : ''}`} style={{ color: hasContent ? 'var(--text-3)' : 'var(--text-4)' }}>{preview}</p>
       </div>
       <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-        <span className="text-xs text-slate-500">{reply.replied_at ? formatDate(reply.replied_at) : '—'}</span>
+        <span className="text-xs" style={{ color: 'var(--text-3)' }}>{reply.replied_at ? formatDate(reply.replied_at) : '—'}</span>
         <div className="flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-lg"
-          style={{ background: 'rgba(124,58,237,0.15)', color: '#a78bfa', border: '1px solid rgba(124,58,237,0.25)' }}>
+          style={{ background: 'rgba(var(--lime-rgb),0.12)', color: 'var(--lime)', border: '1px solid rgba(var(--lime-rgb),0.3)' }}>
           Open <ChevronRight size={11} />
         </div>
       </div>
@@ -259,8 +263,8 @@ export default function RepliesInbox({ onClose }) {
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.95, opacity: 0 }}
           transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-          className="w-full max-w-2xl bg-dark-800 border border-dark-600 rounded-xl flex flex-col overflow-hidden"
-          style={{ height: '82vh', boxShadow: '0 0 60px rgba(124,58,237,0.15)' }}
+          className="w-full max-w-2xl rounded-xl flex flex-col overflow-hidden"
+          style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', height: '82vh', boxShadow: '0 0 60px rgba(200,246,84,0.08)' }}
           onClick={e => e.stopPropagation()}
         >
           <AnimatePresence mode="wait">
@@ -295,14 +299,14 @@ export default function RepliesInbox({ onClose }) {
                 className="flex flex-col h-full"
               >
                 {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4 border-b border-dark-600 flex-shrink-0">
+                <div className="flex items-center justify-between px-6 py-4 flex-shrink-0" style={{ borderBottom: '1px solid var(--line)' }}>
                   <div className="flex items-center gap-3">
                     <div className="p-2 bg-purple-500/20 rounded-lg">
                       <MessageSquare size={18} className="text-purple-400" />
                     </div>
                     <div>
-                      <h2 className="text-white font-bold text-lg">Replies Inbox</h2>
-                      <p className="text-xs text-slate-400">{replies.length} leads replied — click to open & reply</p>
+                      <h2 className="font-bold text-lg" style={{ color: 'var(--text)' }}>Replies Inbox</h2>
+                      <p className="text-xs" style={{ color: 'var(--text-2)' }}>{replies.length} leads replied — click to open & reply</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -316,7 +320,7 @@ export default function RepliesInbox({ onClose }) {
 
                 {/* New count banner */}
                 {newCount !== null && (
-                  <div className={`px-6 py-2 text-sm font-medium flex-shrink-0 ${newCount > 0 ? 'bg-green-500/10 text-green-400' : 'bg-dark-700 text-slate-400'}`}>
+                  <div className="px-6 py-2 text-sm font-medium flex-shrink-0" style={newCount > 0 ? { background: 'rgba(var(--ok-rgb),0.1)', color: 'var(--ok)' } : { background: 'var(--surface-2)', color: 'var(--text-2)' }}>
                     {newCount > 0 ? `✓ Found ${newCount} new repl${newCount === 1 ? 'y' : 'ies'}` : '✓ All caught up — no new replies'}
                   </div>
                 )}
@@ -326,13 +330,13 @@ export default function RepliesInbox({ onClose }) {
                   {loading ? (
                     <div className="flex items-center justify-center h-48 gap-3">
                       <RefreshCw size={24} className="animate-spin text-purple-400" />
-                      <span className="text-slate-400">Loading replies...</span>
+                      <span style={{ color: 'var(--text-2)' }}>Loading replies...</span>
                     </div>
                   ) : replies.length === 0 ? (
                     <div className="flex flex-col items-center py-16 gap-4">
-                      <Mail size={40} className="text-slate-600" />
-                      <p className="text-slate-400 font-medium">No replies yet</p>
-                      <p className="text-slate-500 text-sm text-center">Click "Sync Replies" to check your Gmail inboxes</p>
+                      <Mail size={40} style={{ color: 'var(--text-4)' }} />
+                      <p className="font-medium" style={{ color: 'var(--text-2)' }}>No replies yet</p>
+                      <p className="text-sm text-center" style={{ color: 'var(--text-3)' }}>Click "Sync Replies" to check your Gmail inboxes</p>
                       <button onClick={sync} disabled={syncing} className="btn btn-primary">
                         <RefreshCw size={14} className={syncing ? 'animate-spin mr-2' : 'mr-2'} /> Check Gmail Now
                       </button>

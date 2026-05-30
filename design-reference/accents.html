@@ -1,0 +1,707 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=1440" />
+<title>Accent direction · ContentCrafterzz</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+
+<style>
+:root {
+  --bg:        #0a0a0c;
+  --bg-2:      #0e0e11;
+  --surface:   #131318;
+  --surface-2: #181820;
+  --surface-3: #1f1f28;
+  --line:      #23232c;
+  --line-2:    #2c2c37;
+  --line-3:    #393945;
+  --text:      #f3f3f5;
+  --text-2:    #a8a8b3;
+  --text-3:    #6e6e7a;
+  --text-4:    #46464f;
+  --f-sans:  'Geist', ui-sans-serif, system-ui, sans-serif;
+  --f-serif: 'Instrument Serif', serif;
+  --f-mono:  'Geist Mono', ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: var(--f-sans); -webkit-font-smoothing: antialiased; }
+body { padding: 56px 64px 96px; }
+
+.wrap { max-width: 1320px; margin: 0 auto; }
+
+.hd { margin-bottom: 56px; max-width: 760px; }
+.hd .eyebrow {
+  font-size: 11.5px; color: var(--text-3); text-transform: uppercase;
+  letter-spacing: .08em; font-weight: 500; margin-bottom: 16px;
+}
+.hd h1 {
+  font-family: var(--f-serif); font-style: italic; font-weight: 400;
+  font-size: 56px; letter-spacing: -0.025em; line-height: 1; margin: 0 0 22px;
+}
+.hd h1 em { font-style: normal; color: var(--text-3); }
+.hd p { color: var(--text-2); font-size: 15px; line-height: 1.65; margin: 0; max-width: 640px; }
+
+/* Competitor map */
+.map {
+  margin-top: 32px;
+  display: flex; gap: 6px; flex-wrap: wrap;
+}
+.map .tag {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-family: var(--f-mono); font-size: 11px;
+  padding: 4px 10px 4px 8px; border-radius: 999px;
+  background: var(--surface); border: 1px solid var(--line); color: var(--text-2);
+}
+.map .tag .sw { width: 8px; height: 8px; border-radius: 50%; }
+
+.scale-row {
+  margin-top: 56px; margin-bottom: 80px;
+  display: flex; align-items: center; gap: 20px;
+  padding: 22px 26px; border: 1px solid var(--line); border-radius: 14px; background: var(--bg-2);
+}
+.scale-row .axis-label { color: var(--text-3); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+.scale-row .axis { flex: 1; display: grid; grid-template-columns: repeat(11, 1fr); gap: 4px; }
+.scale-row .axis div {
+  height: 30px; border-radius: 4px;
+}
+
+/* Direction card */
+.dir {
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 48px;
+  padding: 48px 0;
+  border-top: 1px solid var(--line);
+  align-items: start;
+}
+.dir:last-of-type { border-bottom: 1px solid var(--line); }
+
+.dir__left { position: sticky; top: 28px; }
+.dir__num {
+  font-family: var(--f-mono); font-size: 11px; color: var(--text-3);
+  letter-spacing: .08em; margin-bottom: 12px;
+}
+.dir__name {
+  font-family: var(--f-serif); font-style: italic; font-weight: 400;
+  font-size: 38px; letter-spacing: -0.02em; line-height: 1; margin: 0 0 14px;
+}
+.dir__hex {
+  font-family: var(--f-mono); font-size: 12px; color: var(--text-3);
+  margin-bottom: 22px;
+}
+
+.dir__swatches { display: flex; gap: 8px; margin-bottom: 22px; }
+.dir__sw {
+  width: 56px; height: 56px; border-radius: 10px;
+  display: grid; place-items: end; padding: 6px;
+  font-family: var(--f-mono); font-size: 9.5px; color: rgba(0,0,0,0.55);
+  font-weight: 500;
+}
+.dir__sw.bordered { border: 1px solid var(--line); }
+.dir__sw.dark { color: rgba(255,255,255,0.55); }
+
+.dir__sig {
+  color: var(--text-2); font-size: 13.5px; line-height: 1.65;
+  margin-bottom: 22px;
+}
+
+.dir__row { padding: 11px 0; border-top: 1px solid var(--line); display: flex; gap: 14px; font-size: 12.5px; }
+.dir__row .k { color: var(--text-3); width: 86px; flex-shrink: 0; }
+.dir__row .v { color: var(--text-2); line-height: 1.55; }
+
+.score { display: flex; gap: 3px; }
+.score span { width: 18px; height: 6px; border-radius: 2px; background: var(--surface-3); }
+.score span.f { background: var(--accent); }
+
+/* Preview */
+.prev {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.prev__full { grid-column: 1 / -1; }
+
+.tile {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 14px; padding: 22px;
+}
+.tile__label {
+  font-size: 10.5px; color: var(--text-3); text-transform: uppercase;
+  letter-spacing: .08em; font-weight: 500;
+}
+.tile__num {
+  font-family: var(--f-serif); font-style: italic;
+  font-size: 48px; letter-spacing: -0.02em; line-height: 1.05; margin-top: 12px;
+}
+.tile__delta {
+  font-family: var(--f-mono); font-size: 11px; margin-top: 8px;
+  display: inline-flex; align-items: center; gap: 4px;
+  color: var(--accent);
+}
+.tile__spark { margin-top: 14px; }
+
+.tile__btnrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--f-sans); font-size: 12px; font-weight: 500;
+  padding: 7px 12px; border-radius: 8px;
+  border: 1px solid var(--line-2); background: var(--surface-2); color: var(--text);
+  cursor: pointer;
+}
+.btn--p { background: var(--accent); color: var(--accent-fg, #0a0a0c); border-color: var(--accent); }
+.badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 9px; border-radius: 999px;
+  font-size: 11px; font-weight: 500;
+  background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-line);
+}
+.dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 0 var(--accent);
+  animation: pulse 1.6s infinite;
+}
+@keyframes pulse {
+  0%   { box-shadow: 0 0 0 0 var(--accent-soft); }
+  70%  { box-shadow: 0 0 0 6px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+.tile__head {
+  display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;
+}
+.tile__title { font-size: 13px; font-weight: 500; }
+
+.tile__bars { display: flex; flex-direction: column; gap: 12px; margin-top: 6px; }
+.tile__bar { font-size: 12px; }
+.tile__bar .row { display: flex; justify-content: space-between; margin-bottom: 5px; }
+.tile__bar .row .k { color: var(--text-2); }
+.tile__bar .row .v { font-family: var(--f-mono); }
+.tile__bar .track { height: 4px; background: var(--surface-3); border-radius: 3px; overflow: hidden; }
+.tile__bar .fill { height: 100%; background: var(--accent); }
+
+/* Agent feed style row */
+.feed-row { display: flex; gap: 14px; padding: 12px 0; border-bottom: 1px dashed var(--line); font-size: 12.5px; }
+.feed-row:last-child { border-bottom: 0; }
+.feed-row .ts { font-family: var(--f-mono); color: var(--text-3); width: 64px; flex-shrink: 0; font-size: 11px; padding-top: 1px; }
+.feed-row .pip { width: 7px; height: 7px; border-radius: 50%; margin-top: 7px; flex-shrink: 0; background: var(--accent); }
+.feed-row .body { flex: 1; }
+.feed-row .tag { font-family: var(--f-mono); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); margin-bottom: 2px; }
+
+/* Sparkline */
+.spark svg { display: block; }
+
+/* Final synthesis */
+.synth {
+  margin-top: 80px;
+  padding: 40px;
+  background: linear-gradient(180deg, var(--bg-2), var(--bg));
+  border: 1px solid var(--line); border-radius: 22px;
+}
+.synth h2 {
+  font-family: var(--f-serif); font-style: italic; font-weight: 400;
+  font-size: 32px; margin: 0 0 12px; letter-spacing: -0.02em;
+}
+.synth .grid {
+  margin-top: 28px;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
+}
+.synth .rec {
+  padding: 22px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface);
+}
+.synth .rec .rank {
+  font-family: var(--f-mono); font-size: 10px; color: var(--text-3);
+  text-transform: uppercase; letter-spacing: .08em; margin-bottom: 10px;
+}
+.synth .rec .nm {
+  font-family: var(--f-serif); font-style: italic; font-size: 26px;
+  letter-spacing: -0.02em; margin-bottom: 4px;
+}
+.synth .rec .desc { color: var(--text-2); font-size: 12.5px; line-height: 1.55; }
+.synth .rec .pair { display: flex; gap: 6px; margin-top: 14px; }
+.synth .rec .pair div { width: 36px; height: 36px; border-radius: 8px; }
+
+.muted { color: var(--text-3); }
+.mono { font-family: var(--f-mono); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="hd">
+    <div class="eyebrow">Brand exploration · Accent direction</div>
+    <h1>Choosing a color is choosing <em>a competitor you don't want to look like.</em></h1>
+    <p>Six accent directions, each ranked on what matters for a premium outreach SaaS aimed at agencies. Below: how each one would shape the same dashboard, so you can compare not just swatches but vibe.</p>
+
+    <div class="map">
+      <span class="muted mono" style="font-size: 11px; margin-right: 8px; padding-top: 4px;">CROWDED:</span>
+      <span class="tag"><span class="sw" style="background:#3b82f6"></span>Apollo · blue</span>
+      <span class="tag"><span class="sw" style="background:#1e3a8a"></span>Outreach.io · navy</span>
+      <span class="tag"><span class="sw" style="background:#0891b2"></span>Smartlead · teal</span>
+      <span class="tag"><span class="sw" style="background:#22c55e"></span>Instantly · green</span>
+      <span class="tag"><span class="sw" style="background:#f59e0b"></span>Lemlist · yellow</span>
+      <span class="tag"><span class="sw" style="background:#f97316"></span>HubSpot · orange</span>
+      <span class="tag"><span class="sw" style="background:#2563eb"></span>Salesloft · blue</span>
+    </div>
+  </header>
+
+  <!-- Lightness scale primer -->
+  <div class="scale-row">
+    <span class="axis-label">Why accent lightness matters on dark:</span>
+    <div class="axis">
+      <div style="background:oklch(0.30 0.18 145)"></div>
+      <div style="background:oklch(0.40 0.18 145)"></div>
+      <div style="background:oklch(0.50 0.18 145)"></div>
+      <div style="background:oklch(0.60 0.18 145)"></div>
+      <div style="background:oklch(0.70 0.18 145)"></div>
+      <div style="background:oklch(0.78 0.18 145)"></div>
+      <div style="background:oklch(0.85 0.18 145)"></div>
+      <div style="background:oklch(0.90 0.18 145)"></div>
+      <div style="background:oklch(0.94 0.18 145)"></div>
+      <div style="background:oklch(0.97 0.18 130)"></div>
+      <div style="background:oklch(0.99 0.10 130)"></div>
+    </div>
+    <span class="muted" style="font-size: 11.5px; max-width: 220px; line-height: 1.45;">Anything below ~0.7 lightness disappears against #0a0a0c. We need accents from the <span class="mono">.78–.95</span> range.</span>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- DIRECTION 01 — LIME (current) -->
+  <!-- ============================================== -->
+  <section class="dir" style="--accent:#c8f654; --accent-soft:rgba(200,246,84,0.12); --accent-line:rgba(200,246,84,0.32);">
+    <div class="dir__left">
+      <div class="dir__num">01 · CURRENT DIRECTION</div>
+      <h2 class="dir__name">Volt Lime</h2>
+      <div class="dir__hex">#c8f654 · oklch(0.93 0.18 124)</div>
+
+      <div class="dir__swatches">
+        <div class="dir__sw" style="background:#c8f654">c8f654</div>
+        <div class="dir__sw" style="background:#d6ff6e">d6ff6e</div>
+        <div class="dir__sw bordered dark" style="background:#0a0a0c">0a0a0c</div>
+      </div>
+
+      <p class="dir__sig"><b style="color:var(--text)">Says:</b> Agentic, kinetic, the AI is doing something <i>right now</i>. Reads as fresh tech money, not corporate sales.</p>
+
+      <div class="dir__row"><span class="k">Defensible</span><span class="v">✓ No outreach SaaS owns it. Linear uses purple. Bloomberg uses orange. Lime is open.</span></div>
+      <div class="dir__row"><span class="k">Trust</span><span class="v">6 / 10 — feels modern, but skews "AI startup" over "established tool"</span></div>
+      <div class="dir__row"><span class="k">Energy</span><span class="v">9 / 10 — highest perceived activity of any option</span></div>
+      <div class="dir__row"><span class="k">Polarizing?</span><span class="v">Slightly. Some readers will call it "crypto-adjacent." Younger agencies will love it.</span></div>
+    </div>
+
+    <!-- Preview -->
+    <div class="prev">
+      <div class="tile prev__full">
+        <div class="tile__head"><div class="tile__title">Good morning, Sahil</div><span class="badge"><span class="dot"></span>Agents live</span></div>
+        <div class="tile__label">Pipeline this week</div>
+        <div class="tile__num" style="color: var(--accent)">$184,200</div>
+        <div class="tile__delta">↑ +34.6% vs last week</div>
+        <div class="tile__btnrow">
+          <button class="btn btn--p">Launch campaign</button>
+          <button class="btn">Import leads</button>
+        </div>
+      </div>
+
+      <div class="tile">
+        <div class="tile__title" style="margin-bottom: 12px;">Agent activity</div>
+        <div class="feed-row">
+          <span class="ts">2m ago</span><span class="pip"></span>
+          <div class="body"><div class="tag">Scraping</div>184 new Finance creators discovered</div>
+        </div>
+        <div class="feed-row">
+          <span class="ts">12m ago</span><span class="pip"></span>
+          <div class="body"><div class="tag">Writing</div>28 personalized openers drafted</div>
+        </div>
+        <div class="feed-row">
+          <span class="ts">1h ago</span><span class="pip"></span>
+          <div class="body"><div class="tag">Reply</div>Positive reply from @MarketMavenJay</div>
+        </div>
+      </div>
+
+      <div class="tile">
+        <div class="tile__title" style="margin-bottom: 12px;">Niche performance</div>
+        <div class="tile__bars">
+          <div class="tile__bar"><div class="row"><span class="k">Finance</span><span class="v">17%</span></div><div class="track"><div class="fill" style="width: 85%"></div></div></div>
+          <div class="tile__bar"><div class="row"><span class="k">Tech</span><span class="v">14%</span></div><div class="track"><div class="fill" style="width: 70%; opacity: 0.7"></div></div></div>
+          <div class="tile__bar"><div class="row"><span class="k">Fitness</span><span class="v">11%</span></div><div class="track"><div class="fill" style="width: 55%; opacity: 0.5"></div></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================== -->
+  <!-- DIRECTION 02 — BUTTER -->
+  <!-- ============================================== -->
+  <section class="dir" style="--accent:#f4e9b2; --accent-fg:#1a1a0a; --accent-soft:rgba(244,233,178,0.12); --accent-line:rgba(244,233,178,0.30);">
+    <div class="dir__left">
+      <div class="dir__num">02 · EDITORIAL</div>
+      <h2 class="dir__name">Butter Cream</h2>
+      <div class="dir__hex">#f4e9b2 · oklch(0.93 0.08 95)</div>
+
+      <div class="dir__swatches">
+        <div class="dir__sw" style="background:#f4e9b2">f4e9b2</div>
+        <div class="dir__sw" style="background:#fff4c2">fff4c2</div>
+        <div class="dir__sw bordered dark" style="background:#0a0a0c">0a0a0c</div>
+      </div>
+
+      <p class="dir__sig"><b style="color:var(--text)">Says:</b> Considered, tasteful, expensive. The accent of editorial sites and craft-coffee menus. Premium without screaming.</p>
+
+      <div class="dir__row"><span class="k">Defensible</span><span class="v">✓✓ Nobody in SaaS uses this. Reads as art-directed, not designed-by-committee.</span></div>
+      <div class="dir__row"><span class="k">Trust</span><span class="v">9 / 10 — warm, calm, premium</span></div>
+      <div class="dir__row"><span class="k">Energy</span><span class="v">5 / 10 — quiet by design. Needs a louder secondary for "Live" states.</span></div>
+      <div class="dir__row"><span class="k">Risk</span><span class="v">May feel too restrained for SDRs who want to feel like they're "winning"</span></div>
+    </div>
+
+    <div class="prev">
+      <div class="tile prev__full">
+        <div class="tile__head"><div class="tile__title">Good morning, Sahil</div><span class="badge"><span class="dot"></span>Agents live</span></div>
+        <div class="tile__label">Pipeline this week</div>
+        <div class="tile__num" style="color: var(--accent)">$184,200</div>
+        <div class="tile__delta">↑ +34.6% vs last week</div>
+        <div class="tile__btnrow">
+          <button class="btn btn--p">Launch campaign</button>
+          <button class="btn">Import leads</button>
+        </div>
+      </div>
+
+      <div class="tile">
+        <div class="tile__title" style="margin-bottom: 12px;">Agent activity</div>
+        <div class="feed-row">
+          <span class="ts">2m ago</span><span class="pip"></span>
+          <div class="body"><div class="tag">Scraping</div>184 new Finance creators discovered</div>
+        </div>
+        <div class="feed-row">
+          <span class="ts">12m ago</span><span class="pip"></span>
+          <div class="body"><div class="tag">Writing</div>28 personalized openers drafted</div>
+        </div>
+        <div class="feed-row">
+          <span class="ts">1h ago</span><span class="pip"></span>
+          <div class="body"><div class="tag">Reply</div>Positive reply from @MarketMavenJay</div>
+        </div>
+      </div>
+
+      <div class="tile">
+        <div class="tile__title" style="margin-bottom: 12px;">Niche performance</div>
+        <div class="tile__bars">
+          <div class="tile__bar"><div class="row"><span class="k">Finance</span><span class="v">17%</span></div><div class="track"><div class="fill" style="width: 85%"></div></div></div>
+          <div class="tile__bar"><div class="row"><span class="k">Tech</span><span class="v">14%</span></div><div class="track"><div class="fill" style="width: 70%; opacity: 0.7"></div></div></div>
+          <div class="tile__bar"><div class="row"><span class="k">Fitness</span><span class="v">11%</span></div><div class="track"><div class="fill" style="width: 55%; opacity: 0.5"></div></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================== -->
+  <!-- DIRECTION 03 — ELECTRIC VIOLET -->
+  <!-- ============================================== -->
+  <section class="dir" style="--accent:#c4a8ff; --accent-fg:#1a0a2e; --accent-soft:rgba(196,168,255,0.13); --accent-line:rgba(196,168,255,0.35);">
+    <div class="dir__left">
+      <div class="dir__num">03 · AI-NATIVE</div>
+      <h2 class="dir__name">Electric Violet</h2>
+      <div class="dir__hex">#c4a8ff · oklch(0.78 0.13 295)</div>
+
+      <div class="dir__swatches">
+        <div class="dir__sw" style="background:#c4a8ff">c4a8ff</div>
+        <div class="dir__sw" style="background:#d9c5ff">d9c5ff</div>
+        <div class="dir__sw bordered dark" style="background:#0a0a0c">0a0a0c</div>
+      </div>
+
+      <p class="dir__sig"><b style="color:var(--text)">Says:</b> Smart software. The accent of Linear, Vercel, Arc — the tools developers respect. Reads as "this was built by serious engineers."</p>
+
+      <div class="dir__row"><span class="k">Defensible</span><span class="v">⚠️ Linear / Anthropic / Cron all play here. You'd be "another purple tool."</span></div>
+      <div class="dir__row"><span class="k">Trust</span><span class="v">8 / 10 — strong with technical buyers; neutral with sales-ops</span></div>
+      <div class="dir__row"><span class="k">Energy</span><span class="v">7 / 10 — confident, not loud</span></div>
+      <div class="dir__row"><span class="k">Risk</span><span class="v">Less ownable. Hard to remember which purple SaaS yours is.</span></div>
+    </div>
+
+    <div class="prev">
+      <div class="tile prev__full">
+        <div class="tile__head"><div class="tile__title">Good morning, Sahil</div><span class="badge"><span class="dot"></span>Agents live</span></div>
+        <div class="tile__label">Pipeline this week</div>
+        <div class="tile__num" style="color: var(--accent)">$184,200</div>
+        <div class="tile__delta">↑ +34.6% vs last week</div>
+        <div class="tile__btnrow">
+          <button class="btn btn--p">Launch campaign</button>
+          <button class="btn">Import leads</button>
+        </div>
+      </div>
+
+      <div class="tile">
+        <div class="tile__title" style="margin-bottom: 12px;">Agent activity</div>
+        <div class="feed-row">
+          <span class="ts">2m ago</span><span class="pip"></span>
+          <div class="body"><div class="tag">Scraping</div>184 new Finance creators discovered</div>
+        </div>
+        <div class="feed-row">
+          <span class="ts">12m ago</span><span class="pip"></span>
+          <div class="body"><div class="tag">Writing</div>28 personalized openers drafted</div>
+        </div>
+        <div class="feed-row">
+          <span class="ts">1h ago</span><span class="pip"></span>
+          <div class="body"><div class="tag">Reply</div>Positive reply from @MarketMavenJay</div>
+        </div>
+      </div>
+
+      <div class="tile">
+        <div class="tile__title" style="margin-bottom: 12px;">Niche performance</div>
+        <div class="tile__bars">
+          <div class="tile__bar"><div class="row"><span class="k">Finance</span><span class="v">17%</span></div><div class="track"><div class="fill" style="width: 85%"></div></div></div>
+          <div class="tile__bar"><div class="row"><span class="k">Tech</span><span class="v">14%</span></div><div class="track"><div class="fill" style="width: 70%; opacity: 0.7"></div></div></div>
+          <div class="tile__bar"><div class="row"><span class="k">Fitness</span><span class="v">11%</span></div><div class="track"><div class="fill" style="width: 55%; opacity: 0.5"></div></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================== -->
+  <!-- DIRECTION 04 — CORAL -->
+  <!-- ============================================== -->
+  <section class="dir" style="--accent:#ff8a73; --accent-fg:#2a0a05; --accent-soft:rgba(255,138,115,0.14); --accent-line:rgba(255,138,115,0.36);">
+    <div class="dir__left">
+      <div class="dir__num">04 · WARM</div>
+      <h2 class="dir__name">Coral Heat</h2>
+      <div class="dir__hex">#ff8a73 · oklch(0.78 0.16 30)</div>
+
+      <div class="dir__swatches">
+        <div class="dir__sw" style="background:#ff8a73">ff8a73</div>
+        <div class="dir__sw" style="background:#ffa593">ffa593</div>
+        <div class="dir__sw bordered dark" style="background:#0a0a0c">0a0a0c</div>
+      </div>
+
+      <p class="dir__sig"><b style="color:var(--text)">Says:</b> Human, friendly, conversational. Outreach is fundamentally about <i>relationships</i> — coral is the only accent that whispers "warm, not spam."</p>
+
+      <div class="dir__row"><span class="k">Defensible</span><span class="v">✓✓ Zero competitors in outreach. Closest is HubSpot orange (saturated, very different feel).</span></div>
+      <div class="dir__row"><span class="k">Trust</span><span class="v">8 / 10 — disarming, approachable</span></div>
+      <div class="dir__row"><span class="k">Energy</span><span class="v">7 / 10 — confident-warm, not aggressive</span></div>
+      <div class="dir__row"><span class="k">Risk</span><span class="v">Coral is close to error-red — needs careful pairing with status colors.</span></div>
+    </div>
+
+    <div class="prev">
+      <div class="tile prev__full">
+        <div class="tile__head"><div class="tile__title">Good morning, Sahil</div><span class="badge"><span class="dot"></span>Agents live</span></div>
+        <div class="tile__label">Pipeline this week</div>
+        <div class="tile__num" style="color: var(--accent)">$184,200</div>
+        <div class="tile__delta">↑ +34.6% vs last week</div>
+        <div class="tile__btnrow">
+          <button class="btn btn--p">Launch campaign</button>
+          <button class="btn">Import leads</button>
+        </div>
+      </div>
+
+      <div class="tile">
+        <div class="tile__title" style="margin-bottom: 12px;">Agent activity</div>
+        <div class="feed-row">
+          <span class="ts">2m ago</span><span class="pip"></span>
+          <div class="body"><div class="tag">Scraping</div>184 new Finance creators discovered</div>
+        </div>
+        <div class="feed-row">
+          <span class="ts">12m ago</span><span class="pip"></span>
+          <div class="body"><div class="tag">Writing</div>28 personalized openers drafted</div>
+        </div>
+        <div class="feed-row">
+          <span class="ts">1h ago</span><span class="pip"></span>
+          <div class="body"><div class="tag">Reply</div>Positive reply from @MarketMavenJay</div>
+        </div>
+      </div>
+
+      <div class="tile">
+        <div class="tile__title" style="margin-bottom: 12px;">Niche performance</div>
+        <div class="tile__bars">
+          <div class="tile__bar"><div class="row"><span class="k">Finance</span><span class="v">17%</span></div><div class="track"><div class="fill" style="width: 85%"></div></div></div>
+          <div class="tile__bar"><div class="row"><span class="k">Tech</span><span class="v">14%</span></div><div class="track"><div class="fill" style="width: 70%; opacity: 0.7"></div></div></div>
+          <div class="tile__bar"><div class="row"><span class="k">Fitness</span><span class="v">11%</span></div><div class="track"><div class="fill" style="width: 55%; opacity: 0.5"></div></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================== -->
+  <!-- DIRECTION 05 — MONOCHROME -->
+  <!-- ============================================== -->
+  <section class="dir" style="--accent:#f3f3f5; --accent-fg:#0a0a0c; --accent-soft:rgba(243,243,245,0.10); --accent-line:rgba(243,243,245,0.30);">
+    <div class="dir__left">
+      <div class="dir__num">05 · AUSTERE</div>
+      <h2 class="dir__name">Pure Monochrome</h2>
+      <div class="dir__hex">#f3f3f5 · oklch(0.96 0 0)</div>
+
+      <div class="dir__swatches">
+        <div class="dir__sw" style="background:#f3f3f5">f3f3f5</div>
+        <div class="dir__sw bordered dark" style="background:#1f1f28">1f1f28</div>
+        <div class="dir__sw bordered dark" style="background:#0a0a0c">0a0a0c</div>
+      </div>
+
+      <p class="dir__sig"><b style="color:var(--text)">Says:</b> The Vercel / Apple / Stripe move. So premium it refuses to choose a color. Confidence through restraint.</p>
+
+      <div class="dir__row"><span class="k">Defensible</span><span class="v">⚠️ Hard to own — but also impossible to look cheap.</span></div>
+      <div class="dir__row"><span class="k">Trust</span><span class="v">10 / 10 — maximum perceived credibility</span></div>
+      <div class="dir__row"><span class="k">Energy</span><span class="v">3 / 10 — calm to a fault; status changes are subtle</span></div>
+      <div class="dir__row"><span class="k">Risk</span><span class="v">Forgettable. No emotional hook. No screenshot-worthy moment.</span></div>
+    </div>
+
+    <div class="prev">
+      <div class="tile prev__full">
+        <div class="tile__head"><div class="tile__title">Good morning, Sahil</div><span class="badge"><span class="dot"></span>Agents live</span></div>
+        <div class="tile__label">Pipeline this week</div>
+        <div class="tile__num" style="color: var(--accent)">$184,200</div>
+        <div class="tile__delta">↑ +34.6% vs last week</div>
+        <div class="tile__btnrow">
+          <button class="btn btn--p">Launch campaign</button>
+          <button class="btn">Import leads</button>
+        </div>
+      </div>
+
+      <div class="tile">
+        <div class="tile__title" style="margin-bottom: 12px;">Agent activity</div>
+        <div class="feed-row">
+          <span class="ts">2m ago</span><span class="pip"></span>
+          <div class="body"><div class="tag">Scraping</div>184 new Finance creators discovered</div>
+        </div>
+        <div class="feed-row">
+          <span class="ts">12m ago</span><span class="pip"></span>
+          <div class="body"><div class="tag">Writing</div>28 personalized openers drafted</div>
+        </div>
+        <div class="feed-row">
+          <span class="ts">1h ago</span><span class="pip"></span>
+          <div class="body"><div class="tag">Reply</div>Positive reply from @MarketMavenJay</div>
+        </div>
+      </div>
+
+      <div class="tile">
+        <div class="tile__title" style="margin-bottom: 12px;">Niche performance</div>
+        <div class="tile__bars">
+          <div class="tile__bar"><div class="row"><span class="k">Finance</span><span class="v">17%</span></div><div class="track"><div class="fill" style="width: 85%"></div></div></div>
+          <div class="tile__bar"><div class="row"><span class="k">Tech</span><span class="v">14%</span></div><div class="track"><div class="fill" style="width: 70%; opacity: 0.7"></div></div></div>
+          <div class="tile__bar"><div class="row"><span class="k">Fitness</span><span class="v">11%</span></div><div class="track"><div class="fill" style="width: 55%; opacity: 0.5"></div></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================== -->
+  <!-- DIRECTION 06 — DUOTONE (Lime + Coral) -->
+  <!-- ============================================== -->
+  <section class="dir" style="--accent:#c8f654; --accent-fg:#0a0a0c; --accent-soft:rgba(200,246,84,0.12); --accent-line:rgba(200,246,84,0.32);">
+    <div class="dir__left">
+      <div class="dir__num">06 · SIGNATURE</div>
+      <h2 class="dir__name">Lime × Coral duotone</h2>
+      <div class="dir__hex">#c8f654 + #ff8a73 — primary / human</div>
+
+      <div class="dir__swatches">
+        <div class="dir__sw" style="background:#c8f654">c8f654</div>
+        <div class="dir__sw" style="background:#ff8a73">ff8a73</div>
+        <div class="dir__sw" style="background:#f4e9b2">f4e9b2</div>
+        <div class="dir__sw bordered dark" style="background:#0a0a0c">0a0a0c</div>
+      </div>
+
+      <p class="dir__sig"><b style="color:var(--text)">Says:</b> Lime is the <i>machine</i>; Coral is the <i>human</i>. Lime = "agent is working." Coral = "a human replied." The duality is the brand.</p>
+
+      <div class="dir__row"><span class="k">Defensible</span><span class="v">✓✓✓ Nobody has done this. Two-accent systems are rare and instantly distinctive.</span></div>
+      <div class="dir__row"><span class="k">Trust</span><span class="v">8 / 10 — sophisticated, considered</span></div>
+      <div class="dir__row"><span class="k">Energy</span><span class="v">10 / 10 — kinetic + warm, the rare combo</span></div>
+      <div class="dir__row"><span class="k">Risk</span><span class="v">Requires discipline to keep the two from competing. Strict allocation rules.</span></div>
+    </div>
+
+    <div class="prev">
+      <div class="tile prev__full">
+        <div class="tile__head">
+          <div class="tile__title">Good morning, Sahil</div>
+          <span class="badge"><span class="dot"></span>Agents live</span>
+        </div>
+        <div class="tile__label">Pipeline this week</div>
+        <div class="tile__num" style="color: var(--accent)">$184,200</div>
+        <div class="tile__delta">↑ +34.6% vs last week · <span style="color: #ff8a73">3 replies need you</span></div>
+        <div class="tile__btnrow">
+          <button class="btn btn--p">Launch campaign</button>
+          <button class="btn" style="background: rgba(255,138,115,0.12); border-color: rgba(255,138,115,0.36); color: #ff8a73">Reply to 3</button>
+        </div>
+      </div>
+
+      <div class="tile">
+        <div class="tile__title" style="margin-bottom: 12px;">Agent activity</div>
+        <div class="feed-row">
+          <span class="ts">2m ago</span><span class="pip" style="background:#c8f654"></span>
+          <div class="body"><div class="tag" style="color:#c8f654">Scraping</div>184 new Finance creators discovered</div>
+        </div>
+        <div class="feed-row">
+          <span class="ts">12m ago</span><span class="pip" style="background:#c8f654"></span>
+          <div class="body"><div class="tag" style="color:#c8f654">Writing</div>28 personalized openers drafted</div>
+        </div>
+        <div class="feed-row">
+          <span class="ts">1h ago</span><span class="pip" style="background:#ff8a73"></span>
+          <div class="body"><div class="tag" style="color:#ff8a73">Reply · human needed</div>Positive reply from @MarketMavenJay</div>
+        </div>
+      </div>
+
+      <div class="tile">
+        <div class="tile__title" style="margin-bottom: 12px;">Pipeline temperature</div>
+        <div class="tile__bars">
+          <div class="tile__bar"><div class="row"><span class="k">🤖 Agent activity</span><span class="v" style="color:#c8f654">82%</span></div><div class="track"><div class="fill" style="width: 82%; background:#c8f654"></div></div></div>
+          <div class="tile__bar"><div class="row"><span class="k">👋 Human replies</span><span class="v" style="color:#ff8a73">14%</span></div><div class="track"><div class="fill" style="width: 14%; background:#ff8a73"></div></div></div>
+          <div class="tile__bar"><div class="row"><span class="k">Awaiting</span><span class="v">4%</span></div><div class="track"><div class="fill" style="width: 4%; background: var(--text-3)"></div></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================== -->
+  <!-- SYNTHESIS -->
+  <!-- ============================================== -->
+  <section class="synth">
+    <div class="muted mono" style="font-size: 11px; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 10px;">My recommendation</div>
+    <h2>Lime × Coral, in that order — with cream as a typographic punctuation mark.</h2>
+    <p style="color: var(--text-2); font-size: 14px; line-height: 1.65; max-width: 760px; margin: 14px 0 0;">
+      Single-accent systems are safe but generic. A <b style="color:var(--text)">two-accent system with strict semantic rules</b> is the rarest thing in B2B SaaS and the most defensible. Lime owns the machine; Coral owns the human. The user instantly learns: <span style="color:#c8f654">green = my AI is working</span>, <span style="color:#ff8a73">coral = a real person needs me</span>. Every other competitor has only one register; you have two.
+    </p>
+
+    <div class="grid">
+      <div class="rec">
+        <div class="rank">1st choice · Recommended</div>
+        <div class="nm" style="color:#c8f654">Lime × Coral</div>
+        <div class="desc">Two accents with clear semantic ownership. Most defensible, most distinctive, most useful to the user.</div>
+        <div class="pair">
+          <div style="background:#c8f654"></div>
+          <div style="background:#ff8a73"></div>
+          <div style="background:#f4e9b2"></div>
+          <div style="background:#0a0a0c; border:1px solid var(--line)"></div>
+        </div>
+      </div>
+      <div class="rec">
+        <div class="rank">2nd choice · Safer</div>
+        <div class="nm" style="color:#f4e9b2">Butter Cream</div>
+        <div class="desc">If "premium" matters more than "energetic." Editorial vibe. Quietly upmarket. Less ownable but unimpeachable.</div>
+        <div class="pair">
+          <div style="background:#f4e9b2"></div>
+          <div style="background:#fff4c2"></div>
+          <div style="background:#1f1f28"></div>
+          <div style="background:#0a0a0c; border:1px solid var(--line)"></div>
+        </div>
+      </div>
+      <div class="rec">
+        <div class="rank">3rd choice · Bold</div>
+        <div class="nm" style="color:#ff8a73">Coral solo</div>
+        <div class="desc">If you want maximum warmth and humanity. Differentiates from every blue/green competitor. Slight error-color risk.</div>
+        <div class="pair">
+          <div style="background:#ff8a73"></div>
+          <div style="background:#ffa593"></div>
+          <div style="background:#1f1f28"></div>
+          <div style="background:#0a0a0c; border:1px solid var(--line)"></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top: 32px; padding: 20px 22px; background: var(--bg-2); border: 1px dashed var(--line-2); border-radius: 12px;">
+      <div class="mono muted" style="font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px;">Avoid</div>
+      <div style="color: var(--text-2); font-size: 13px; line-height: 1.6;">
+        <span style="color:#3b82f6">Blue</span> (Apollo, Outreach.io, Salesloft, Reply.io). 
+        <span style="color:#22c55e">Saturated green</span> (Instantly). 
+        <span style="color:#f97316">Saturated orange</span> (HubSpot, Lemlist).
+        Any color over 0.7 chroma will read as "AI bro" or "trading platform" — both wrong for the agency audience.
+      </div>
+    </div>
+  </section>
+
+</div>
+</body>
+</html>
