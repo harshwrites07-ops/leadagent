@@ -3,9 +3,11 @@ require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 // Global crash guards — must come first
 process.on('uncaughtException', (err) => {
   console.error('[FATAL] Uncaught exception:', err.message, err.stack);
+  process.exit(1);
 });
 process.on('unhandledRejection', (reason) => {
   console.error('[FATAL] Unhandled rejection:', reason?.message || reason);
+  process.exit(1);
 });
 
 const express = require('express');
@@ -256,6 +258,14 @@ app.listen(PORT, '0.0.0.0', () => {
     // Clean email_queue items stuck in 'sending' — they'll never complete after a restart
     const stuckQueue = db.prepare(`UPDATE email_queue SET status='failed' WHERE status='sending'`).run();
     if (stuckQueue.changes > 0) console.log(`   Cleared ${stuckQueue.changes} stuck queue item(s) from previous session`);
+
+    // Auto-promote admin email to admin + agency plan (runs every boot, idempotent)
+    const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'harshwrites07@gmail.com';
+    const promoted = db.prepare(`
+      UPDATE users SET is_admin=1, plan='agency', plan_status='active', email_verified=1, onboarding_completed=1
+      WHERE email=? AND (is_admin IS NULL OR is_admin=0)
+    `).run(ADMIN_EMAIL);
+    if (promoted.changes > 0) console.log(`   Admin promoted: ${ADMIN_EMAIL}`);
   } catch {}
 
   // Self-ping every 14 minutes to prevent Railway sleep
@@ -272,7 +282,6 @@ app.listen(PORT, '0.0.0.0', () => {
         mod.get(url.href, () => {}).on('error', () => {});
       } catch {}
     }, 14 * 60 * 1000);
-    console.log('   Self-ping enabled (every 14 min)');
   }
 });
 

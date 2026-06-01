@@ -56,7 +56,16 @@
       "Bash(git checkout *)",
       "Bash(railway up *)",
       "Bash(npm install *)",
-      "Bash(railway login *)"
+      "Bash(railway login *)",
+      "Bash(npx pm2 *)",
+      "Bash(curl -s http://localhost:3001/api/health)",
+      "Bash(Invoke-WebRequest -Uri \"http://localhost:3001/api/health\" -UseBasicParsing)",
+      "PowerShell(try { $r = Invoke-WebRequest -Uri \"http://localhost:3001/api/health\" -UseBasicParsing -TimeoutSec 5; $r.StatusCode; $r.Content } catch { \"ERROR: $_\" })",
+      "PowerShell(npx pm2 logs outreach-backend --lines 50 --nostream 2>&1)",
+      "PowerShell(Get-Process -Id 20448 -ErrorAction SilentlyContinue)",
+      "PowerShell(Start-Sleep -Seconds 3; try { $r = Invoke-WebRequest -Uri \"http://localhost:3001/api/health\" -UseBasicParsing -TimeoutSec 10; $r.StatusCode; $r.Content } catch { \"ERROR: $_\" })",
+      "PowerShell(npx pm2 logs cloudflare-tunnel --lines 30 --nostream 2>&1)",
+      "PowerShell(try { $r = Invoke-WebRequest -Uri \"http://localhost:3001/api/health\" -UseBasicParsing -TimeoutSec 5; \"Backend OK: \" + $r.Content } catch { \"Backend DOWN: $_\" })"
     ],
     "additionalDirectories": [
       "c:\\Users\\it\\contentcrafterzz-outreach-os\\design-reference\\screenshots"
