@@ -86,7 +86,7 @@ export default function Settings() {
     try {
       await api.put('/settings/me', { profile, preferences: prefs });
       setDirty(false);
-      toast.success('Settings saved');
+      toast.success('Saved.');
     } catch (e) {
       toast.error(e.response?.data?.error || e.message);
     } finally {

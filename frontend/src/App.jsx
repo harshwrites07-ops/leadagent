@@ -21,8 +21,9 @@ import ResetPassword from './pages/ResetPassword';
 import Admin from './pages/Admin';
 import AdminSettings from './pages/AdminSettings';
 import VerifyEmail from './pages/VerifyEmail';
-
-const AUTH_ROUTES = ['/login', '/signup', '/phone-login', '/verify', '/forgot-password', '/reset-password'];
+import PrivacyPolicy from './pages/PrivacyPolicy';
+import TermsOfService from './pages/TermsOfService';
+import NotFound from './pages/NotFound';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -30,12 +31,12 @@ function ProtectedRoute({ children }) {
 
   if (loading) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-base)' }}>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 9, background: 'var(--gradient-orange)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 20px rgba(var(--lime-rgb),0.3)' }}>
-            <span style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 900, color: '#fff' }}>CC</span>
+          <div style={{ width: 36, height: 36, borderRadius: 9, background: 'var(--lime)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ fontFamily: 'var(--f-sans)', fontSize: 14, fontWeight: 900, color: '#0a0a0c' }}>CC</span>
           </div>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.14em', color: 'var(--text-muted)' }}>LOADING...</span>
+          <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.14em', color: 'var(--text-3)' }}>LOADING...</span>
         </div>
       </div>
     );
@@ -55,9 +56,21 @@ function PublicRoute({ children }) {
   return children;
 }
 
+// Allows authed users who haven't completed onboarding
+function ProtectedAllowOnboarding({ children }) {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (!user) return <Navigate to="/login" replace />;
+  return children;
+}
+
 function AppRoutes() {
   return (
     <Routes>
+      {/* Fully public — no auth required */}
+      <Route path="/privacy" element={<PrivacyPolicy />} />
+      <Route path="/terms" element={<TermsOfService />} />
+
       {/* Public auth routes */}
       <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
       <Route path="/signup" element={<PublicRoute><Signup /></PublicRoute>} />
@@ -88,7 +101,7 @@ function AppRoutes() {
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/admin" element={<Admin />} />
                 <Route path="/admin/settings" element={<AdminSettings />} />
-                <Route path="*" element={<Navigate to="/" replace />} />
+                <Route path="*" element={<NotFound />} />
               </Routes>
             </Layout>
           </AppProvider>
@@ -96,14 +109,6 @@ function AppRoutes() {
       } />
     </Routes>
   );
-}
-
-// Allows authed users who haven't completed onboarding
-function ProtectedAllowOnboarding({ children }) {
-  const { user, loading } = useAuth();
-  if (loading) return null;
-  if (!user) return <Navigate to="/login" replace />;
-  return children;
 }
 
 export default function App() {

@@ -76,11 +76,11 @@ export default function EmailSender() {
       if (paused) {
         await api.post('/emails/queue/resume');
         setPaused(false);
-        toast.success('Queue resumed');
+        toast.success('Sending resumed.');
       } else {
         await api.post('/emails/queue/pause');
         setPaused(true);
-        toast.success('Queue paused');
+        toast.success('Paused. Nothing will go out.');
       }
     } catch { toast.error('Failed to toggle queue'); }
   };
@@ -89,7 +89,7 @@ export default function EmailSender() {
     try {
       await api.delete(`/emails/queue/${id}`);
       setQueue(prev => prev.filter(i => i.id !== id));
-      toast.success('Removed from queue');
+      toast.success('Removed.');
     } catch { toast.error('Failed to remove'); }
   };
 
@@ -97,7 +97,7 @@ export default function EmailSender() {
     try {
       setQueue(prev => prev.map(i => i.id === id ? { ...i, status: 'sending' } : i));
       await api.post(`/emails/send-now/${id}`);
-      toast.success('Email sent!');
+      toast.success('Sent.');
       fetchQueue();
       fetchStats();
     } catch { toast.error('Failed to send'); fetchQueue(); }
@@ -189,7 +189,7 @@ export default function EmailSender() {
             </div>
           ) : queue.length === 0 ? (
             <div className="card" style={{ padding: '32px', textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>
-              Queue is empty. Generate pitches in the Pitch Gen tab to fill it up.
+              Nothing queued yet. Head to Pitch Gen, generate some pitches, and they'll land here ready to send.
             </div>
           ) : (
             <div className="card" style={{ overflow: 'hidden' }}>

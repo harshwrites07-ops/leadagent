@@ -5,11 +5,11 @@ import Icon from '../components/ui/Icon';
 import api from '../utils/api';
 
 const STEPS = [
-  { title: 'Welcome to ContentCrafterzz', sub: 'Built for agencies running outreach to creators.' },
-  { title: 'Connect your mailbox',         sub: 'Outpost rotates across multiple senders to protect deliverability.' },
-  { title: 'Tell us who you sell to',      sub: 'We use this to scrape, score, and personalize.' },
-  { title: 'Draft your pitch',             sub: 'You write the brief. The agent writes the emails.' },
-  { title: 'Ready to launch',              sub: 'Your first campaign is one click away.' },
+  { title: 'Let\'s get you set up.',       sub: 'Takes 3 minutes. Your first leads will be waiting when you\'re done.' },
+  { title: 'Connect a Gmail account.',     sub: 'This is what sends your emails. Connect yours and we\'ll handle the rest.' },
+  { title: 'Who are you going after?',     sub: 'The more specific you are, the better the pitches.' },
+  { title: 'How do you want to sound?',    sub: 'The agent writes in your voice — give it something to work with.' },
+  { title: 'You\'re in.',                  sub: 'Go find your first lead.' },
 ];
 
 export default function Onboarding() {

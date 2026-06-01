@@ -2,8 +2,14 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
-// __dirname = backend/src/models  →  ../../data = backend/data
-const DB_PATH = path.join(__dirname, '../../data/outreach.db');
+// DB_PATH resolution order:
+//   1. DB_PATH env var (set this in Railway to point at the mounted volume)
+//   2. /app/backend/data (Railway volume default mount path)
+//   3. local: backend/data/outreach.db
+const DB_PATH = process.env.DB_PATH ||
+  (fs.existsSync('/app/backend/data') || process.env.NODE_ENV === 'production'
+    ? '/app/backend/data/outreach.db'
+    : path.join(__dirname, '../../data/outreach.db'));
 
 let db;
 

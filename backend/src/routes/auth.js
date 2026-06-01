@@ -3,7 +3,7 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
 const { getDb, getUserById, getUserByEmail } = require('../models/database');
-const { requireAuth, requireAdmin } = require('../middleware/requireAuth');
+const { requireAuth, requireAdmin, isTrialExpired } = require('../middleware/requireAuth');
 const { asyncHandler } = require('../middleware/errorHandler');
 const {
   generateOtp, verifyOtp, sendSmsOtp,
@@ -35,7 +35,11 @@ const safeUser = (u) => u ? {
 // ── GET /api/auth/me ────────────────────────────────────────────────────────
 router.get('/me', requireAuth, (req, res) => {
   const limits = PLAN_LIMITS[req.user.plan] || PLAN_LIMITS.free;
-  res.json({ success: true, user: safeUser(req.user), limits });
+  const trialExpired = isTrialExpired(req.user);
+  const trialDaysLeft = req.user.trial_ends_at
+    ? Math.max(0, Math.ceil((new Date(req.user.trial_ends_at) - Date.now()) / (1000 * 60 * 60 * 24)))
+    : null;
+  res.json({ success: true, user: safeUser(req.user), limits, trialExpired, trialDaysLeft });
 });
 
 // ── POST /api/auth/register ─────────────────────────────────────────────────

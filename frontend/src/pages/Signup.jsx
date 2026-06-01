@@ -61,8 +61,8 @@ export default function Signup() {
           </div>
         </div>
 
-        <h2 style={styles.title}>Create account</h2>
-        <p style={styles.subtitle}>Start finding and closing clients</p>
+        <h2 style={styles.title}>Let's get you clients.</h2>
+        <p style={styles.subtitle}>14-day free trial. No card required.</p>
 
         {error && <div style={styles.errorBox}>{error}</div>}
 
@@ -118,6 +118,12 @@ export default function Signup() {
         <p style={styles.footer}>
           Already have an account?{' '}
           <Link to="/login" style={styles.link}>Sign in</Link>
+        </p>
+        <p style={{ ...styles.footer, fontSize: 11, color: 'var(--text-4)', marginTop: 8 }}>
+          By creating an account you agree to our{' '}
+          <Link to="/terms" style={{ ...styles.link, color: 'var(--text-3)' }}>Terms of Service</Link>
+          {' '}and{' '}
+          <Link to="/privacy" style={{ ...styles.link, color: 'var(--text-3)' }}>Privacy Policy</Link>
         </p>
       </div>
     </div>

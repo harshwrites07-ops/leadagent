@@ -3,6 +3,8 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import Icon from './Icon';
 import api from '../../utils/api';
 import { useAuth } from '../../context/AuthContext';
+import TrialBanner from './TrialBanner';
+import UpgradeWall from './UpgradeWall';
 
 export function useIsMobile() {
   const [isMobile, setIsMobile] = useState(
@@ -271,7 +273,7 @@ export default function Layout({ children }) {
   });
   const location = useLocation();
   const isMobile = useIsMobile();
-  const { user, logout } = useAuth();
+  const { user, logout, trialExpired } = useAuth();
 
   const crumbs = ROUTE_CRUMBS[location.pathname] || ['ContentCrafterzz'];
 
@@ -312,7 +314,11 @@ export default function Layout({ children }) {
           background: 'var(--bg-2)', borderBottom: '1px solid var(--line)',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div className="sb__logo" style={{ width: 24, height: 24 }}><span>c</span></div>
+            <div className="sb__logo" style={{ width: 24, height: 24 }}>
+              <svg width="12" height="12" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M8.5 1L3 7.5H7L5.5 13L11 6.5H7L8.5 1Z" fill="#0a0a0c" strokeLinejoin="round"/>
+              </svg>
+            </div>
             <span style={{ fontSize: 13, fontWeight: 600 }}>ContentCrafterzz</span>
           </div>
           {user && <UserMenu user={user} logout={logout} />}
@@ -345,7 +351,11 @@ export default function Layout({ children }) {
       {/* ── Sidebar ── */}
       <aside className="sb">
         <div className="sb__brand">
-          <div className="sb__logo"><span>c</span></div>
+          <div className="sb__logo">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M8.5 1L3 7.5H7L5.5 13L11 6.5H7L8.5 1Z" fill="#0a0a0c" strokeLinejoin="round"/>
+            </svg>
+          </div>
           <div>
             <div className="sb__brand-name">ContentCrafterzz</div>
             <div className="muted" style={{ fontSize: 10.5, marginTop: 1, fontFamily: 'var(--f-mono)', letterSpacing: '.08em' }}>OUTREACH·OS</div>
@@ -412,8 +422,13 @@ export default function Layout({ children }) {
         </div>
       </aside>
 
+      {/* ── Upgrade wall (trial expired) ── */}
+      {trialExpired && <UpgradeWall />}
+
       {/* ── Main ── */}
       <main className="main">
+        {/* Trial countdown banner */}
+        <TrialBanner />
         {/* Topbar */}
         <header className="tb">
           <div className="tb__crumbs">

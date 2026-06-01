@@ -47,8 +47,8 @@ export default function Login() {
           </div>
         </div>
 
-        <h2 style={styles.title}>Welcome back</h2>
-        <p style={styles.subtitle}>Sign in to your account</p>
+        <h2 style={styles.title}>Welcome back.</h2>
+        <p style={styles.subtitle}>Your leads are waiting.</p>
 
         {(error || googleErrorMsg) && (
           <div style={styles.errorBox}>{error || googleErrorMsg}</div>
@@ -110,6 +110,11 @@ export default function Login() {
         <p style={styles.footer}>
           Don't have an account?{' '}
           <Link to="/signup" style={styles.link}>Create one</Link>
+        </p>
+        <p style={{ ...styles.footer, fontSize: 11, color: 'var(--text-4)', marginTop: 8 }}>
+          <Link to="/terms" style={{ color: 'var(--text-3)', textDecoration: 'none' }}>Terms</Link>
+          {' · '}
+          <Link to="/privacy" style={{ color: 'var(--text-3)', textDecoration: 'none' }}>Privacy</Link>
         </p>
       </div>
     </div>

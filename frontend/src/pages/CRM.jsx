@@ -236,7 +236,7 @@ export default function CRM() {
             <>
               <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>Timeline</div>
               {leadHistory.length === 0 ? (
-                <div className="muted" style={{ fontSize: 12 }}>No activity recorded yet.</div>
+                <div className="muted" style={{ fontSize: 12 }}>Nothing yet — activity shows up as soon as you start sending.</div>
               ) : leadHistory.map((e, i) => (
                 <div key={i} className="row" style={{ gap: 12, padding: '10px 0', borderBottom: '1px dashed var(--line)' }}>
                   <span style={{ color: e.type === 'reply' ? 'var(--coral)' : e.type === 'open' ? 'var(--lime)' : 'var(--text-3)', width: 16, display: 'grid', placeItems: 'center' }}>
@@ -262,9 +262,9 @@ export default function CRM() {
                 </>
               ) : (
                 <div style={{ textAlign: 'center', padding: '24px 0' }}>
-                  <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>No pitch yet.</div>
+                  <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>No pitch written yet.</div>
                   <button className="btn btn--ghost btn--sm" onClick={() => navigate(`/pitch?lead=${selected.id}`)}>
-                    <Icon name="sparkle" size={11} />Generate pitch
+                    <Icon name="sparkle" size={11} />Write pitch
                   </button>
                 </div>
               )}

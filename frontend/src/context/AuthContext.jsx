@@ -6,11 +6,15 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [trialExpired, setTrialExpired] = useState(false);
+  const [trialDaysLeft, setTrialDaysLeft] = useState(null);
 
   const fetchMe = useCallback(async () => {
     try {
       const { data } = await api.get('/auth/me');
       setUser(data.user || null);
+      setTrialExpired(data.trialExpired || false);
+      setTrialDaysLeft(data.trialDaysLeft ?? null);
     } catch {
       setUser(null);
     } finally {
@@ -35,7 +39,7 @@ export function AuthProvider({ children }) {
   const refreshUser = fetchMe;
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, refreshUser, setUser }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, refreshUser, setUser, trialExpired, trialDaysLeft }}>
       {children}
     </AuthContext.Provider>
   );

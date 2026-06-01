@@ -20,7 +20,7 @@ const { apiLimiter } = require('./src/middleware/rateLimiter');
 const { errorHandler } = require('./src/middleware/errorHandler');
 const { getDb, getUserById, getUserByEmail, BetterSQLiteStore } = require('./src/models/database');
 const { startQueueProcessor } = require('./src/services/schedulerService');
-const { requireAuth } = require('./src/middleware/requireAuth');
+const { requireAuth, requireActiveSubscription } = require('./src/middleware/requireAuth');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -54,9 +54,12 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Session middleware
-// Use RAILWAY_STATIC_URL (or FORCE_HTTPS=true) to detect actual HTTPS deployment.
-// NODE_ENV=production alone is not enough — local dev can have NODE_ENV=production.
-const isHttps = !!(process.env.RAILWAY_STATIC_URL || process.env.FORCE_HTTPS === 'true');
+// Detect HTTPS via RAILWAY_STATIC_URL, FORCE_HTTPS, or APP_URL starting with https://
+const isHttps = !!(
+  process.env.RAILWAY_STATIC_URL ||
+  process.env.FORCE_HTTPS === 'true' ||
+  (process.env.APP_URL || '').startsWith('https://')
+);
 const sessionStore = new BetterSQLiteStore(session);
 app.use(session({
   store: sessionStore,
@@ -190,23 +193,18 @@ app.get('/api/health', (req, res) => {
 });
 
 // Protected API routes
-app.use('/api/leads', requireAuth, require('./src/routes/leads'));
-app.use('/api/pitches', requireAuth, require('./src/routes/pitches'));
-app.use('/api/emails', requireAuth, emailsRouter);
-app.use('/api/crm', requireAuth, require('./src/routes/crm'));
+app.use('/api/leads',     requireAuth, requireActiveSubscription, require('./src/routes/leads'));
+app.use('/api/pitches',   requireAuth, requireActiveSubscription, require('./src/routes/pitches'));
+app.use('/api/emails',    requireAuth, requireActiveSubscription, emailsRouter);
+app.use('/api/crm',       requireAuth, require('./src/routes/crm'));
 app.use('/api/analytics', requireAuth, require('./src/routes/analytics'));
-app.use('/api/settings', requireAuth, require('./src/routes/settings'));
-app.use('/api/gmail', require('./src/routes/gmail'));
-app.use('/api/scraper', requireAuth, require('./src/routes/scraper'));
-app.use('/api/analyzer', requireAuth, require('./src/routes/analyzer'));
-app.use('/api/assistant', requireAuth, require('./src/routes/assistant'));
-app.use('/api/followups', requireAuth, require('./src/routes/followups'));
-app.use('/api/stripe', requireAuth, stripeRouter);
-
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '1.0.0' });
-});
+app.use('/api/settings',  requireAuth, require('./src/routes/settings'));
+app.use('/api/gmail',     require('./src/routes/gmail'));
+app.use('/api/scraper',   requireAuth, requireActiveSubscription, require('./src/routes/scraper'));
+app.use('/api/analyzer',  requireAuth, requireActiveSubscription, require('./src/routes/analyzer'));
+app.use('/api/assistant', requireAuth, requireActiveSubscription, require('./src/routes/assistant'));
+app.use('/api/followups', requireAuth, requireActiveSubscription, require('./src/routes/followups'));
+app.use('/api/stripe',    requireAuth, stripeRouter);
 
 // Serve frontend build (production mode)
 if (isProd) {
@@ -264,7 +262,7 @@ app.listen(PORT, '0.0.0.0', () => {
   if (process.env.NODE_ENV === 'production' || process.env.SELF_PING === 'true') {
     const SELF_URL = process.env.RAILWAY_STATIC_URL
       ? `https://${process.env.RAILWAY_STATIC_URL}`
-      : `http://localhost:${PORT}`;
+      : (process.env.APP_URL || `http://localhost:${PORT}`);
     setInterval(async () => {
       try {
         const http = require('http');

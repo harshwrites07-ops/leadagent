@@ -87,7 +87,7 @@ export default function Dashboard() {
             {today}
           </div>
           <h1 className="page__title">
-            Good morning, {firstName} — <em>your agents shipped {emailsSent} emails.</em>
+            {new Date().getHours() < 12 ? 'Morning' : new Date().getHours() < 17 ? 'Hey' : 'Evening'}, {firstName} — <em>{emailsSent === '0' ? 'ready to start sending.' : `${emailsSent} emails out the door.`}</em>
           </h1>
           <div className="page__sub">
             <span style={{ color: 'var(--coral)' }}>{activities.filter(a => a.type === 'reply_received').length} conversations need a human.</span>
@@ -103,25 +103,25 @@ export default function Dashboard() {
       {/* KPI row */}
       <div className="grid g-4">
         <div className="stat">
-          <div className="stat__label">Total leads in DB</div>
+          <div className="stat__label">Leads found</div>
           <div className="stat__value stat__value--mono">{formatNumber(s?.total_leads ?? 0)}</div>
           <div className="stat__delta stat__delta--up"><Icon name="arrowUp" size={11} />+{s?.leads_today ?? 0} today</div>
           <div className="stat__spark"><Sparkline data={s?.charts?.weekly_leads?.map(d => d.count) || [0,1,2,1,3,2,4,3,5,4,6,5,8,7,10]} color="var(--lime)" /></div>
         </div>
         <div className="stat">
-          <div className="stat__label">Emails sent</div>
+          <div className="stat__label">Pitches sent</div>
           <div className="stat__value stat__value--mono">{formatNumber(s?.emails_today ?? 0)}<span className="muted" style={{ fontSize: 14, fontWeight: 400 }}> today</span></div>
           <div className="stat__delta"><Icon name="arrowR" size={11} />{formatNumber(s?.emails_month ?? 0)} this month</div>
           <div className="stat__spark"><Sparkline data={spark1} /></div>
         </div>
         <div className="stat">
-          <div className="stat__label">Open rate</div>
+          <div className="stat__label">Opens</div>
           <div className="stat__value">{s?.open_rate != null ? `${Number(s.open_rate).toFixed(1)}%` : '—'}</div>
           <div className="stat__delta"><Icon name="arrowR" size={11} />reply rate {replyRate}</div>
           <div className="stat__spark"><Sparkline data={spark2} color="var(--coral)" /></div>
         </div>
         <div className="stat">
-          <div className="stat__label">Pipeline value</div>
+          <div className="stat__label">In the pipe</div>
           <div className="stat__value stat__value--mono" style={{ color: 'var(--ok)' }}>
             ${formatNumber(s?.pipeline_value ?? 0)}
           </div>
@@ -136,7 +136,7 @@ export default function Dashboard() {
         <div className="card">
           <div className="card__head">
             <div className="row">
-              <div className="card__title">Agent activity</div>
+              <div className="card__title">What's happening</div>
               <Badge kind="lime"><span className="dot dot--pulse" />Live</Badge>
             </div>
             <div className="row">
@@ -178,7 +178,7 @@ export default function Dashboard() {
         {/* Quick stats */}
         <div className="card">
           <div className="card__head">
-            <div className="card__title">Pipeline at a glance</div>
+            <div className="card__title">Where deals stand</div>
             <button className="btn btn--ghost btn--sm" onClick={() => navigate('/crm')}>View CRM</button>
           </div>
           <div className="card__body" style={{ padding: 0 }}>
@@ -207,7 +207,7 @@ export default function Dashboard() {
         <div className="card">
           <div className="card__head">
             <div className="row">
-              <div className="card__title">Inbox needs attention</div>
+              <div className="card__title">Humans responded</div>
               {activities.filter(a => a.type === 'reply_received').length > 0 && (
                 <Badge kind="coral"><span className="dot dot--pulse-coral" />{activities.filter(a => a.type === 'reply_received').length} unread</Badge>
               )}
@@ -236,7 +236,7 @@ export default function Dashboard() {
 
         <div className="card">
           <div className="card__head">
-            <div className="card__title">Stats overview</div>
+            <div className="card__title">Numbers</div>
             <Badge kind="ok"><Icon name="check" size={11} />Live data</Badge>
           </div>
           <div className="card__body">

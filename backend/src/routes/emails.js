@@ -63,6 +63,7 @@ router.get('/stats', asyncHandler(async (req, res) => {
   const month = db.prepare(`SELECT COUNT(*) as count FROM emails WHERE strftime('%Y-%m', sent_at) = strftime('%Y-%m','now') AND status='sent' AND user_id=?`).get(uid);
   const opens = db.prepare(`SELECT COUNT(*) as count FROM emails WHERE (status='opened' OR opened_at IS NOT NULL) AND user_id=?`).get(uid);
   const replies = db.prepare(`SELECT COUNT(*) as count FROM emails WHERE (status='replied' OR replied_at IS NOT NULL) AND user_id=?`).get(uid);
+  const bounces = db.prepare(`SELECT COUNT(*) as count FROM emails WHERE status='bounced' AND user_id=?`).get(uid);
   const totalSent = db.prepare(`SELECT COUNT(*) as count FROM emails WHERE (status='sent' OR sent_at IS NOT NULL) AND user_id=?`).get(uid);
   const firstSent = db.prepare(`SELECT MIN(sent_at) as first_date FROM emails WHERE sent_at IS NOT NULL AND user_id=?`).get(uid);
   const dailyLimit = parseInt(getSetting('daily_send_limit') || '150');
@@ -75,6 +76,9 @@ router.get('/stats', asyncHandler(async (req, res) => {
     daily_remaining: Math.max(0, dailyLimit - today.count),
     total_sent: totalSent.count,
     first_sent_date: firstSent?.first_date || null,
+    opened_count: opens.count,
+    replied_count: replies.count,
+    bounced_count: bounces.count,
     open_rate: totalSent.count > 0 ? parseFloat(((opens.count / totalSent.count) * 100).toFixed(1)) : 0,
     reply_rate: totalSent.count > 0 ? parseFloat(((replies.count / totalSent.count) * 100).toFixed(1)) : 0,
   });
@@ -489,7 +493,7 @@ router.get('/spam-report', asyncHandler(async (req, res) => {
       new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 30000)),
     ]);
   } catch (e) {
-    imapResults = inboxes.map(i => ({ email: i.email, bounceEmails: [], spamCount: 0, error: e.message }));
+    imapResults = gmailAccounts.map(i => ({ email: i.email, bounceEmails: [], spamCount: 0, error: e.message }));
   }
 
   res.json({

@@ -53,7 +53,10 @@
       "Bash(ls -lh backend/*.db)",
       "Bash(rm -f \"c:/Users/it/contentcrafterzz-outreach-os/design-reference/screenshots/\"*.png \"c:/Users/it/contentcrafterzz-outreach-os/design-reference/uploads/\"*.png && df -h / 2>/dev/null | tail -1)",
       "Bash(npm cache *)",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(railway up *)",
+      "Bash(npm install *)",
+      "Bash(railway login *)"
     ],
     "additionalDirectories": [
       "c:\\Users\\it\\contentcrafterzz-outreach-os\\design-reference\\screenshots"

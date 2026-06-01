@@ -295,7 +295,7 @@ cron.schedule('0 9 * * *', () => {
     `).run();
 
     if (resurrected.changes > 0) {
-      logActivity('resurrection', `Resurrected ${resurrected.changes} closed leads back to new_lead after 30 days`);
+      logActivity('resurrection', `Resurrected ${resurrected.changes} closed leads back to new_lead after 30 days`, null, {}, 1);
       console.log(`[Scheduler] Resurrection: moved ${resurrected.changes} closed leads back to new_lead`);
     }
   } catch (e) {

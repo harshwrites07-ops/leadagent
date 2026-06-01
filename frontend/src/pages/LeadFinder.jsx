@@ -82,11 +82,11 @@ export default function LeadFinder() {
           setPmDone(true);
           pmStartTime.current = null;
           if (data.targetReached) {
-            toast.success(`Found all ${data.targetCount} leads with emails!`);
+            toast.success(`Got all ${data.targetCount} leads with emails.`);
           } else if (data.quotaExhausted) {
             toast(`Found ${data.stats?.withEmail ?? 0}/${data.targetCount} leads — quota reached for today`, { icon: '⚡' });
           } else if (data.saved > 0 && !data.stopped) {
-            toast.success(`PowerMode complete — ${data.saved} leads saved!`);
+            toast.success(`Done — ${data.saved} leads saved.`);
           }
         }
       } catch {}
@@ -159,7 +159,7 @@ export default function LeadFinder() {
     try {
       const { data } = await api.post('/leads/import', { leads: csvRows });
       setCsvDone(data);
-      toast.success(`Imported ${data.added} leads!`);
+      toast.success(`${data.added} leads imported.`);
     } catch (e) {
       toast.error(e.response?.data?.error || 'Import failed');
     } finally {
@@ -207,7 +207,7 @@ export default function LeadFinder() {
             setYtSearched(true);
             setYtProgress(null);
             const n = event.added ?? 0;
-            if (n > 0) toast.success(`Found ${n} qualified lead${n !== 1 ? 's' : ''}!`);
+            if (n > 0) toast.success(`${n} lead${n !== 1 ? 's' : ''} added.`);
             else toast('0 leads found — try a different keyword');
           } else if (event.type === 'error') {
             setYtProgress(null);
@@ -245,7 +245,7 @@ export default function LeadFinder() {
         <div className="page__actions">
           {currentSelected.size > 0 && (
             <>
-              <button className="btn btn--ghost" onClick={() => toast.promise(api.post('/pitches/generate/bulk', { lead_ids: [...currentSelected] }), { loading: 'Generating...', success: 'Pitches queued!', error: 'Failed' })}>
+              <button className="btn btn--ghost" onClick={() => toast.promise(api.post('/pitches/bulk-generate', { lead_ids: [...currentSelected] }), { loading: 'Generating...', success: 'Pitches queued!', error: 'Failed' })}>
                 <Icon name="sparkle" size={13} />Pitch {currentSelected.size}
               </button>
               <button className="btn btn--ghost" onClick={() => toast.promise(api.post('/emails/queue/bulk', { lead_ids: [...currentSelected] }), { loading: 'Adding...', success: 'Added to queue!', error: 'Failed' })}>
@@ -633,7 +633,7 @@ export default function LeadFinder() {
       {/* Empty state */}
       {!isLoading && tab === 'youtube' && ytSearched && ytLeads.length === 0 && (
         <div className="card" style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--text-3)', fontSize: 13 }}>
-          0 leads found — try a broader keyword or wider subscriber range.
+          Nothing came back. Try a different keyword, drop the subscriber floor, or turn off "email only".
         </div>
       )}
     </div>
