@@ -200,10 +200,33 @@ async function getChannelDetails(channelIds) {
   }
 }
 
+const SKIP_DOMAINS = new Set(['youtube.com','google.com','googlemail.com','googleapis.com','gstatic.com','example.com']);
+
 function extractEmail(text) {
   if (!text) return null;
-  const match = text.match(/[\w.+-]+@[\w-]+\.[a-zA-Z]{2,}/);
-  return match ? match[0].toLowerCase() : null;
+  const matches = [...text.matchAll(/[\w.+%-]+@[\w.-]+\.[a-zA-Z]{2,}/g)].map(m => m[0].toLowerCase());
+  for (const email of matches) {
+    const domain = email.split('@')[1];
+    if (domain && !SKIP_DOMAINS.has(domain)) return email;
+  }
+  return null;
+}
+
+async function scrapeEmailFromAbout(handle, channelId) {
+  const urls = [];
+  if (handle) urls.push(`https://www.youtube.com/${handle}/about`);
+  if (channelId) urls.push(`https://www.youtube.com/channel/${channelId}/about`);
+  for (const url of urls) {
+    try {
+      const { data } = await axios.get(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        timeout: 6000,
+      });
+      const email = extractEmail(data);
+      if (email) return email;
+    } catch {}
+  }
+  return null;
 }
 
 function scoreChannel(stats) {
@@ -274,7 +297,15 @@ async function processKeyword(keyword, nicheTag) {
     if (subs < MIN_SUBS || subs > MAX_SUBS) continue;
 
     const desc = ch.snippet?.description || '';
-    const email = extractEmail(desc) || extractEmail(ch.brandingSettings?.channel?.description);
+    // Try description first (fast), then scrape about page
+    let email = extractEmail(desc) || extractEmail(ch.brandingSettings?.channel?.description);
+    if (!email) {
+      const handle = ch.snippet?.customUrl || null;
+      email = await scrapeEmailFromAbout(handle, ch.id);
+    }
+    // Email-only mode — skip channels without emails
+    if (!email) continue;
+
     const score = scoreChannel(ch.statistics);
     const temperature = subs > 100000 ? 'warm' : subs > 10000 ? 'cold' : 'cold';
 

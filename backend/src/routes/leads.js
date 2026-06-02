@@ -345,7 +345,62 @@ router.post('/scrape/youtube/stream', scrapeLimiter, asyncHandler(async (req, re
       return res.end();
     }
 
-    // Step 1 — Expand keywords
+    // Step 0 — Serve from master_leads if we have enough matching results
+    {
+      const db = getDb();
+      const masterTotal = db.prepare('SELECT COUNT(*) as c FROM master_leads').get().c;
+      if (masterTotal > 500) {
+        const conditions = ['1=1'];
+        const params = [];
+        if (keyword) { conditions.push('(channel_name LIKE ? OR channel_description LIKE ? OR niche LIKE ?)'); params.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`); }
+        if (minSubs) { conditions.push('subscriber_count >= ?'); params.push(Number(minSubs)); }
+        if (maxSubs) { conditions.push('subscriber_count <= ?'); params.push(Number(maxSubs)); }
+        if (emailOnly) { conditions.push("email IS NOT NULL AND email != ''"); }
+        if (country) { conditions.push('country = ?'); params.push(country); }
+
+        const masterCount = db.prepare(`SELECT COUNT(*) as c FROM master_leads WHERE ${conditions.join(' AND ')}`).get(...params).c;
+
+        if (masterCount >= Math.min(maxResults, 20)) {
+          send({ type: 'progress', stage: 'search', message: `Found ${masterCount} leads in database — delivering instantly...` });
+
+          const masterLeads = db.prepare(
+            `SELECT * FROM master_leads WHERE ${conditions.join(' AND ')} ORDER BY lead_score DESC, subscriber_count DESC LIMIT ?`
+          ).all(...params, Number(maxResults));
+
+          const uid = req.user.id;
+          const insertStmt = db.prepare(`
+            INSERT OR IGNORE INTO leads
+              (user_id, platform, channel_id, channel_name, channel_handle, subscriber_count,
+               avg_views, email, website, channel_description, lead_score, temperature, crm_stage, country, niche)
+            VALUES (?, 'youtube', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new_lead', ?, ?)
+          `);
+
+          const saved = db.transaction(leads => {
+            let count = 0;
+            for (const l of leads) {
+              const r = insertStmt.run(uid, l.channel_id, l.channel_name, l.channel_handle,
+                l.subscriber_count, l.avg_views, l.email, l.website,
+                l.channel_description, l.lead_score, l.temperature, l.country, l.niche);
+              if (r.changes > 0) count++;
+            }
+            return count;
+          })(masterLeads);
+
+          // Return leads from user's own table (with user lead IDs)
+          const userLeads = db.prepare(
+            `SELECT * FROM leads WHERE user_id=? AND channel_id IN (${masterLeads.map(() => '?').join(',')}) ORDER BY lead_score DESC`
+          ).all(uid, ...masterLeads.map(l => l.channel_id));
+
+          for (const lead of userLeads) {
+            send({ type: 'lead', lead, source: 'database' });
+          }
+          send({ type: 'done', total: userLeads.length, saved, source: 'database', message: `Delivered ${userLeads.length} leads from database instantly` });
+          return res.end();
+        }
+      }
+    }
+
+    // Step 1 — Expand keywords (live YouTube scrape fallback)
     send({ type: 'progress', stage: 'expand', message: `Generating keyword variations for "${keyword}"...` });
     const keywords = await expandKeywords(keyword);
     send({ type: 'progress', stage: 'search', message: `Searching YouTube for: ${keywords.slice(0, 3).join(', ')}${keywords.length > 3 ? ' +more' : ''}`, keywords });
