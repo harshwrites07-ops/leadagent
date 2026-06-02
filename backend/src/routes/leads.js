@@ -657,6 +657,32 @@ function getSetting(key) {
   return require('../models/database').getSetting(key);
 }
 
+// ── POST /api/leads/master/bulk-import — admin only, syncs local DB to Railway ─
+const { requireAdmin } = require('../middleware/requireAuth');
+router.post('/master/bulk-import', requireAdmin, asyncHandler(async (req, res) => {
+  const db = getDb();
+  const { leads } = req.body;
+  if (!Array.isArray(leads) || !leads.length) return res.status(400).json({ success: false, error: 'leads array required' });
+
+  const stmt = db.prepare(`
+    INSERT OR IGNORE INTO master_leads
+      (channel_id, channel_name, channel_handle, subscriber_count, avg_views,
+       email, website, channel_description, lead_score, temperature, country, niche)
+    VALUES (@channel_id,@channel_name,@channel_handle,@subscriber_count,@avg_views,
+            @email,@website,@channel_description,@lead_score,@temperature,@country,@niche)
+  `);
+
+  const insert = db.transaction(rows => {
+    let count = 0;
+    for (const l of rows) { const r = stmt.run(l); if (r.changes > 0) count++; }
+    return count;
+  });
+
+  const inserted = insert(leads);
+  const total = db.prepare('SELECT COUNT(*) as c FROM master_leads').get().c;
+  res.json({ success: true, inserted, total });
+}));
+
 // ── GET /api/leads/master — search the shared master_leads pool ──────────────
 // Query params: niche, min_subs, max_subs, email_only, country, limit, offset
 // Copies matching leads into the user's own leads table and returns them

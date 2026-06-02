@@ -52,7 +52,36 @@ function extractEmail(text) {
   return null;
 }
 
-async function scrapeEmail(handle, channelId) {
+async function scrapeEmailFromWebsite(url) {
+  if (!url) return null;
+  try {
+    const { data: html } = await axios.get(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Outreach/1.0)' },
+      timeout: 6000, maxRedirects: 3,
+    });
+    // Check mailto links first
+    const mailto = (html.match(/href="mailto:([^"?]+)/gi) || [])
+      .map(m => m.replace(/href="mailto:/i, '').toLowerCase().trim())
+      .find(e => e.includes('@') && !SKIP_DOMAINS.has(e.split('@')[1]));
+    if (mailto) return mailto;
+    // Try contact/about subpages
+    const links = (html.match(/href="([^"]*(?:contact|about)[^"]*)"/gi) || [])
+      .map(m => m.match(/href="([^"]+)"/)?.[1]).filter(Boolean).slice(0, 3);
+    for (const link of links) {
+      try {
+        const subUrl = link.startsWith('http') ? link : new URL(link, url).href;
+        const { data: sub } = await axios.get(subUrl, { timeout: 5000, maxRedirects: 2,
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Outreach/1.0)' } });
+        const email = extractEmail(sub);
+        if (email) return email;
+      } catch {}
+    }
+    return extractEmail(html);
+  } catch { return null; }
+}
+
+async function scrapeEmail(handle, channelId, websiteUrl) {
+  // 1. Try YouTube about page
   const urls = [];
   if (handle) urls.push(`https://www.youtube.com/${handle}/about`);
   if (channelId) urls.push(`https://www.youtube.com/channel/${channelId}/about`);
@@ -62,9 +91,22 @@ async function scrapeEmail(handle, channelId) {
         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
         timeout: 7000,
       });
+      // Also extract website link from about page
+      const siteMatch = data.match(/"url":"(https?:\/\/(?!www\.youtube\.com)[^"]+)"/);
+      const foundSite = siteMatch?.[1];
       const email = extractEmail(data);
-      if (email) return email;
+      if (email) return { email, website: foundSite || websiteUrl };
+      // No email on about page — try their website
+      if (foundSite) {
+        const webEmail = await scrapeEmailFromWebsite(foundSite);
+        if (webEmail) return { email: webEmail, website: foundSite };
+      }
     } catch {}
+  }
+  // 2. Try provided website directly
+  if (websiteUrl) {
+    const webEmail = await scrapeEmailFromWebsite(websiteUrl);
+    if (webEmail) return { email: webEmail, website: websiteUrl };
   }
   return null;
 }
@@ -136,32 +178,42 @@ async function runSeedCycle() {
         timeout: 12000,
       });
 
-      for (const ch of (detailRes.data.items || [])) {
+      // Process channels concurrently for speed
+      await Promise.allSettled((detailRes.data.items || []).map(async ch => {
         const subs = parseInt(ch.statistics?.subscriberCount || 0);
-        if (subs < MIN_SUBS || subs > MAX_SUBS) continue;
+        if (subs < MIN_SUBS || subs > MAX_SUBS) return;
 
         const desc = ch.snippet?.description || '';
-        let email = extractEmail(desc) || extractEmail(ch.brandingSettings?.channel?.description);
-        if (!email) email = await scrapeEmail(ch.snippet?.customUrl, ch.id);
-        if (!email) continue; // email-only
+        const brandDesc = ch.brandingSettings?.channel?.description || '';
+        const websiteUrl = ch.brandingSettings?.channel?.unsubscribedTrailer || null;
+
+        // Try description first (instant), then scrape about page + website
+        let email = extractEmail(desc) || extractEmail(brandDesc);
+        let website = websiteUrl;
+
+        if (!email) {
+          const result = await scrapeEmail(ch.snippet?.customUrl, ch.id, websiteUrl);
+          if (result) { email = result.email; website = result.website || websiteUrl; }
+        }
+        if (!email) return; // email-only — skip
 
         const views = parseInt(ch.statistics?.viewCount || 0);
         const videos = Math.max(1, parseInt(ch.statistics?.videoCount || 1));
         let score = 50;
         if (subs > 10000) score += 10; if (subs > 50000) score += 10; if (subs > 100000) score += 10;
         if (views > 100000) score += 5; if (views > 1000000) score += 5;
+        if (email) score += 15; // bonus for having email
 
-        INSERT.run(
+        const r = INSERT.run(
           ch.id, ch.snippet?.title || 'Unknown', ch.snippet?.customUrl || null,
-          subs, Math.round(views / videos), email,
-          ch.brandingSettings?.channel?.unsubscribedTrailer || null,
+          subs, Math.round(views / videos), email, website,
           desc.substring(0, 400) || null, score,
           subs > 100000 ? 'warm' : 'cold',
           ch.snippet?.country || null,
           keyword.split(' ')[0].toLowerCase()
         );
-        totalSaved++;
-      }
+        if (r.changes > 0) totalSaved++;
+      }));
       keyIndex++;
     } catch (e) {
       if (e.response?.status === 403 || e.response?.status === 429) {
