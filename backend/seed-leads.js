@@ -224,19 +224,42 @@ function scoreChannel(stats) {
 const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 
+// Ensure master_leads table exists (same as in database.js)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS master_leads (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    channel_id TEXT UNIQUE NOT NULL,
+    channel_name TEXT NOT NULL,
+    channel_handle TEXT,
+    subscriber_count INTEGER DEFAULT 0,
+    avg_views REAL DEFAULT 0,
+    engagement_rate REAL DEFAULT 0,
+    upload_frequency_days REAL DEFAULT 0,
+    last_upload_date TEXT,
+    country TEXT,
+    email TEXT,
+    website TEXT,
+    niche TEXT,
+    channel_description TEXT,
+    cpm REAL DEFAULT 0,
+    days_since_upload INTEGER,
+    lead_score INTEGER DEFAULT 0,
+    temperature TEXT DEFAULT 'warm',
+    scraped_at DATETIME DEFAULT (datetime('now'))
+  )
+`);
+
 const INSERT = db.prepare(`
-  INSERT OR IGNORE INTO leads
-    (user_id, platform, channel_id, channel_name, channel_handle, subscriber_count,
-     total_videos, avg_views, email, website, thumbnail_url, channel_description,
-     channel_tags, lead_score, temperature, crm_stage, country)
+  INSERT OR IGNORE INTO master_leads
+    (channel_id, channel_name, channel_handle, subscriber_count, avg_views,
+     email, website, channel_description, lead_score, temperature, country, niche)
   VALUES
-    (@user_id, 'youtube', @channel_id, @channel_name, @channel_handle, @subscriber_count,
-     @total_videos, @avg_views, @email, @website, @thumbnail_url, @channel_description,
-     @channel_tags, @lead_score, @temperature, 'new_lead', @country)
+    (@channel_id, @channel_name, @channel_handle, @subscriber_count, @avg_views,
+     @email, @website, @channel_description, @lead_score, @temperature, @country, @niche)
 `);
 
 // ── Main ──────────────────────────────────────────────────────────────────────
-async function processKeyword(keyword) {
+async function processKeyword(keyword, nicheTag) {
   const items = await searchKeyword(keyword);
   if (!items.length) return 0;
 
@@ -256,21 +279,18 @@ async function processKeyword(keyword) {
     const temperature = subs > 100000 ? 'warm' : subs > 10000 ? 'cold' : 'cold';
 
     const r = INSERT.run({
-      user_id: USER_ID,
       channel_id: ch.id,
       channel_name: ch.snippet?.title || 'Unknown',
       channel_handle: ch.snippet?.customUrl || null,
       subscriber_count: subs,
-      total_videos: parseInt(ch.statistics?.videoCount || 0),
       avg_views: Math.round(parseInt(ch.statistics?.viewCount || 0) / Math.max(1, parseInt(ch.statistics?.videoCount || 1))),
       email: email || null,
       website: ch.brandingSettings?.channel?.unsubscribedTrailer || null,
-      thumbnail_url: ch.snippet?.thumbnails?.high?.url || ch.snippet?.thumbnails?.default?.url || null,
       channel_description: desc.substring(0, 500) || null,
-      channel_tags: JSON.stringify(ch.brandingSettings?.channel?.keywords?.split(',').slice(0, 10) || []),
       lead_score: score,
       temperature,
       country: ch.snippet?.country || null,
+      niche: nicheTag || keyword.split(' ')[0].toLowerCase(),
     });
 
     if (r.changes > 0) saved++;
@@ -280,12 +300,11 @@ async function processKeyword(keyword) {
 }
 
 async function main() {
-  const startCount = db.prepare('SELECT COUNT(*) as c FROM leads WHERE user_id=?').get(USER_ID).c;
-  console.log(`\nQuelro Lead Seeder`);
+  const startCount = db.prepare('SELECT COUNT(*) as c FROM master_leads').get().c;
+  console.log(`\nQuelro Master Lead Seeder`);
   console.log(`API keys available: ${API_KEYS.length}`);
   console.log(`Target: ${TARGET.toLocaleString()} leads`);
-  console.log(`User ID: ${USER_ID}`);
-  console.log(`Starting DB count: ${startCount.toLocaleString()}`);
+  console.log(`Starting master_leads count: ${startCount.toLocaleString()}`);
   console.log(`\nStarting...\n`);
 
   let totalSaved = 0;
@@ -301,11 +320,11 @@ async function main() {
     const batch = shuffled.slice(keywordIndex, keywordIndex + CONCURRENCY);
     keywordIndex += CONCURRENCY;
 
-    const results = await Promise.allSettled(batch.map(kw => processKeyword(kw)));
+    const results = await Promise.allSettled(batch.map(kw => processKeyword(kw, kw.split(' ')[0].toLowerCase())));
     const batchSaved = results.reduce((sum, r) => sum + (r.status === 'fulfilled' ? r.value : 0), 0);
     totalSaved += batchSaved;
 
-    const currentTotal = db.prepare('SELECT COUNT(*) as c FROM leads WHERE user_id=?').get(USER_ID).c;
+    const currentTotal = db.prepare('SELECT COUNT(*) as c FROM master_leads').get().c;
     const pct = Math.min(100, Math.round((totalSaved / TARGET) * 100));
     process.stdout.write(`\r  Saved: ${totalSaved.toLocaleString()} | DB total: ${currentTotal.toLocaleString()} | Progress: ${pct}% | Keys left: ${API_KEYS.length - exhausted.size}/${API_KEYS.length}   `);
 
@@ -317,13 +336,13 @@ async function main() {
     await new Promise(r => setTimeout(r, 200)); // small delay to avoid hammering
   }
 
-  const finalCount = db.prepare('SELECT COUNT(*) as c FROM leads WHERE user_id=?').get(USER_ID).c;
-  const withEmail = db.prepare("SELECT COUNT(*) as c FROM leads WHERE user_id=? AND email IS NOT NULL AND email != ''").get(USER_ID).c;
+  const finalCount = db.prepare('SELECT COUNT(*) as c FROM master_leads').get().c;
+  const withEmail = db.prepare("SELECT COUNT(*) as c FROM master_leads WHERE email IS NOT NULL AND email != ''").get().c;
 
   console.log(`\n\nDone!`);
-  console.log(`  New leads added: ${totalSaved.toLocaleString()}`);
-  console.log(`  Total in DB: ${finalCount.toLocaleString()}`);
-  console.log(`  With email: ${withEmail.toLocaleString()} (${Math.round(withEmail/finalCount*100)}%)`);
+  console.log(`  New leads added this run: ${totalSaved.toLocaleString()}`);
+  console.log(`  Total in master_leads: ${finalCount.toLocaleString()}`);
+  console.log(`  With email: ${withEmail.toLocaleString()} (${finalCount > 0 ? Math.round(withEmail/finalCount*100) : 0}%)`);
 }
 
 main().catch(console.error);

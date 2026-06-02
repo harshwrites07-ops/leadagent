@@ -602,4 +602,78 @@ function getSetting(key) {
   return require('../models/database').getSetting(key);
 }
 
+// ── GET /api/leads/master — search the shared master_leads pool ──────────────
+// Query params: niche, min_subs, max_subs, email_only, country, limit, offset
+// Copies matching leads into the user's own leads table and returns them
+router.get('/master', asyncHandler(async (req, res) => {
+  const db = getDb();
+  const uid = req.user.id;
+  const {
+    niche, min_subs = 1000, max_subs = 10000000,
+    email_only = false, country, limit = 50, offset = 0,
+  } = req.query;
+
+  const total = db.prepare('SELECT COUNT(*) as c FROM master_leads').get().c;
+  if (total === 0) {
+    return res.json({ success: true, leads: [], total: 0, master_total: 0, message: 'Master database is still being built. Try YouTube search or check back soon.' });
+  }
+
+  const conditions = ['1=1'];
+  const params = [];
+  if (niche) { conditions.push(`niche LIKE ?`); params.push(`%${niche}%`); }
+  if (min_subs) { conditions.push(`subscriber_count >= ?`); params.push(Number(min_subs)); }
+  if (max_subs) { conditions.push(`subscriber_count <= ?`); params.push(Number(max_subs)); }
+  if (email_only === 'true' || email_only === true) { conditions.push(`email IS NOT NULL AND email != ''`); }
+  if (country) { conditions.push(`country = ?`); params.push(country); }
+
+  const where = conditions.join(' AND ');
+  const masterLeads = db.prepare(
+    `SELECT * FROM master_leads WHERE ${where} ORDER BY lead_score DESC, subscriber_count DESC LIMIT ? OFFSET ?`
+  ).all(...params, Number(limit), Number(offset));
+
+  // Copy into user's leads table (skip duplicates)
+  const insertStmt = db.prepare(`
+    INSERT OR IGNORE INTO leads
+      (user_id, platform, channel_id, channel_name, channel_handle, subscriber_count,
+       avg_views, email, website, channel_description, lead_score, temperature,
+       crm_stage, country, niche, cpm, days_since_upload)
+    VALUES
+      (?, 'youtube', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new_lead', ?, ?, ?, ?)
+  `);
+
+  const copyMany = db.transaction(leads => {
+    let copied = 0;
+    for (const l of leads) {
+      const r = insertStmt.run(
+        uid, l.channel_id, l.channel_name, l.channel_handle,
+        l.subscriber_count, l.avg_views, l.email, l.website,
+        l.channel_description, l.lead_score, l.temperature,
+        l.country, l.niche, l.cpm, l.days_since_upload
+      );
+      if (r.changes > 0) copied++;
+    }
+    return copied;
+  });
+
+  const copied = copyMany(masterLeads);
+
+  // Return with user lead IDs so frontend can link to /leads/:id
+  const userLeads = db.prepare(
+    `SELECT * FROM leads WHERE user_id=? AND channel_id IN (${masterLeads.map(() => '?').join(',')}) ORDER BY lead_score DESC`
+  ).all(uid, ...masterLeads.map(l => l.channel_id));
+
+  const masterCount = db.prepare(`SELECT COUNT(*) as c FROM master_leads WHERE ${where}`).get(...params).c;
+
+  res.json({ success: true, leads: userLeads, total: masterCount, master_total: total, copied });
+}));
+
+// GET /api/leads/master/stats — master DB stats for admin dashboard
+router.get('/master/stats', asyncHandler(async (req, res) => {
+  const db = getDb();
+  const total = db.prepare('SELECT COUNT(*) as c FROM master_leads').get().c;
+  const withEmail = db.prepare("SELECT COUNT(*) as c FROM master_leads WHERE email IS NOT NULL AND email != ''").get().c;
+  const niches = db.prepare(`SELECT niche, COUNT(*) as count FROM master_leads WHERE niche IS NOT NULL GROUP BY niche ORDER BY count DESC LIMIT 12`).all();
+  res.json({ success: true, total, withEmail, niches });
+}));
+
 module.exports = router;

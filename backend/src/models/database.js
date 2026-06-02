@@ -334,6 +334,35 @@ function initSchema() {
   try { db.exec(`ALTER TABLE users ADD COLUMN trial_ends_at DATETIME DEFAULT (datetime('now', '+14 days'))`); } catch {}
   try { db.exec(`ALTER TABLE users ADD COLUMN billing_cycle_start DATETIME DEFAULT (datetime('now'))`); } catch {}
 
+  // ── Master leads pool — global shared DB filled by background seeder ──────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS master_leads (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      channel_id TEXT UNIQUE NOT NULL,
+      channel_name TEXT NOT NULL,
+      channel_handle TEXT,
+      subscriber_count INTEGER DEFAULT 0,
+      avg_views REAL DEFAULT 0,
+      engagement_rate REAL DEFAULT 0,
+      upload_frequency_days REAL DEFAULT 0,
+      last_upload_date TEXT,
+      country TEXT,
+      email TEXT,
+      website TEXT,
+      niche TEXT,
+      channel_description TEXT,
+      cpm REAL DEFAULT 0,
+      days_since_upload INTEGER,
+      lead_score INTEGER DEFAULT 0,
+      temperature TEXT DEFAULT 'warm',
+      scraped_at DATETIME DEFAULT (datetime('now'))
+    )
+  `);
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_master_niche ON master_leads(niche)`); } catch {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_master_subs ON master_leads(subscriber_count)`); } catch {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_master_email ON master_leads(email)`); } catch {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_master_country ON master_leads(country)`); } catch {}
+
   // gmail_accounts migrations
   try { db.exec(`ALTER TABLE gmail_accounts ADD COLUMN daily_limit INTEGER DEFAULT 500`); } catch {}
   try { db.exec(`CREATE INDEX IF NOT EXISTS idx_gmail_accounts_user_id ON gmail_accounts(user_id)`); } catch {}
