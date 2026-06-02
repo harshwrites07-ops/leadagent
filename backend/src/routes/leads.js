@@ -46,37 +46,60 @@ const KEYWORD_EXPANSIONS = {
   'podcast':           ['podcast youtube', 'video podcast', 'interview show', 'talk show youtube', 'business podcast'],
 };
 
+// In-memory keyword expansion cache — persists for lifetime of server process
+const _kwCache = new Map();
+
 async function expandKeywords(keyword) {
   require('dotenv').config({ path: ENV_PATH, override: true });
   const lower = keyword.toLowerCase().trim();
 
-  // Preset map check
+  // 1. In-memory cache — free, instant
+  if (_kwCache.has(lower)) return _kwCache.get(lower);
+
+  // 2. Preset map check — no API call needed
   for (const [key, variants] of Object.entries(KEYWORD_EXPANSIONS)) {
     if (lower === key || lower.includes(key) || key.includes(lower)) {
-      return [keyword, ...variants.slice(0, 4)];
+      const result = [keyword, ...variants.slice(0, 4)];
+      _kwCache.set(lower, result);
+      return result;
     }
   }
 
-  // Gemini — fastest
-  const geminiKey = process.env.GEMINI_API_KEY;
-  if (geminiKey && geminiKey !== 'placeholder') {
+  // 3. Gemini — only called once per unique keyword ever, result cached forever
+  const keys = [];
+  for (let i = 1; i <= 10; i++) {
+    const k = process.env[`GEMINI_API_KEY_${i}`];
+    if (k && k !== 'placeholder') keys.push(k);
+  }
+  if (process.env.GEMINI_API_KEY && !keys.includes(process.env.GEMINI_API_KEY)) keys.push(process.env.GEMINI_API_KEY);
+
+  for (const geminiKey of keys) {
     try {
       const { GoogleGenerativeAI } = require('@google/generative-ai');
       const genAI = new GoogleGenerativeAI(geminiKey);
       const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
       const result = await model.generateContent(
-        `Give me 4 YouTube search keywords related to "${keyword}" for finding content creators who might need video editing help. Return only the keywords, one per line, no numbering.`
+        `Give me 4 YouTube search keywords related to "${keyword}" for finding creators who need video editing. Return only keywords, one per line, no numbering.`
       );
       const lines = result.response.text().trim().split('\n')
         .map(l => l.replace(/^[\d\-\*\•\.]+\s*/, '').trim())
         .filter(l => l.length > 2 && l.length < 60)
         .slice(0, 4);
-      if (lines.length > 0) return [keyword, ...lines];
+      if (lines.length > 0) {
+        const expanded = [keyword, ...lines];
+        _kwCache.set(lower, expanded);
+        return expanded;
+      }
     } catch (e) {
-      console.log(`[expandKeywords] Gemini failed: ${e.message}`);
+      const isQuota = /429|quota|resource_exhausted|limit/i.test(e.message);
+      if (isQuota) continue; // try next key
+      console.log(`[expandKeywords] Gemini error: ${e.message?.substring(0, 80)}`);
+      break;
     }
   }
 
+  // 4. Fallback — return keyword as-is, cache it so we never retry
+  _kwCache.set(lower, [keyword]);
   return [keyword];
 }
 

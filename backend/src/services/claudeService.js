@@ -5,12 +5,18 @@ const { getSetting, getDb } = require('../models/database');
 function getGeminiKeys() {
   require('dotenv').config({ path: ENV_PATH, override: true });
   const keys = [];
-  const dbKey = getSetting('gemini_api_key');
-  if (dbKey && dbKey !== 'placeholder') keys.push(dbKey);
-  for (let i = 1; i <= 5; i++) {
-    const k = process.env[`GEMINI_API_KEY_${i}`] || (i === 1 ? process.env.GEMINI_API_KEY : null);
+  try {
+    const dbKey = getSetting('gemini_api_key');
+    if (dbKey && dbKey !== 'placeholder') keys.push(dbKey);
+  } catch {}
+  // Support up to 20 keys: GEMINI_API_KEY_1 through GEMINI_API_KEY_20
+  for (let i = 1; i <= 20; i++) {
+    const k = process.env[`GEMINI_API_KEY_${i}`];
     if (k && k !== 'placeholder' && !keys.includes(k)) keys.push(k);
   }
+  // Also check plain GEMINI_API_KEY
+  const plain = process.env.GEMINI_API_KEY;
+  if (plain && plain !== 'placeholder' && !keys.includes(plain)) keys.push(plain);
   return keys;
 }
 
