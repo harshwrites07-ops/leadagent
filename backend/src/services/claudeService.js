@@ -98,7 +98,439 @@ async function checkAiAvailability() {
   return { ok: false, error: 'No Gemini API key configured. Add keys at aistudio.google.com.' };
 }
 
-// ─── ContentCrafterzz Email Intelligence ──────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+// HYPER-PERSONALIZED EMAIL GENERATION v2
+// Philosophy: Every email must feel like a human spent hours studying this creator.
+// ════════════════════════════════════════════════════════════════════════════
+
+const BANNED_PHRASES = [
+  'leaving money on the table','i came across your channel','i love your content',
+  'i noticed your channel','collaboration opportunity','partnership','exciting opportunity',
+  'hope this finds you well','i wanted to reach out','touching base','circling back',
+  'synergy','game-changer','crushing it','killing it','amazing content','incredible work',
+  'fantastic videos','quick question','just following up','checking in','as per my last',
+  'per our conversation','moving forward','leverage','utilize','at the end of the day',
+  'think outside the box','low-hanging fruit','deep dive','bandwidth','circle back',
+  'touch base','i hope this','exciting','innovative','cutting-edge','state-of-the-art',
+  'i noticed','i came across','i stumbled upon','i wanted to','hope you',
+];
+
+// ─── Step 1: Build rich creator context from stored lead data ────────────────
+function buildRichCreatorContext(lead) {
+  const recentVideos = (() => { try { return JSON.parse(lead.recent_videos || '[]'); } catch { return []; } })();
+  const painPoints   = (() => { try { return JSON.parse(lead.pain_points   || '[]'); } catch { return []; } })();
+
+  const daysSinceUpload = lead.last_upload_date
+    ? Math.floor((Date.now() - new Date(lead.last_upload_date)) / 86400000) : null;
+
+  // View trend — compare first 3 vs last 3 videos
+  let viewTrend = 'stable';
+  if (recentVideos.length >= 4) {
+    const recentAvg = recentVideos.slice(0, 3).reduce((s, v) => s + (v.views || 0), 0) / 3;
+    const olderAvg  = recentVideos.slice(-3).reduce((s, v) => s + (v.views || 0), 0) / 3;
+    const viewsArr  = recentVideos.map(v => v.views || 0);
+    if (recentAvg > olderAvg * 1.3)      viewTrend = 'growing';
+    else if (recentAvg < olderAvg * 0.65) viewTrend = 'declining';
+    else if (Math.max(...viewsArr) > Math.min(...viewsArr) * 6) viewTrend = 'volatile';
+  }
+
+  // Best / worst performer
+  const sorted   = [...recentVideos].sort((a, b) => (b.views || 0) - (a.views || 0));
+  const bestVideo  = sorted[0] || null;
+  const worstVideo = sorted.length > 1 ? sorted[sorted.length - 1] : null;
+
+  // View-to-sub ratio (engagement health)
+  const viewToSubRatio = lead.subscriber_count > 0 ? (lead.avg_views || 0) / lead.subscriber_count : 0;
+
+  // Title pattern signals
+  const titles = recentVideos.map(v => v.title || '').filter(Boolean);
+  const titleText = titles.join(' ');
+  const usesNumbers  = titles.filter(t => /\d+/.test(t)).length > titles.length / 2;
+  const usesAllCaps  = titles.filter(t => /[A-Z]{3,}/.test(t)).length > titles.length / 3;
+  const usesQuestions = titles.some(t => /\?/.test(t));
+  const usesEmojis    = (titleText.match(/[\u{1F300}-\u{1F9FF}]/gu) || []).length > 3;
+  const avgTitleWords = titles.length ? titles.reduce((s, t) => s + t.split(' ').length, 0) / titles.length : 0;
+
+  return {
+    recentVideos, painPoints, daysSinceUpload, viewTrend,
+    bestVideo, worstVideo, viewToSubRatio,
+    usesNumbers, usesAllCaps, usesQuestions, usesEmojis, avgTitleWords,
+  };
+}
+
+// ─── Step 2: Psychology profile ───────────────────────────────────────────────
+function buildPsychologyProfile(lead, ctx) {
+  const subs  = lead.subscriber_count || 0;
+  const niche = (lead.niche || lead.channel_description || '').toLowerCase();
+  const { viewTrend, daysSinceUpload, viewToSubRatio, recentVideos } = ctx;
+
+  // Base personality from niche
+  let personality = 'analytical', tone = 'professional', commsStyle = 'data-driven';
+  if (niche.match(/fitness|gym|workout|train|health|nutrition|wellness/)) {
+    personality = 'energetic'; tone = 'motivational and direct'; commsStyle = 'results-focused';
+  } else if (niche.match(/finance|invest|stock|crypto|money|wealth|trading|forex/)) {
+    personality = 'analytical'; tone = 'precise and data-driven'; commsStyle = 'evidence-based';
+  } else if (niche.match(/business|entrepreneur|startup|agency|saas|marketing|growth/)) {
+    personality = 'ambitious'; tone = 'strategic and sharp'; commsStyle = 'ROI-focused';
+  } else if (niche.match(/gaming|entertainment|comedy|vlog|prank|challenge|react/)) {
+    personality = 'creative'; tone = 'casual and energetic'; commsStyle = 'peer-to-peer';
+  } else if (niche.match(/cook|food|recipe|chef|bak|restaurant/)) {
+    personality = 'warm'; tone = 'friendly and approachable'; commsStyle = 'conversational';
+  } else if (niche.match(/tech|software|code|program|develop|AI|machine/)) {
+    personality = 'analytical'; tone = 'precise'; commsStyle = 'technical but clear';
+  } else if (niche.match(/educat|learn|teach|tutor|school|course/)) {
+    personality = 'nurturing'; tone = 'encouraging'; commsStyle = 'clear and helpful';
+  }
+
+  // Title style overrides
+  if (ctx.usesAllCaps) { tone = 'high-energy'; }
+  if (ctx.usesEmojis)  { tone += ', uses emojis naturally'; }
+
+  // Profile label
+  let profileLabel = 'SMALL/GROWING';
+  if (subs >= 1_000_000)   profileLabel = 'PROFESSIONAL/MEDIA';
+  else if (subs >= 500_000) profileLabel = 'LARGE CREATOR';
+  else if (subs >= 100_000) profileLabel = 'SOLO CREATIVE';
+  else if (niche.match(/finance|invest|trading/)) profileLabel = 'FINANCE CREATOR';
+  else if (niche.match(/fitness|gym|wellness/))   profileLabel = 'FITNESS CREATOR';
+  else if (niche.match(/business|entrepreneur/))  profileLabel = 'BUSINESS CREATOR';
+  if (viewTrend === 'declining')                   profileLabel = 'CREATOR IN PAIN';
+
+  // Pain signals
+  const painSignals = [];
+  if (viewTrend === 'declining')          painSignals.push(`views are DROPPING — recent avg far below channel avg ${(lead.avg_views||0).toLocaleString()}`);
+  if (daysSinceUpload > 21)               painSignals.push(`${daysSinceUpload} days since last upload — editing may be the bottleneck`);
+  if (viewToSubRatio < 0.04 && subs > 10_000) painSignals.push(`only ${(viewToSubRatio*100).toFixed(1)}% of subs watch — audience disengaged`);
+  if (viewTrend === 'volatile')            painSignals.push('wildly inconsistent views — no consistent content formula');
+  if (ctx.bestVideo && ctx.worstVideo && (ctx.bestVideo.views||0) > (ctx.worstVideo.views||0) * 10)
+    painSignals.push(`massive gap between best (${(ctx.bestVideo.views||0).toLocaleString()}) and worst (${(ctx.worstVideo.views||0).toLocaleString()}) recent video`);
+
+  // What makes them stop and read
+  let stopAndRead = 'Someone who clearly studied their specific channel and numbers';
+  if (viewTrend === 'declining') stopAndRead = 'Something that names WHY their views dropped — they want answers';
+  else if (daysSinceUpload > 21) stopAndRead = 'Something that addresses the upload gap as a solvable problem';
+  else if (viewToSubRatio < 0.04) stopAndRead = 'Someone who noticed their sub count vs view discrepancy';
+
+  return {
+    profileLabel, personality, tone, commsStyle,
+    isDataDriven: ['analytical', 'ambitious'].includes(personality),
+    isCasual: ['creative', 'warm'].includes(personality),
+    painSignals, stopAndRead,
+    usesNumbers: ctx.usesNumbers, usesAllCaps: ctx.usesAllCaps, usesQuestions: ctx.usesQuestions,
+  };
+}
+
+// ─── Step 3: Cross-platform analysis (lightweight, non-blocking) ──────────────
+async function analyzeCrossPlatform(lead) {
+  const result = { websiteText: '', socialLinks: {} };
+  const socialLinks = (() => { try { return JSON.parse(lead.social_links || '{}'); } catch { return {}; } })();
+  result.socialLinks = socialLinks;
+
+  if (lead.website) {
+    try {
+      const { data: html } = await require('axios').get(lead.website, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible)' },
+        timeout: 5000, maxRedirects: 3,
+      });
+      const paras = (html.match(/<(?:p|h1|h2|h3)[^>]*>([\s\S]{20,300}?)<\/(?:p|h1|h2|h3)>/gi) || [])
+        .map(m => m.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim())
+        .filter(t => t.length > 20).slice(0, 4);
+      result.websiteText = paras.join(' ').substring(0, 500);
+    } catch {}
+  }
+  return result;
+}
+
+// ─── Step 4: Build the master prompt ─────────────────────────────────────────
+function buildMasterPrompt(lead, ctx, psych, crossPlatform, senderCtx) {
+  const { recentVideos, daysSinceUpload, viewTrend, bestVideo, worstVideo, viewToSubRatio } = ctx;
+
+  const videoList = recentVideos.slice(0, 8).map((v, i) =>
+    `  ${i+1}. "${v.title || '?'}" — ${(v.views||0).toLocaleString()} views`
+  ).join('\n') || '  (no video data)';
+
+  const trendLine = viewTrend === 'declining'
+    ? `⚠️ DECLINING — recent 3-video avg: ${Math.round(recentVideos.slice(0,3).reduce((s,v)=>s+(v.views||0),0)/Math.max(1,Math.min(3,recentVideos.length))).toLocaleString()} views vs channel avg ${(lead.avg_views||0).toLocaleString()}`
+    : viewTrend === 'growing'  ? `📈 GROWING — outperforming channel average`
+    : viewTrend === 'volatile' ? `⚡ VOLATILE — massive swings between videos`
+    : `📊 STABLE — consistent with channel average`;
+
+  const uploadLine = daysSinceUpload !== null
+    ? `${daysSinceUpload} days since last upload (normally every ${lead.upload_frequency_days || '?'} days)${daysSinceUpload > 21 ? ' — THIS IS A BIG GAP' : ''}`
+    : `uploads every ${lead.upload_frequency_days || '?'} days`;
+
+  const painBlock = psych.painSignals.length
+    ? psych.painSignals.map(p => `  • ${p}`).join('\n')
+    : '  • None detected — use opportunity angle';
+
+  const websiteExtra = crossPlatform.websiteText
+    ? `\nWEBSITE COPY (their actual voice): "${crossPlatform.websiteText}"` : '';
+
+  const senderName = senderCtx.split('SENDER:')[1]?.split('|')[0]?.trim() || 'Prahvi';
+
+  return `You are ghostwriting a cold outreach email.
+The goal: make the creator think "this person ACTUALLY studied my channel."
+Not a template. Not AI. A human who spent hours on their content.
+
+${senderCtx}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CREATOR: ${lead.channel_name} (@${lead.channel_handle || 'N/A'})
+SUBS: ${(lead.subscriber_count||0).toLocaleString()} | NICHE: ${lead.niche || 'general'}
+AVG VIEWS: ${(lead.avg_views||0).toLocaleString()} | ENGAGEMENT: ${lead.engagement_rate||0}%
+VIEW/SUB RATIO: ${(viewToSubRatio*100).toFixed(1)}%${viewToSubRatio < 0.05 ? ' ⚠️ LOW — audience not watching' : viewToSubRatio > 0.3 ? ' ✓ HIGH — very engaged' : ''}
+UPLOAD STATUS: ${uploadLine}
+VIEW TREND: ${trendLine}
+
+RECENT VIDEOS:
+${videoList}
+
+BEST VIDEO: ${bestVideo ? `"${bestVideo.title}" — ${(bestVideo.views||0).toLocaleString()} views` : 'N/A'}
+WORST RECENT: ${worstVideo && worstVideo.title !== bestVideo?.title ? `"${worstVideo.title}" — ${(worstVideo.views||0).toLocaleString()} views` : 'N/A'}
+DESCRIPTION: ${(lead.channel_description||'').substring(0,250)||'N/A'}${websiteExtra}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PSYCHOLOGY
+Profile: ${psych.profileLabel}
+Personality: ${psych.personality} | Tone: ${psych.tone}
+Data-driven: ${psych.isDataDriven?'YES — use specific numbers':'NO — emotion and story'}
+Communication: ${psych.commsStyle}
+Pain signals detected:
+${painBlock}
+What makes them stop and read: ${psych.stopAndRead}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EMAIL RULES — FOLLOW EVERY SINGLE ONE
+
+STRUCTURE (4 parts, no headers in email):
+HOOK (1-2 lines): Observation so specific they think "this person studied me."
+  NOT a compliment — an INSIGHT. Use exact video title, exact number, exact pattern.
+  ${viewTrend === 'declining' ? 'Lead with the view drop. Hint you know why.' : ''}
+  ${daysSinceUpload > 21 ? `Lead with the ${daysSinceUpload}-day upload gap as a solvable problem.` : ''}
+CONNECT (1-2 lines): Build on that insight. Show you understand their situation.
+  No pitch yet. Match their EXACT tone: ${psych.tone}
+SOFT PITCH (1 line): One specific result you've gotten for creators in this situation.
+  NOT "I'm a video editor." Say "I helped a [niche] creator go from X to Y."
+CTA (1 line): ONE question. Low commitment. They answer in 1-2 words.
+
+WORD COUNT: 60-120 words body. Hard limit.
+SUBJECT: 3-7 words. Hyper-specific. Wouldn't work for any other creator.
+SIGN AS: ${senderName} — first name only, nothing else after it.
+
+${psych.usesAllCaps ? 'CREATOR STYLE: Uses ALL CAPS — high energy channel, match the energy.' : ''}
+${psych.usesNumbers ? 'CREATOR STYLE: Loves numbers in titles — be specific with data.' : ''}
+${psych.usesQuestions ? 'CREATOR STYLE: Uses questions in titles — conversational approach works.' : ''}
+
+BANNED — NEVER USE ANY OF THESE:
+"${BANNED_PHRASES.join('", "')}"
+Never start body with "I". Never mention pricing. Never sound salesy.
+Never use exclamation marks more than once total.
+
+OUTPUT: Return ONLY valid JSON. No markdown, no backticks, no explanation.
+{
+  "subject": "3-7 word subject",
+  "body": "60-120 word email body",
+  "subject_variants": ["metric variant", "curiosity variant", "peer variant"],
+  "key_insight": "most specific thing you noticed and used",
+  "custom_offer": "one line — what specifically you'd help them with",
+  "tone_used": "describe the tone",
+  "personalization_elements": ["specific element 1", "specific element 2", "specific element 3"],
+  "psychology_applied": "one sentence on your approach",
+  "word_count": <number>,
+  "quality_score": <0-100>
+}`;
+}
+
+// ─── Step 5: Quality scorer ───────────────────────────────────────────────────
+function scoreEmailDetailed(subject, body) {
+  const bl  = body.toLowerCase();
+  const wc  = body.split(/\s+/).filter(Boolean).length;
+  let score = 0;
+
+  // Personalization (30 pts)
+  if (/\d{3,}|\d+k|\d+%/.test(body)) score += 10;              // uses specific numbers
+  if (/"[^"]{5,}"/.test(body) || /titled|called|your video/i.test(body)) score += 10; // refs specific content
+  if (wc >= 60 && wc <= 120) score += 10; else if (wc < 40 || wc > 150) score -= 15; // word count
+
+  // Hook strength (25 pts)
+  const firstLine = (body.split('\n')[0] || body.substring(0, 120)).toLowerCase();
+  if (!/^(hi |hey |hello |i |my |we )/.test(firstLine)) score += 5; // doesn't start with I/Hi
+  if (/\d/.test(firstLine) || /"/.test(firstLine)) score += 10;      // specific data in hook
+  if (!BANNED_PHRASES.some(p => firstLine.includes(p))) score += 10; // no banned in hook
+
+  // Uniqueness (25 pts)
+  const hasBanned = BANNED_PHRASES.some(p => bl.includes(p.toLowerCase()));
+  if (!hasBanned) score += 10;
+  if (!/leverage|synergy|game.changer|innovative|passionate|hope this finds/i.test(body)) score += 10;
+  if (subject.split(' ').length >= 3 && subject.split(' ').length <= 7) score += 5;
+
+  // CTA quality (20 pts)
+  const qCount = (body.match(/\?/g) || []).length;
+  if (qCount >= 1) score += 10;
+  if (qCount === 1) score += 5; // exactly one question
+  if (!/click here|book a call|schedule|sign up|visit our|check out our/i.test(body)) score += 5;
+
+  return Math.min(100, Math.max(0, score));
+}
+
+// ─── Parse AI response ────────────────────────────────────────────────────────
+function parsePitchResponseV2(text, lead) {
+  try {
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('No JSON');
+    const p = JSON.parse(jsonMatch[0]);
+    if (!p.subject || !p.body) throw new Error('Missing fields');
+    return {
+      email_subject:   p.subject,
+      email_body:      p.body,
+      subject_variants: p.subject_variants || [],
+      key_insight:     p.key_insight || '',
+      custom_offer:    p.custom_offer || '',
+      tone_used:       p.tone_used || '',
+      personalization_elements: p.personalization_elements || [],
+      psychology_applied: p.psychology_applied || '',
+      word_count:      p.word_count || p.body.split(/\s+/).filter(Boolean).length,
+      quality_score:   p.quality_score || null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ─── Follow-up sequence generator ────────────────────────────────────────────
+async function generateFollowUpSequence(lead, initialEmail, psychology) {
+  const subs  = (lead.subscriber_count || 0).toLocaleString();
+  const niche = lead.niche || 'general';
+  const recentVideos = (() => { try { return JSON.parse(lead.recent_videos||'[]'); } catch { return []; } })();
+  const latestVideo  = recentVideos[0]?.title || null;
+
+  const steps = [
+    { day: 3,  angle: 'new observation — completely different angle, no repeat of email 1', maxWords: 60,  hasCTA: false,
+      instruction: 'Give something genuinely valuable with zero ask — a specific retention insight, a video idea tailored to them, or an algorithm observation only someone who studied their channel would notice. This PROVES skill.' },
+    { day: 6,  angle: 'pure value — timely insight, zero ask', maxWords: 50, hasCTA: false,
+      instruction: 'A trending topic in their niche they haven\'t covered, or an insight about why a specific video underperformed. ZERO pitch. ZERO ask. Just value. Make them think "this person actually knows their stuff."' },
+    { day: 9,  angle: 'specific social proof relevant to their situation', maxWords: 45, hasCTA: true,
+      instruction: 'ONE specific result from a creator in a similar situation. NOT generic — be specific: "helped a [niche] creator go from [exact problem] to [exact result]." Soft question at end.' },
+    { day: 12, angle: 'genuine capacity signal — natural not fake', maxWords: 35, hasCTA: true,
+      instruction: 'Real, honest capacity signal: "taking on 2 more creators this month" or "had a slot open up." Never fake countdown. Warm, honest, one simple ask.' },
+    { day: 15, angle: 'close the loop — highest reply-rate email', maxWords: 28, hasCTA: false,
+      instruction: 'Graceful exit — "closing your file for now." People hate unresolved open loops. This gets replies. Warm. Zero pressure. Door permanently open. Mirror their energy.' },
+  ];
+
+  const followUps = [];
+
+  for (const step of steps) {
+    try {
+      const prompt = `You are Prahvi from ContentCrafterzz. Write follow-up #${steps.indexOf(step)+1}/5 for ${lead.channel_name}.
+
+CHANNEL: ${lead.channel_name} | ${subs} subs | Niche: ${niche}
+${latestVideo ? `Latest video: "${latestVideo}"` : ''}
+Initial email sent — now follow up with a COMPLETELY DIFFERENT angle.
+
+ANGLE: ${step.angle}
+INSTRUCTION: ${step.instruction}
+
+RULES:
+• Under ${step.maxWords} words body. Hard limit.
+• NEVER repeat anything from the first email.
+• Never sound desperate. Never mention pricing.
+• Sign: Prahvi (first name only)
+• ${step.hasCTA ? 'End with ONE soft, low-commitment question' : 'No CTA — let the value speak'}
+• Tone: ${psychology.tone}
+• Different subject from all previous emails
+
+Return ONLY valid JSON:
+{"subject": "under 6 words", "body": "email body", "day": ${step.day}}`;
+
+      const raw = await completeWithGeminiRotating(prompt, '', 600, FAST_MODEL);
+      if (raw) {
+        const match = raw.match(/\{[\s\S]*\}/);
+        if (match) {
+          const parsed = JSON.parse(match[0]);
+          followUps.push({ day: step.day, subject: parsed.subject, body: parsed.body, angle: step.angle });
+        }
+      }
+    } catch {}
+  }
+
+  return followUps;
+}
+
+// ─── Fallback email when all AI attempts fail ─────────────────────────────────
+function buildFallback(lead, userId) {
+  let name = 'Prahvi';
+  try {
+    const u = getDb().prepare('SELECT full_name FROM users WHERE id=?').get(userId || lead.user_id);
+    if (u?.full_name) name = u.full_name.split(' ')[0];
+  } catch {}
+  return {
+    email_subject: `${lead.channel_name?.split(' ')[0]}'s last ${Math.round(lead.upload_frequency_days||7)} days`,
+    email_body: `Your last few uploads have been getting around ${(lead.avg_views||0).toLocaleString()} views — have you noticed the gap between your best video and your most recent ones?\n\nI work with creators in ${lead.niche||'your space'} on exactly this. Would a quick breakdown of what's holding back your views be useful?\n\n${name}`,
+    subject_variants: [`your ${lead.channel_name?.split(' ')[0]} view pattern`, 'something I noticed', `${lead.niche || 'your'} retention angle`],
+    key_insight: 'View-to-sub ratio and upload pattern',
+    custom_offer: 'Retention-optimized editing for consistent growth',
+    tone_used: 'direct and specific',
+    personalization_elements: ['subscriber count', 'average views', 'upload frequency'],
+    psychology_applied: 'Led with their specific metrics to prove channel knowledge',
+    word_count: 62,
+    quality_score: 55,
+    pitch_score: 55,
+    follow_ups: [],
+  };
+}
+
+// ─── MAIN: generateFullPitch v2 ───────────────────────────────────────────────
+async function generateFullPitch(lead, userId = null) {
+  const ctx     = buildRichCreatorContext(lead);
+  const psych   = buildPsychologyProfile(lead, ctx);
+  const cross   = await analyzeCrossPlatform(lead).catch(() => ({ websiteText: '', socialLinks: {} }));
+  const senderCtx = buildAgencyContext(userId || lead.user_id);
+
+  const prompt = buildMasterPrompt(lead, ctx, psych, cross, senderCtx);
+
+  let bestResult   = null;
+  let bestScore    = 0;
+  const maxAttempts = 3;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const raw = await completeWithGeminiRotating(prompt, '', 2000, FAST_MODEL);
+    if (!raw) break;
+
+    const parsed = parsePitchResponseV2(raw, lead);
+    if (!parsed) continue;
+
+    // Score with our detailed rubric
+    const detailedScore = scoreEmailDetailed(parsed.email_subject, parsed.email_body);
+    const finalScore = Math.round((detailedScore + (parsed.quality_score || 50)) / 2);
+
+    console.log(`[PitchV2] Attempt ${attempt+1}/3 — score ${finalScore}/100 for ${lead.channel_name}`);
+
+    if (finalScore > bestScore) {
+      bestScore  = finalScore;
+      bestResult = { ...parsed, pitch_score: finalScore };
+    }
+
+    if (finalScore >= 70) break; // good enough, stop
+  }
+
+  if (!bestResult) {
+    console.warn('[PitchV2] All AI attempts failed — using fallback for', lead.channel_name);
+    return buildFallback(lead, userId);
+  }
+
+  // Generate follow-up sequence (non-blocking — fire and return, sequence stored separately)
+  generateFollowUpSequence(lead, bestResult, psych)
+    .then(followUps => { bestResult.follow_ups = followUps; })
+    .catch(() => {});
+
+  return {
+    ...bestResult,
+    // backward compat aliases
+    email_subject:   bestResult.email_subject || bestResult.subject,
+    email_body:      bestResult.email_body    || bestResult.body,
+    subject_variants: bestResult.subject_variants || [],
+  };
+}
+
+// ─── ContentCrafterzz Agency Context (preserved for other functions) ──────────
 const CONTENTCRAFTERZZ_INTELLIGENCE = `
 AGENCY: ContentCrafterzz — Premium YouTube Video Editing Agency
 SENDER NAME: Prahvi (always sign first name only — never "Prathvi", never "ContentCrafterzz" as signature)
@@ -176,9 +608,9 @@ function buildAgencyContext(userId = null) {
   return `${BUSINESS_PROFILE}\n\nSENDER: ${name} | ${role} | ${agencyName} | ${portfolio}`;
 }
 
-// ─── ONE-SHOT pitch generation — Prahvi persona, 120-word limit, score ≥7 ─────
-// Returns { email_subject, email_body, subject_variants, custom_offer, key_insight }
-async function generateFullPitch(lead, userId = null) {
+// ─── OLD generateFullPitch removed — replaced by v2 above ────────────────────
+// kept as dead stub so nothing crashes if called directly
+async function _legacyGenerateFullPitch_UNUSED(lead, userId = null) {
   const recentVideos = (() => { try { return JSON.parse(lead.recent_videos || '[]'); } catch { return []; } })();
   const painPoints = (() => { try { return JSON.parse(lead.pain_points || '[]'); } catch { return []; } })();
   const daysSince = lead.last_upload_date
