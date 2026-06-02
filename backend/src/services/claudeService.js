@@ -66,40 +66,21 @@ function makeGeminiModel(key, modelName, systemPrompt) {
 
 async function completeWithGemini(prompt, systemPrompt, maxTokens, key, modelName) {
   const model = modelName || SMART_MODEL;
-  // Use raw fetch — works with both AIzaSy... and AQ. key formats
-  const https = require('https');
-  const body = JSON.stringify({
-    system_instruction: systemPrompt ? { parts: [{ text: systemPrompt }] } : undefined,
+  const axios = require('axios');
+  const payload = {
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
     generationConfig: { maxOutputTokens: maxTokens },
-  });
-  return new Promise((resolve, reject) => {
-    const req = https.request({
-      hostname: 'generativelanguage.googleapis.com',
-      path: `/v1beta/models/${model}:generateContent?key=${key}`,
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
-    }, res => {
-      let data = '';
-      res.on('data', c => data += c);
-      res.on('end', () => {
-        try {
-          const json = JSON.parse(data);
-          if (json.error) {
-            const err = new Error(json.error.message || 'Gemini error');
-            err.status = json.error.code;
-            return reject(err);
-          }
-          const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (!text) return reject(new Error('Empty response from Gemini'));
-          resolve(text);
-        } catch (e) { reject(e); }
-      });
-    });
-    req.on('error', reject);
-    req.write(body);
-    req.end();
-  });
+  };
+  if (systemPrompt) payload.system_instruction = { parts: [{ text: systemPrompt }] };
+
+  const { data } = await axios.post(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+    payload,
+    { headers: { 'Content-Type': 'application/json' }, timeout: 30000 }
+  );
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error('Empty response from Gemini');
+  return text;
 }
 
 // True = quota/billing exhausted — rotate to next key
