@@ -202,7 +202,66 @@ router.post('/powermode/start', asyncHandler(async (req, res) => {
   const keywords = kwObjects.map(k => k.keyword);
   const kwNicheMap = Object.fromEntries(kwObjects.map(k => [k.keyword, k.niche]));
 
-  console.log(`[PowerMode] Starting — target: ${targetCount} leads with email | niches: ${requestedNiches.join(', ')} | ${keywords.length} keywords | country: ${country || 'Global'}`);
+  // ── Fast-serve from master_leads if we have enough ──────────────────────────
+  {
+    const db = getDb();
+    const masterTotal = db.prepare("SELECT COUNT(*) as c FROM master_leads WHERE email IS NOT NULL AND email != ''").get().c;
+    if (masterTotal >= 50) {
+      // Build niche filter
+      const nicheConditions = requestedNiches.map(() => "niche LIKE ?").join(' OR ');
+      const nicheParams = requestedNiches.map(n => `%${n}%`);
+      const whereClause = nicheConditions
+        ? `(${nicheConditions}) AND email IS NOT NULL AND email != ''`
+        : `email IS NOT NULL AND email != ''`;
+
+      const available = db.prepare(`SELECT COUNT(*) as c FROM master_leads WHERE ${whereClause}`).get(...nicheParams).c;
+
+      if (available >= targetCount) {
+        console.log(`[PowerMode] Serving ${targetCount} leads from master_leads (${available} available)`);
+        const masterLeads = db.prepare(
+          `SELECT * FROM master_leads WHERE ${whereClause} ORDER BY lead_score DESC, subscriber_count DESC LIMIT ?`
+        ).all(...nicheParams, targetCount);
+
+        const insert = db.prepare(LEAD_INSERT_SQL);
+        const saveMany = db.transaction(leads => {
+          let count = 0;
+          for (const l of leads) {
+            const r = insert.run({
+              user_id: userId, platform: 'youtube',
+              channel_id: l.channel_id || null, channel_name: l.channel_name,
+              channel_handle: l.channel_handle || null, subscriber_count: l.subscriber_count || 0,
+              total_videos: 0, avg_views: l.avg_views || 0, avg_likes: 0, avg_comments: 0,
+              engagement_rate: 0, upload_frequency_days: 0, last_upload_date: null,
+              channel_description: l.channel_description || null,
+              channel_tags: '[]', recent_videos: '[]', most_viewed_video: '{}',
+              country: l.country || null, email: l.email, website: l.website || null,
+              social_links: '{}', thumbnail_url: null, pain_points: '[]',
+              lead_score: l.lead_score || 50, temperature: l.temperature || 'warm', niche: l.niche || null,
+            });
+            if (r.changes > 0) count++;
+          }
+          return count;
+        });
+        const totalSaved = saveMany(masterLeads);
+        incrementUsage(userId, 'leads', totalSaved);
+        logActivity('leads_imported', `PowerMode served ${totalSaved} leads from master database`, null, {}, userId);
+
+        // Return instant success — no background job needed
+        Object.assign(ps, {
+          running: false, total: masterLeads.length, saved: totalSaved,
+          keywordsTotal: 0, keywordsDone: 0, currentKeywords: [],
+          recentLeads: masterLeads.slice(0, 10).map(l => ({ channel_name: l.channel_name, subscriber_count: l.subscriber_count, hasEmail: true, email: l.email })),
+          stats: { hot: 0, warm: totalSaved, cold: 0, withEmail: totalSaved },
+          stopped: false, error: null, quotaExhausted: false,
+          niches: requestedNiches, targetCount, targetReached: true,
+        });
+        return res.json({ status: 'instant', source: 'master_leads', saved: totalSaved, targetCount, niches: requestedNiches, keywordsTotal: 0, targetReached: true });
+      }
+    }
+  }
+  // ────────────────────────────────────────────────────────────────────────────
+
+  console.log(`[PowerMode] Starting live scrape — target: ${targetCount} leads with email | niches: ${requestedNiches.join(', ')} | ${keywords.length} keywords | country: ${country || 'Global'}`);
 
   Object.assign(ps, {
     running: true, startedAt: new Date().toISOString(),
