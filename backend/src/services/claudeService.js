@@ -29,23 +29,31 @@ async function completeWithGeminiRotating(prompt, systemPrompt, maxTokens, model
   const keys = getGeminiKeys();
   if (!keys.length) return null;
   for (const key of keys) {
-    try {
-      return await completeWithGemini(prompt, systemPrompt, maxTokens, key, modelName);
-    } catch (e) {
-      if (isQuotaError(e)) {
-        console.warn(`[AI] Gemini key ...${key.slice(-6)} quota/balance hit, trying next key`);
-        continue;
+    // Each key gets up to 3 attempts to handle temporary overload
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        return await completeWithGemini(prompt, systemPrompt, maxTokens, key, modelName);
+      } catch (e) {
+        if (isQuotaError(e)) {
+          console.warn(`[AI] Gemini key ...${key.slice(-6)} quota exhausted, rotating`);
+          break; // try next key
+        }
+        if (isOverloadError(e)) {
+          const wait = (attempt + 1) * 8000; // 8s, 16s, 24s
+          console.warn(`[AI] Gemini overloaded, retrying in ${wait/1000}s (attempt ${attempt+1}/3)`);
+          await new Promise(r => setTimeout(r, wait));
+          continue; // retry same key
+        }
+        throw e;
       }
-      throw e;
     }
   }
-  return null; // all keys exhausted
+  return null; // all keys exhausted or all overloaded
 }
 
-// Fast model for pitch generation — 2-4x faster than Pro, same writing quality
-const FAST_MODEL  = process.env.GEMINI_FAST_MODEL  || 'gemini-2.0-flash';
-// Pro model for deep analysis tasks that need reasoning
-const SMART_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+// Use 2.5-flash — available on both old AIzaSy keys and new AQ. keys
+const FAST_MODEL  = process.env.GEMINI_FAST_MODEL  || 'gemini-2.5-flash';
+const SMART_MODEL = process.env.GEMINI_MODEL       || 'gemini-2.5-flash';
 
 function makeGeminiModel(key, modelName, systemPrompt) {
   const { GoogleGenerativeAI } = require('@google/generative-ai');
@@ -57,20 +65,56 @@ function makeGeminiModel(key, modelName, systemPrompt) {
 }
 
 async function completeWithGemini(prompt, systemPrompt, maxTokens, key, modelName) {
-  const model = makeGeminiModel(key, modelName || SMART_MODEL, systemPrompt);
-  const result = await model.generateContent({
+  const model = modelName || SMART_MODEL;
+  // Use raw fetch — works with both AIzaSy... and AQ. key formats
+  const https = require('https');
+  const body = JSON.stringify({
+    system_instruction: systemPrompt ? { parts: [{ text: systemPrompt }] } : undefined,
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
     generationConfig: { maxOutputTokens: maxTokens },
   });
-  return result.response.text();
+  return new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: 'generativelanguage.googleapis.com',
+      path: `/v1beta/models/${model}:generateContent?key=${key}`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+    }, res => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          if (json.error) {
+            const err = new Error(json.error.message || 'Gemini error');
+            err.status = json.error.code;
+            return reject(err);
+          }
+          const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (!text) return reject(new Error('Empty response from Gemini'));
+          resolve(text);
+        } catch (e) { reject(e); }
+      });
+    });
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
 }
 
-// Returns true if the error is a recoverable quota/rate error
+// True = quota/billing exhausted — rotate to next key
 function isQuotaError(err) {
   const msg = (err?.message || err?.toString() || '').toLowerCase();
-  return msg.includes('quota') || msg.includes('resource_exhausted') || msg.includes('429') ||
-         msg.includes('rate') || msg.includes('limit') || msg.includes('503') || msg.includes('overloaded') ||
+  return msg.includes('quota') || msg.includes('resource_exhausted') ||
+         (err?.status === 429 || msg.includes('429')) ||
          msg.includes('credit') || msg.includes('billing') || msg.includes('payment') || msg.includes('balance');
+}
+
+// True = server temporarily overloaded — retry same key after pause
+function isOverloadError(err) {
+  const msg = (err?.message || err?.toString() || '').toLowerCase();
+  return msg.includes('high demand') || msg.includes('overloaded') || msg.includes('503') ||
+         msg.includes('service unavailable') || msg.includes('try again later');
 }
 
 // Standard complete — rotates all Gemini keys
