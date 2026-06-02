@@ -273,6 +273,24 @@ async function analyzeCrossPlatform(lead) {
 }
 
 // ─── Step 4: Build the master prompt ─────────────────────────────────────────
+// Build sender context string from user's voice DNA
+function buildSenderContextFromDNA(dna) {
+  const lines = [
+    `SENDER: ${dna.fullName || dna.name}`,
+    `SERVICE: ${dna.service}`,
+    `IDENTITY: "${dna.identity}"`,
+    dna.experienceLevel ? `EXPERIENCE: ${dna.experienceLevel}` : '',
+    dna.socialProof     ? `BEST RESULT: "${dna.socialProof}"` : '',
+    dna.uniqueDifference? `WHAT MAKES THEM DIFFERENT: "${dna.uniqueDifference}"` : '',
+    dna.originStory     ? `WHY THEY DO THIS: "${dna.originStory}"` : '',
+    ``,
+    `HOW THEY COMMUNICATE:`,
+    dna.writingInstructions || `Communication style: ${dna.communicationStyle}`,
+    `Outreach goal: ${dna.ctaStyle}`,
+  ].filter(l => l !== undefined && l !== null);
+  return lines.join('\n');
+}
+
 function buildMasterPrompt(lead, ctx, psych, crossPlatform, senderCtx) {
   const { recentVideos, daysSinceUpload, viewTrend, bestVideo, worstVideo, viewToSubRatio } = ctx;
 
@@ -487,14 +505,15 @@ Return ONLY valid JSON:
 
 // ─── Fallback email when all AI attempts fail ─────────────────────────────────
 function buildFallback(lead, userId) {
-  let name = 'Prahvi';
+  let name = 'there', service = 'your space';
   try {
-    const u = getDb().prepare('SELECT full_name FROM users WHERE id=?').get(userId || lead.user_id);
+    const u = getDb().prepare('SELECT full_name, service_type FROM users WHERE id=?').get(userId || lead.user_id);
     if (u?.full_name) name = u.full_name.split(' ')[0];
+    if (u?.service_type) service = u.service_type;
   } catch {}
   return {
     email_subject: `${lead.channel_name?.split(' ')[0]}'s last ${Math.round(lead.upload_frequency_days||7)} days`,
-    email_body: `Your last few uploads have been getting around ${(lead.avg_views||0).toLocaleString()} views — have you noticed the gap between your best video and your most recent ones?\n\nI work with creators in ${lead.niche||'your space'} on exactly this. Would a quick breakdown of what's holding back your views be useful?\n\n${name}`,
+    email_body: `Your last few uploads have been getting around ${(lead.avg_views||0).toLocaleString()} views — have you noticed the gap between your best video and your most recent ones?\n\nI work with creators in ${lead.niche||'your space'} on ${service}. Would a quick breakdown of what's holding back your views be useful?\n\n${name}`,
     subject_variants: [`your ${lead.channel_name?.split(' ')[0]} view pattern`, 'something I noticed', `${lead.niche || 'your'} retention angle`],
     key_insight: 'View-to-sub ratio and upload pattern',
     custom_offer: 'Retention-optimized editing for consistent growth',
@@ -513,7 +532,16 @@ async function generateFullPitch(lead, userId = null) {
   const ctx     = buildRichCreatorContext(lead);
   const psych   = buildPsychologyProfile(lead, ctx);
   const cross   = await analyzeCrossPlatform(lead).catch(() => ({ websiteText: '', socialLinks: {} }));
-  const senderCtx = buildAgencyContext(userId || lead.user_id);
+
+  // Always try to use voice DNA — falls back to legacy agency context if not available
+  let senderCtx;
+  try {
+    const { getOrBuildVoiceDNA } = require('./voiceDNA');
+    const dna = await getOrBuildVoiceDNA(userId || lead.user_id);
+    senderCtx = dna ? buildSenderContextFromDNA(dna) : buildAgencyContext(userId || lead.user_id);
+  } catch {
+    senderCtx = buildAgencyContext(userId || lead.user_id);
+  }
 
   const prompt = buildMasterPrompt(lead, ctx, psych, cross, senderCtx);
 

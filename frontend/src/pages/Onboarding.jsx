@@ -1,250 +1,252 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import Icon from '../components/ui/Icon';
 import api from '../utils/api';
 
-const STEPS = [
-  { title: 'Let\'s get you set up.',       sub: 'Takes 3 minutes. Your first leads will be waiting when you\'re done.' },
-  { title: 'Connect a Gmail account.',     sub: 'This is what sends your emails. Connect yours and we\'ll handle the rest.' },
-  { title: 'Who are you going after?',     sub: 'The more specific you are, the better the pitches.' },
-  { title: 'How do you want to sound?',    sub: 'The agent writes in your voice — give it something to work with.' },
-  { title: 'You\'re in.',                  sub: 'Go find your first lead.' },
-];
+const NICHES = ['Finance','Business','Fitness','Tech','Education','Real Estate','Health','Cooking','Motivation','Marketing','Lifestyle','Gaming','Travel','Beauty','Entertainment','Sports','Other'];
+const TRAITS = ['Direct and no-nonsense','Warm and friendly','Analytical and data-driven','Creative and energetic','Calm and thoughtful','Funny and casual','Professional and polished','Bold and confident','Laid-back and approachable'];
+const PRICING = ['Under $500/month or project','$500 - $1,500/month','$1,500 - $3,500/month','$3,500 - $7,000/month','$7,000+/month','I work on project rates'];
+const EXPERIENCE = [['just_starting','Just starting out (under 1 year)'],['getting_established','Getting established (1-3 years)'],['experienced','Experienced (3-5 years)'],['veteran','Veteran (5+ years)']];
+const GOALS = [['get_reply','Start a conversation (get a reply)'],['book_call','Book a discovery call'],['close_deal','Close a deal directly']];
+const STEPS = ['Tell us about yourself','Your work','How you communicate','Your story'];
 
 export default function Onboarding() {
-  const [step, setStep] = useState(0);
-  const [form, setForm] = useState({
-    full_name: '', agency_name: '', role: 'Video Editor',
-    target_niches: [], portfolio_url: '',
-    what_you_sell: '', niche: '', sub_range: '', geography: '', cadence: '',
-    pitch_brief: '',
-  });
-  const [gmailAccounts, setGmailAccounts] = useState([]);
-  const [connectingGmail, setConnectingGmail] = useState(false);
-  const [finishing, setFinishing] = useState(false);
-  const [error, setError] = useState('');
   const navigate = useNavigate();
-  const location = useLocation();
-  const { refreshUser } = useAuth();
+  const { user, refreshUser } = useAuth();
 
-  useEffect(() => {
-    if (step === 1) loadGmailAccounts();
-  }, [step]);
+  const [step, setStep] = useState(0);
+  const [done, setDone] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    if (params.get('gmail_connected') === '1') {
-      loadGmailAccounts();
-      navigate('/onboarding', { replace: true });
-      setStep(1);
-    } else if (params.get('gmail_error')) {
-      setError('Gmail connection failed: ' + decodeURIComponent(params.get('gmail_error')));
-      navigate('/onboarding', { replace: true });
-    }
-  }, [location.search]);
+  const [form, setForm] = useState({
+    full_name: user?.full_name || '',
+    service_type: '',
+    one_liner: '',
+    experience_years: '',
+    best_result: '',
+    target_niches: [],
+    pricing_range: '',
+    personality_traits: [],
+    outreach_goal: '',
+    origin_story: '',
+    unique_difference: '',
+  });
 
-  const loadGmailAccounts = async () => {
-    try {
-      const res = await api.get('/gmail/accounts');
-      setGmailAccounts(res.data.accounts || []);
-    } catch {}
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const toggleChip = (key, val, max = 99) => {
+    setForm(f => {
+      const arr = f[key];
+      if (arr.includes(val)) return { ...f, [key]: arr.filter(x => x !== val) };
+      if (arr.length >= max) return { ...f, [key]: [...arr.slice(1), val] };
+      return { ...f, [key]: [...arr, val] };
+    });
   };
 
-  const connectGmail = async () => {
-    setConnectingGmail(true);
-    setError('');
-    try {
-      const res = await api.get('/gmail/auth-url');
-      if (res.data.url) window.location.href = res.data.url;
-      else setError(res.data.error || 'Gmail not configured on this server yet.');
-    } catch (e) {
-      setError(e.response?.data?.error || 'Failed to connect Gmail');
-    } finally {
-      setConnectingGmail(false);
-    }
+  const canProceed = () => {
+    if (step === 0) return form.full_name.trim() && form.service_type.trim() && form.experience_years;
+    if (step === 1) return form.best_result.trim() && form.target_niches.length > 0 && form.pricing_range;
+    if (step === 2) return form.personality_traits.length > 0 && form.outreach_goal;
+    if (step === 3) return form.origin_story.trim() && form.unique_difference.trim();
+    return true;
   };
 
   const finish = async () => {
-    setFinishing(true);
+    setSaving(true);
     setError('');
     try {
       await api.put('/auth/onboarding', {
         full_name: form.full_name,
-        agency_name: form.agency_name,
-        role: form.role,
+        service_type: form.service_type,
+        one_liner: form.one_liner,
+        experience_years: form.experience_years,
+        best_result: form.best_result,
         target_niches: form.target_niches,
-        portfolio_url: form.portfolio_url,
-        target_platforms: ['YouTube'],
-        pitch_brief: form.pitch_brief,
-        what_you_sell: form.what_you_sell,
+        pricing_range: form.pricing_range,
+        personality_traits: form.personality_traits,
+        outreach_goal: form.outreach_goal,
+        origin_story: form.origin_story,
+        unique_difference: form.unique_difference,
+        profile_completed: 1,
       });
       await refreshUser();
-      navigate('/');
+      setDone(true);
     } catch (e) {
-      setError(e.response?.data?.error || e.message);
-      setFinishing(false);
+      setError(e.response?.data?.error || 'Failed to save profile');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const progress = (step / STEPS.length) * 100;
+
+  if (done) return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', padding: 24 }}>
+      <div style={{ maxWidth: 440, width: '100%', textAlign: 'center' }}>
+        <div style={{ width: 80, height: 80, borderRadius: 24, background: 'var(--lime-soft)', border: '1px solid var(--lime-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px', fontSize: 36 }}>⚡</div>
+        <h1 style={{ fontFamily: 'var(--f-heading)', fontSize: 32, fontWeight: 800, marginBottom: 10 }}>Your profile is ready.</h1>
+        <p className="muted" style={{ fontSize: 14, lineHeight: 1.7, marginBottom: 32 }}>
+          We've built your unique voice profile. Every email will sound exactly like you.
+        </p>
+        <button className="btn btn--lime btn--lg" style={{ width: '100%', justifyContent: 'center' }} onClick={() => navigate('/')}>
+          Start finding leads →
+        </button>
+      </div>
+    </div>
+  );
 
   return (
-    <div className="onb">
-      <div className="onb__card">
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', padding: 24 }}>
+      <div style={{ maxWidth: 560, width: '100%' }}>
+
         {/* Header */}
-        <div style={{ padding: '24px 28px 12px', display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div className="sb__logo" style={{ width: 30, height: 30 }}><span>c</span></div>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>ContentCrafterzz Outreach OS</div>
-            <div className="muted mono" style={{ fontSize: 10.5 }}>Setup · {step + 1} of {STEPS.length}</div>
-          </div>
-          <div style={{ flex: 1 }} />
-          <button className="btn btn--ghost btn--sm" onClick={() => navigate('/')}>
-            <Icon name="x" size={12} />Skip
-          </button>
-        </div>
-
-        {/* Progress bars */}
-        <div style={{ display: 'flex', gap: 4, padding: '0 28px 24px' }}>
-          {STEPS.map((_, i) => (
-            <div key={i} style={{ flex: 1, height: 3, borderRadius: 2, background: i <= step ? 'var(--lime)' : 'var(--surface-3)' }} />
-          ))}
-        </div>
-
-        {/* Body */}
-        <div style={{ padding: '8px 28px 28px' }}>
-          <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>Step {step + 1}</div>
-          <h2 className="page__title" style={{ fontSize: 32, marginBottom: 6 }}>{STEPS[step].title}</h2>
-          <div className="muted" style={{ fontSize: 13.5, lineHeight: 1.6, marginBottom: 24 }}>{STEPS[step].sub}</div>
-
-          {/* Step 0: Welcome */}
-          {step === 0 && (
-            <div className="grid g-3" style={{ gap: 12 }}>
-              {[
-                { ic: 'sparkle', t: 'AI agents do the work',  d: 'Scrape, study, write, send, follow up. You stay strategic.' },
-                { ic: 'flame',   t: 'Deliverability-first',   d: 'Built-in warmup, rotation, and inbox placement monitoring.' },
-                { ic: 'bar',     t: 'Honest analytics',        d: 'Cost per meeting. Pipeline value. Nothing vanity.' },
-              ].map((f, i) => (
-                <div key={i} style={{ padding: 16, border: '1px solid var(--line)', borderRadius: 'var(--r)', background: 'var(--bg-2)' }}>
-                  <div style={{ color: 'var(--lime)', marginBottom: 10 }}><Icon name={f.ic} size={18} /></div>
-                  <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>{f.t}</div>
-                  <div className="muted" style={{ fontSize: 12, lineHeight: 1.5 }}>{f.d}</div>
-                </div>
-              ))}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 28, height: 28, borderRadius: 7, background: 'var(--lime)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ fontSize: 12, fontWeight: 900, color: '#0a0a0c' }}>CC</span>
             </div>
-          )}
+            <span className="muted mono" style={{ fontSize: 10, letterSpacing: '.1em' }}>VOICE PROFILE SETUP</span>
+          </div>
+          <span className="muted mono" style={{ fontSize: 10 }}>Step {step + 1} of {STEPS.length}</span>
+        </div>
 
-          {/* Step 1: Connect mailbox */}
-          {step === 1 && (
-            <div className="col" style={{ gap: 10 }}>
-              {gmailAccounts.length > 0 && (
-                <div style={{ marginBottom: 8 }}>
-                  {gmailAccounts.map(acc => (
-                    <div key={acc.id} style={{ padding: '12px 16px', border: '1px solid var(--lime-border)', borderRadius: 'var(--r)', background: 'var(--lime-soft)', display: 'flex', alignItems: 'center', gap: 14, marginBottom: 8 }}>
-                      <span className="badge badge--lime"><Icon name="check" size={11} /></span>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 13.5, fontWeight: 500 }}>{acc.email}</div>
-                        <div className="muted" style={{ fontSize: 11.5 }}>Connected · up to {acc.daily_limit || 500} emails/day</div>
-                      </div>
-                    </div>
+        {/* Progress bar */}
+        <div style={{ height: 3, borderRadius: 2, background: 'var(--surface-3)', marginBottom: 40, overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${progress}%`, background: 'var(--lime)', borderRadius: 2, transition: 'width .4s ease' }} />
+        </div>
+
+        {/* Card */}
+        <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 16, padding: '32px 32px 28px' }}>
+          <p style={{ fontFamily: 'var(--f-mono)', fontSize: 9, color: 'var(--lime)', letterSpacing: '.14em', textTransform: 'uppercase', marginBottom: 8 }}>{STEPS[step]}</p>
+          <h2 style={{ fontFamily: 'var(--f-heading)', fontSize: 26, fontWeight: 800, marginBottom: 6, lineHeight: 1.2 }}>
+            {step === 0 && 'First, tell us about yourself.'}
+            {step === 1 && 'Tell us about your work.'}
+            {step === 2 && 'How do you communicate?'}
+            {step === 3 && 'Almost done — your story.'}
+          </h2>
+          <p className="muted" style={{ fontSize: 13, marginBottom: 28, lineHeight: 1.6 }}>
+            {step === 0 && 'This helps us write emails that sound exactly like you.'}
+            {step === 1 && 'The more specific you are, the more believable the emails.'}
+            {step === 2 && "We'll match this tone in every email we write for you."}
+            {step === 3 && 'The most effective emails have a real person behind them.'}
+          </p>
+
+          {step === 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: 'var(--text-2)' }}>What's your name?</label>
+                <input className="input" value={form.full_name} onChange={e => set('full_name', e.target.value)} placeholder="Your full name" />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: 'var(--text-2)' }}>What do you sell to YouTube creators?</label>
+                <input className="input" value={form.service_type} onChange={e => set('service_type', e.target.value)}
+                  placeholder="e.g. video editing, thumbnail design, sponsorships, software, coaching..." />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4, color: 'var(--text-2)' }}>
+                  Describe yourself in one sentence.
+                  <span className="muted" style={{ fontWeight: 400, marginLeft: 6 }}>{form.one_liner.length}/150</span>
+                </label>
+                <textarea className="input" rows={2} maxLength={150} value={form.one_liner} onChange={e => set('one_liner', e.target.value)}
+                  style={{ resize: 'none' }} placeholder="e.g. I help finance creators look as professional as their ideas deserve" />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 10, color: 'var(--text-2)' }}>How long have you been doing this?</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {EXPERIENCE.map(([val, label]) => (
+                    <label key={val} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: `1px solid ${form.experience_years === val ? 'var(--lime-border)' : 'var(--line)'}`, borderRadius: 8, cursor: 'pointer', background: form.experience_years === val ? 'var(--lime-soft)' : 'transparent', transition: 'all .15s' }}>
+                      <input type="radio" checked={form.experience_years === val} onChange={() => set('experience_years', val)} style={{ accentColor: 'var(--lime)' }} />
+                      <span style={{ fontSize: 13 }}>{label}</span>
+                    </label>
                   ))}
                 </div>
-              )}
-              {[
-                { n: 'Google Workspace', d: 'Recommended · OAuth in 1 click', primary: true, action: connectGmail },
-                { n: 'Microsoft 365',    d: 'Outlook & Exchange · OAuth', primary: false, action: null },
-                { n: 'Custom SMTP / IMAP', d: 'Smartlead, Mailreef, your own server', primary: false, action: null },
-              ].map((p, i) => (
-                <div key={i}
-                  onClick={p.action ? p.action : undefined}
-                  style={{
-                    padding: 16,
-                    border: `1px solid ${p.primary ? 'var(--lime-border)' : 'var(--line)'}`,
-                    borderRadius: 'var(--r)',
-                    background: p.primary ? 'var(--lime-soft)' : 'var(--surface)',
-                    display: 'flex', alignItems: 'center', gap: 14,
-                    cursor: p.action ? 'pointer' : 'default',
-                    opacity: p.action ? 1 : 0.5,
-                  }}
-                >
-                  <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--bg-2)', display: 'grid', placeItems: 'center', fontFamily: 'var(--f-mono)', fontSize: 13, color: p.primary ? 'var(--lime)' : 'var(--text-2)' }}>
-                    {p.n[0]}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13.5, fontWeight: 500 }}>{p.n}</div>
-                    <div className="muted" style={{ fontSize: 11.5 }}>{connectingGmail && p.primary ? 'Redirecting…' : p.d}</div>
-                  </div>
-                  <Icon name="chev" size={14} />
-                </div>
-              ))}
-              {error && (
-                <div style={{ padding: '10px 14px', background: 'rgba(255,100,100,0.1)', border: '1px solid rgba(255,100,100,0.25)', borderRadius: 8, fontSize: 12, color: 'var(--bad)', marginTop: 4 }}>
-                  {error}
-                </div>
-              )}
+              </div>
             </div>
           )}
 
-          {/* Step 2: Who you sell to */}
+          {step === 1 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4, color: 'var(--text-2)' }}>
+                  What's your single best result for a client?
+                  <span className="muted" style={{ fontWeight: 400, marginLeft: 6 }}>{form.best_result.length}/300</span>
+                </label>
+                <textarea className="input" rows={3} maxLength={300} value={form.best_result} onChange={e => set('best_result', e.target.value)} style={{ resize: 'none' }}
+                  placeholder={'Be specific. Numbers work best.\ne.g. Helped a fitness channel increase watch time by 60% in 30 days\nNo results yet? Tell us what result you WANT to achieve.'} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 10, color: 'var(--text-2)' }}>Which YouTube niches do you love working with?</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {NICHES.map(n => (
+                    <button key={n} type="button" onClick={() => toggleChip('target_niches', n)}
+                      style={{ padding: '6px 14px', borderRadius: 99, fontSize: 12, cursor: 'pointer', border: `1px solid ${form.target_niches.includes(n) ? 'var(--lime-border)' : 'var(--line)'}`, background: form.target_niches.includes(n) ? 'var(--lime-soft)' : 'var(--surface-2)', color: form.target_niches.includes(n) ? 'var(--lime)' : 'var(--text-2)', fontWeight: form.target_niches.includes(n) ? 600 : 400, transition: 'all .15s' }}>
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: 'var(--text-2)' }}>What's your typical pricing?</label>
+                <select className="input" value={form.pricing_range} onChange={e => set('pricing_range', e.target.value)}>
+                  <option value="">Select a range...</option>
+                  {PRICING.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+                <p className="muted" style={{ fontSize: 11, marginTop: 6 }}>Only used to calibrate your email tone — never shown to creators.</p>
+              </div>
+            </div>
+          )}
+
           {step === 2 && (
-            <div className="col" style={{ gap: 14 }}>
-              <div className="field">
-                <div className="field__label">Your name & agency</div>
-                <div className="grid g-2" style={{ gap: 10 }}>
-                  <input className="input" placeholder="Full name" value={form.full_name} onChange={e => set('full_name', e.target.value)} />
-                  <input className="input" placeholder="Agency name" value={form.agency_name} onChange={e => set('agency_name', e.target.value)} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 10, color: 'var(--text-2)' }}>
+                  How would your best friend describe you?
+                  <span className="muted" style={{ fontWeight: 400, marginLeft: 6 }}>Pick up to 3</span>
+                </label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {TRAITS.map(t => (
+                    <button key={t} type="button" onClick={() => toggleChip('personality_traits', t, 3)}
+                      style={{ padding: '7px 14px', borderRadius: 99, fontSize: 12, cursor: 'pointer', border: `1px solid ${form.personality_traits.includes(t) ? 'var(--lime-border)' : 'var(--line)'}`, background: form.personality_traits.includes(t) ? 'var(--lime-soft)' : 'var(--surface-2)', color: form.personality_traits.includes(t) ? 'var(--lime)' : 'var(--text-2)', fontWeight: form.personality_traits.includes(t) ? 600 : 400, transition: 'all .15s' }}>
+                      {t}
+                    </button>
+                  ))}
                 </div>
               </div>
-              <div className="field">
-                <div className="field__label">What do you sell?</div>
-                <input className="input" placeholder="e.g. AI thumbnail design for YouTubers" value={form.what_you_sell} onChange={e => set('what_you_sell', e.target.value)} />
-              </div>
-              <div className="field">
-                <div className="field__label">Who's your ideal creator?</div>
-                <div className="grid g-2" style={{ gap: 10 }}>
-                  <input className="input" placeholder="Niche" value={form.niche} onChange={e => set('niche', e.target.value)} />
-                  <input className="input" placeholder="Sub range (e.g. 50k–500k)" value={form.sub_range} onChange={e => set('sub_range', e.target.value)} />
-                  <input className="input" placeholder="Geography (e.g. US, UK)" value={form.geography} onChange={e => set('geography', e.target.value)} />
-                  <input className="input" placeholder="Posting cadence (e.g. 1+ / week)" value={form.cadence} onChange={e => set('cadence', e.target.value)} />
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 10, color: 'var(--text-2)' }}>What's your main outreach goal?</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {GOALS.map(([val, label]) => (
+                    <label key={val} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: `1px solid ${form.outreach_goal === val ? 'var(--lime-border)' : 'var(--line)'}`, borderRadius: 8, cursor: 'pointer', background: form.outreach_goal === val ? 'var(--lime-soft)' : 'transparent', transition: 'all .15s' }}>
+                      <input type="radio" checked={form.outreach_goal === val} onChange={() => set('outreach_goal', val)} style={{ accentColor: 'var(--lime)' }} />
+                      <span style={{ fontSize: 13 }}>{label}</span>
+                    </label>
+                  ))}
                 </div>
               </div>
             </div>
           )}
 
-          {/* Step 3: Draft pitch */}
           {step === 3 && (
-            <div className="col" style={{ gap: 12 }}>
-              <div className="field">
-                <div className="field__label">Your one-line pitch</div>
-                <textarea className="input" rows={3}
-                  style={{ fontFamily: 'var(--f-sans)', lineHeight: 1.6 }}
-                  value={form.pitch_brief}
-                  onChange={e => set('pitch_brief', e.target.value)}
-                  placeholder="e.g. We pay $28 CPM for 60-sec mid-roll placements on Finance YouTube channels (50k–500k subs)."
-                />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4, color: 'var(--text-2)' }}>
+                  Why did you start doing this?
+                  <span className="muted" style={{ fontWeight: 400, marginLeft: 6 }}>{form.origin_story.length}/300</span>
+                </label>
+                <textarea className="input" rows={3} maxLength={300} value={form.origin_story} onChange={e => set('origin_story', e.target.value)} style={{ resize: 'none' }}
+                  placeholder={'Keep it real and short.\ne.g. Started editing videos to pay for college. Now I help creators tell better stories.\nOR: Built a sponsorship agency because I saw creators leaving massive deals on the table.'} />
               </div>
-              <div style={{ padding: 12, border: '1px solid var(--line)', borderRadius: 'var(--r)', background: 'var(--bg-2)', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                <Icon name="sparkle" size={14} style={{ color: 'var(--lime)', flexShrink: 0, marginTop: 2 }} />
-                <div style={{ fontSize: 12.5, color: 'var(--text-2)' }}>
-                  We'll turn this into ~50 personalized variants per send — referencing each creator's latest video, tone, and sponsor history.
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Step 4: Ready to launch */}
-          {step === 4 && (
-            <div style={{ textAlign: 'center', padding: '24px 0' }}>
-              <div style={{ display: 'inline-grid', placeItems: 'center', width: 84, height: 84, borderRadius: 28, background: 'var(--lime-soft)', border: '1px solid var(--lime-border)', color: 'var(--lime)', marginBottom: 18 }}>
-                <Icon name="rocket" size={36} />
-              </div>
-              <div className="page__title" style={{ fontSize: 30, marginBottom: 10 }}>You're set up.</div>
-              <div className="muted" style={{ fontSize: 13.5, maxWidth: 420, margin: '0 auto' }}>
-                Your profile is ready. Start finding leads and let the agent handle the rest.
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4, color: 'var(--text-2)' }}>
+                  What makes you different from everyone else who does what you do?
+                  <span className="muted" style={{ fontWeight: 400, marginLeft: 6 }}>{form.unique_difference.length}/300</span>
+                </label>
+                <textarea className="input" rows={3} maxLength={300} value={form.unique_difference} onChange={e => set('unique_difference', e.target.value)} style={{ resize: 'none' }}
+                  placeholder={"Your honest answer.\ne.g. I only take 3 clients at a time so every creator gets my full attention.\nOR: I've worked with 200+ creators so I know what works in every niche."} />
               </div>
               {error && (
-                <div style={{ padding: '10px 14px', background: 'rgba(255,100,100,0.1)', border: '1px solid rgba(255,100,100,0.25)', borderRadius: 8, fontSize: 12, color: 'var(--bad)', marginTop: 16 }}>
+                <div style={{ padding: '10px 14px', background: 'rgba(255,80,80,0.08)', border: '1px solid rgba(255,80,80,0.2)', borderRadius: 8, fontSize: 12, color: 'var(--coral)' }}>
                   {error}
                 </div>
               )}
@@ -252,20 +254,21 @@ export default function Onboarding() {
           )}
         </div>
 
-        {/* Footer */}
-        <div style={{ padding: '18px 28px', borderTop: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 12, background: 'var(--bg-2)' }}>
-          <span className="muted" style={{ fontSize: 11.5 }}>Takes ~3 minutes. Skip anytime.</span>
-          <div style={{ flex: 1 }} />
+        {/* Footer nav */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 20 }}>
           {step > 0 && (
-            <button className="btn btn--sm" onClick={() => setStep(s => s - 1)}>Back</button>
+            <button className="btn btn--ghost" onClick={() => setStep(s => s - 1)}>← Back</button>
           )}
+          <div style={{ flex: 1 }} />
           {step < STEPS.length - 1 ? (
-            <button className="btn btn--sm" onClick={() => setStep(s => s + 1)}>
-              Continue <Icon name="arrowR" size={12} />
+            <button className="btn btn--lime btn--lg" disabled={!canProceed()} onClick={() => setStep(s => s + 1)}
+              style={{ opacity: canProceed() ? 1 : 0.45 }}>
+              Continue →
             </button>
           ) : (
-            <button className="btn btn--sm" onClick={finish} disabled={finishing}>
-              <Icon name="rocket" size={12} />{finishing ? 'Launching…' : 'Launch first campaign'}
+            <button className="btn btn--lime btn--lg" disabled={!canProceed() || saving} onClick={finish}
+              style={{ opacity: canProceed() && !saving ? 1 : 0.45, minWidth: 160 }}>
+              {saving ? 'Building your profile...' : 'Finish setup →'}
             </button>
           )}
         </div>

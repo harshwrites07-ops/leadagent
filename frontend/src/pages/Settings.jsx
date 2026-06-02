@@ -10,12 +10,23 @@ export default function Settings() {
   const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const [tab, setTab] = useState('profile');
+  const [tab, setTab] = useState('voice');
 
   const [profile, setProfile] = useState({
     full_name: '', agency_name: '', role: 'Video Editor',
     target_niches: [], portfolio_url: '', best_result: '', pricing_range: '$500-$2000/month',
   });
+
+  // Voice profile state
+  const [voice, setVoice] = useState({
+    service_type: '', one_liner: '', experience_years: '', best_result: '',
+    target_niches: [], pricing_range: '', personality_traits: [],
+    outreach_goal: '', origin_story: '', unique_difference: '',
+  });
+  const [voiceDNA, setVoiceDNA] = useState(null);
+  const [savingVoice, setSavingVoice] = useState(false);
+  const [previewEmail, setPreviewEmail] = useState(null);
+  const [generatingPreview, setGeneratingPreview] = useState(false);
   const [prefs, setPrefs] = useState({
     email_tone: 'casual', outreach_goal: 'get_reply', signature: '',
     daily_email_limit: 150, min_email_delay: 45, max_email_delay: 120,
@@ -61,6 +72,65 @@ export default function Settings() {
       if (res.data.profile) setProfile(p => ({ ...p, ...res.data.profile }));
       if (res.data.preferences) setPrefs(p => ({ ...p, ...res.data.preferences }));
     } catch {}
+    // Load voice profile from user
+    try {
+      const me = await api.get('/auth/me');
+      const u = me.data.user;
+      setVoice({
+        service_type: u.service_type || '',
+        one_liner: u.one_liner || '',
+        experience_years: u.experience_years || '',
+        best_result: u.best_result || '',
+        target_niches: (() => { try { return JSON.parse(u.target_niches || '[]'); } catch { return []; } })(),
+        pricing_range: u.pricing_range || '',
+        personality_traits: (() => { try { return JSON.parse(u.personality_traits || '[]'); } catch { return []; } })(),
+        outreach_goal: u.outreach_goal || '',
+        origin_story: u.origin_story || '',
+        unique_difference: u.unique_difference || '',
+      });
+      try { setVoiceDNA(JSON.parse(u.voice_dna || '{}')); } catch {}
+    } catch {}
+  };
+
+  const setV = (k, v) => setVoice(prev => ({ ...prev, [k]: v }));
+
+  const toggleVoiceChip = (key, val, max = 99) => {
+    setVoice(prev => {
+      const arr = prev[key];
+      if (arr.includes(val)) return { ...prev, [key]: arr.filter(x => x !== val) };
+      if (arr.length >= max) return { ...prev, [key]: [...arr.slice(1), val] };
+      return { ...prev, [key]: [...arr, val] };
+    });
+  };
+
+  const saveVoiceProfile = async () => {
+    setSavingVoice(true);
+    try {
+      const res = await api.put('/auth/profile', voice);
+      if (res.data.voice_dna) setVoiceDNA(res.data.voice_dna);
+      toast.success('Voice profile updated — DNA rebuilt');
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Failed to save');
+    } finally {
+      setSavingVoice(false);
+    }
+  };
+
+  const generatePreviewEmail = async () => {
+    setGeneratingPreview(true);
+    try {
+      // Pick a random lead with email
+      const leadsRes = await api.get('/leads?limit=10&hasEmail=true');
+      const leads = leadsRes.data?.leads || [];
+      if (!leads.length) { toast.error('No leads with emails found — add some leads first'); setGeneratingPreview(false); return; }
+      const lead = leads[Math.floor(Math.random() * leads.length)];
+      const pitchRes = await api.post(`/pitches/generate/${lead.id}`);
+      setPreviewEmail({ lead, pitch: pitchRes.data.pitch });
+    } catch (e) {
+      toast.error('Failed to generate preview');
+    } finally {
+      setGeneratingPreview(false);
+    }
   };
 
   const loadGmailAccounts = async () => {
@@ -175,17 +245,172 @@ export default function Settings() {
 
       <div className="tabs" style={{ marginBottom: 24 }}>
         {[
-          { id: 'profile', l: 'Profile' },
+          { id: 'voice', l: 'Voice Profile' },
+          { id: 'profile', l: 'Account' },
           { id: 'mailboxes', l: 'Mailboxes & sending' },
           { id: 'integrations', l: 'Integrations' },
-          { id: 'team', l: 'Team & roles' },
           { id: 'plan', l: 'Plan & billing' },
         ].map(t => (
           <div key={t.id} className={`tab ${tab === t.id ? 'is-active' : ''}`} onClick={() => setTab(t.id)}>{t.l}</div>
         ))}
       </div>
 
-      {/* Profile */}
+      {/* Voice Profile */}
+      {tab === 'voice' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+          {/* DNA Preview Card */}
+          {voiceDNA?.communicationStyle && (
+            <div className="card" style={{ background: 'rgba(var(--lime-rgb),0.04)', borderColor: 'var(--lime-border)' }}>
+              <div className="card__head">
+                <div>
+                  <div className="card__title">Your Voice Profile</div>
+                  <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+                    Last updated: {voiceDNA.builtAt ? new Date(voiceDNA.builtAt).toLocaleDateString() : 'today'}
+                  </div>
+                </div>
+                <button className="btn btn--ghost btn--sm" onClick={generatePreviewEmail} disabled={generatingPreview}>
+                  {generatingPreview ? 'Generating...' : '⚡ Preview email'}
+                </button>
+              </div>
+              <div className="card__body" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                {[
+                  { label: 'Writing style', value: voiceDNA.communicationStyle },
+                  { label: 'Email tone', value: voiceDNA.emailTone },
+                  { label: 'Social proof', value: voiceDNA.socialProof },
+                  { label: 'Your angle', value: voiceDNA.uniqueDifference || voiceDNA.identity },
+                ].map(row => row.value ? (
+                  <div key={row.label} style={{ padding: '10px 14px', background: 'var(--surface-2)', borderRadius: 8, border: '1px solid var(--line)' }}>
+                    <div className="muted mono" style={{ fontSize: 9, letterSpacing: '.1em', marginBottom: 4 }}>{row.label.toUpperCase()}</div>
+                    <div style={{ fontSize: 12.5, lineHeight: 1.5 }}>{row.value}</div>
+                  </div>
+                ) : null)}
+              </div>
+            </div>
+          )}
+
+          {/* Preview email modal */}
+          {previewEmail && (
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+              <div style={{ maxWidth: 560, width: '100%', background: 'var(--bg-surface)', borderRadius: 14, border: '1px solid var(--border-subtle)', overflow: 'hidden' }}>
+                <div style={{ padding: '18px 24px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontWeight: 600 }}>Preview — {previewEmail.lead.channel_name}</div>
+                    <div className="muted" style={{ fontSize: 11 }}>This is what your emails will sound like</div>
+                  </div>
+                  <button className="btn btn--ghost btn--sm" onClick={() => setPreviewEmail(null)}>✕</button>
+                </div>
+                <div style={{ padding: 24 }}>
+                  <div style={{ marginBottom: 12 }}>
+                    <span className="muted" style={{ fontSize: 11 }}>SUBJECT</span>
+                    <div style={{ fontWeight: 600, marginTop: 2 }}>{previewEmail.pitch?.email_subject}</div>
+                  </div>
+                  <div style={{ whiteSpace: 'pre-wrap', fontSize: 13.5, lineHeight: 1.8, padding: '16px 20px', background: 'var(--surface-2)', borderRadius: 8, border: '1px solid var(--line)' }}>
+                    {previewEmail.pitch?.cold_email}
+                  </div>
+                  <div className="muted" style={{ fontSize: 11, marginTop: 10, textAlign: 'right' }}>
+                    Score: {previewEmail.pitch?.pitch_score}/100
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Editable fields */}
+          <div className="card">
+            <div className="card__head"><div className="card__title">About you</div></div>
+            <div className="card__body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div className="field">
+                <div className="field__label">What do you sell to YouTube creators?</div>
+                <input className="input" value={voice.service_type} onChange={e => setV('service_type', e.target.value)}
+                  placeholder="e.g. video editing, thumbnail design, sponsorships, coaching..." />
+              </div>
+              <div className="field">
+                <div className="field__label">Describe yourself in one sentence <span className="muted">({voice.one_liner.length}/150)</span></div>
+                <textarea className="input" rows={2} maxLength={150} style={{ resize: 'none' }}
+                  value={voice.one_liner} onChange={e => setV('one_liner', e.target.value)}
+                  placeholder="e.g. I help finance creators look as professional as their ideas deserve" />
+              </div>
+              <div className="field">
+                <div className="field__label">How long have you been doing this?</div>
+                <select className="input" value={voice.experience_years} onChange={e => setV('experience_years', e.target.value)}>
+                  <option value="">Select...</option>
+                  {[['just_starting','Just starting out (under 1 year)'],['getting_established','1-3 years'],['experienced','3-5 years'],['veteran','5+ years']].map(([v,l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card__head"><div className="card__title">Your best result</div></div>
+            <div className="card__body">
+              <div className="field">
+                <div className="field__label">Best result for a client <span className="muted">({voice.best_result.length}/300)</span></div>
+                <textarea className="input" rows={3} maxLength={300} style={{ resize: 'none' }}
+                  value={voice.best_result} onChange={e => setV('best_result', e.target.value)}
+                  placeholder="Be specific with numbers. e.g. Helped a fitness channel increase watch time by 60% in 30 days" />
+              </div>
+              <div className="field" style={{ marginTop: 14 }}>
+                <div className="field__label">Typical pricing <span className="muted" style={{ fontWeight: 400 }}>(never shown to creators)</span></div>
+                <select className="input" value={voice.pricing_range} onChange={e => setV('pricing_range', e.target.value)}>
+                  <option value="">Select...</option>
+                  {['Under $500/month or project','$500 - $1,500/month','$1,500 - $3,500/month','$3,500 - $7,000/month','$7,000+/month','I work on project rates'].map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card__head"><div className="card__title">Your communication style</div></div>
+            <div className="card__body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div className="field">
+                <div className="field__label">How would your best friend describe you? <span className="muted">(up to 3)</span></div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+                  {['Direct and no-nonsense','Warm and friendly','Analytical and data-driven','Creative and energetic','Calm and thoughtful','Funny and casual','Professional and polished','Bold and confident','Laid-back and approachable'].map(t => (
+                    <button key={t} type="button" onClick={() => toggleVoiceChip('personality_traits', t, 3)}
+                      style={{ padding: '6px 12px', borderRadius: 99, fontSize: 12, cursor: 'pointer', border: `1px solid ${voice.personality_traits.includes(t) ? 'var(--lime-border)' : 'var(--line)'}`, background: voice.personality_traits.includes(t) ? 'var(--lime-soft)' : 'var(--surface-2)', color: voice.personality_traits.includes(t) ? 'var(--lime)' : 'var(--text-2)', fontWeight: voice.personality_traits.includes(t) ? 600 : 400 }}>
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="field">
+                <div className="field__label">Main outreach goal</div>
+                {[['get_reply','Start a conversation (get a reply)'],['book_call','Book a discovery call'],['close_deal','Close a deal directly']].map(([val, label]) => (
+                  <label key={val} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', border: `1px solid ${voice.outreach_goal === val ? 'var(--lime-border)' : 'var(--line)'}`, borderRadius: 8, cursor: 'pointer', background: voice.outreach_goal === val ? 'var(--lime-soft)' : 'transparent', marginBottom: 6 }}>
+                    <input type="radio" checked={voice.outreach_goal === val} onChange={() => setV('outreach_goal', val)} style={{ accentColor: 'var(--lime)' }} />
+                    <span style={{ fontSize: 13 }}>{label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card__head"><div className="card__title">Your story</div></div>
+            <div className="card__body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div className="field">
+                <div className="field__label">Why did you start doing this? <span className="muted">({voice.origin_story.length}/300)</span></div>
+                <textarea className="input" rows={3} maxLength={300} style={{ resize: 'none' }}
+                  value={voice.origin_story} onChange={e => setV('origin_story', e.target.value)}
+                  placeholder="e.g. Started editing videos to pay for college. Now I help creators tell better stories." />
+              </div>
+              <div className="field">
+                <div className="field__label">What makes you different? <span className="muted">({voice.unique_difference.length}/300)</span></div>
+                <textarea className="input" rows={3} maxLength={300} style={{ resize: 'none' }}
+                  value={voice.unique_difference} onChange={e => setV('unique_difference', e.target.value)}
+                  placeholder="e.g. I only take 3 clients at a time so every creator gets my full attention." />
+              </div>
+            </div>
+          </div>
+
+          <button className="btn btn--lime btn--lg" onClick={saveVoiceProfile} disabled={savingVoice} style={{ alignSelf: 'flex-end', minWidth: 200 }}>
+            {savingVoice ? 'Saving & rebuilding...' : 'Save voice profile'}
+          </button>
+        </div>
+      )}
+
+      {/* Account (formerly Profile) */}
       {tab === 'profile' && (
         <div className="card">
           <div className="card__body">

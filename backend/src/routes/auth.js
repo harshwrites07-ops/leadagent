@@ -30,6 +30,13 @@ const safeUser = (u) => u ? {
   usage_reset_date: u.usage_reset_date,
   target_niches: u.target_niches, target_platforms: u.target_platforms,
   portfolio_url: u.portfolio_url, daily_email_limit: u.daily_email_limit,
+  // Voice DNA profile fields
+  service_type: u.service_type, one_liner: u.one_liner,
+  experience_years: u.experience_years, best_result: u.best_result,
+  pricing_range: u.pricing_range, personality_traits: u.personality_traits,
+  outreach_goal: u.outreach_goal, origin_story: u.origin_story,
+  unique_difference: u.unique_difference, profile_completed: u.profile_completed,
+  voice_dna: u.voice_dna,
 } : null;
 
 // ── GET /api/auth/me ────────────────────────────────────────────────────────
@@ -298,8 +305,15 @@ router.post('/reset-password', asyncHandler(async (req, res) => {
 
 // ── PUT /api/auth/onboarding ────────────────────────────────────────────────
 router.put('/onboarding', requireAuth, asyncHandler(async (req, res) => {
-  const { full_name, agency_name, role, target_niches, target_platforms, portfolio_url, daily_email_limit, auto_find_leads } = req.body;
+  const {
+    full_name, agency_name, role, target_niches, target_platforms, portfolio_url,
+    daily_email_limit, auto_find_leads,
+    // Voice DNA profile fields
+    service_type, one_liner, experience_years, best_result, pricing_range,
+    personality_traits, outreach_goal, origin_story, unique_difference, profile_completed,
+  } = req.body;
   const db = getDb();
+
   db.prepare(`
     UPDATE users SET
       full_name=COALESCE(?,full_name),
@@ -310,22 +324,71 @@ router.put('/onboarding', requireAuth, asyncHandler(async (req, res) => {
       portfolio_url=COALESCE(?,portfolio_url),
       daily_email_limit=COALESCE(?,daily_email_limit),
       auto_find_leads=COALESCE(?,auto_find_leads),
+      service_type=COALESCE(?,service_type),
+      one_liner=COALESCE(?,one_liner),
+      experience_years=COALESCE(?,experience_years),
+      best_result=COALESCE(?,best_result),
+      pricing_range=COALESCE(?,pricing_range),
+      personality_traits=COALESCE(?,personality_traits),
+      outreach_goal=COALESCE(?,outreach_goal),
+      origin_story=COALESCE(?,origin_story),
+      unique_difference=COALESCE(?,unique_difference),
+      profile_completed=COALESCE(?,profile_completed),
+      voice_dna='{}',
       onboarding_completed=1
     WHERE id=?
   `).run(
     full_name || null, agency_name || null, role || null,
     target_niches ? JSON.stringify(target_niches) : null,
     target_platforms ? JSON.stringify(target_platforms) : null,
-    portfolio_url || null, daily_email_limit || null, auto_find_leads != null ? (auto_find_leads ? 1 : 0) : null,
+    portfolio_url || null, daily_email_limit || null,
+    auto_find_leads != null ? (auto_find_leads ? 1 : 0) : null,
+    service_type || null, one_liner || null, experience_years || null,
+    best_result || null, pricing_range || null,
+    personality_traits ? JSON.stringify(personality_traits) : null,
+    outreach_goal || null, origin_story || null, unique_difference || null,
+    profile_completed != null ? profile_completed : null,
     req.user.id,
   );
 
-  // Also update app settings with user's preferences
   const { setSetting } = require('../models/database');
   if (full_name) setSetting('your_name', full_name);
   if (agency_name) setSetting('agency_name', agency_name);
-  if (portfolio_url) setSetting('portfolio_url', portfolio_url);
-  if (auto_find_leads) setSetting('auto_scrape', 'true');
+
+  // Rebuild voice DNA immediately
+  try {
+    const { rebuildVoiceDNA } = require('../services/voiceDNA');
+    await rebuildVoiceDNA(req.user.id);
+  } catch {}
+
+  const user = getUserById(req.user.id);
+  res.json({ success: true, user: safeUser(user) });
+}));
+
+// ── PUT /api/auth/profile — update voice profile from Settings ───────────────
+router.put('/profile', requireAuth, asyncHandler(async (req, res) => {
+  const allowed = ['full_name','service_type','one_liner','experience_years','best_result',
+    'target_niches','pricing_range','personality_traits','outreach_goal','origin_story','unique_difference'];
+  const db = getDb();
+  const sets = [], vals = [];
+  for (const key of allowed) {
+    if (req.body[key] !== undefined) {
+      sets.push(`${key}=?`);
+      const v = req.body[key];
+      vals.push(Array.isArray(v) ? JSON.stringify(v) : v);
+    }
+  }
+  if (!sets.length) return res.json({ success: true });
+  sets.push('voice_dna=?'); vals.push('{}'); // invalidate cached DNA
+  vals.push(req.user.id);
+  db.prepare(`UPDATE users SET ${sets.join(',')} WHERE id=?`).run(...vals);
+
+  try {
+    const { rebuildVoiceDNA } = require('../services/voiceDNA');
+    const dna = await rebuildVoiceDNA(req.user.id);
+    const user = getUserById(req.user.id);
+    return res.json({ success: true, user: safeUser(user), voice_dna: dna });
+  } catch {}
 
   const user = getUserById(req.user.id);
   res.json({ success: true, user: safeUser(user) });

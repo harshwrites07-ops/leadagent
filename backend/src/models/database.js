@@ -371,6 +371,19 @@ function initSchema() {
   try { db.exec(`ALTER TABLE leads ADD COLUMN scrape_source TEXT DEFAULT 'youtube_api'`); } catch {}
   try { db.exec(`ALTER TABLE leads ADD COLUMN view_trend TEXT`); } catch {}
 
+  // Voice DNA / user profile columns
+  try { db.exec(`ALTER TABLE users ADD COLUMN service_type TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN one_liner TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN experience_years TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN best_result TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN pricing_range TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN personality_traits TEXT DEFAULT '[]'`); } catch {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN outreach_goal TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN origin_story TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN unique_difference TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN voice_dna TEXT DEFAULT '{}'`); } catch {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN profile_completed INTEGER DEFAULT 0`); } catch {}
+
   // user_id indexes for fast per-user queries
   try { db.exec(`CREATE INDEX IF NOT EXISTS idx_leads_user_id ON leads(user_id)`); } catch {}
   try { db.exec(`CREATE INDEX IF NOT EXISTS idx_emails_user_id ON emails(user_id)`); } catch {}
