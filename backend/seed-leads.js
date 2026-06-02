@@ -8,9 +8,10 @@
  * Run for specific user: node seed-leads.js --user=1
  */
 
-require('dotenv').config({ path: require('path').join(__dirname, '.env') });
-const Database = require('./backend/node_modules/better-sqlite3');
-const axios = require('./backend/node_modules/axios');
+require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
+require('dotenv').config({ path: require('path').join(__dirname, '.env'), override: false });
+const Database = require('better-sqlite3');
+const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
 
@@ -21,7 +22,7 @@ const CONCURRENCY = 5; // parallel keyword searches
 const MIN_SUBS = 1000;
 const MAX_SUBS = 2000000;
 
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'backend/data/outreach.db');
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'data/outreach.db');
 if (!fs.existsSync(DB_PATH)) {
   console.error('DB not found at', DB_PATH);
   process.exit(1);

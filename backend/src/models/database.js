@@ -297,6 +297,13 @@ function initSchema() {
     console.log(`[DB] Created admin user: ${ownerEmail} (set ADMIN_EMAIL + ADMIN_PASSWORD in .env)`);
   }
 
+  // Auto-promote any emails listed in ADMIN_EMAILS env var
+  const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim()).filter(Boolean);
+  for (const email of adminEmails) {
+    const result = db.prepare(`UPDATE users SET is_admin=1, plan='agency' WHERE email=?`).run(email);
+    if (result.changes > 0) console.log(`[DB] Auto-promoted ${email} to admin (agency plan)`);
+  }
+
   // Assign all orphaned rows (user_id IS NULL) to admin user 1
   try { db.exec(`UPDATE leads SET user_id=1 WHERE user_id IS NULL`); } catch {}
   try { db.exec(`UPDATE emails SET user_id=1 WHERE user_id IS NULL`); } catch {}
