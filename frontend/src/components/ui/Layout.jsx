@@ -175,45 +175,9 @@ function AgentPanel({ onClose }) {
 
 /* ── User section (inline, no floating) ─────────────────── */
 function UserFooter({ user, logout }) {
-  const [open, setOpen] = useState(false);
-  const navigate = useNavigate();
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      {open && (
-        <div style={{
-          background: 'var(--surface-2)', border: '1px solid var(--line)',
-          borderRadius: 'var(--r)', padding: 4,
-        }}>
-          <button
-            onClick={() => { navigate('/settings'); setOpen(false); }}
-            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-2)', fontSize: 12, borderRadius: 6, textAlign: 'left' }}
-            onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-3)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'none'}
-          >
-            <Icon name="settings" size={13} /> Profile & Settings
-          </button>
-          {user?.is_admin && <>
-            <button onClick={() => { navigate('/admin'); setOpen(false); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-2)', fontSize: 12, borderRadius: 6, textAlign: 'left' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-3)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}><Icon name="shield" size={13} /> Admin Panel</button>
-            <button onClick={() => { navigate('/admin/settings'); setOpen(false); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-2)', fontSize: 12, borderRadius: 6, textAlign: 'left' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-3)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}><Icon name="shield" size={13} /> Admin Settings</button>
-          </>}
-          <div style={{ borderTop: '1px solid var(--line)', marginTop: 2, paddingTop: 2 }}>
-            <button
-              onClick={logout}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--bad)', fontSize: 12, fontWeight: 600, borderRadius: 6, textAlign: 'left' }}
-              onMouseEnter={e => e.currentTarget.style.background = 'var(--coral-soft)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'none'}
-            >
-              <Icon name="logout" size={13} /> Sign Out
-            </button>
-          </div>
-        </div>
-      )}
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="sb__org"
-        style={{ cursor: 'pointer', border: open ? '1px solid var(--lime)' : undefined }}
-      >
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div className="sb__org" style={{ cursor: 'default' }}>
         <div className="sb__org-ava" style={{ fontSize: 10, fontWeight: 700 }}>
           {(user?.full_name || user?.email || '?').slice(0, 2).toUpperCase()}
         </div>
@@ -221,7 +185,18 @@ function UserFooter({ user, logout }) {
           <div className="sb__org-name" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.full_name || user?.email}</div>
           <div className="sb__org-role">{user?.plan || 'Free'} plan</div>
         </div>
-        <Icon name="chev" size={12} style={{ color: 'var(--text-3)', transform: open ? 'rotate(-90deg)' : 'rotate(90deg)', flexShrink: 0 }} />
+      </div>
+      <button
+        onClick={logout}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          padding: '8px 12px', background: 'var(--coral-soft)',
+          border: '1px solid var(--coral-border, #ff6b6b44)',
+          cursor: 'pointer', color: 'var(--bad)', fontSize: 12, fontWeight: 600,
+          borderRadius: 'var(--r)', textAlign: 'center',
+        }}
+      >
+        <Icon name="logout" size={13} /> Sign Out
       </button>
     </div>
   );
