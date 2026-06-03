@@ -202,25 +202,32 @@ router.post('/powermode/start', asyncHandler(async (req, res) => {
   const keywords = kwObjects.map(k => k.keyword);
   const kwNicheMap = Object.fromEntries(kwObjects.map(k => [k.keyword, k.niche]));
 
-  // ── Fast-serve from master_leads if we have enough ──────────────────────────
+  // ── Always serve from master_leads — no live scraping for users ─────────────
   {
     const db = getDb();
-    const masterTotal = db.prepare("SELECT COUNT(*) as c FROM master_leads WHERE email IS NOT NULL AND email != ''").get().c;
-    if (masterTotal >= 50) {
-      // Build niche filter
-      const nicheConditions = requestedNiches.map(() => "niche LIKE ?").join(' OR ');
-      const nicheParams = requestedNiches.map(n => `%${n}%`);
-      const whereClause = nicheConditions
-        ? `(${nicheConditions}) AND email IS NOT NULL AND email != ''`
-        : `email IS NOT NULL AND email != ''`;
+    const nicheConditions = requestedNiches.map(() => "niche LIKE ?").join(' OR ');
+    const nicheParams = requestedNiches.map(n => `%${n}%`);
+    const whereClause = nicheConditions
+      ? `(${nicheConditions}) AND email IS NOT NULL AND email != ''`
+      : `email IS NOT NULL AND email != ''`;
 
-      const available = db.prepare(`SELECT COUNT(*) as c FROM master_leads WHERE ${whereClause}`).get(...nicheParams).c;
+    // Exclude channels user already has
+    const userChannelIds = db.prepare(`SELECT channel_id FROM leads WHERE user_id=? AND channel_id IS NOT NULL`).all(userId).map(r => r.channel_id);
+    let fullWhere = whereClause;
+    const fullParams = [...nicheParams];
+    if (userChannelIds.length > 0) {
+      fullWhere += ` AND channel_id NOT IN (${userChannelIds.map(() => '?').join(',')})`;
+      fullParams.push(...userChannelIds);
+    }
 
-      if (available >= targetCount) {
-        console.log(`[PowerMode] Serving ${targetCount} leads from master_leads (${available} available)`);
-        const masterLeads = db.prepare(
-          `SELECT * FROM master_leads WHERE ${whereClause} ORDER BY lead_score DESC, subscriber_count DESC LIMIT ?`
-        ).all(...nicheParams, targetCount);
+    const available = db.prepare(`SELECT COUNT(*) as c FROM master_leads WHERE ${fullWhere}`).get(...fullParams).c;
+
+    if (available > 0) {
+      const serveCount = Math.min(targetCount, available);
+      console.log(`[PowerMode] master_leads: ${available} available → serving ${serveCount} to user ${userId}`);
+      const masterLeads = db.prepare(
+        `SELECT * FROM master_leads WHERE ${fullWhere} ORDER BY lead_score DESC, subscriber_count DESC LIMIT ?`
+      ).all(...fullParams, serveCount);
 
         const insert = db.prepare(LEAD_INSERT_SQL);
         const saveMany = db.transaction(leads => {
@@ -246,22 +253,30 @@ router.post('/powermode/start', asyncHandler(async (req, res) => {
         incrementUsage(userId, 'leads', totalSaved);
         logActivity('leads_imported', `PowerMode served ${totalSaved} leads from master database`, null, {}, userId);
 
-        // Return instant success — no background job needed
+        const targetReached = totalSaved >= targetCount;
         Object.assign(ps, {
           running: false, total: masterLeads.length, saved: totalSaved,
           keywordsTotal: 0, keywordsDone: 0, currentKeywords: [],
           recentLeads: masterLeads.slice(0, 10).map(l => ({ channel_name: l.channel_name, subscriber_count: l.subscriber_count, hasEmail: true, email: l.email })),
           stats: { hot: 0, warm: totalSaved, cold: 0, withEmail: totalSaved },
           stopped: false, error: null, quotaExhausted: false,
-          niches: requestedNiches, targetCount, targetReached: true,
+          niches: requestedNiches, targetCount, targetReached,
         });
-        return res.json({ status: 'instant', source: 'master_leads', saved: totalSaved, targetCount, niches: requestedNiches, keywordsTotal: 0, targetReached: true });
-      }
+        return res.json({ status: 'instant', source: 'master_leads', saved: totalSaved, targetCount, niches: requestedNiches, keywordsTotal: 0, targetReached });
     }
-  }
-  // ────────────────────────────────────────────────────────────────────────────
 
-  console.log(`[PowerMode] Starting live scrape — target: ${targetCount} leads with email | niches: ${requestedNiches.join(', ')} | ${keywords.length} keywords | country: ${country || 'Global'}`);
+    // master_leads is empty — tell user, don't burn API quota
+    Object.assign(ps, {
+      running: false, total: 0, saved: 0, keywordsTotal: 0, keywordsDone: 0,
+      stats: { hot: 0, warm: 0, cold: 0, withEmail: 0 },
+      stopped: false, error: 'Lead database is being built. Check back in a few hours.', quotaExhausted: false,
+      niches: requestedNiches, targetCount, targetReached: false,
+    });
+    return res.json({ status: 'empty', source: 'master_leads', saved: 0, targetCount, message: 'Lead database is being built — check back soon.' });
+  }
+  // ── master_leads serves everything — live scraping disabled for users ────────
+  // (This line should never be reached now that master_leads is always checked)
+  console.log(`[PowerMode] Skipping live scrape — master_leads is the source of truth`);
 
   Object.assign(ps, {
     running: true, startedAt: new Date().toISOString(),

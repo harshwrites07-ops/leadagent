@@ -368,59 +368,69 @@ router.post('/scrape/youtube/stream', scrapeLimiter, asyncHandler(async (req, re
       return res.end();
     }
 
-    // Step 0 — Serve from master_leads if we have enough matching results
+    // Step 0 — ALWAYS serve from master_leads first (no YouTube API calls)
     {
       const db = getDb();
-      const masterTotal = db.prepare('SELECT COUNT(*) as c FROM master_leads').get().c;
-      if (masterTotal > 500) {
-        const conditions = ['1=1'];
-        const params = [];
-        if (keyword) { conditions.push('(channel_name LIKE ? OR channel_description LIKE ? OR niche LIKE ?)'); params.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`); }
-        if (minSubs) { conditions.push('subscriber_count >= ?'); params.push(Number(minSubs)); }
-        if (maxSubs) { conditions.push('subscriber_count <= ?'); params.push(Number(maxSubs)); }
-        if (emailOnly) { conditions.push("email IS NOT NULL AND email != ''"); }
-        if (country) { conditions.push('country = ?'); params.push(country); }
-
-        const masterCount = db.prepare(`SELECT COUNT(*) as c FROM master_leads WHERE ${conditions.join(' AND ')}`).get(...params).c;
-
-        if (masterCount >= Math.min(maxResults, 20)) {
-          send({ type: 'progress', stage: 'search', message: `Found ${masterCount} leads in database — delivering instantly...` });
-
-          const masterLeads = db.prepare(
-            `SELECT * FROM master_leads WHERE ${conditions.join(' AND ')} ORDER BY lead_score DESC, subscriber_count DESC LIMIT ?`
-          ).all(...params, Number(maxResults));
-
-          const uid = req.user.id;
-          const insertStmt = db.prepare(`
-            INSERT OR IGNORE INTO leads
-              (user_id, platform, channel_id, channel_name, channel_handle, subscriber_count,
-               avg_views, email, website, channel_description, lead_score, temperature, crm_stage, country, niche)
-            VALUES (?, 'youtube', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new_lead', ?, ?)
-          `);
-
-          const saved = db.transaction(leads => {
-            let count = 0;
-            for (const l of leads) {
-              const r = insertStmt.run(uid, l.channel_id, l.channel_name, l.channel_handle,
-                l.subscriber_count, l.avg_views, l.email, l.website,
-                l.channel_description, l.lead_score, l.temperature, l.country, l.niche);
-              if (r.changes > 0) count++;
-            }
-            return count;
-          })(masterLeads);
-
-          // Return leads from user's own table (with user lead IDs)
-          const userLeads = db.prepare(
-            `SELECT * FROM leads WHERE user_id=? AND channel_id IN (${masterLeads.map(() => '?').join(',')}) ORDER BY lead_score DESC`
-          ).all(uid, ...masterLeads.map(l => l.channel_id));
-
-          for (const lead of userLeads) {
-            send({ type: 'lead', lead, source: 'database' });
-          }
-          send({ type: 'done', total: userLeads.length, saved, source: 'database', message: `Delivered ${userLeads.length} leads from database instantly` });
-          return res.end();
-        }
+      const conditions = ["email IS NOT NULL AND email != ''"]; // always email-only from master DB
+      const params = [];
+      if (keyword) {
+        conditions.push('(channel_name LIKE ? OR channel_description LIKE ? OR niche LIKE ?)');
+        params.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`);
       }
+      if (minSubs) { conditions.push('subscriber_count >= ?'); params.push(Number(minSubs)); }
+      if (maxSubs) { conditions.push('subscriber_count <= ?'); params.push(Number(maxSubs)); }
+      if (country) { conditions.push('country = ?'); params.push(country); }
+
+      // Exclude channels already in this user's leads
+      const userChannelIds = db.prepare(`SELECT channel_id FROM leads WHERE user_id=? AND channel_id IS NOT NULL`).all(req.user.id).map(r => r.channel_id);
+
+      let whereClause = conditions.join(' AND ');
+      const allParams = [...params];
+      if (userChannelIds.length > 0) {
+        whereClause += ` AND channel_id NOT IN (${userChannelIds.map(() => '?').join(',')})`;
+        allParams.push(...userChannelIds);
+      }
+
+      const masterCount = db.prepare(`SELECT COUNT(*) as c FROM master_leads WHERE ${whereClause}`).get(...allParams).c;
+
+      if (masterCount > 0) {
+        send({ type: 'progress', stage: 'search', message: `Found ${masterCount} matching leads — delivering from database...` });
+
+        const masterLeads = db.prepare(
+          `SELECT * FROM master_leads WHERE ${whereClause} ORDER BY lead_score DESC, subscriber_count DESC LIMIT ?`
+        ).all(...allParams, Number(maxResults));
+
+        const uid = req.user.id;
+        const insertStmt = db.prepare(`
+          INSERT OR IGNORE INTO leads
+            (user_id, platform, channel_id, channel_name, channel_handle, subscriber_count,
+             avg_views, email, website, channel_description, lead_score, temperature, crm_stage, country, niche)
+          VALUES (?, 'youtube', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new_lead', ?, ?)
+        `);
+
+        const saved = db.transaction(leads => {
+          let count = 0;
+          for (const l of leads) {
+            const r = insertStmt.run(uid, l.channel_id, l.channel_name, l.channel_handle,
+              l.subscriber_count, l.avg_views, l.email, l.website,
+              l.channel_description, l.lead_score, l.temperature, l.country, l.niche);
+            if (r.changes > 0) count++;
+          }
+          return count;
+        })(masterLeads);
+
+        const userLeads = db.prepare(
+          `SELECT * FROM leads WHERE user_id=? AND channel_id IN (${masterLeads.map(() => '?').join(',')}) ORDER BY lead_score DESC`
+        ).all(uid, ...masterLeads.map(l => l.channel_id));
+
+        for (const lead of userLeads) {
+          send({ type: 'lead', lead, source: 'database' });
+        }
+        send({ type: 'done', total: userLeads.length, saved, source: 'database', message: `Delivered ${userLeads.length} leads instantly` });
+        return res.end();
+      }
+
+      // master_leads is empty — fall through to live YouTube scrape below
     }
 
     // Step 1 — Expand keywords (live YouTube scrape fallback)
