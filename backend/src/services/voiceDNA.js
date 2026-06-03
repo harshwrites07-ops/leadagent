@@ -32,14 +32,15 @@ function buildVoiceDNA(user) {
   else if (price.includes('500'))                             emailTone = 'approachable and eager to prove value';
 
   // Social proof — use best_result or construct from service
+  const serviceLC = (user.service_type || 'their growth').toLowerCase();
   const socialProof = user.best_result
     ? user.best_result.trim()
-    : `helping YouTube creators with ${user.service_type || 'their growth'}`;
+    : `helping YouTube creators with ${serviceLC}`;
 
   // Identity
   const identity = user.one_liner
     ? user.one_liner.trim()
-    : `${user.full_name || name} who offers ${user.service_type || 'services'} to YouTube creators`;
+    : `${user.full_name || name} who offers ${(user.service_type || 'services').toLowerCase()} to YouTube creators`;
 
   // CTA style from outreach goal
   let ctaStyle = 'a low-commitment conversational question';
@@ -49,7 +50,7 @@ function buildVoiceDNA(user) {
   const dna = {
     name,
     fullName: user.full_name,
-    service: user.service_type || 'services',
+    service: (user.service_type || 'services').toLowerCase(),
     identity,
     communicationStyle,
     emailTone,

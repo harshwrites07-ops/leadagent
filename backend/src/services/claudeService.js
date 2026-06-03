@@ -272,119 +272,126 @@ async function analyzeCrossPlatform(lead) {
   return result;
 }
 
-// ─── Step 4: Build the master prompt ─────────────────────────────────────────
-// Build sender context string from user's voice DNA
-function buildSenderContextFromDNA(dna) {
-  const lines = [
-    `SENDER: ${dna.fullName || dna.name}`,
-    `SERVICE: ${dna.service}`,
-    `IDENTITY: "${dna.identity}"`,
-    dna.experienceLevel ? `EXPERIENCE: ${dna.experienceLevel}` : '',
-    dna.socialProof     ? `BEST RESULT: "${dna.socialProof}"` : '',
-    dna.uniqueDifference? `WHAT MAKES THEM DIFFERENT: "${dna.uniqueDifference}"` : '',
-    dna.originStory     ? `WHY THEY DO THIS: "${dna.originStory}"` : '',
-    ``,
-    `HOW THEY COMMUNICATE:`,
-    dna.writingInstructions || `Communication style: ${dna.communicationStyle}`,
-    `Outreach goal: ${dna.ctaStyle}`,
-  ].filter(l => l !== undefined && l !== null);
-  return lines.join('\n');
+// ─── Step 4: Helpers + new example-driven prompt ─────────────────────────────
+
+function daysAgoText(dateStr) {
+  if (!dateStr) return 'recently';
+  const days = Math.floor((Date.now() - new Date(dateStr)) / 86400000);
+  if (days === 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 7) return `${days} days ago`;
+  if (days < 14) return 'last week';
+  return 'recently';
 }
 
-function buildMasterPrompt(lead, ctx, psych, crossPlatform, senderCtx) {
-  const { recentVideos, daysSinceUpload, viewTrend, bestVideo, worstVideo, viewToSubRatio } = ctx;
+function buildMasterPrompt(lead, user, dna) {
+  const senderName    = dna?.name || (user?.full_name || '').split(' ')[0] || 'the sender';
+  const senderService = (dna?.service || user?.service_type || 'services').toLowerCase();
+  const senderResult  = dna?.socialProof || user?.best_result || `helping creators with ${senderService}`;
+  const senderStyle   = dna?.communicationStyle || 'natural and genuine';
+  const senderTraits  = Array.isArray(dna?.traits) ? dna.traits.join(', ') : '';
 
-  const videoList = recentVideos.slice(0, 8).map((v, i) =>
-    `  ${i+1}. "${v.title || '?'}" — ${(v.views||0).toLocaleString()} views`
-  ).join('\n') || '  (no video data)';
+  const recentVideos = (() => { try { return JSON.parse(lead.recent_videos || '[]'); } catch { return []; } })();
+  const recentTitles = recentVideos.slice(0, 3).map(v => v.title).filter(Boolean).join(', ') || 'not available';
 
-  const trendLine = viewTrend === 'declining'
-    ? `⚠️ DECLINING — recent 3-video avg: ${Math.round(recentVideos.slice(0,3).reduce((s,v)=>s+(v.views||0),0)/Math.max(1,Math.min(3,recentVideos.length))).toLocaleString()} views vs channel avg ${(lead.avg_views||0).toLocaleString()}`
-    : viewTrend === 'growing'  ? `📈 GROWING — outperforming channel average`
-    : viewTrend === 'volatile' ? `⚡ VOLATILE — massive swings between videos`
-    : `📊 STABLE — consistent with channel average`;
+  const daysSinceUpload = lead.last_upload_date
+    ? Math.floor((Date.now() - new Date(lead.last_upload_date)) / 86400000) : null;
 
-  const uploadLine = daysSinceUpload !== null
-    ? `${daysSinceUpload} days since last upload (normally every ${lead.upload_frequency_days || '?'} days)${daysSinceUpload > 21 ? ' — THIS IS A BIG GAP' : ''}`
-    : `uploads every ${lead.upload_frequency_days || '?'} days`;
+  let viewTrend = 'stable';
+  if (recentVideos.length >= 4) {
+    const rAvg = recentVideos.slice(0, 3).reduce((s, v) => s + (v.views || 0), 0) / 3;
+    const oAvg = recentVideos.slice(-3).reduce((s, v) => s + (v.views || 0), 0) / 3;
+    if (rAvg > oAvg * 1.3)       viewTrend = 'growing';
+    else if (rAvg < oAvg * 0.65) viewTrend = 'declining';
+  }
 
-  const painBlock = psych.painSignals.length
-    ? psych.painSignals.map(p => `  • ${p}`).join('\n')
-    : '  • None detected — use opportunity angle';
+  const isSmall = (lead.subscriber_count || 0) < 5000;
 
-  const websiteExtra = crossPlatform.websiteText
-    ? `\nWEBSITE COPY (their actual voice): "${crossPlatform.websiteText}"` : '';
+  const examples = `EXAMPLE 1 — Analytical creator, video editor reaching out:
+Subject: your last 6 videos
+Body:
+Your upload pace dropped from twice a week to once every 11 days after March. That gap always shows up in subscriber growth before anything else does.
 
-  const senderName = senderCtx.split('SENDER:')[1]?.split('|')[0]?.trim() || 'Prahvi';
+Edited for a business creator in a similar spot — consistency fix alone moved their average views from 8K to 23K over 2 months.
 
-  return `You are ghostwriting a cold outreach email.
-The goal: make the creator think "this person ACTUALLY studied my channel."
-Not a template. Not AI. A human who spent hours on their content.
+Worth a 5-minute look at what changed?
 
-${senderCtx}
+Jake
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-CREATOR: ${lead.channel_name} (@${lead.channel_handle || 'N/A'})
-SUBS: ${(lead.subscriber_count||0).toLocaleString()} | NICHE: ${lead.niche || 'general'}
-AVG VIEWS: ${(lead.avg_views||0).toLocaleString()} | ENGAGEMENT: ${lead.engagement_rate||0}%
-VIEW/SUB RATIO: ${(viewToSubRatio*100).toFixed(1)}%${viewToSubRatio < 0.05 ? ' ⚠️ LOW — audience not watching' : viewToSubRatio > 0.3 ? ' ✓ HIGH — very engaged' : ''}
-UPLOAD STATUS: ${uploadLine}
-VIEW TREND: ${trendLine}
+---
 
-RECENT VIDEOS:
-${videoList}
+EXAMPLE 2 — Casual creator, thumbnail designer reaching out:
+Subject: noticed something on your channel
+Body:
+Your cooking videos get solid views but your thumbnails are doing the opposite of what your content deserves.
 
-BEST VIDEO: ${bestVideo ? `"${bestVideo.title}" — ${(bestVideo.views||0).toLocaleString()} views` : 'N/A'}
-WORST RECENT: ${worstVideo && worstVideo.title !== bestVideo?.title ? `"${worstVideo.title}" — ${(worstVideo.views||0).toLocaleString()} views` : 'N/A'}
-DESCRIPTION: ${(lead.channel_description||'').substring(0,250)||'N/A'}${websiteExtra}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PSYCHOLOGY
-Profile: ${psych.profileLabel}
-Personality: ${psych.personality} | Tone: ${psych.tone}
-Data-driven: ${psych.isDataDriven?'YES — use specific numbers':'NO — emotion and story'}
-Communication: ${psych.commsStyle}
-Pain signals detected:
-${painBlock}
-What makes them stop and read: ${psych.stopAndRead}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-EMAIL RULES — FOLLOW EVERY SINGLE ONE
+Redesigned thumbnails for a food creator with your exact setup — CTR went from 3.2% to 8.7% in 3 weeks.
 
-STRUCTURE (4 parts, no headers in email):
-HOOK (1-2 lines): Observation so specific they think "this person studied me."
-  NOT a compliment — an INSIGHT. Use exact video title, exact number, exact pattern.
-  ${viewTrend === 'declining' ? 'Lead with the view drop. Hint you know why.' : ''}
-  ${daysSinceUpload > 21 ? `Lead with the ${daysSinceUpload}-day upload gap as a solvable problem.` : ''}
-CONNECT (1-2 lines): Build on that insight. Show you understand their situation.
-  No pitch yet. Match their EXACT tone: ${psych.tone}
-SOFT PITCH (1 line): One specific result you've gotten for creators in this situation.
-  NOT "I'm a video editor." Say "I helped a [niche] creator go from X to Y."
-CTA (1 line): ONE question. Low commitment. They answer in 1-2 words.
+Want me to mock one up for your latest video?
 
-WORD COUNT: 60-120 words body. Hard limit.
-SUBJECT: 3-7 words. Hyper-specific. Wouldn't work for any other creator.
-SIGN AS: ${senderName} — first name only, nothing else after it.
+Sarah
 
-${psych.usesAllCaps ? 'CREATOR STYLE: Uses ALL CAPS — high energy channel, match the energy.' : ''}
-${psych.usesNumbers ? 'CREATOR STYLE: Loves numbers in titles — be specific with data.' : ''}
-${psych.usesQuestions ? 'CREATOR STYLE: Uses questions in titles — conversational approach works.' : ''}
+---
 
-BANNED — NEVER USE ANY OF THESE:
-"${BANNED_PHRASES.join('", "')}"
-Never start body with "I". Never mention pricing. Never sound salesy.
-Never use exclamation marks more than once total.
+EXAMPLE 3 — Finance creator, scriptwriter reaching out:
+Subject: your March videos
+Body:
+Three of your last four finance videos dropped below your 6-month average by 40%. The content is solid — the hooks aren't matching what your audience clicks for.
 
-OUTPUT: Return ONLY valid JSON. No markdown, no backticks, no explanation.
+Rewrote hooks for a creator in the same situation. Next two videos hit their all-time view records.
+
+Open to seeing what I'd change in yours?
+
+Marcus`;
+
+  return `You are writing a cold outreach email.
+Study these 3 examples carefully.
+They show EXACTLY the style, length, and structure required.
+
+${examples}
+
+NOW WRITE ONE EMAIL with these details:
+
+SENDER:
+Name: ${senderName}
+What they do: ${senderService}
+Their best result: ${senderResult}
+Their style: ${senderStyle}
+Their personality: ${senderTraits}
+
+CREATOR TO EMAIL:
+Name: ${lead.channel_name}
+Subscribers: ${(lead.subscriber_count || 0).toLocaleString()}
+Niche: ${lead.niche || 'general'}
+Average views: ${(lead.avg_views || 0).toLocaleString()}
+View trend: ${viewTrend}
+Last upload: ${daysSinceUpload !== null ? `${daysSinceUpload} days ago` : 'unknown'}
+Recent video titles: ${recentTitles}
+Description snippet: ${(lead.channel_description || '').slice(0, 150) || 'not available'}
+
+RULES — NON NEGOTIABLE:
+1. Maximum 4-5 sentences in body
+2. First sentence: one specific observation about THIS creator using their real data. NO compliments. An insight only.
+3. Second sentence: expand on that insight. Still zero mention of your service.
+4. Third sentence: your social proof. ONE specific result. Numbers required. Format: "Helped a [niche] creator [specific result]"
+5. Fourth sentence: ONE question CTA. Low commitment. Easy to answer yes/no.
+6. Sign with first name only: ${senderName}
+7. Subject line: 3-5 words. Reference something specific from their channel. NOT generic. Must feel personal.
+8. Body: 50-80 words maximum
+9. NEVER mention pricing
+10. NEVER offer free work
+11. NEVER use: "I came across", "love your content", "collaboration", "opportunity", "hope this finds you"
+12. Do NOT capitalize service name. Write "${senderService}" not "${senderService.charAt(0).toUpperCase() + senderService.slice(1)}"
+13. NEVER start body with "I"
+
+${isSmall ? 'IMPORTANT: This is a small/growing channel. Focus on their growth potential and trajectory. Do NOT highlight their low view counts in a way that feels embarrassing. Frame it as an opportunity.' : ''}
+
+OUTPUT as JSON only, no markdown:
 {
-  "subject": "3-7 word subject",
-  "body": "60-120 word email body",
-  "subject_variants": ["metric variant", "curiosity variant", "peer variant"],
-  "key_insight": "most specific thing you noticed and used",
-  "custom_offer": "one line — what specifically you'd help them with",
-  "tone_used": "describe the tone",
-  "personalization_elements": ["specific element 1", "specific element 2", "specific element 3"],
-  "psychology_applied": "one sentence on your approach",
-  "word_count": <number>,
-  "quality_score": <0-100>
+  "subject": "subject line here",
+  "body": "email body here",
+  "pitch_score": 85,
+  "word_count": 67
 }`;
 }
 
@@ -426,18 +433,21 @@ function parsePitchResponseV2(text, lead) {
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('No JSON');
     const p = JSON.parse(jsonMatch[0]);
-    if (!p.subject || !p.body) throw new Error('Missing fields');
+    // Accept both old and new field names
+    const subject = p.subject || p.email_subject;
+    const body    = p.body    || p.email_body;
+    if (!subject || !body) throw new Error('Missing fields');
     return {
-      email_subject:   p.subject,
-      email_body:      p.body,
+      email_subject:    subject,
+      email_body:       body,
       subject_variants: p.subject_variants || [],
-      key_insight:     p.key_insight || '',
-      custom_offer:    p.custom_offer || '',
-      tone_used:       p.tone_used || '',
+      key_insight:      p.key_insight      || '',
+      custom_offer:     p.custom_offer     || '',
+      tone_used:        p.tone_used        || '',
       personalization_elements: p.personalization_elements || [],
       psychology_applied: p.psychology_applied || '',
-      word_count:      p.word_count || p.body.split(/\s+/).filter(Boolean).length,
-      quality_score:   p.quality_score || null,
+      word_count:  p.word_count  || body.split(/\s+/).filter(Boolean).length,
+      pitch_score: p.pitch_score || p.quality_score || null,
     };
   } catch {
     return null;
@@ -509,11 +519,12 @@ function buildFallback(lead, userId) {
   try {
     const u = getDb().prepare('SELECT full_name, service_type FROM users WHERE id=?').get(userId || lead.user_id);
     if (u?.full_name) name = u.full_name.split(' ')[0];
-    if (u?.service_type) service = u.service_type;
+    if (u?.service_type) service = u.service_type.toLowerCase();
   } catch {}
+  const uploadAgo = daysAgoText(lead.last_upload_date);
   return {
-    email_subject: `${lead.channel_name?.split(' ')[0]}'s last ${Math.round(lead.upload_frequency_days||7)} days`,
-    email_body: `Your last few uploads have been getting around ${(lead.avg_views||0).toLocaleString()} views — have you noticed the gap between your best video and your most recent ones?\n\nI work with creators in ${lead.niche||'your space'} on ${service}. Would a quick breakdown of what's holding back your views be useful?\n\n${name}`,
+    email_subject: `your ${lead.niche || 'channel'} views`,
+    email_body: `Your last few uploads have been getting around ${(lead.avg_views||0).toLocaleString()} views — there's a gap between your best video and your most recent ones worth looking at.\n\nHelped a ${lead.niche||'similar'} creator fix exactly this. Would a quick breakdown of what's holding back your views be useful?\n\n${name}`,
     subject_variants: [`your ${lead.channel_name?.split(' ')[0]} view pattern`, 'something I noticed', `${lead.niche || 'your'} retention angle`],
     key_insight: 'View-to-sub ratio and upload pattern',
     custom_offer: 'Retention-optimized editing for consistent growth',
@@ -527,47 +538,60 @@ function buildFallback(lead, userId) {
   };
 }
 
+// ─── Validation: check email body for disqualifying patterns ─────────────────
+function failsValidation(subject, body) {
+  if (!body) return 'empty body';
+  const wc = body.split(/\s+/).filter(Boolean).length;
+  if (wc > 100)                              return `too long (${wc} words)`;
+  if (/Video editing/.test(body))            return 'capitalized service name "Video editing"';
+  if (/I came across/i.test(body))           return 'banned phrase "I came across"';
+  if (/love your content/i.test(body))       return 'banned phrase "love your content"';
+  if (/hope this finds/i.test(body))         return 'banned phrase "hope this finds"';
+  return null; // passes
+}
+
 // ─── MAIN: generateFullPitch v2 ───────────────────────────────────────────────
 async function generateFullPitch(lead, userId = null) {
-  const ctx     = buildRichCreatorContext(lead);
-  const psych   = buildPsychologyProfile(lead, ctx);
-  const cross   = await analyzeCrossPlatform(lead).catch(() => ({ websiteText: '', socialLinks: {} }));
+  const ctx   = buildRichCreatorContext(lead);
+  const psych = buildPsychologyProfile(lead, ctx);
 
-  // Always try to use voice DNA — falls back to legacy agency context if not available
-  let senderCtx;
+  // Load user + DNA for new prompt
+  let user = null, dna = null;
   try {
     const { getOrBuildVoiceDNA } = require('./voiceDNA');
-    const dna = await getOrBuildVoiceDNA(userId || lead.user_id);
-    senderCtx = dna ? buildSenderContextFromDNA(dna) : buildAgencyContext(userId || lead.user_id);
-  } catch {
-    senderCtx = buildAgencyContext(userId || lead.user_id);
-  }
+    user = getDb().prepare('SELECT * FROM users WHERE id=?').get(userId || lead.user_id);
+    dna  = await getOrBuildVoiceDNA(userId || lead.user_id);
+  } catch {}
 
-  const prompt = buildMasterPrompt(lead, ctx, psych, cross, senderCtx);
+  const prompt = buildMasterPrompt(lead, user, dna);
 
-  let bestResult   = null;
-  let bestScore    = 0;
+  let bestResult = null;
+  let bestScore  = 0;
   const maxAttempts = 3;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const raw = await completeWithGeminiRotating(prompt, '', 2000, FAST_MODEL);
+    const raw = await completeWithGeminiRotating(prompt, '', 800, FAST_MODEL);
     if (!raw) break;
 
     const parsed = parsePitchResponseV2(raw, lead);
-    if (!parsed) continue;
+    if (!parsed) { console.log(`[PitchV2] Attempt ${attempt+1} — parse failed`); continue; }
 
-    // Score with our detailed rubric
+    // Validation gate — regenerate on bad patterns (max 2 retries)
+    const fail = failsValidation(parsed.email_subject, parsed.email_body);
+    if (fail && attempt < maxAttempts - 1) {
+      console.log(`[PitchV2] Attempt ${attempt+1} failed validation: ${fail} — regenerating`);
+      continue;
+    }
+
     const detailedScore = scoreEmailDetailed(parsed.email_subject, parsed.email_body);
-    const finalScore = Math.round((detailedScore + (parsed.quality_score || 50)) / 2);
-
+    const finalScore    = Math.round((detailedScore + (parsed.pitch_score || parsed.quality_score || 50)) / 2);
     console.log(`[PitchV2] Attempt ${attempt+1}/3 — score ${finalScore}/100 for ${lead.channel_name}`);
 
     if (finalScore > bestScore) {
       bestScore  = finalScore;
       bestResult = { ...parsed, pitch_score: finalScore };
     }
-
-    if (finalScore >= 70) break; // good enough, stop
+    if (finalScore >= 70) break;
   }
 
   if (!bestResult) {
@@ -575,16 +599,15 @@ async function generateFullPitch(lead, userId = null) {
     return buildFallback(lead, userId);
   }
 
-  // Generate follow-up sequence (non-blocking — fire and return, sequence stored separately)
+  // Generate follow-up sequence (non-blocking)
   generateFollowUpSequence(lead, bestResult, psych)
     .then(followUps => { bestResult.follow_ups = followUps; })
     .catch(() => {});
 
   return {
     ...bestResult,
-    // backward compat aliases
-    email_subject:   bestResult.email_subject || bestResult.subject,
-    email_body:      bestResult.email_body    || bestResult.body,
+    email_subject:    bestResult.email_subject || bestResult.subject,
+    email_body:       bestResult.email_body    || bestResult.body,
     subject_variants: bestResult.subject_variants || [],
   };
 }
