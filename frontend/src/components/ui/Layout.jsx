@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import ReactDOM from 'react-dom';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import Icon from './Icon';
 import api from '../../utils/api';
@@ -174,114 +173,57 @@ function AgentPanel({ onClose }) {
   );
 }
 
-/* ── User dropdown ───────────────────────────────────────── */
-function UserMenu({ user, logout }) {
+/* ── User section (inline, no floating) ─────────────────── */
+function UserFooter({ user, logout }) {
   const [open, setOpen] = useState(false);
-  const [rect, setRect] = useState(null);
-  const btnRef = useRef(null);
-  const menuRef = useRef(null);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    if (!open) return;
-    const handler = e => {
-      if (menuRef.current && !menuRef.current.contains(e.target) &&
-          btnRef.current && !btnRef.current.contains(e.target)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
-
-  const initials = user?.full_name
-    ? user.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
-    : (user?.email?.[0] || '?').toUpperCase();
-
-  const handleOpen = () => {
-    if (btnRef.current) setRect(btnRef.current.getBoundingClientRect());
-    setOpen(o => !o);
-  };
-
-  const menu = open && rect && ReactDOM.createPortal(
-    <div
-      ref={menuRef}
-      style={{
-        position: 'fixed',
-        bottom: window.innerHeight - rect.top + 8,
-        left: rect.left,
-        background: 'var(--surface)', border: '1px solid var(--line-2)',
-        borderRadius: 'var(--r-md)', padding: 4, width: 210, zIndex: 99999,
-        boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
-      }}
-    >
-      <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--line)', marginBottom: 4 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {user?.full_name || 'User'}
-        </div>
-        <div style={{ fontSize: 10, color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'var(--f-mono)' }}>
-          {user?.email}
-        </div>
-      </div>
-      {[
-        { label: 'Profile & Settings', icon: 'settings', action: () => { navigate('/settings'); setOpen(false); } },
-        ...(user?.is_admin ? [
-          { label: 'Admin Panel', icon: 'shield', action: () => { navigate('/admin'); setOpen(false); } },
-          { label: 'Admin Settings', icon: 'shield', action: () => { navigate('/admin/settings'); setOpen(false); } },
-        ] : []),
-      ].map(item => (
-        <button
-          key={item.label}
-          onClick={item.action}
-          style={{
-            width: '100%', display: 'flex', alignItems: 'center', gap: 8,
-            padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer',
-            color: 'var(--text-2)', fontSize: 12, fontWeight: 500, borderRadius: 6,
-            textAlign: 'left',
-          }}
-          onMouseEnter={e => e.currentTarget.style.background = 'var(--hover)'}
-          onMouseLeave={e => e.currentTarget.style.background = 'none'}
-        >
-          <Icon name={item.icon} size={13} />
-          {item.label}
-        </button>
-      ))}
-      <div style={{ borderTop: '1px solid var(--line)', marginTop: 4, paddingTop: 4 }}>
-        <button
-          onClick={logout}
-          style={{
-            width: '100%', display: 'flex', alignItems: 'center', gap: 8,
-            padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer',
-            color: 'var(--bad)', fontSize: 12, fontWeight: 600, borderRadius: 6,
-            textAlign: 'left',
-          }}
-          onMouseEnter={e => e.currentTarget.style.background = 'var(--coral-soft)'}
-          onMouseLeave={e => e.currentTarget.style.background = 'none'}
-        >
-          <Icon name="logout" size={13} />
-          Sign Out
-        </button>
-      </div>
-    </div>,
-    document.body
-  );
-
   return (
-    <>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      {open && (
+        <div style={{
+          background: 'var(--surface-2)', border: '1px solid var(--line)',
+          borderRadius: 'var(--r)', padding: 4,
+        }}>
+          <button
+            onClick={() => { navigate('/settings'); setOpen(false); }}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-2)', fontSize: 12, borderRadius: 6, textAlign: 'left' }}
+            onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-3)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'none'}
+          >
+            <Icon name="settings" size={13} /> Profile & Settings
+          </button>
+          {user?.is_admin && <>
+            <button onClick={() => { navigate('/admin'); setOpen(false); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-2)', fontSize: 12, borderRadius: 6, textAlign: 'left' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-3)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}><Icon name="shield" size={13} /> Admin Panel</button>
+            <button onClick={() => { navigate('/admin/settings'); setOpen(false); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-2)', fontSize: 12, borderRadius: 6, textAlign: 'left' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-3)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}><Icon name="shield" size={13} /> Admin Settings</button>
+          </>}
+          <div style={{ borderTop: '1px solid var(--line)', marginTop: 2, paddingTop: 2 }}>
+            <button
+              onClick={logout}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--bad)', fontSize: 12, fontWeight: 600, borderRadius: 6, textAlign: 'left' }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--coral-soft)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'none'}
+            >
+              <Icon name="logout" size={13} /> Sign Out
+            </button>
+          </div>
+        </div>
+      )}
       <button
-        ref={btnRef}
-        onClick={handleOpen}
-        className="tb__avatar"
-        style={{ cursor: 'pointer', border: 'none' }}
-        title={user?.full_name || user?.email}
+        onClick={() => setOpen(o => !o)}
+        className="sb__org"
+        style={{ cursor: 'pointer', border: open ? '1px solid var(--lime)' : undefined }}
       >
-        {user?.profile_picture
-          ? <img src={user.profile_picture} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
-          : initials
-        }
+        <div className="sb__org-ava" style={{ fontSize: 10, fontWeight: 700 }}>
+          {(user?.full_name || user?.email || '?').slice(0, 2).toUpperCase()}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="sb__org-name" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.full_name || user?.email}</div>
+          <div className="sb__org-role">{user?.plan || 'Free'} plan</div>
+        </div>
+        <Icon name="chev" size={12} style={{ color: 'var(--text-3)', transform: open ? 'rotate(-90deg)' : 'rotate(90deg)', flexShrink: 0 }} />
       </button>
-      {menu}
-    </>
+    </div>
   );
 }
 
@@ -343,7 +285,7 @@ export default function Layout({ children }) {
             </div>
             <span style={{ fontSize: 13, fontWeight: 600 }}>ContentCrafterzz</span>
           </div>
-          {user && <UserMenu user={user} logout={logout} />}
+          {user && <UserFooter user={user} logout={logout} />}
         </header>
         <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 60 }}>
           {children}
@@ -429,18 +371,7 @@ export default function Layout({ children }) {
             </div>
             <div className="sb__credit-meta">6.4k / 10k</div>
           </div>
-          {user && (
-            <div className="sb__org" style={{ cursor: 'default' }}>
-              <div className="sb__org-ava" style={{ fontSize: 10, fontWeight: 700 }}>
-                {(user.full_name || user.email || '?').slice(0, 2).toUpperCase()}
-              </div>
-              <div>
-                <div className="sb__org-name">{user.full_name || user.email}</div>
-                <div className="sb__org-role">{user.plan || 'Free'} plan</div>
-              </div>
-              <UserMenu user={user} logout={logout} />
-            </div>
-          )}
+          {user && <UserFooter user={user} logout={logout} />}
         </div>
       </aside>
 
