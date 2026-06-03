@@ -68,7 +68,8 @@
       "PowerShell(try { $r = Invoke-WebRequest -Uri \"http://localhost:3001/api/health\" -UseBasicParsing -TimeoutSec 5; \"Backend OK: \" + $r.Content } catch { \"Backend DOWN: $_\" })",
       "Bash(node backend\\\\seed-leads.js)",
       "Bash(node)",
-      "Bash(xargs grep -l \"app.listen\\\\|server.listen\")"
+      "Bash(xargs grep -l \"app.listen\\\\|server.listen\")",
+      "PowerShell(Invoke-RestMethod -Uri \"https://app.quelro.com/api/health\")"
     ],
     "additionalDirectories": [
       "c:\\Users\\it\\contentcrafterzz-outreach-os\\design-reference\\screenshots"

@@ -371,6 +371,11 @@ function initSchema() {
   try { db.exec(`ALTER TABLE leads ADD COLUMN scrape_source TEXT DEFAULT 'youtube_api'`); } catch {}
   try { db.exec(`ALTER TABLE leads ADD COLUMN view_trend TEXT`); } catch {}
 
+  // Enforce email-only in master_leads — delete any rows without email
+  try { db.exec(`DELETE FROM master_leads WHERE email IS NULL OR email = ''`); } catch {}
+  // Unique index on channel_id for master_leads
+  try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_master_leads_channel_id ON master_leads(channel_id) WHERE channel_id IS NOT NULL`); } catch {}
+
   // Voice DNA / user profile columns
   try { db.exec(`ALTER TABLE users ADD COLUMN service_type TEXT`); } catch {}
   try { db.exec(`ALTER TABLE users ADD COLUMN one_liner TEXT`); } catch {}
