@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import ReactDOM from 'react-dom';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import Icon from './Icon';
 import api from '../../utils/api';
@@ -176,31 +177,97 @@ function AgentPanel({ onClose }) {
 /* ── User dropdown ───────────────────────────────────────── */
 function UserMenu({ user, logout }) {
   const [open, setOpen] = useState(false);
-  const [dropPos, setDropPos] = useState({ bottom: 72, left: 16 });
-  const ref = useRef(null);
+  const [rect, setRect] = useState(null);
   const btnRef = useRef(null);
+  const menuRef = useRef(null);
   const navigate = useNavigate();
 
   useEffect(() => {
-    const handler = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    if (!open) return;
+    const handler = e => {
+      if (menuRef.current && !menuRef.current.contains(e.target) &&
+          btnRef.current && !btnRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, []);
+  }, [open]);
 
   const initials = user?.full_name
     ? user.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
     : (user?.email?.[0] || '?').toUpperCase();
 
   const handleOpen = () => {
-    if (btnRef.current) {
-      const r = btnRef.current.getBoundingClientRect();
-      setDropPos({ bottom: window.innerHeight - r.top + 8, left: r.left });
-    }
+    if (btnRef.current) setRect(btnRef.current.getBoundingClientRect());
     setOpen(o => !o);
   };
 
+  const menu = open && rect && ReactDOM.createPortal(
+    <div
+      ref={menuRef}
+      style={{
+        position: 'fixed',
+        bottom: window.innerHeight - rect.top + 8,
+        left: rect.left,
+        background: 'var(--surface)', border: '1px solid var(--line-2)',
+        borderRadius: 'var(--r-md)', padding: 4, width: 210, zIndex: 99999,
+        boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+      }}
+    >
+      <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--line)', marginBottom: 4 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {user?.full_name || 'User'}
+        </div>
+        <div style={{ fontSize: 10, color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'var(--f-mono)' }}>
+          {user?.email}
+        </div>
+      </div>
+      {[
+        { label: 'Profile & Settings', icon: 'settings', action: () => { navigate('/settings'); setOpen(false); } },
+        ...(user?.is_admin ? [
+          { label: 'Admin Panel', icon: 'shield', action: () => { navigate('/admin'); setOpen(false); } },
+          { label: 'Admin Settings', icon: 'shield', action: () => { navigate('/admin/settings'); setOpen(false); } },
+        ] : []),
+      ].map(item => (
+        <button
+          key={item.label}
+          onClick={item.action}
+          style={{
+            width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+            padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer',
+            color: 'var(--text-2)', fontSize: 12, fontWeight: 500, borderRadius: 6,
+            textAlign: 'left',
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = 'var(--hover)'}
+          onMouseLeave={e => e.currentTarget.style.background = 'none'}
+        >
+          <Icon name={item.icon} size={13} />
+          {item.label}
+        </button>
+      ))}
+      <div style={{ borderTop: '1px solid var(--line)', marginTop: 4, paddingTop: 4 }}>
+        <button
+          onClick={logout}
+          style={{
+            width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+            padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer',
+            color: 'var(--bad)', fontSize: 12, fontWeight: 600, borderRadius: 6,
+            textAlign: 'left',
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = 'var(--coral-soft)'}
+          onMouseLeave={e => e.currentTarget.style.background = 'none'}
+        >
+          <Icon name="logout" size={13} />
+          Sign Out
+        </button>
+      </div>
+    </div>,
+    document.body
+  );
+
   return (
-    <div ref={ref} style={{ position: 'relative' }}>
+    <>
       <button
         ref={btnRef}
         onClick={handleOpen}
@@ -213,64 +280,8 @@ function UserMenu({ user, logout }) {
           : initials
         }
       </button>
-
-      {open && (
-        <div style={{
-          position: 'fixed', bottom: dropPos.bottom, left: dropPos.left,
-          background: 'var(--surface)', border: '1px solid var(--line-2)',
-          borderRadius: 'var(--r-md)', padding: 4, width: 200, zIndex: 9999,
-          boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-        }}>
-          <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--line)', marginBottom: 4 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {user?.full_name || 'User'}
-            </div>
-            <div style={{ fontSize: 10, color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'var(--f-mono)' }}>
-              {user?.email}
-            </div>
-          </div>
-          {[
-            { label: 'Profile & Settings', icon: 'settings', action: () => { navigate('/settings'); setOpen(false); } },
-            ...(user?.is_admin ? [
-              { label: 'Admin Panel', icon: 'shield', action: () => { navigate('/admin'); setOpen(false); } },
-              { label: 'Admin Settings', icon: 'shield', action: () => { navigate('/admin/settings'); setOpen(false); } },
-            ] : []),
-          ].map(item => (
-            <button
-              key={item.label}
-              onClick={item.action}
-              style={{
-                width: '100%', display: 'flex', alignItems: 'center', gap: 8,
-                padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer',
-                color: 'var(--text-2)', fontSize: 12, fontWeight: 500, borderRadius: 6,
-                textAlign: 'left',
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = 'var(--hover)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'none'}
-            >
-              <Icon name={item.icon} size={13} />
-              {item.label}
-            </button>
-          ))}
-          <div style={{ borderTop: '1px solid var(--line)', marginTop: 4, paddingTop: 4 }}>
-            <button
-              onClick={logout}
-              style={{
-                width: '100%', display: 'flex', alignItems: 'center', gap: 8,
-                padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer',
-                color: 'var(--bad)', fontSize: 12, fontWeight: 600, borderRadius: 6,
-                textAlign: 'left',
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = 'var(--coral-soft)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'none'}
-            >
-              <Icon name="logout" size={13} />
-              Sign Out
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
+      {menu}
+    </>
   );
 }
 
