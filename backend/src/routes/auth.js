@@ -488,6 +488,33 @@ router.put('/admin/users/:id/ban', requireAdmin, asyncHandler(async (req, res) =
   res.json({ success: true, banned: !!lockout });
 }));
 
+// ── Admin: bulk seed master_leads from JSON payload ───────────────────────────
+router.post('/admin/seed-master-leads', requireAdmin, asyncHandler(async (req, res) => {
+  const { leads } = req.body;
+  if (!Array.isArray(leads) || !leads.length) return res.status(400).json({ success: false, error: 'leads array required' });
+  const db = getDb();
+  const stmt = db.prepare(`
+    INSERT OR IGNORE INTO master_leads
+      (channel_id, channel_name, channel_handle, subscriber_count, avg_views,
+       email, website, channel_description, lead_score, temperature, country, niche)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+  `);
+  let inserted = 0;
+  const doInsert = db.transaction(rows => {
+    for (const l of rows) {
+      if (!l.channel_name) continue;
+      const r = stmt.run(l.channel_id||null, l.channel_name, l.channel_handle||null,
+        l.subscriber_count||0, l.avg_views||0, l.email||null, l.website||null,
+        l.channel_description||null, l.lead_score||50, l.temperature||'warm', l.country||null, l.niche||null);
+      if (r.changes > 0) inserted++;
+    }
+  });
+  doInsert(leads);
+  const total = db.prepare('SELECT COUNT(*) as c FROM master_leads').get().c;
+  const withEmail = db.prepare("SELECT COUNT(*) as c FROM master_leads WHERE email IS NOT NULL AND email != ''").get().c;
+  res.json({ success: true, inserted, total, withEmail });
+}));
+
 // ── Google OAuth ─────────────────────────────────────────────────────────────
 // These routes are registered directly in server.js via passport
 
