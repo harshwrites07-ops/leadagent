@@ -220,59 +220,76 @@ router.post('/powermode/start', asyncHandler(async (req, res) => {
       fullParams.push(...userChannelIds);
     }
 
-    const available = db.prepare(`SELECT COUNT(*) as c FROM master_leads WHERE ${fullWhere}`).get(...fullParams).c;
+    let available = db.prepare(`SELECT COUNT(*) as c FROM master_leads WHERE ${fullWhere}`).get(...fullParams).c;
+
+    // Cross-niche fallback: if the selected niches return nothing, serve any email-verified leads
+    let fallbackNiche = false;
+    let activewhere = fullWhere;
+    let activeParams = fullParams;
+    if (available === 0) {
+      const fallbackWhere = userChannelIds.length > 0
+        ? `email IS NOT NULL AND email != '' AND channel_id NOT IN (${userChannelIds.map(() => '?').join(',')})`
+        : `email IS NOT NULL AND email != ''`;
+      const fallbackParams = userChannelIds.length > 0 ? [...userChannelIds] : [];
+      available = db.prepare(`SELECT COUNT(*) as c FROM master_leads WHERE ${fallbackWhere}`).get(...fallbackParams).c;
+      if (available > 0) {
+        fallbackNiche = true;
+        activewhere = fallbackWhere;
+        activeParams = fallbackParams;
+      }
+    }
 
     if (available > 0) {
       const serveCount = Math.min(targetCount, available);
-      console.log(`[PowerMode] master_leads: ${available} available → serving ${serveCount} to user ${userId}`);
+      console.log(`[PowerMode] master_leads: ${available} available → serving ${serveCount} to user ${userId}${fallbackNiche ? ' (cross-niche fallback)' : ''}`);
       const masterLeads = db.prepare(
-        `SELECT * FROM master_leads WHERE ${fullWhere} ORDER BY lead_score DESC, subscriber_count DESC LIMIT ?`
-      ).all(...fullParams, serveCount);
+        `SELECT * FROM master_leads WHERE ${activewhere} ORDER BY lead_score DESC, subscriber_count DESC LIMIT ?`
+      ).all(...activeParams, serveCount);
 
-        const insert = db.prepare(LEAD_INSERT_SQL);
-        const saveMany = db.transaction(leads => {
-          let count = 0;
-          for (const l of leads) {
-            const r = insert.run({
-              user_id: userId, platform: 'youtube',
-              channel_id: l.channel_id || null, channel_name: l.channel_name,
-              channel_handle: l.channel_handle || null, subscriber_count: l.subscriber_count || 0,
-              total_videos: 0, avg_views: l.avg_views || 0, avg_likes: 0, avg_comments: 0,
-              engagement_rate: 0, upload_frequency_days: 0, last_upload_date: null,
-              channel_description: l.channel_description || null,
-              channel_tags: '[]', recent_videos: '[]', most_viewed_video: '{}',
-              country: l.country || null, email: l.email, website: l.website || null,
-              social_links: '{}', thumbnail_url: null, pain_points: '[]',
-              lead_score: l.lead_score || 50, temperature: l.temperature || 'warm', niche: l.niche || null,
-            });
-            if (r.changes > 0) count++;
-          }
-          return count;
-        });
-        const totalSaved = saveMany(masterLeads);
-        incrementUsage(userId, 'leads', totalSaved);
-        logActivity('leads_imported', `PowerMode served ${totalSaved} leads from master database`, null, {}, userId);
+      const insert = db.prepare(LEAD_INSERT_SQL);
+      const saveMany = db.transaction(leads => {
+        let count = 0;
+        for (const l of leads) {
+          const r = insert.run({
+            user_id: userId, platform: 'youtube',
+            channel_id: l.channel_id || null, channel_name: l.channel_name,
+            channel_handle: l.channel_handle || null, subscriber_count: l.subscriber_count || 0,
+            total_videos: 0, avg_views: l.avg_views || 0, avg_likes: 0, avg_comments: 0,
+            engagement_rate: 0, upload_frequency_days: 0, last_upload_date: null,
+            channel_description: l.channel_description || null,
+            channel_tags: '[]', recent_videos: '[]', most_viewed_video: '{}',
+            country: l.country || null, email: l.email, website: l.website || null,
+            social_links: '{}', thumbnail_url: null, pain_points: '[]',
+            lead_score: l.lead_score || 50, temperature: l.temperature || 'warm', niche: l.niche || null,
+          });
+          if (r.changes > 0) count++;
+        }
+        return count;
+      });
+      const totalSaved = saveMany(masterLeads);
+      incrementUsage(userId, 'leads', totalSaved);
+      logActivity('leads_imported', `PowerMode served ${totalSaved} leads from master database`, null, {}, userId);
 
-        const targetReached = totalSaved >= targetCount;
-        Object.assign(ps, {
-          running: false, total: masterLeads.length, saved: totalSaved,
-          keywordsTotal: 0, keywordsDone: 0, currentKeywords: [],
-          recentLeads: masterLeads.slice(0, 10).map(l => ({ channel_name: l.channel_name, subscriber_count: l.subscriber_count, hasEmail: true, email: l.email })),
-          stats: { hot: 0, warm: totalSaved, cold: 0, withEmail: totalSaved },
-          stopped: false, error: null, quotaExhausted: false,
-          niches: requestedNiches, targetCount, targetReached,
-        });
-        return res.json({ status: 'instant', source: 'master_leads', saved: totalSaved, targetCount, niches: requestedNiches, keywordsTotal: 0, targetReached });
+      const targetReached = totalSaved >= targetCount;
+      Object.assign(ps, {
+        running: false, total: masterLeads.length, saved: totalSaved,
+        keywordsTotal: 0, keywordsDone: 0, currentKeywords: [],
+        recentLeads: masterLeads.slice(0, 10).map(l => ({ channel_name: l.channel_name, subscriber_count: l.subscriber_count, hasEmail: true, email: l.email })),
+        stats: { hot: 0, warm: totalSaved, cold: 0, withEmail: totalSaved },
+        stopped: false, error: null, quotaExhausted: false,
+        niches: requestedNiches, targetCount, targetReached, fallbackNiche,
+      });
+      return res.json({ status: 'instant', source: 'master_leads', saved: totalSaved, targetCount, niches: requestedNiches, keywordsTotal: 0, targetReached, fallbackNiche });
     }
 
-    // master_leads is empty — tell user, don't burn API quota
+    // master_leads is completely empty — tell user
     Object.assign(ps, {
       running: false, total: 0, saved: 0, keywordsTotal: 0, keywordsDone: 0,
       stats: { hot: 0, warm: 0, cold: 0, withEmail: 0 },
-      stopped: false, error: 'Lead database is being built. Check back in a few hours.', quotaExhausted: false,
+      stopped: false, error: 'No leads in the database yet. The admin is seeding it — check back soon.', quotaExhausted: false,
       niches: requestedNiches, targetCount, targetReached: false,
     });
-    return res.json({ status: 'empty', source: 'master_leads', saved: 0, targetCount, message: 'Lead database is being built — check back soon.' });
+    return res.json({ status: 'empty', source: 'master_leads', saved: 0, targetCount, message: 'No leads in the database yet — check back soon.' });
   }
   // ── master_leads serves everything — live scraping disabled for users ────────
   // (This line should never be reached now that master_leads is always checked)

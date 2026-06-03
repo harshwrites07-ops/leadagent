@@ -176,7 +176,9 @@ function AgentPanel({ onClose }) {
 /* ── User dropdown ───────────────────────────────────────── */
 function UserMenu({ user, logout }) {
   const [open, setOpen] = useState(false);
+  const [dropPos, setDropPos] = useState({ bottom: 72, left: 16 });
   const ref = useRef(null);
+  const btnRef = useRef(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -189,10 +191,19 @@ function UserMenu({ user, logout }) {
     ? user.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
     : (user?.email?.[0] || '?').toUpperCase();
 
+  const handleOpen = () => {
+    if (btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect();
+      setDropPos({ bottom: window.innerHeight - r.top + 8, left: r.left });
+    }
+    setOpen(o => !o);
+  };
+
   return (
     <div ref={ref} style={{ position: 'relative' }}>
       <button
-        onClick={() => setOpen(o => !o)}
+        ref={btnRef}
+        onClick={handleOpen}
         className="tb__avatar"
         style={{ cursor: 'pointer', border: 'none' }}
         title={user?.full_name || user?.email}
@@ -205,9 +216,9 @@ function UserMenu({ user, logout }) {
 
       {open && (
         <div style={{
-          position: 'absolute', top: 'calc(100% + 8px)', right: 0,
+          position: 'fixed', bottom: dropPos.bottom, left: dropPos.left,
           background: 'var(--surface)', border: '1px solid var(--line-2)',
-          borderRadius: 'var(--r-md)', padding: 4, width: 190, zIndex: 1000,
+          borderRadius: 'var(--r-md)', padding: 4, width: 200, zIndex: 9999,
           boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
         }}>
           <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--line)', marginBottom: 4 }}>

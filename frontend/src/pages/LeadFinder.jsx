@@ -68,6 +68,14 @@ export default function LeadFinder() {
   const [csvDone, setCsvDone] = useState(null);
   const csvInputRef = useRef(null);
 
+  // Reset stale results when niche selection changes so old quota errors don't persist
+  useEffect(() => {
+    if (!pmRunning) {
+      setPmDone(false);
+      setPmStatus(null);
+    }
+  }, [selectedNiches]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // PowerMode polling
   useEffect(() => {
     if (!pmPolling) return;
@@ -86,7 +94,13 @@ export default function LeadFinder() {
           } else if (data.quotaExhausted) {
             toast(`Found ${data.stats?.withEmail ?? 0}/${data.targetCount} leads — quota reached for today`, { icon: '⚡' });
           } else if (data.saved > 0 && !data.stopped) {
-            toast.success(`Done — ${data.saved} leads saved.`);
+            if (data.fallbackNiche) {
+              toast.success(`${data.saved} leads saved — niche not seeded yet, delivered top leads from other niches.`);
+            } else {
+              toast.success(`Done — ${data.saved} leads saved.`);
+            }
+          } else if (data.saved === 0 && data.error) {
+            toast.error(data.error, { duration: 5000 });
           }
         }
       } catch {}
@@ -374,13 +388,18 @@ export default function LeadFinder() {
                 {/* Status line */}
                 <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
                   {pmDone ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                       <span>
                         {pmStatus.targetReached
                           ? `All ${pmStatus.targetCount} leads saved to CRM.`
                           : pmStatus.quotaExhausted
                             ? `Found ${pmStatus.stats?.withEmail ?? 0}/${pmStatus.targetCount} leads. Daily quota reached — come back tomorrow.`
-                            : `Found ${pmStatus.stats?.withEmail ?? 0} leads with emails.`}
+                            : pmStatus.saved === 0 && pmStatus.error
+                              ? pmStatus.error
+                              : `Found ${pmStatus.stats?.withEmail ?? 0} leads with emails.`}
+                        {pmStatus.fallbackNiche && pmStatus.saved > 0 && (
+                          <span className="muted" style={{ marginLeft: 6 }}>(niche not yet seeded — delivered top leads from other niches)</span>
+                        )}
                       </span>
                       {pmStatus.saved > 0 && (
                         <button className="btn btn--ghost btn--sm" onClick={() => navigate('/crm')}>
