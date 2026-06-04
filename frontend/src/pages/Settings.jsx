@@ -561,28 +561,38 @@ export default function Settings() {
       {tab === 'integrations' && (
         <div className="card">
           <div className="card__body" style={{ padding: 0 }}>
-            {[
-              { n: 'Google Workspace', s: `Connected · ${gmailAccounts.length} mailbox${gmailAccounts.length !== 1 ? 'es' : ''}`, on: gmailAccounts.length > 0, ic: 'mail' },
-              { n: 'YouTube Data API', s: 'Connected · quota / day', on: true, ic: 'youtube' },
-              { n: 'Hunter (emails)', s: 'Connected · email discovery', on: true, ic: 'globe' },
-              { n: 'Apollo (emails)', s: 'Connected · enrichment + verify', on: true, ic: 'globe' },
-              { n: 'Smartlead SMTP', s: 'Not connected', on: false, ic: 'mail' },
-              { n: 'Slack', s: 'Send reply alerts to #outreach', on: false, ic: 'bell' },
-              { n: 'Zapier / Make', s: 'Webhook out · 0 active flows', on: false, ic: 'link' },
-            ].map((it, i, arr) => (
-              <div key={i} className="row" style={{ padding: 16, borderBottom: i < arr.length - 1 ? '1px solid var(--line)' : 'none', gap: 14 }}>
-                <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', color: it.on ? 'var(--lime)' : 'var(--text-3)' }}>
-                  <Icon name={it.ic} size={14} />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500 }}>{it.n}</div>
-                  <div className="muted" style={{ fontSize: 11.5 }}>{it.s}</div>
-                </div>
-                {it.on
-                  ? <span className="badge badge--lime"><Icon name="check" size={11} />Connected</span>
-                  : <button className="btn btn--sm">Connect</button>}
+            {/* Gmail */}
+            <div className="row" style={{ padding: 16, gap: 14 }}>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', color: gmailAccounts.length > 0 ? 'var(--lime)' : 'var(--text-3)' }}>
+                <Icon name="mail" size={14} />
               </div>
-            ))}
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 500 }}>Gmail</div>
+                <div className="muted" style={{ fontSize: 11.5 }}>
+                  {gmailAccounts.length > 0
+                    ? `${gmailAccounts.length} mailbox${gmailAccounts.length !== 1 ? 'es' : ''} connected — used for sending outreach emails`
+                    : 'Connect your Gmail to send outreach emails directly from your account'}
+                </div>
+              </div>
+              {gmailAccounts.length > 0
+                ? <span className="badge badge--lime"><Icon name="check" size={11} />Connected</span>
+                : (
+                  <button
+                    className="btn btn--primary btn--sm"
+                    onClick={async () => {
+                      setConnectingGmail(true);
+                      try {
+                        const { data } = await api.get('/gmail/auth-url');
+                        if (data.url) window.location.href = data.url;
+                      } catch { toast.error('Failed to start Gmail connect'); }
+                      finally { setConnectingGmail(false); }
+                    }}
+                    disabled={connectingGmail}
+                  >
+                    {connectingGmail ? 'Redirecting…' : 'Connect Gmail'}
+                  </button>
+                )}
+            </div>
           </div>
         </div>
       )}

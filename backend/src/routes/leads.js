@@ -430,10 +430,40 @@ router.post('/scrape/youtube/stream', scrapeLimiter, asyncHandler(async (req, re
         return res.end();
       }
 
-      // master_leads is empty — fall through to live YouTube scrape below
+      // No exact match — try broadened search (drop sub filters, keep keyword + email)
+      {
+        const broadConditions = ["email IS NOT NULL AND email != ''"];
+        const broadParams = [];
+        if (keyword) {
+          broadConditions.push('(channel_name LIKE ? OR channel_description LIKE ? OR niche LIKE ?)');
+          broadParams.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`);
+        }
+        const broadExclude = db.prepare(`SELECT channel_id FROM leads WHERE user_id=? AND channel_id IS NOT NULL`).all(req.user.id).map(r => r.channel_id);
+        let broadWhere = broadConditions.join(' AND ');
+        const broadAllParams = [...broadParams];
+        if (broadExclude.length > 0) {
+          broadWhere += ` AND channel_id NOT IN (${broadExclude.map(() => '?').join(',')})`;
+          broadAllParams.push(...broadExclude);
+        }
+        const broadCount = db.prepare(`SELECT COUNT(*) as c FROM master_leads WHERE ${broadWhere}`).get(...broadAllParams).c;
+        if (broadCount > 0) {
+          send({ type: 'progress', stage: 'search', message: `Found ${broadCount} related leads — delivering from database...` });
+          const broadLeads = db.prepare(`SELECT * FROM master_leads WHERE ${broadWhere} ORDER BY lead_score DESC, subscriber_count DESC LIMIT ?`).all(...broadAllParams, Number(maxResults));
+          const uid = req.user.id;
+          const ins2 = db.prepare(`INSERT OR IGNORE INTO leads (user_id,platform,channel_id,channel_name,channel_handle,subscriber_count,avg_views,email,website,channel_description,lead_score,temperature,crm_stage,country,niche) VALUES (?,'youtube',?,?,?,?,?,?,?,?,?,?,'new_lead',?,?)`);
+          const saved2 = db.transaction(ls => { let n=0; for (const l of ls) { if (ins2.run(uid,l.channel_id,l.channel_name,l.channel_handle,l.subscriber_count,l.avg_views,l.email,l.website,l.channel_description,l.lead_score,l.temperature,l.country,l.niche).changes>0) n++; } return n; })(broadLeads);
+          const ul2 = db.prepare(`SELECT * FROM leads WHERE user_id=? AND channel_id IN (${broadLeads.map(()=>'?').join(',')}) ORDER BY lead_score DESC`).all(uid, ...broadLeads.map(l=>l.channel_id));
+          for (const lead of ul2) send({ type: 'lead', lead, source: 'database' });
+          send({ type: 'done', total: ul2.length, saved: saved2, source: 'database', message: `Delivered ${ul2.length} leads instantly` });
+          return res.end();
+        }
+      }
+      // No leads at all for this search
+      send({ type: 'complete', leads: [], added: 0, message: `No leads found for "${keyword}" — try a broader keyword or different niche` });
+      return res.end();
     }
 
-    // Step 1 — Expand keywords (live YouTube scrape fallback)
+    // Step 1 — Expand keywords (live YouTube scrape — admin/seeder only path)
     send({ type: 'progress', stage: 'expand', message: `Generating keyword variations for "${keyword}"...` });
     const keywords = await expandKeywords(keyword);
     send({ type: 'progress', stage: 'search', message: `Searching YouTube for: ${keywords.slice(0, 3).join(', ')}${keywords.length > 3 ? ' +more' : ''}`, keywords });

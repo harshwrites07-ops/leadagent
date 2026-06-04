@@ -51,32 +51,16 @@ const SUGGESTED = [
 
 /* ── Sysbar ─────────────────────────────────────────────── */
 function Sysbar({ sysStatus, onOpenAgent, agentOpen }) {
-  const services = [
-    { label: 'SCRAPER', on: sysStatus.innertube?.online ?? true },
-    { label: 'YT·API',  on: sysStatus.youtube?.configured && !sysStatus.youtube?.exhausted, warn: sysStatus.youtube?.configured && sysStatus.youtube?.exhausted },
-    { label: 'GEMINI',  on: sysStatus.gemini },
-    { label: 'SMTP',    on: sysStatus.smtp },
-  ];
-
   return (
     <div className={`sysbar${agentOpen ? ' sysbar--agent' : ''}`} style={agentOpen ? { right: 420 } : {}}>
-      {services.map(s => {
-        const color = s.warn ? 'var(--warn)' : s.on ? 'var(--lime)' : 'var(--bad)';
-        return (
-          <span key={s.label} className="sysbar__svc">
-            <span className="sysbar__dot" style={{ background: color }} />
-            {s.label}{s.warn ? '!' : ''}
-          </span>
-        );
-      })}
+      <span style={{ color: 'var(--text-4)', fontSize: 10.5, fontFamily: 'var(--f-mono)' }}>v2.4.1</span>
       <span className="spacer" />
-      <span style={{ color: 'var(--text-4)', fontSize: 10.5 }}>v2.4.1</span>
       <span className="sysbar__svc">
         <button
           onClick={onOpenAgent}
           style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--text-2)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--f-mono)', fontSize: 10.5 }}
         >
-          Ask agent <kbd>⌘K</kbd>
+          Ask Jack <kbd>⌘K</kbd>
         </button>
       </span>
     </div>
@@ -86,7 +70,7 @@ function Sysbar({ sysStatus, onOpenAgent, agentOpen }) {
 /* ── Agent Panel ─────────────────────────────────────────── */
 function AgentPanel({ onClose }) {
   const [messages, setMessages] = useState([
-    { role: 'bot', text: "Hey — I'm your outreach agent. What do you want to work on?" },
+    { role: 'bot', text: "Hey — I'm Jack, your outreach agent. Tell me what to do: find leads, write emails, send pitches, anything." },
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -117,8 +101,8 @@ function AgentPanel({ onClose }) {
       <div className="agent__head">
         <div className="agent__avatar" />
         <div>
-          <h3>Agent</h3>
-          <div className="muted">Online · gemini-2.5-pro</div>
+          <h3>Jack</h3>
+          <div className="muted">Online · your outreach agent</div>
         </div>
         <button className="agent__close" onClick={onClose}><Icon name="x" size={14} /></button>
       </div>
@@ -156,7 +140,7 @@ function AgentPanel({ onClose }) {
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
-            placeholder="Ask the agent to find, write, send, or analyze…"
+            placeholder="Ask Jack to find leads, write emails, send pitches…"
             rows={1}
           />
           <button className="agent__send" disabled={!input.trim() || loading} onClick={() => send()}>
@@ -205,11 +189,8 @@ function UserFooter({ user, logout }) {
 /* ── Layout ─────────────────────────────────────────────── */
 export default function Layout({ children }) {
   const [agentOpen, setAgentOpen] = useState(false);
-  const [sysStatus, setSysStatus] = useState({
-    gemini: false, smtp: false,
-    youtube: { configured: true, exhausted: false },
-    innertube: { online: true },
-  });
+  const [sysStatus, setSysStatus] = useState({ gemini: false, smtp: false, youtube: { configured: true, exhausted: false }, innertube: { online: true } });
+  const [emailUsage, setEmailUsage] = useState({ sent: 0, limit: 500 });
   const location = useLocation();
   const isMobile = useIsMobile();
   const { user, logout, trialExpired } = useAuth();
@@ -218,10 +199,7 @@ export default function Layout({ children }) {
 
   useEffect(() => {
     const toggle = e => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        setAgentOpen(o => !o);
-      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setAgentOpen(o => !o); }
     };
     document.addEventListener('keydown', toggle);
     return () => document.removeEventListener('keydown', toggle);
@@ -237,6 +215,9 @@ export default function Layout({ children }) {
           youtube: { configured: data.youtube?.configured ?? true, exhausted: data.youtube?.exhausted ?? false },
           innertube: { online: data.innertube?.online ?? true },
         });
+        if (data.smtp?.sent_today !== undefined) {
+          setEmailUsage({ sent: data.smtp.sent_today || 0, limit: data.smtp.daily_limit || 500 });
+        }
       } catch {}
     };
     fetchStatus();
@@ -304,7 +285,7 @@ export default function Layout({ children }) {
         <button className="sb__org" onClick={() => setAgentOpen(true)}>
           <div className="agent__bot-avatar" style={{ width: 24, height: 24, borderRadius: 7 }} />
           <div>
-            <div className="sb__org-name">Ask the agent</div>
+            <div className="sb__org-name">Ask Jack</div>
             <div className="sb__org-role">
               Press <kbd style={{ fontFamily: 'var(--f-mono)', fontSize: 9.5, background: 'var(--bg-2)', border: '1px solid var(--line)', padding: '0 4px', borderRadius: 3 }}>⌘K</kbd>
             </div>
@@ -339,12 +320,12 @@ export default function Layout({ children }) {
         <div className="sb__foot">
           <div className="sb__credit">
             <div style={{ flex: 1 }}>
-              <div className="sb__credit-label">AI credits</div>
+              <div className="sb__credit-label">Emails this month</div>
               <div className="sb__credit-bar" style={{ marginTop: 6 }}>
-                <div className="sb__credit-fill" />
+                <div className="sb__credit-fill" style={{ width: `${Math.min(100, Math.round((emailUsage.sent / Math.max(1, emailUsage.limit)) * 100))}%` }} />
               </div>
             </div>
-            <div className="sb__credit-meta">6.4k / 10k</div>
+            <div className="sb__credit-meta">{emailUsage.sent.toLocaleString()} / {emailUsage.limit.toLocaleString()}</div>
           </div>
           {user && <UserFooter user={user} logout={logout} />}
         </div>

@@ -12,7 +12,7 @@ function getGeminiChat(systemPrompt) {
   require('dotenv').config({ path: ENV_PATH, override: true });
   const key = getGeminiKey();
   if (!key) return null;
-  // Levi uses Flash — fast responses, strong tool use
+  // Jack uses Flash — fast responses, strong tool use
   return makeGeminiModel(key, FAST_MODEL, systemPrompt);
 }
 
@@ -445,8 +445,8 @@ async function runTool(name, input, userId) {
         const leads = await searchChannels({ keyword, minSubs, maxSubs, maxResults, emailOnly: true });
         const ins = db.prepare(LEAD_INSERT_SQL);
         for (const lead of leads) { try { const r = ins.run({ ...lead, user_id: userId }); if (r.changes > 0) saved++; } catch {} }
-        console.log(`[Levi] search_youtube "${keyword}": ${saved} new leads saved`);
-      } catch (e) { console.error(`[Levi] search_youtube error:`, e.message); return { error: e.message }; }
+        console.log(`[Jack] search_youtube "${keyword}": ${saved} new leads saved`);
+      } catch (e) { console.error(`[Jack] search_youtube error:`, e.message); return { error: e.message }; }
       return { status: 'done', keyword, leads_found: saved, message: `Found and saved ${saved} new leads for "${keyword}". Check CRM to see them.` };
     }
 
@@ -461,8 +461,8 @@ async function runTool(name, input, userId) {
           const leads = await searchChannels({ keyword, minSubs, maxSubs, maxResults: maxPerKw, emailOnly: true });
           const ins = db.prepare(LEAD_INSERT_SQL);
           for (const lead of leads) { try { const r = ins.run({ ...lead, user_id: userId }); if (r.changes > 0) totalSaved++; } catch {} }
-          console.log(`[Levi] scrape_bulk "${keyword}": ${leads.length} found`);
-        } catch (e) { console.error(`[Levi] scrape_bulk "${keyword}" error:`, e.message); }
+          console.log(`[Jack] scrape_bulk "${keyword}": ${leads.length} found`);
+        } catch (e) { console.error(`[Jack] scrape_bulk "${keyword}" error:`, e.message); }
       }
       return { status: 'done', keywords, leads_saved: totalSaved, message: `Scraped ${keywords.length} keywords — ${totalSaved} new leads saved to CRM.` };
     }
@@ -488,8 +488,8 @@ async function runTool(name, input, userId) {
           const ins = db.prepare(LEAD_INSERT_SQL);
           let saved = 0;
           for (const lead of leads) { try { ins.run({ ...lead, niche, user_id: userId }); saved++; } catch {} }
-          console.log(`[Levi] niche_hunt "${niche}": ${saved} saved`);
-        } catch (e) { console.error(`[Levi] niche_hunt error:`, e.message); }
+          console.log(`[Jack] niche_hunt "${niche}": ${saved} saved`);
+        } catch (e) { console.error(`[Jack] niche_hunt error:`, e.message); }
       })();
       return { status: 'hunting', niche, target, message: `Hunting ${niche} leads in background. Targeting ${target} leads with emails. Check CRM in 2-5 min.` };
     }
@@ -512,8 +512,8 @@ async function runTool(name, input, userId) {
             const leads = await pmSearch(batch, { minSubs: 5000, maxSubs: 500000, maxResults: 30, emailOnly: false });
             for (const lead of leads) { try { const r = ins.run({ ...lead, user_id: userId }); if (r.changes > 0) totalSaved++; } catch {} }
           }
-          console.log(`[Levi] powermode complete: ${totalSaved} leads saved`);
-        } catch (e) { console.error('[Levi] powermode error:', e.message); }
+          console.log(`[Jack] powermode complete: ${totalSaved} leads saved`);
+        } catch (e) { console.error('[Jack] powermode error:', e.message); }
       })();
       return { status: 'started', message: 'PowerMode launched — searching 15 high-value keywords in background. Expect 50-150 leads in CRM over next 10-20 minutes.' };
     }
@@ -570,7 +570,7 @@ async function runTool(name, input, userId) {
             done++;
           }));
         }
-        console.log(`[Levi] bulk_generate_pitches done — ${done}/${ids.length}`);
+        console.log(`[Jack] bulk_generate_pitches done — ${done}/${ids.length}`);
       })();
       return { status: 'generating', lead_count: ids.length, concurrency: CONCURRENCY, message: `Generating ${ids.length} pitches — 5 at a time in parallel. ~${Math.ceil(ids.length / 5) * 15}s total. Pitches land in Pitch Gen as they complete.` };
     }
@@ -593,7 +593,7 @@ async function runTool(name, input, userId) {
               const saved = db.prepare('SELECT id FROM leads WHERE channel_id=? AND user_id=?').get(lead.channel_id, userId);
               if (saved) allIds.push(saved.id);
             }
-          } catch (e) { console.error(`[Levi] find_and_pitch scrape "${keyword}":`, e.message); }
+          } catch (e) { console.error(`[Jack] find_and_pitch scrape "${keyword}":`, e.message); }
         }
         let pitched = 0;
         for (let i = 0; i < Math.min(allIds.length, 20); i += CONCURRENCY) {
@@ -610,7 +610,7 @@ async function runTool(name, input, userId) {
             } catch {}
           }));
         }
-        console.log(`[Levi] find_and_pitch done — ${allIds.length} leads, ${pitched} pitched`);
+        console.log(`[Jack] find_and_pitch done — ${allIds.length} leads, ${pitched} pitched`);
       })();
       return { status: 'running', keywords, message: `Finding + pitching across ${keywords.length} keywords. Scraping leads + generating pitches in parallel. Check Pitch Gen in 5-10 min.` };
     }
@@ -657,7 +657,7 @@ async function runTool(name, input, userId) {
           const sentResult = await sendEmail({ to: lead.email, subject: result.email_subject, body: result.email_body, leadId: lead.id });
           db.prepare(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP,email_id=? WHERE id=?`).run(sentResult.emailId || null, qr.lastInsertRowid);
           db.prepare(`UPDATE leads SET crm_stage='emailed', last_contacted_date=date('now'), follow_up_count=0, follow_up_status='active', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(lead.id);
-          logActivity('email_sent', `[Levi] Email sent to ${lead.channel_name}`, lead.id, {}, userId);
+          logActivity('email_sent', `[Jack] Email sent to ${lead.channel_name}`, lead.id, {}, userId);
           return lead.channel_name;
         }));
 
@@ -718,12 +718,12 @@ async function runTool(name, input, userId) {
               db.prepare(`UPDATE email_queue SET status='sending' WHERE id=?`).run(qr.lastInsertRowid);
               const sentResult = await sendEmail({ to: lead.email, subject, body, leadId: lead.id });
               db.prepare(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP,email_id=? WHERE id=?`).run(sentResult.emailId || null, qr.lastInsertRowid);
-              logActivity('follow_up_sent', `[Levi] Follow-up #${followUpNum} sent to ${lead.channel_name}`, lead.id, {}, userId);
+              logActivity('follow_up_sent', `[Jack] Follow-up #${followUpNum} sent to ${lead.channel_name}`, lead.id, {}, userId);
               sent++;
-            } catch (e) { console.error(`[Levi] followup lead ${lead.id}:`, e.message); }
+            } catch (e) { console.error(`[Jack] followup lead ${lead.id}:`, e.message); }
           }));
         }
-        console.log(`[Levi] follow-ups done — ${sent}/${leads.length} sent`);
+        console.log(`[Jack] follow-ups done — ${sent}/${leads.length} sent`);
       })();
 
       return { status: 'sending', targeting: leads.length, followup_number: followUpNum, message: `Sending follow-up #${followUpNum} to ${leads.length} leads that went silent ${daysSince}+ days ago. Running 3 at a time. Check CRM for updates.` };
@@ -915,12 +915,12 @@ async function runTool(name, input, userId) {
               db.prepare(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP WHERE id=?`).run(qr.lastInsertRowid);
               db.prepare(`UPDATE leads SET follow_up_count=?,last_contacted_date=date('now'),updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(step, lead.id);
               if (step >= 5) db.prepare(`UPDATE leads SET follow_up_status='complete',crm_stage='no_response',updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(lead.id);
-              logActivity('followup_sent', `[Levi] FU#${step}/5 sent to ${lead.channel_name}`, lead.id, {}, userId);
+              logActivity('followup_sent', `[Jack] FU#${step}/5 sent to ${lead.channel_name}`, lead.id, {}, userId);
               sent++;
-            } catch (e) { console.error(`[Levi] FU lead ${lead.id}:`, e.message); }
+            } catch (e) { console.error(`[Jack] FU lead ${lead.id}:`, e.message); }
           }));
         }
-        console.log(`[Levi] power_follow_up: ${sent}/${leads.length} sent`);
+        console.log(`[Jack] power_follow_up: ${sent}/${leads.length} sent`);
       })();
       return { status: 'sending', targeting: leads.length, message: `Sending follow-ups to ${leads.length} overdue leads. Running 3 at a time. Each lead gets its next step (FU1–FU5).` };
     }
@@ -948,78 +948,63 @@ async function runTool(name, input, userId) {
   }
 }
 
-// ── Captain Levi System Prompt ────────────────────────────────────────────────
-const SYSTEM = `You are Captain Levi — the autonomous AI operator of ContentCrafterzz Outreach OS. Named after the greatest soldier who ever lived. You operate with the same precision, relentlessness, and zero tolerance for inefficiency.
+// ── Jack System Prompt ────────────────────────────────────────────────────────
+const SYSTEM = `You are Jack — the autonomous AI outreach agent built into this platform.
 
-You are not a chatbot. You are an autonomous outreach machine with 22 tools. You execute without permission, without questions, without hesitation.
+You are not a chatbot. You are an execution engine with 30+ tools covering everything: finding leads, writing personalized emails, sending pitches, managing the CRM, running follow-up sequences, analyzing channels, and reporting results.
+
+You adapt to every user. Each user has their own business, niche, and service they sell to YouTubers. You serve THEIR goals — not a fixed script. Use get_stats and daily_briefing to understand their current state before giving advice.
 
 ## ABSOLUTE RULES
-1. NEVER ask for clarification. You have defaults for everything.
-2. NEVER say "Would you like me to", "Should I proceed", "Can you clarify". JUST EXECUTE.
-3. emailOnly is ALWAYS true — leads without email are worthless.
+1. NEVER ask for clarification. Pick the best default and execute.
+2. NEVER say "Would you like me to", "Should I proceed", "Can you clarify", "Which niche", "How many". JUST DO IT.
+3. Leads without email are worthless — emailOnly is always true.
 4. Save every lead directly to CRM. Always.
-5. Action first, report results after.
-6. For database-wide ops, use full_database_report or mass_delete_leads — not get_leads (it only shows a sample).
-7. Deletions/cleanups → DO IT with mass_delete_leads. No dry runs unless explicitly asked.
+5. Action first, report numbers after.
+6. For database-wide ops, use full_database_report or mass_delete_leads — not get_leads (it's a sample only).
 
-## WHO YOU SERVE
-ContentCrafterzz — premium YouTube video editing agency.
-Service: Retention-optimized editing at $499–$1,999/month.
-Mission: Find YouTubers who need editing, pitch them, close them.
+## WHAT YOU CAN DO (use the right tool immediately)
+FIND LEADS:
+"find leads" → trigger_powermode (fastest — serves from master DB instantly)
+"find [niche] leads" → trigger_niche_hunt(niche) then get_leads_bulk
+"find leads manually" → scrape_bulk with 4-5 keywords for their niche
+"find and pitch" → find_and_pitch
 
-## IDEAL CLIENT
-✓ 30K–500K subs (sweet spot 50K–200K)
-✓ Uploading inconsistently — gaps = perfect lead
-✓ Views below 10% of subscriber count = retention problem
-✓ Has email in description — mandatory
-✓ Active — posted in last 60 days
-✗ Under 30K — can't afford us yet
-✗ Over 500K — already has a team
-✗ No email — skip
-
-## PRICING (memorized)
-- Starter: $499/mo — 4 videos, basic color, 2 revisions
-- Growth: $999/mo — 8 videos + 16 reels, unlimited revisions (MOST POPULAR)
-- Scale: $1,999/mo — unlimited, same-day, team of 3, weekly strategy calls
-- Entry: $29 trial edit OR free first edit
-
-## DEFAULT EXECUTION — NO QUESTIONS
-"find leads" → scrape_bulk, 5 diverse keywords, minSubs=30000, maxSubs=500000, maxPerKw=10
-"find N leads" → scrape_bulk, keywords scaled to hit N
-"find [niche] leads" → scrape_bulk, 4 niche keywords
-"find and pitch" → find_and_pitch, 3 keywords
-"pitch all hot leads" → get_leads_bulk(hot, new_lead) → bulk_generate_pitches with ALL IDs
-"pitch X leads" → get_leads_bulk → bulk_generate_pitches, limit X
-"send emails" / "send N emails" → send_emails, limit N
-"email warm leads" → send_emails(temperature="warm", limit=10)
-"send hot lead emails" → send_emails(temperature="hot", limit=10)
+EMAILS & PITCHES:
+"generate pitches" / "write emails" → get_leads_bulk → bulk_generate_pitches
+"send emails" / "send N emails" → send_emails(limit=N)
+"email hot leads" → send_emails(temperature="hot", limit=10)
 "follow up" → power_follow_up(limit=30)
 "follow up status" → show_follow_up_status
-"export leads" → export_leads_csv
-"backup" → backup_database
-"clear failed" → clear_failed_emails
-"archive cold leads" → archive_cold_leads
-"best subjects" → show_best_subjects
-"email queue" / "queue status" → get_email_queue
+
+CRM & ANALYTICS:
+"stats" / "briefing" → daily_briefing + full_database_report
+"export" → export_leads_csv
+"clean up" → mass_delete_leads(no_email) then mass_delete_leads(duplicates)
+"archive cold" → archive_cold_leads
+"move lead to X" → move_lead(lead_id, stage)
+
+QUEUE MANAGEMENT:
+"queue status" → get_email_queue
 "pause queue" → control_queue(pause)
 "resume queue" → control_queue(resume)
-"set daily limit to N" → set_setting(daily_send_limit, N)
-"daily briefing" / "stats" → daily_briefing + full_database_report
+"set daily limit N" → set_setting(daily_send_limit, N)
+"clear failed" → clear_failed_emails
+
+AUTOMATION:
 "automation status" → get_automation_status
 "turn on automation" → toggle_automation(true)
-"niche hunt [niche]" → trigger_niche_hunt(niche)
 "powermode" → trigger_powermode
-"clean leads" / "remove no email" → mass_delete_leads(no_email)
-"remove duplicates" → mass_delete_leads(duplicates)
-"remove cold leads" → mass_delete_leads(all_cold_temperature)
 
 ## RESPONSE STYLE
-Short. Numbers. Results.
-Good: "Sent 12 emails to hot leads. Queue: 8 pending. 3 replies in last 24h."
-Never apologize. Never hesitate. Never ask permission.
-One sentence why if something fails, one sentence fix.
+Short. Numbers. Results. No fluff.
+Good: "Found 24 leads. Pitched 18. 6 emails sent. 2 replies. Queue: 4 pending."
+Bad: "Great! I'd be happy to help you find leads today."
 
-BANNED: "Great question" | "I'd be happy to" | "Would you like" | "Should I" | "Can you clarify" | "Which niche" | "How many" | "Let me know if" | "Just let me know" | "Shall I"`;
+Never apologize. Never hesitate. One sentence why if something fails, one sentence fix.
+
+BANNED WORDS: "Great question" | "I'd be happy to" | "Would you like" | "Should I" | "Can you clarify" | "Let me know" | "Shall I" | "Just to confirm" | "Certainly"`;
+
 
 // ── Status route (used by sidebar to show real AI/SMTP health) ────────────────
 router.get('/status', asyncHandler(async (req, res) => {
@@ -1102,7 +1087,7 @@ router.post('/chat', asyncHandler(async (req, res) => {
 
       return res.json({ reply: 'Mission complete.' });
     } catch (geminiErr) {
-      console.error('[Levi] Gemini error:', geminiErr.message);
+      console.error('[Jack] Gemini error:', geminiErr.message);
       throw new Error('AI unavailable — all Gemini keys exhausted. Add more keys at aistudio.google.com.');
     }
   }

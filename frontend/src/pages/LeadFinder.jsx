@@ -46,6 +46,9 @@ export default function LeadFinder() {
   // PowerMode
   const [selectedNiches, setSelectedNiches] = useState(new Set(['finance']));
   const [pmTargetCount, setPmTargetCount] = useState(100);
+  const [pmMinSubs, setPmMinSubs] = useState('');
+  const [pmMaxSubs, setPmMaxSubs] = useState('');
+  const [pmCountry, setPmCountry] = useState('');
   const [pmRunning, setPmRunning] = useState(false);
   const [pmDone, setPmDone] = useState(false);
   const [pmStatus, setPmStatus] = useState(null);
@@ -113,7 +116,12 @@ export default function LeadFinder() {
     const target = Math.min(pmTargetCount, runLimit);
     try {
       const niches = [...selectedNiches];
-      await api.post('/scraper/powermode/start', { niches, targetCount: target });
+      await api.post('/scraper/powermode/start', {
+        niches, targetCount: target,
+        ...(pmMinSubs ? { minSubs: parseInt(pmMinSubs) } : {}),
+        ...(pmMaxSubs ? { maxSubs: parseInt(pmMaxSubs) } : {}),
+        ...(pmCountry ? { country: pmCountry.trim().toUpperCase() } : {}),
+      });
       setPmRunning(true);
       setPmDone(false);
       pmStartTime.current = Date.now();
@@ -299,11 +307,19 @@ export default function LeadFinder() {
               }
             </div>
 
-            <div className="grid" style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10, marginBottom: 8 }}>
-              <div className="field"><div className="field__label">Sub range</div><input className="input" defaultValue="50k – 500k" /></div>
-              <div className="field"><div className="field__label">Geo</div><input className="input" defaultValue="US, UK, CA, AU" /></div>
-              <div className="field"><div className="field__label">Posting cadence</div><input className="input" defaultValue="≥ 1 / week" /></div>
-              <div className="field"><div className="field__label">Last upload</div><input className="input" defaultValue="within 14 days" /></div>
+            <div className="grid" style={{ gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 8 }}>
+              <div className="field">
+                <div className="field__label">Min subscribers</div>
+                <input className="input" type="number" placeholder="e.g. 10000" value={pmMinSubs} onChange={e => setPmMinSubs(e.target.value)} disabled={pmRunning} />
+              </div>
+              <div className="field">
+                <div className="field__label">Max subscribers</div>
+                <input className="input" type="number" placeholder="e.g. 500000" value={pmMaxSubs} onChange={e => setPmMaxSubs(e.target.value)} disabled={pmRunning} />
+              </div>
+              <div className="field">
+                <div className="field__label">Country (optional)</div>
+                <input className="input" placeholder="US, GB, IN…" value={pmCountry} onChange={e => setPmCountry(e.target.value)} disabled={pmRunning} maxLength={2} />
+              </div>
             </div>
 
             <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', marginTop: 18, marginBottom: 8 }}>Pick niches</div>

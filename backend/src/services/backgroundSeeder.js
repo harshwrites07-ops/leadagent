@@ -12,35 +12,88 @@ const MAX_SUBS = 5000000;
 const CONCURRENCY = 4;
 const SKIP_DOMAINS = new Set(['youtube.com','google.com','googlemail.com','googleapis.com','gstatic.com','example.com']);
 
-const KEYWORDS = [
-  'business coach','entrepreneur channel','startup founder','agency owner','CEO vlog',
-  'digital marketing','passive income','dropshipping','ecommerce tips','amazon fba',
-  'freelancing tips','consulting business','B2B sales','lead generation','growth hacking',
-  'stock trading','investing beginners','crypto educator','personal finance','financial advisor',
-  'dividend investing','real estate investing','options trading','forex trading','day trading',
-  'fitness coach','personal trainer','nutrition coach','wellness coach','yoga instructor',
-  'cooking channel','chef youtube','food blogger','recipe channel','baking youtube',
-  'tech reviewer','software tutorial','coding tutorial','web development','app development',
-  'travel vlogger','travel channel','budget travel','solo travel','adventure travel',
-  'beauty guru','makeup tutorial','skincare routine','fashion channel','style tips',
-  'education channel','online courses','tutoring channel','homeschool','learning channel',
-  'saas founder','software startup','product review tech','unboxing channel','gadget review',
-  'real estate agent','property investor','house flipping','rental property','real estate tips',
-  'parenting channel','mom vlog','dad vlog','family channel','kids education',
-  'mental health','life coach','mindset channel','motivation channel','self improvement',
-  'photography tutorial','videography tips','video editing tutorial','filmmaking',
-  'music channel','musician youtube','guitar lessons','piano tutorial','singing lessons',
-  'gaming channel','game review','lets play','game streaming','esports',
-  'law channel','lawyer youtube','legal tips','attorney channel',
-  'medical channel','doctor youtube','health tips','dentist channel','therapy channel',
-  'accounting channel','tax tips','bookkeeping','financial planning','wealth management',
-  'marketing agency','social media tips','content creator tips','youtube growth','tiktok tips',
-  'construction channel','home improvement','DIY channel','woodworking','interior design',
-  'automotive channel','car review','mechanic tips','car restoration',
-  'farming channel','gardening tips','homesteading','agriculture channel',
-  'pet channel','dog training','cat channel','animal channel','veterinarian',
-  'sports channel','athlete vlog','training channel','crossfit','marathon running',
+// Each entry: [keyword, niche_id] — niche_id must match frontend NICHES ids exactly
+const KEYWORD_NICHE_MAP = [
+  // business
+  ['business coach youtube', 'business'], ['entrepreneur channel', 'business'],
+  ['startup founder vlog', 'business'], ['agency owner youtube', 'business'],
+  ['CEO vlog', 'business'], ['digital entrepreneur', 'business'],
+  ['online business tips', 'business'], ['B2B sales channel', 'business'],
+  ['consulting business youtube', 'business'], ['dropshipping channel', 'business'],
+  ['ecommerce tips youtube', 'business'], ['amazon fba youtube', 'business'],
+  ['freelancing tips channel', 'business'], ['passive income ideas', 'business'],
+  ['solopreneur youtube', 'business'], ['business automation channel', 'business'],
+  ['scaling business youtube', 'business'], ['personal brand channel', 'business'],
+  // finance
+  ['personal finance channel', 'finance'], ['investing tips youtube', 'finance'],
+  ['stock market channel', 'finance'], ['crypto educator youtube', 'finance'],
+  ['financial advisor youtube', 'finance'], ['day trading channel', 'finance'],
+  ['dividend investing youtube', 'finance'], ['forex trading channel', 'finance'],
+  ['options trading youtube', 'finance'], ['wealth building channel', 'finance'],
+  ['financial freedom youtube', 'finance'], ['budgeting tips channel', 'finance'],
+  ['debt free journey youtube', 'finance'], ['financial independence channel', 'finance'],
+  ['money mindset youtube', 'finance'], ['tax tips channel', 'finance'],
+  // fitness
+  ['fitness coach youtube', 'fitness'], ['personal trainer channel', 'fitness'],
+  ['workout routine youtube', 'fitness'], ['nutrition coach channel', 'fitness'],
+  ['gym motivation youtube', 'fitness'], ['weight loss channel', 'fitness'],
+  ['bodybuilding youtube', 'fitness'], ['yoga instructor channel', 'fitness'],
+  ['calisthenics youtube', 'fitness'], ['online fitness coaching', 'fitness'],
+  ['HIIT workout channel', 'fitness'], ['running coach youtube', 'fitness'],
+  ['strength training channel', 'fitness'], ['wellness coach youtube', 'fitness'],
+  // cooking
+  ['cooking channel youtube', 'cooking'], ['chef youtube channel', 'cooking'],
+  ['food blogger youtube', 'cooking'], ['recipe channel', 'cooking'],
+  ['baking youtube channel', 'cooking'], ['meal prep channel', 'cooking'],
+  ['vegan cooking youtube', 'cooking'], ['bbq youtube channel', 'cooking'],
+  ['restaurant owner youtube', 'cooking'], ['food review channel', 'cooking'],
+  // tech
+  ['tech review channel', 'tech'], ['software tutorial youtube', 'tech'],
+  ['coding tutorial channel', 'tech'], ['web development youtube', 'tech'],
+  ['app development channel', 'tech'], ['AI tools youtube', 'tech'],
+  ['gadget review channel', 'tech'], ['programming tips youtube', 'tech'],
+  ['cybersecurity channel', 'tech'], ['data science youtube', 'tech'],
+  ['machine learning channel', 'tech'], ['developer vlog youtube', 'tech'],
+  // travel
+  ['travel vlogger channel', 'travel'], ['travel tips youtube', 'travel'],
+  ['budget travel channel', 'travel'], ['solo travel youtube', 'travel'],
+  ['digital nomad vlog', 'travel'], ['adventure travel channel', 'travel'],
+  ['backpacking youtube', 'travel'], ['luxury travel vlog', 'travel'],
+  ['expat youtube channel', 'travel'], ['van life youtube', 'travel'],
+  // beauty
+  ['beauty youtube channel', 'beauty'], ['makeup tutorial youtube', 'beauty'],
+  ['skincare routine channel', 'beauty'], ['fashion channel youtube', 'beauty'],
+  ['style tips youtube', 'beauty'], ['hair tutorial channel', 'beauty'],
+  ['beauty influencer youtube', 'beauty'], ['nail art channel', 'beauty'],
+  // education
+  ['education channel youtube', 'edu'], ['online course creator youtube', 'edu'],
+  ['tutoring channel youtube', 'edu'], ['skill development youtube', 'edu'],
+  ['self improvement channel', 'edu'], ['language learning youtube', 'edu'],
+  ['career advice channel', 'edu'], ['study tips youtube', 'edu'],
+  ['teacher youtube channel', 'edu'], ['how to channel youtube', 'edu'],
+  // saas
+  ['saas founder youtube', 'saas'], ['software startup channel', 'saas'],
+  ['product led growth youtube', 'saas'], ['indie hacker youtube', 'saas'],
+  ['build in public channel', 'saas'], ['SaaS marketing youtube', 'saas'],
+  ['micro saas youtube', 'saas'], ['B2B software youtube', 'saas'],
+  // realestate — IMPORTANT: tag as 'realestate' not 'real' or 'real estate'
+  ['real estate agent youtube', 'realestate'], ['property investor channel', 'realestate'],
+  ['house flipping youtube', 'realestate'], ['rental property tips youtube', 'realestate'],
+  ['real estate investing channel', 'realestate'], ['realtor youtube channel', 'realestate'],
+  ['real estate coach youtube', 'realestate'], ['airbnb hosting channel', 'realestate'],
+  ['commercial real estate youtube', 'realestate'], ['property management youtube', 'realestate'],
+  ['real estate wholesaling', 'realestate'], ['multifamily investing youtube', 'realestate'],
+  // gaming
+  ['gaming channel youtube', 'gaming'], ['game review channel', 'gaming'],
+  ['lets play youtube', 'gaming'], ['esports youtube channel', 'gaming'],
+  ['streaming tips youtube', 'gaming'], ['game developer youtube', 'gaming'],
+  // design
+  ['graphic design youtube', 'design'], ['UI UX design channel', 'design'],
+  ['logo design youtube', 'design'], ['Figma tutorial channel', 'design'],
+  ['motion graphics youtube', 'design'], ['freelance design channel', 'design'],
 ];
+
+const KEYWORDS = KEYWORD_NICHE_MAP.map(([kw]) => kw);
 
 function extractEmail(text) {
   if (!text) return null;
@@ -155,10 +208,13 @@ async function runSeedCycle() {
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
   `);
 
-  const shuffled = [...KEYWORDS].sort(() => Math.random() - 0.5);
+  // Build keyword→niche lookup
+  const kwNicheMap = Object.fromEntries(KEYWORD_NICHE_MAP);
+
+  const shuffled = [...KEYWORD_NICHE_MAP].sort(() => Math.random() - 0.5);
   let totalSaved = 0;
 
-  for (const keyword of shuffled) {
+  for (const [keyword] of shuffled) {
     if (exhausted.size >= API_KEYS.length) break;
 
     const key = getKey();
@@ -210,7 +266,7 @@ async function runSeedCycle() {
           desc.substring(0, 400) || null, score,
           subs > 100000 ? 'warm' : 'cold',
           ch.snippet?.country || null,
-          keyword.split(' ')[0].toLowerCase()
+          kwNicheMap[keyword] || keyword.split(' ')[0].toLowerCase()
         );
         if (r.changes > 0) totalSaved++;
       }));

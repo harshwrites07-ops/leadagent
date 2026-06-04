@@ -193,28 +193,33 @@ router.post('/powermode/start', asyncHandler(async (req, res) => {
   const country = POWERMODE_COUNTRIES[pmCountryIdx % POWERMODE_COUNTRIES.length];
   pmCountryIdx++;
 
-  // Build keyword list from selected niches (or defaults)
-  // Use 30 per niche so we have enough to reach higher targets
   const requestedNiches = Array.isArray(req.body?.niches) && req.body.niches.length > 0
-    ? req.body.niches
-    : POWERMODE_DEFAULT_NICHES;
-  const kwObjects = getKeywordsForNiches(requestedNiches, 30);
-  const keywords = kwObjects.map(k => k.keyword);
-  const kwNicheMap = Object.fromEntries(kwObjects.map(k => [k.keyword, k.niche]));
+    ? req.body.niches : POWERMODE_DEFAULT_NICHES;
+
+  // Optional filters from request body
+  const pmMinSubs = parseInt(req.body?.minSubs) || 0;
+  const pmMaxSubs = parseInt(req.body?.maxSubs) || 0;
+  const pmCountry = (req.body?.country || '').trim().toUpperCase();
 
   // ── Always serve from master_leads — no live scraping for users ─────────────
   {
     const db = getDb();
     const nicheConditions = requestedNiches.map(() => "niche LIKE ?").join(' OR ');
     const nicheParams = requestedNiches.map(n => `%${n}%`);
-    const whereClause = nicheConditions
+    let baseWhere = nicheConditions
       ? `(${nicheConditions}) AND email IS NOT NULL AND email != ''`
       : `email IS NOT NULL AND email != ''`;
+    const baseParams = [...nicheParams];
+
+    // Apply optional filters
+    if (pmMinSubs > 0) { baseWhere += ' AND subscriber_count >= ?'; baseParams.push(pmMinSubs); }
+    if (pmMaxSubs > 0) { baseWhere += ' AND subscriber_count <= ?'; baseParams.push(pmMaxSubs); }
+    if (pmCountry)     { baseWhere += ' AND country = ?';            baseParams.push(pmCountry); }
 
     // Exclude channels user already has
     const userChannelIds = db.prepare(`SELECT channel_id FROM leads WHERE user_id=? AND channel_id IS NOT NULL`).all(userId).map(r => r.channel_id);
-    let fullWhere = whereClause;
-    const fullParams = [...nicheParams];
+    let fullWhere = baseWhere;
+    const fullParams = [...baseParams];
     if (userChannelIds.length > 0) {
       fullWhere += ` AND channel_id NOT IN (${userChannelIds.map(() => '?').join(',')})`;
       fullParams.push(...userChannelIds);
@@ -222,21 +227,22 @@ router.post('/powermode/start', asyncHandler(async (req, res) => {
 
     let available = db.prepare(`SELECT COUNT(*) as c FROM master_leads WHERE ${fullWhere}`).get(...fullParams).c;
 
-    // Cross-niche fallback: if the selected niches return nothing, serve any email-verified leads
+    // Cross-niche fallback: if selected niches return nothing, serve any matching email-verified leads
     let fallbackNiche = false;
     let activewhere = fullWhere;
     let activeParams = fullParams;
     if (available === 0) {
-      const fallbackWhere = userChannelIds.length > 0
-        ? `email IS NOT NULL AND email != '' AND channel_id NOT IN (${userChannelIds.map(() => '?').join(',')})`
-        : `email IS NOT NULL AND email != ''`;
-      const fallbackParams = userChannelIds.length > 0 ? [...userChannelIds] : [];
-      available = db.prepare(`SELECT COUNT(*) as c FROM master_leads WHERE ${fallbackWhere}`).get(...fallbackParams).c;
-      if (available > 0) {
-        fallbackNiche = true;
-        activewhere = fallbackWhere;
-        activeParams = fallbackParams;
+      let fbWhere = `email IS NOT NULL AND email != ''`;
+      const fbParams = [];
+      if (pmMinSubs > 0) { fbWhere += ' AND subscriber_count >= ?'; fbParams.push(pmMinSubs); }
+      if (pmMaxSubs > 0) { fbWhere += ' AND subscriber_count <= ?'; fbParams.push(pmMaxSubs); }
+      if (pmCountry)     { fbWhere += ' AND country = ?';            fbParams.push(pmCountry); }
+      if (userChannelIds.length > 0) {
+        fbWhere += ` AND channel_id NOT IN (${userChannelIds.map(() => '?').join(',')})`;
+        fbParams.push(...userChannelIds);
       }
+      available = db.prepare(`SELECT COUNT(*) as c FROM master_leads WHERE ${fbWhere}`).get(...fbParams).c;
+      if (available > 0) { fallbackNiche = true; activewhere = fbWhere; activeParams = fbParams; }
     }
 
     if (available > 0) {
