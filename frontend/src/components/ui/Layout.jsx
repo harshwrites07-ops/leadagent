@@ -53,7 +53,7 @@ const SUGGESTED = [
 function Sysbar({ sysStatus, onOpenAgent, agentOpen }) {
   return (
     <div className={`sysbar${agentOpen ? ' sysbar--agent' : ''}`} style={agentOpen ? { right: 420 } : {}}>
-      <span style={{ color: 'var(--text-4)', fontSize: 10.5, fontFamily: 'var(--f-mono)' }}>v2.4.1</span>
+      <span style={{ color: 'var(--text-4)', fontSize: 10.5, fontFamily: 'var(--f-mono)' }}>v2.5.0</span>
       <span className="spacer" />
       <span className="sysbar__svc">
         <button
