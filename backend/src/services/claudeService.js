@@ -272,7 +272,7 @@ async function analyzeCrossPlatform(lead) {
   return result;
 }
 
-// ─── Step 4: Helpers + new example-driven prompt ─────────────────────────────
+// ─── Step 4: Email prompt engine ─────────────────────────────────────────────
 
 function daysAgoText(dateStr) {
   if (!dateStr) return 'recently';
@@ -285,114 +285,94 @@ function daysAgoText(dateStr) {
 }
 
 function buildMasterPrompt(lead, user, dna) {
-  const senderName    = dna?.name || (user?.full_name || '').split(' ')[0] || 'the sender';
-  const senderService = (dna?.service || user?.service_type || 'services').toLowerCase();
-  const senderResult  = dna?.socialProof || user?.best_result || `helping creators with ${senderService}`;
-  const senderStyle   = dna?.communicationStyle || 'natural and genuine';
-  const senderTraits  = Array.isArray(dna?.traits) ? dna.traits.join(', ') : '';
+  const { getServiceIntelligence, buildServiceExamples, buildVoiceInstruction } = require('./voiceDNA');
 
-  const recentVideos = (() => { try { return JSON.parse(lead.recent_videos || '[]'); } catch { return []; } })();
-  const recentTitles = recentVideos.slice(0, 3).map(v => v.title).filter(Boolean).join(', ') || 'not available';
+  // ── Sender identity ──────────────────────────────────────────────────────
+  const senderFirst  = dna?.name      || (user?.full_name || '').split(' ')[0] || 'Alex';
+  const senderFull   = dna?.fullName  || user?.full_name  || senderFirst;
+  const senderSvc    = (dna?.service  || user?.service_type || 'services').toLowerCase();
+  const senderResult = dna?.socialProof || user?.best_result || '';
+  const traits       = Array.isArray(dna?.traits) ? dna.traits : [];
+  const outreachGoal = dna?.outreachGoal || user?.outreach_goal || 'get_reply';
+  const uniqueAngle  = dna?.uniqueDifference || user?.unique_difference || '';
+  const oneLiner     = dna?.identity || user?.one_liner || '';
+  const experienceYears = dna?.experienceLevel || user?.experience_years || '';
+  const style        = dna?.communicationStyle || 'natural and genuine';
 
-  const daysSinceUpload = lead.last_upload_date
-    ? Math.floor((Date.now() - new Date(lead.last_upload_date)) / 86400000) : null;
-
-  let viewTrend = 'stable';
-  if (recentVideos.length >= 4) {
-    const rAvg = recentVideos.slice(0, 3).reduce((s, v) => s + (v.views || 0), 0) / 3;
-    const oAvg = recentVideos.slice(-3).reduce((s, v) => s + (v.views || 0), 0) / 3;
-    if (rAvg > oAvg * 1.3)       viewTrend = 'growing';
-    else if (rAvg < oAvg * 0.65) viewTrend = 'declining';
-  }
+  // ── Service + channel intelligence ──────────────────────────────────────
+  const intel = getServiceIntelligence(senderSvc, lead);
+  const { hookFact, whyItMatters, proofAngle } = intel;
 
   const isSmall = (lead.subscriber_count || 0) < 5000;
+  const niche   = lead.niche || 'general';
 
-  const examples = `EXAMPLE 1 — Analytical creator, video editor reaching out:
-Subject: your last 6 videos
-Body:
-Your upload pace dropped from twice a week to once every 11 days after March. That gap always shows up in subscriber growth before anything else does.
+  // ── Dynamic service-matched examples ────────────────────────────────────
+  const examples = buildServiceExamples(senderSvc, senderFirst);
 
-Edited for a business creator in a similar spot — consistency fix alone moved their average views from 8K to 23K over 2 months.
+  // ── Voice instruction ────────────────────────────────────────────────────
+  const voiceInstr = buildVoiceInstruction(traits, style);
 
-Worth a 5-minute look at what changed?
+  // ── CTA instruction ──────────────────────────────────────────────────────
+  const ctaInstr = outreachGoal === 'book_call'
+    ? 'A soft question that plants the seed of a call without asking for one directly. e.g. "Worth a quick breakdown of what changed?"'
+    : outreachGoal === 'close_deal'
+    ? 'A direct but low-pressure question. e.g. "Open to seeing what I\'d fix first?"'
+    : 'A single yes/no question or a 2-word answer question. e.g. "Want to see what I\'d change?"';
 
-Jake
+  // ── Social proof instruction ─────────────────────────────────────────────
+  const proofInstr = senderResult
+    ? `Your proof sentence must reference this real result: "${senderResult}" — reframe it as "Helped a ${niche} creator [result]"`
+    : `Your proof sentence format: "Helped a ${niche} creator ${proofAngle}" — invent a plausible specific number`;
 
----
+  return `You are ${senderFirst}. You are writing a cold email FROM YOURSELF to a YouTube creator named ${lead.channel_name}. This is not a template — this is YOUR email.
 
-EXAMPLE 2 — Casual creator, thumbnail designer reaching out:
-Subject: noticed something on your channel
-Body:
-Your cooking videos get solid views but your thumbnails are doing the opposite of what your content deserves.
-
-Redesigned thumbnails for a food creator with your exact setup — CTR went from 3.2% to 8.7% in 3 weeks.
-
-Want me to mock one up for your latest video?
-
-Sarah
-
----
-
-EXAMPLE 3 — Finance creator, scriptwriter reaching out:
-Subject: your March videos
-Body:
-Three of your last four finance videos dropped below your 6-month average by 40%. The content is solid — the hooks aren't matching what your audience clicks for.
-
-Rewrote hooks for a creator in the same situation. Next two videos hit their all-time view records.
-
-Open to seeing what I'd change in yours?
-
-Marcus`;
-
-  return `You are writing a cold outreach email.
-Study these 3 examples carefully.
-They show EXACTLY the style, length, and structure required.
+WHO YOU ARE:
+Name: ${senderFull}
+What you sell: ${senderSvc}
+${oneLiner ? `Your one-liner: "${oneLiner}"` : ''}
+${senderResult ? `Your best result: "${senderResult}"` : ''}
+${uniqueAngle ? `What makes you different: "${uniqueAngle}"` : ''}
+${experienceYears ? `Experience: ${experienceYears}` : ''}
+How you write: ${voiceInstr}
 
 ${examples}
 
-NOW WRITE ONE EMAIL with these details:
+NOW WRITE THE EMAIL for this specific creator:
 
-SENDER:
-Name: ${senderName}
-What they do: ${senderService}
-Their best result: ${senderResult}
-Their style: ${senderStyle}
-Their personality: ${senderTraits}
-
-CREATOR TO EMAIL:
-Name: ${lead.channel_name}
+CREATOR: ${lead.channel_name}
 Subscribers: ${(lead.subscriber_count || 0).toLocaleString()}
-Niche: ${lead.niche || 'general'}
+Niche: ${niche}
 Average views: ${(lead.avg_views || 0).toLocaleString()}
-View trend: ${viewTrend}
-Last upload: ${daysSinceUpload !== null ? `${daysSinceUpload} days ago` : 'unknown'}
-Recent video titles: ${recentTitles}
-Description snippet: ${(lead.channel_description || '').slice(0, 150) || 'not available'}
+Description: ${(lead.channel_description || '').slice(0, 200) || 'not available'}
 
-RULES — NON NEGOTIABLE:
-1. Maximum 4-5 sentences in body
-2. First sentence: one specific observation about THIS creator using their real data. NO compliments. An insight only.
-3. Second sentence: expand on that insight. Still zero mention of your service.
-4. Third sentence: your social proof. ONE specific result. Numbers required. Format: "Helped a [niche] creator [specific result]"
-5. Fourth sentence: ONE question CTA. Low commitment. Easy to answer yes/no.
-6. Sign with first name only: ${senderName}
-7. Subject line: 3-5 words. Reference something specific from their channel. NOT generic. Must feel personal.
-8. Body: 50-80 words maximum
-9. NEVER mention pricing
-10. NEVER offer free work
-11. NEVER use: "I came across", "love your content", "collaboration", "opportunity", "hope this finds you"
-12. Do NOT capitalize service name. Write "${senderService}" not "${senderService.charAt(0).toUpperCase() + senderService.slice(1)}"
-13. NEVER start body with "I"
+THE SPECIFIC OBSERVATION TO LEAD WITH:
+Fact: ${hookFact}
+Why it matters: ${whyItMatters}
+→ Use these exact numbers/facts in your first 1-2 sentences. Do not invent different data.
 
-${isSmall ? 'IMPORTANT: This is a small/growing channel. Focus on their growth potential and trajectory. Do NOT highlight their low view counts in a way that feels embarrassing. Frame it as an opportunity.' : ''}
+PROOF SENTENCE: ${proofInstr}
 
-OUTPUT as JSON only, no markdown:
-{
-  "subject": "subject line here",
-  "body": "email body here",
-  "pitch_score": 85,
-  "word_count": 67
-}`;
+CTA STYLE: ${ctaInstr}
+
+STRUCTURE (4 sentences, no headers, no blank lines between sentences):
+Sentence 1: State the observation above. Use the exact numbers given. No hello. No compliment.
+Sentence 2: Explain why it matters without mentioning your service yet.
+Sentence 3: Your social proof — ONE specific result with numbers.
+Sentence 4: The CTA question.
+Sign off: ${senderFirst} (first name only, on its own line after one blank line)
+
+ABSOLUTE RULES:
+- Body: 50-80 words. Count. Hard limit.
+- Subject: 3-5 words. Reference the specific data point above (upload days, view count, sub count, etc.). NOT "quick question". NOT "noticed something".
+- NEVER: "I came across", "I noticed", "love your content", "collaboration", "opportunity", "hope this finds you", "I wanted to reach out"
+- NEVER start the body with "I"
+- NEVER mention pricing
+- NEVER offer free work
+- Write "${senderSvc}" not "${senderSvc.charAt(0).toUpperCase() + senderSvc.slice(1)}"
+${isSmall ? '- SMALL CHANNEL: Frame everything around growth POTENTIAL. Never make them feel small or embarrassed.' : ''}
+
+OUTPUT as JSON only — no markdown, no backticks, no explanation:
+{"subject":"3-5 word subject","body":"full email body ending with a blank line then the first name","pitch_score":85,"word_count":67}`;
 }
 
 // ─── Step 5: Quality scorer ───────────────────────────────────────────────────

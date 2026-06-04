@@ -259,6 +259,35 @@ export default function Settings() {
       {tab === 'voice' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
+          {/* Completeness banner */}
+          {(() => {
+            const filled = [voice.service_type, voice.best_result, voice.one_liner, voice.pricing_range, voice.outreach_goal, voice.personality_traits.length > 0, voice.unique_difference].filter(Boolean).length;
+            const total  = 7;
+            const pct    = Math.round((filled / total) * 100);
+            if (pct === 100) return null;
+            return (
+              <div style={{ padding: '12px 16px', background: 'rgba(200,246,84,0.06)', border: '1px solid var(--lime-border)', borderRadius: 'var(--r)', display: 'flex', alignItems: 'center', gap: 14 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
+                    Your email system is {pct}% configured
+                  </div>
+                  <div className="muted" style={{ fontSize: 11.5 }}>
+                    Fill in all fields below for the best email quality. Missing: {[
+                      !voice.service_type && 'what you sell',
+                      !voice.best_result && 'best result',
+                      !voice.one_liner && 'one-liner',
+                      !voice.pricing_range && 'pricing range',
+                      !voice.outreach_goal && 'outreach goal',
+                      !voice.personality_traits.length && 'personality',
+                      !voice.unique_difference && 'what makes you different',
+                    ].filter(Boolean).join(', ')}
+                  </div>
+                </div>
+                <div style={{ fontSize: 22, fontWeight: 800, fontFamily: 'var(--f-mono)', color: 'var(--lime)' }}>{pct}%</div>
+              </div>
+            );
+          })()}
+
           {/* DNA Preview Card */}
           {voiceDNA?.communicationStyle && (
             <div className="card" style={{ background: 'rgba(var(--lime-rgb),0.04)', borderColor: 'var(--lime-border)' }}>
@@ -306,11 +335,14 @@ export default function Settings() {
                     <div style={{ fontWeight: 600, marginTop: 2 }}>{previewEmail.pitch?.email_subject}</div>
                   </div>
                   <div style={{ whiteSpace: 'pre-wrap', fontSize: 13.5, lineHeight: 1.8, padding: '16px 20px', background: 'var(--surface-2)', borderRadius: 8, border: '1px solid var(--line)' }}>
-                    {previewEmail.pitch?.cold_email}
+                    {previewEmail.pitch?.email_body || previewEmail.pitch?.cold_email || previewEmail.pitch?.body || '(no body generated)'}
                   </div>
-                  <div className="muted" style={{ fontSize: 11, marginTop: 10, textAlign: 'right' }}>
-                    Score: {previewEmail.pitch?.pitch_score}/100
-                  </div>
+                  {previewEmail.pitch?.word_count && (
+                    <div className="muted" style={{ fontSize: 11, marginTop: 10, display: 'flex', justifyContent: 'space-between' }}>
+                      <span>{previewEmail.pitch.word_count} words</span>
+                      <span>Score: {previewEmail.pitch?.pitch_score || previewEmail.pitch?.quality_score || '—'}/100</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
