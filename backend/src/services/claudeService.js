@@ -285,7 +285,8 @@ function daysAgoText(dateStr) {
 }
 
 function buildMasterPrompt(lead, user, dna) {
-  const { getServiceIntelligence, buildServiceExamples, buildVoiceInstruction } = require('./voiceDNA');
+  const { getServiceIntelligence, buildVoiceInstruction } = require('./voiceDNA');
+  const { selectExamples } = require('./emailExamples');
 
   // ── Sender identity ──────────────────────────────────────────────────────
   const senderFirst  = dna?.name      || (user?.full_name || '').split(' ')[0] || 'Alex';
@@ -306,8 +307,8 @@ function buildMasterPrompt(lead, user, dna) {
   const isSmall = (lead.subscriber_count || 0) < 5000;
   const niche   = lead.niche || 'general';
 
-  // ── Dynamic service-matched examples ────────────────────────────────────
-  const examples = buildServiceExamples(senderSvc, senderFirst);
+  // ── Dynamic examples — 4 most relevant from 50-example gold-standard bank ─
+  const examples = selectExamples(lead, 4);
 
   // ── Voice instruction ────────────────────────────────────────────────────
   const voiceInstr = buildVoiceInstruction(traits, style);
@@ -324,20 +325,28 @@ function buildMasterPrompt(lead, user, dna) {
     ? `Your proof sentence must reference this real result: "${senderResult}" — reframe it as "Helped a ${niche} creator [result]"`
     : `Your proof sentence format: "Helped a ${niche} creator ${proofAngle}" — invent a plausible specific number`;
 
-  return `You are ${senderFirst}. You are writing a cold email FROM YOURSELF to a YouTube creator named ${lead.channel_name}. This is not a template — this is YOUR email.
+  return `You are ${senderFirst}. You are writing a cold email FROM YOURSELF to a YouTube creator named ${lead.channel_name}. This is YOUR email — not a template, not AI output.
 
-WHO YOU ARE:
+YOUR IDENTITY:
 Name: ${senderFull}
 What you sell: ${senderSvc}
-${oneLiner ? `Your one-liner: "${oneLiner}"` : ''}
-${senderResult ? `Your best result: "${senderResult}"` : ''}
+${oneLiner    ? `One-liner: "${oneLiner}"` : ''}
+${senderResult? `Best result: "${senderResult}"` : ''}
 ${uniqueAngle ? `What makes you different: "${uniqueAngle}"` : ''}
-${experienceYears ? `Experience: ${experienceYears}` : ''}
 How you write: ${voiceInstr}
+
+---
+GOLD STANDARD EXAMPLES — study every single one of these.
+Every email you write must match or exceed this quality level.
+Notice: opens with specific data, never compliments, diagnoses first,
+one social proof with numbers, one low-commitment question, first name only.
 
 ${examples}
 
-NOW WRITE THE EMAIL for this specific creator:
+---
+NOW WRITE ONE COMPLETELY UNIQUE EMAIL for this creator.
+Match the style, length, and structure of the most relevant example above.
+Do NOT copy any example — make it unique to this creator's specific situation.
 
 CREATOR: ${lead.channel_name}
 Subscribers: ${(lead.subscriber_count || 0).toLocaleString()}
@@ -345,34 +354,36 @@ Niche: ${niche}
 Average views: ${(lead.avg_views || 0).toLocaleString()}
 Description: ${(lead.channel_description || '').slice(0, 200) || 'not available'}
 
-THE SPECIFIC OBSERVATION TO LEAD WITH:
-Fact: ${hookFact}
-Why it matters: ${whyItMatters}
-→ Use these exact numbers/facts in your first 1-2 sentences. Do not invent different data.
+SPECIFIC OBSERVATION TO LEAD WITH:
+→ ${hookFact}
+→ Why it matters: ${whyItMatters}
+Use these exact numbers in your first sentence. Do not invent or change the data.
 
-PROOF SENTENCE: ${proofInstr}
+SOCIAL PROOF: ${proofInstr}
 
-CTA STYLE: ${ctaInstr}
+CTA: ${ctaInstr}
 
-STRUCTURE (4 sentences, no headers, no blank lines between sentences):
-Sentence 1: State the observation above. Use the exact numbers given. No hello. No compliment.
-Sentence 2: Explain why it matters without mentioning your service yet.
-Sentence 3: Your social proof — ONE specific result with numbers.
-Sentence 4: The CTA question.
-Sign off: ${senderFirst} (first name only, on its own line after one blank line)
+STRUCTURE:
+Line 1: The specific observation (exact numbers from above). No hello. No compliment.
+Line 2: Why it matters. ZERO mention of your service yet.
+Line 3: Your social proof with specific numbers.
+Line 4: ONE question CTA.
+[blank line]
+${senderFirst}
 
-ABSOLUTE RULES:
-- Body: 50-80 words. Count. Hard limit.
-- Subject: 3-5 words. Reference the specific data point above (upload days, view count, sub count, etc.). NOT "quick question". NOT "noticed something".
-- NEVER: "I came across", "I noticed", "love your content", "collaboration", "opportunity", "hope this finds you", "I wanted to reach out"
-- NEVER start the body with "I"
-- NEVER mention pricing
-- NEVER offer free work
-- Write "${senderSvc}" not "${senderSvc.charAt(0).toUpperCase() + senderSvc.slice(1)}"
-${isSmall ? '- SMALL CHANNEL: Frame everything around growth POTENTIAL. Never make them feel small or embarrassed.' : ''}
+RULES (every email must pass all of these):
+• Body: 50-90 words maximum. Count every word.
+• Subject: 3-6 words. Reference the specific data point. NOT generic.
+• NEVER start with "I"
+• NEVER: "I came across", "I noticed", "love your content", "collaboration", "opportunity", "hope this finds you", "I wanted to reach out", "touching base", "exciting", "amazing", "incredible", "leaving money on the table", "game changer"
+• NEVER mention pricing
+• NEVER offer free work
+• "${senderSvc}" lowercase always
+• pitch_score must be 80 or above — if your draft would score below 80, rewrite it first
+${isSmall ? '• SMALL CHANNEL: Focus on growth potential, never embarrass them about low numbers.' : ''}
 
-OUTPUT as JSON only — no markdown, no backticks, no explanation:
-{"subject":"3-5 word subject","body":"full email body ending with a blank line then the first name","pitch_score":85,"word_count":67}`;
+OUTPUT: JSON only — no markdown, no backticks:
+{"subject":"3-6 word subject","body":"email body with blank line then first name","pitch_score":85,"word_count":72}`;
 }
 
 // ─── Step 5: Quality scorer ───────────────────────────────────────────────────
@@ -519,14 +530,33 @@ function buildFallback(lead, userId) {
 }
 
 // ─── Validation: check email body for disqualifying patterns ─────────────────
+const BANNED_PATTERNS = [
+  [/I came across/i,            '"I came across"'],
+  [/I noticed/i,                '"I noticed"'],
+  [/love your content/i,        '"love your content"'],
+  [/hope this finds/i,          '"hope this finds"'],
+  [/I wanted to reach out/i,    '"I wanted to reach out"'],
+  [/touching base/i,            '"touching base"'],
+  [/exciting opportunity/i,     '"exciting opportunity"'],
+  [/leaving money on the table/i,'"leaving money on the table"'],
+  [/game.changer/i,             '"game changer"'],
+  [/amazing content/i,          '"amazing content"'],
+  [/incredible work/i,          '"incredible work"'],
+  [/I hope/i,                   '"I hope"'],
+  [/collaboration/i,             '"collaboration"'],
+  [/quick question/i,           '"quick question"'],
+  [/just wanted to/i,           '"just wanted to"'],
+];
+
 function failsValidation(subject, body) {
   if (!body) return 'empty body';
   const wc = body.split(/\s+/).filter(Boolean).length;
-  if (wc > 100)                              return `too long (${wc} words)`;
-  if (/Video editing/.test(body))            return 'capitalized service name "Video editing"';
-  if (/I came across/i.test(body))           return 'banned phrase "I came across"';
-  if (/love your content/i.test(body))       return 'banned phrase "love your content"';
-  if (/hope this finds/i.test(body))         return 'banned phrase "hope this finds"';
+  if (wc > 100) return `too long (${wc} words, max 100)`;
+  if (subject && subject.split(/\s+/).length > 7) return `subject too long (${subject.split(/\s+/).length} words, max 7)`;
+  if (/^I /i.test(body.trim())) return 'body starts with "I"';
+  for (const [pattern, label] of BANNED_PATTERNS) {
+    if (pattern.test(body)) return `banned phrase ${label}`;
+  }
   return null; // passes
 }
 
@@ -547,31 +577,34 @@ async function generateFullPitch(lead, userId = null) {
 
   let bestResult = null;
   let bestScore  = 0;
-  const maxAttempts = 3;
+  const MAX_ATTEMPTS = 3;
+  const PASS_SCORE   = 80; // require 80+ before stopping early
 
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const raw = await completeWithGeminiRotating(prompt, '', 800, FAST_MODEL);
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const raw = await completeWithGeminiRotating(prompt, '', 900, FAST_MODEL);
     if (!raw) break;
 
     const parsed = parsePitchResponseV2(raw, lead);
     if (!parsed) { console.log(`[PitchV2] Attempt ${attempt+1} — parse failed`); continue; }
 
-    // Validation gate — regenerate on bad patterns (max 2 retries)
+    // Validation gate — regenerate on bad patterns
     const fail = failsValidation(parsed.email_subject, parsed.email_body);
-    if (fail && attempt < maxAttempts - 1) {
-      console.log(`[PitchV2] Attempt ${attempt+1} failed validation: ${fail} — regenerating`);
-      continue;
+    if (fail) {
+      console.log(`[PitchV2] Attempt ${attempt+1} failed: ${fail}`);
+      if (attempt < MAX_ATTEMPTS - 1) continue;
     }
 
     const detailedScore = scoreEmailDetailed(parsed.email_subject, parsed.email_body);
-    const finalScore    = Math.round((detailedScore + (parsed.pitch_score || parsed.quality_score || 50)) / 2);
-    console.log(`[PitchV2] Attempt ${attempt+1}/3 — score ${finalScore}/100 for ${lead.channel_name}`);
+    // Trust Gemini's self-score more now that we demand 80+ in the prompt
+    const geminiScore   = parsed.pitch_score || parsed.quality_score || 50;
+    const finalScore    = Math.round((detailedScore * 0.4) + (geminiScore * 0.6));
+    console.log(`[PitchV2] Attempt ${attempt+1}/${MAX_ATTEMPTS} — score ${finalScore}/100 for ${lead.channel_name}`);
 
     if (finalScore > bestScore) {
       bestScore  = finalScore;
       bestResult = { ...parsed, pitch_score: finalScore };
     }
-    if (finalScore >= 70) break;
+    if (finalScore >= PASS_SCORE) break; // good enough — ship it
   }
 
   if (!bestResult) {
