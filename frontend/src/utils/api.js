@@ -14,10 +14,14 @@ api.interceptors.response.use(
     } else if (err.response?.data?.error) {
       err.message = err.response.data.error;
     }
-    // Redirect to login on 401 (session expired)
+    // Redirect to login on 401 (session expired) — skip for /auth/me (AuthContext handles that)
     if (err.response?.status === 401 && err.response?.data?.code === 'UNAUTHENTICATED') {
-      if (window.location.pathname !== '/login' && window.location.pathname !== '/signup') {
-        window.location.href = '/login';
+      const url = err.config?.url || '';
+      if (!url.includes('/auth/me')) {
+        const p = window.location.pathname;
+        if (p !== '/login' && p !== '/signup' && p !== '/landing') {
+          window.location.href = '/login';
+        }
       }
     }
     // Global upgrade interceptor — 429 with upgradeRequired flag
