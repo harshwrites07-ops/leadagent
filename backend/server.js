@@ -211,11 +211,15 @@ app.use('/api/stripe',    requireAuth, stripeRouter);
 // Serve frontend build (production mode)
 if (isProd) {
   app.use(express.static(FRONTEND_DIST, {
-    maxAge: '7d',
+    maxAge: '1h',
     etag: true,
     setHeaders: (res, filePath) => {
       if (filePath.endsWith('.html')) {
-        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      }
+      // Vite hashes JS/CSS filenames — safe to cache, but keep short for rapid deploys
+      if (filePath.match(/\.(js|css)$/)) {
+        res.setHeader('Cache-Control', 'public, max-age=3600');
       }
     },
   }));
