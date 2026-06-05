@@ -69,7 +69,11 @@
       "Bash(node backend\\\\seed-leads.js)",
       "Bash(node)",
       "Bash(xargs grep -l \"app.listen\\\\|server.listen\")",
-      "PowerShell(Invoke-RestMethod -Uri \"https://app.quelro.com/api/health\")"
+      "PowerShell(Invoke-RestMethod -Uri \"https://app.quelro.com/api/health\")",
+      "PowerShell(Invoke-RestMethod -Uri \"https://app.quelro.com/api/auth/me\" -Method GET 2>&1)",
+      "Bash(dir \"c:\\\\Users\\\\it\\\\contentcrafterzz-outreach-os\\\\backend\\\\src\\\\routes\")",
+      "Bash(railway --version)",
+      "Bash(railway status *)"
     ],
     "additionalDirectories": [
       "c:\\Users\\it\\contentcrafterzz-outreach-os\\design-reference\\screenshots"
