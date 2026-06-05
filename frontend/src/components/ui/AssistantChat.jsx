@@ -386,7 +386,7 @@ export default function AssistantChat() {
             }
           </div>
           <p style={{ fontSize: 10, color: '#555', margin: 0 }}>
-            {speaking ? 'Captain Levi is speaking...' : listening ? 'Listening to you...' : 'ContentCrafterzz · Outreach OS'}
+            {speaking ? 'Captain Levi is speaking...' : listening ? 'Listening to you...' : 'Quelro · Outreach OS'}
           </p>
         </div>
         <GripHorizontal size={14} color="#333" style={{ flexShrink: 0 }} />

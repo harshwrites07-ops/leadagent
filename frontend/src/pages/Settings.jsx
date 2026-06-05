@@ -453,7 +453,7 @@ export default function Settings() {
               </div>
               <div className="field">
                 <div className="field__label">Agency / Brand</div>
-                <input className="input" value={profile.agency_name} onChange={e => setP('agency_name', e.target.value)} placeholder="ContentCrafterzz" />
+                <input className="input" value={profile.agency_name} onChange={e => setP('agency_name', e.target.value)} placeholder="Quelro" />
               </div>
               <div className="field">
                 <div className="field__label">Your Role</div>

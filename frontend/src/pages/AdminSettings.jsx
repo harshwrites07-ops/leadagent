@@ -316,7 +316,7 @@ export default function AdminSettings() {
             <div style={{ padding: 16, background: 'var(--bg-elevated)', borderRadius: 8, border: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div style={row2}>
                 <div><label style={labelSt}>Email</label><input style={inputSt} type="email" value={newInbox.email} onChange={e => setNewInbox(p => ({ ...p, email: e.target.value }))} placeholder="you@gmail.com" /></div>
-                <div><label style={labelSt}>From Name</label><input style={inputSt} value={newInbox.from_name} onChange={e => setNewInbox(p => ({ ...p, from_name: e.target.value }))} placeholder="ContentCrafterzz" /></div>
+                <div><label style={labelSt}>From Name</label><input style={inputSt} value={newInbox.from_name} onChange={e => setNewInbox(p => ({ ...p, from_name: e.target.value }))} placeholder="Quelro" /></div>
               </div>
               <div style={row3}>
                 <div style={{ gridColumn: 'span 2' }}><label style={labelSt}>SMTP Host</label><input style={inputSt} value={newInbox.host} onChange={e => setNewInbox(p => ({ ...p, host: e.target.value }))} /></div>
@@ -356,7 +356,7 @@ export default function AdminSettings() {
       <Section icon={Building2} title="Default Agency Profile (System Defaults)">
         <div style={gap}>
           <div style={row2}>
-            <div><label style={labelSt}>Agency Name</label><input style={inputSt} value={local.agency_name || ''} onChange={e => set('agency_name', e.target.value)} placeholder="ContentCrafterzz" /></div>
+            <div><label style={labelSt}>Agency Name</label><input style={inputSt} value={local.agency_name || ''} onChange={e => set('agency_name', e.target.value)} placeholder="Quelro" /></div>
             <div><label style={labelSt}>Your Name</label><input style={inputSt} value={local.your_name || ''} onChange={e => set('your_name', e.target.value)} placeholder="Your name" /></div>
           </div>
           <div style={row2}>

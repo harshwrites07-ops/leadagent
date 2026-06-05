@@ -45,7 +45,7 @@ export default function Verify() {
         )}
 
         <div style={styles.steps}>
-          <div style={styles.step}>1. Open the email from ContentCrafterzz</div>
+          <div style={styles.step}>1. Open the email from Quelro</div>
           <div style={styles.step}>2. Click the "Verify Email" button</div>
           <div style={styles.step}>3. You'll be redirected to complete setup</div>
         </div>

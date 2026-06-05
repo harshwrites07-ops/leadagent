@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 const PRICING = [
   {
     name: 'Starter',
-    price: 49,
+    price: 39,
     period: 'mo',
     tag: null,
     emails: '2,000',
@@ -15,24 +15,24 @@ const PRICING = [
   },
   {
     name: 'Pro',
-    price: 199,
+    price: 79,
     period: 'mo',
     tag: 'MOST POPULAR',
     emails: '10,000',
     leads: 'Unlimited',
-    features: ['Everything in Starter', '10x Email Volume', 'Multi-inbox Rotation', 'Priority AI Generation', 'Advanced Analytics', 'Jack AI Agent Access'],
+    features: ['Everything in Starter', '5x Email Volume', 'Multi-inbox Rotation', 'Priority AI Generation', 'Advanced Analytics', 'Jack AI Agent Access'],
     cta: 'Start Free Trial',
     highlight: true,
   },
   {
     name: 'Agency',
-    price: 599,
+    price: 149,
     period: 'mo',
     tag: null,
     emails: 'Unlimited',
     leads: 'Unlimited',
     features: ['Everything in Pro', 'Unlimited Emails', 'Team Seats (coming)', 'White-label Reports', 'API Access', 'Dedicated Support'],
-    cta: 'Contact Us',
+    cta: 'Start Free Trial',
     highlight: false,
   },
 ];
@@ -109,17 +109,17 @@ export default function Landing() {
               <path d="M8.5 1L3 7.5H7L5.5 13L11 6.5H7L8.5 1Z" fill="#0a0a0c" strokeLinejoin="round"/>
             </svg>
           </div>
-          <span style={{ fontWeight: 700, fontSize: 15, letterSpacing: '-0.01em' }}>ContentCrafterzz</span>
-          <span style={{ fontFamily: 'monospace', fontSize: 9, color: '#46464f', letterSpacing: '0.1em', marginLeft: 4 }}>FOR YOUTUBE AGENCIES</span>
+          <span style={{ fontWeight: 700, fontSize: 15, letterSpacing: '-0.01em' }}>Quelro</span>
+          <span style={{ fontFamily: 'monospace', fontSize: 9, color: '#46464f', letterSpacing: '0.1em', marginLeft: 4 }}>FOR CREATOR SERVICE PROVIDERS</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button onClick={() => navigate('/login')} style={navBtnStyle}>Log In</button>
-          <button onClick={() => navigate('/signup')} style={ctaNavStyle}>Start Free →</button>
+          <button onClick={() => navigate('/signup')} style={ctaNavStyle}>Start Free Trial →</button>
         </div>
       </nav>
 
       {/* ── Hero ── */}
-      <section style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '120px 24px 80px', position: 'relative', overflow: 'hidden' }}>
+      <section style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '100px 24px 56px', position: 'relative', overflow: 'hidden' }}>
         {/* Background glow */}
         <div style={{ position: 'absolute', top: '40%', left: '50%', transform: 'translate(-50%, -50%)', width: 600, height: 600, background: 'radial-gradient(circle, rgba(200,246,84,0.06) 0%, transparent 70%)', pointerEvents: 'none' }} />
 
@@ -130,17 +130,17 @@ export default function Landing() {
 
         <h1 style={{ fontSize: 'clamp(38px, 6vw, 76px)', fontWeight: 800, lineHeight: 1.08, letterSpacing: '-0.03em', margin: '0 0 20px', maxWidth: 820 }}>
           The outreach system built for{' '}
-          <span style={{ color: '#c8f654', fontStyle: 'italic', fontFamily: "'Instrument Serif', serif" }}>YouTube agencies</span>
-          {' '}who want to close clients on autopilot
+          <span style={{ color: '#c8f654', fontStyle: 'italic', fontFamily: "'Instrument Serif', serif" }}>everyone who sells</span>
+          {' '}to YouTube creators
         </h1>
 
         <p style={{ fontSize: 18, color: '#a8a8b3', lineHeight: 1.6, maxWidth: 580, margin: '0 0 40px' }}>
-          Whether you do editing, thumbnails, scripts, SEO, or channel management — find verified leads, send AI-personalized emails, and book calls without the manual grind.
+          Video editors, thumbnail designers, scriptwriters, agencies — find verified YouTube creator leads, send hyper-personalized emails, and land clients on autopilot.
         </p>
 
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 60 }}>
           <button onClick={() => navigate('/signup')} style={heroCta}>
-            Start for Free — 100 emails included →
+            Start Free Trial — 100 emails included →
           </button>
           <button onClick={() => navigate('/login')} style={heroSecondary}>
             Already have an account
@@ -149,7 +149,7 @@ export default function Landing() {
 
         {/* Stats bar */}
         <div style={{ display: 'flex', gap: 40, flexWrap: 'wrap', justifyContent: 'center' }}>
-          {[['10,000+', 'Verified leads in DB'], ['3 steps', 'From signup to first email'], ['< 60s', 'To generate a personalized pitch']].map(([val, label]) => (
+          {[['1,700+', 'Verified leads ready now'], ['80%', 'Average open rate'], ['< 60s', 'To generate a personalized pitch']].map(([val, label]) => (
             <div key={label} style={{ textAlign: 'center' }}>
               <div style={{ fontSize: 24, fontWeight: 800, color: '#c8f654', letterSpacing: '-0.02em' }}>{val}</div>
               <div style={{ fontSize: 12, color: '#6e6e7a', marginTop: 3 }}>{label}</div>
@@ -257,7 +257,7 @@ export default function Landing() {
               <path d="M8.5 1L3 7.5H7L5.5 13L11 6.5H7L8.5 1Z" fill="#0a0a0c" strokeLinejoin="round"/>
             </svg>
           </div>
-          <span style={{ fontSize: 13, fontWeight: 600 }}>ContentCrafterzz</span>
+          <span style={{ fontSize: 13, fontWeight: 600 }}>Quelro</span>
         </div>
         <div style={{ display: 'flex', gap: 20 }}>
           <a href="/privacy" style={{ fontSize: 12, color: '#6e6e7a', textDecoration: 'none' }}>Privacy</a>
@@ -274,7 +274,7 @@ const navBtnStyle = { background: 'none', border: '1px solid #23232c', borderRad
 const ctaNavStyle = { background: '#c8f654', border: 'none', borderRadius: 8, padding: '7px 16px', color: '#0a0a0c', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' };
 const heroCta = { background: '#c8f654', color: '#0a0a0c', border: 'none', borderRadius: 10, padding: '13px 26px', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', letterSpacing: '-0.01em' };
 const heroSecondary = { background: 'none', color: '#a8a8b3', border: '1px solid #23232c', borderRadius: 10, padding: '13px 26px', fontSize: 15, cursor: 'pointer', fontFamily: 'inherit' };
-const section = { padding: '96px 24px' };
+const section = { padding: '64px 24px' };
 const sectionInner = { maxWidth: 1080, margin: '0 auto' };
 const sectionLabel = { fontFamily: 'monospace', fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', color: '#6e6e7a', textAlign: 'center', marginBottom: 16, textTransform: 'uppercase' };
 const sectionH2 = { fontSize: 'clamp(24px, 3.5vw, 40px)', fontWeight: 800, textAlign: 'center', letterSpacing: '-0.03em', margin: '0 0 0', lineHeight: 1.15 };

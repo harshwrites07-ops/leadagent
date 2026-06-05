@@ -41,7 +41,7 @@ export default function PrivacyPolicy() {
         <div style={S.logo}>
           <div style={S.logoIcon}><span style={S.logoText}>CC</span></div>
           <div>
-            <p style={S.logoName}>ContentCrafterzz</p>
+            <p style={S.logoName}>Quelro</p>
             <p style={S.logoSub}>OUTREACH OS</p>
           </div>
         </div>
@@ -50,7 +50,7 @@ export default function PrivacyPolicy() {
         <p style={S.updated}>Last updated: June 1, 2026</p>
 
         <p style={S.p}>
-          ContentCrafterzz ("we", "us", or "our") operates the ContentCrafterzz Outreach OS platform. This Privacy Policy explains how we collect, use, and protect your information when you use our service.
+          Quelro ("we", "us", or "our") operates the Quelro Outreach OS platform. This Privacy Policy explains how we collect, use, and protect your information when you use our service.
         </p>
 
         <hr style={S.divider} />
@@ -67,7 +67,7 @@ export default function PrivacyPolicy() {
 
         <h2 style={S.h2}>2. How We Use Your Information</h2>
         <ul style={S.ul}>
-          <li>To provide and operate the ContentCrafterzz Outreach OS service</li>
+          <li>To provide and operate the Quelro Outreach OS service</li>
           <li>To generate AI-powered pitch emails and lead analysis on your behalf</li>
           <li>To process payments and manage your subscription</li>
           <li>To send transactional emails (verification, password reset, billing receipts)</li>
@@ -116,7 +116,7 @@ export default function PrivacyPolicy() {
 
         <h2 style={S.h2}>9. Children's Privacy</h2>
         <p style={S.p}>
-          ContentCrafterzz is not directed to children under 16. We do not knowingly collect personal information from children.
+          Quelro is not directed to children under 16. We do not knowingly collect personal information from children.
         </p>
 
         <h2 style={S.h2}>10. Changes to This Policy</h2>

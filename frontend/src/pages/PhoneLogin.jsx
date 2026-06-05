@@ -70,7 +70,7 @@ export default function PhoneLogin() {
         <div style={styles.logo}>
           <div style={styles.logoIcon}><span style={styles.logoText}>CC</span></div>
           <div>
-            <p style={styles.logoName}>ContentCrafterzz</p>
+            <p style={styles.logoName}>Quelro</p>
             <p style={styles.logoSub}>OUTREACH OS</p>
           </div>
         </div>

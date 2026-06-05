@@ -6,7 +6,7 @@ const PLANS = [
   {
     id: 'starter',
     name: 'Starter',
-    price: '$49',
+    price: '$39',
     period: '/mo',
     leads: 'Unlimited lead extraction',
     emails: '2,000 emails/mo',
@@ -15,7 +15,7 @@ const PLANS = [
   {
     id: 'pro',
     name: 'Pro',
-    price: '$199',
+    price: '$79',
     period: '/mo',
     leads: 'Unlimited lead extraction',
     emails: '10,000 emails/mo',
@@ -24,7 +24,7 @@ const PLANS = [
   {
     id: 'agency',
     name: 'Agency',
-    price: '$599',
+    price: '$149',
     period: '/mo',
     leads: 'Unlimited lead extraction',
     emails: 'Unlimited emails',

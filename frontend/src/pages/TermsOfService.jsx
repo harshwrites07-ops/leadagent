@@ -39,7 +39,7 @@ export default function TermsOfService() {
         <div style={S.logo}>
           <div style={S.logoIcon}><span style={S.logoText}>CC</span></div>
           <div>
-            <p style={S.logoName}>ContentCrafterzz</p>
+            <p style={S.logoName}>Quelro</p>
             <p style={S.logoSub}>OUTREACH OS</p>
           </div>
         </div>
@@ -48,13 +48,13 @@ export default function TermsOfService() {
         <p style={S.updated}>Last updated: June 1, 2026</p>
 
         <p style={S.p}>
-          Please read these Terms of Service ("Terms") carefully before using ContentCrafterzz Outreach OS ("the Service") operated by ContentCrafterzz ("we", "us", or "our"). By accessing or using the Service, you agree to be bound by these Terms.
+          Please read these Terms of Service ("Terms") carefully before using Quelro Outreach OS ("the Service") operated by Quelro ("we", "us", or "our"). By accessing or using the Service, you agree to be bound by these Terms.
         </p>
 
         <hr style={S.divider} />
 
         <h2 style={S.h2}>1. Use of the Service</h2>
-        <p style={S.p}>ContentCrafterzz Outreach OS provides tools for finding creator leads, generating AI-powered outreach emails, and managing client relationships. You agree to use the Service only for lawful business outreach purposes.</p>
+        <p style={S.p}>Quelro Outreach OS provides tools for finding creator leads, generating AI-powered outreach emails, and managing client relationships. You agree to use the Service only for lawful business outreach purposes.</p>
 
         <h2 style={S.h2}>2. Acceptable Use</h2>
         <p style={S.p}>You must not use the Service to:</p>
@@ -97,7 +97,7 @@ export default function TermsOfService() {
 
         <h2 style={S.h2}>7. Intellectual Property</h2>
         <p style={S.p}>
-          The ContentCrafterzz platform, including its design, code, and branding, is owned by ContentCrafterzz and protected by intellectual property law. You may not copy, modify, or redistribute any part of the platform without written permission.
+          The Quelro platform, including its design, code, and branding, is owned by Quelro and protected by intellectual property law. You may not copy, modify, or redistribute any part of the platform without written permission.
         </p>
 
         <h2 style={S.h2}>8. Disclaimers</h2>

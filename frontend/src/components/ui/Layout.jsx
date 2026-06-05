@@ -195,7 +195,7 @@ export default function Layout({ children }) {
   const isMobile = useIsMobile();
   const { user, logout, trialExpired } = useAuth();
 
-  const crumbs = ROUTE_CRUMBS[location.pathname] || ['ContentCrafterzz'];
+  const crumbs = ROUTE_CRUMBS[location.pathname] || ['Quelro'];
 
   useEffect(() => {
     const toggle = e => {
@@ -239,7 +239,7 @@ export default function Layout({ children }) {
                 <path d="M8.5 1L3 7.5H7L5.5 13L11 6.5H7L8.5 1Z" fill="#0a0a0c" strokeLinejoin="round"/>
               </svg>
             </div>
-            <span style={{ fontSize: 13, fontWeight: 600 }}>ContentCrafterzz</span>
+            <span style={{ fontSize: 13, fontWeight: 600 }}>Quelro</span>
           </div>
           {user && <UserFooter user={user} logout={logout} />}
         </header>
@@ -277,7 +277,7 @@ export default function Layout({ children }) {
             </svg>
           </div>
           <div>
-            <div className="sb__brand-name">ContentCrafterzz</div>
+            <div className="sb__brand-name">Quelro</div>
             <div className="muted" style={{ fontSize: 10.5, marginTop: 1, fontFamily: 'var(--f-mono)', letterSpacing: '.08em' }}>OUTREACH·OS</div>
           </div>
         </div>
