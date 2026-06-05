@@ -536,6 +536,28 @@ router.post('/admin/seed-master-leads', requireAdmin, asyncHandler(async (req, r
   res.json({ success: true, inserted, total, withEmail });
 }));
 
+// ── Admin: seeder status ─────────────────────────────────────────────────────
+router.get('/admin/seeder-status', requireAdmin, asyncHandler(async (req, res) => {
+  const { seederStatus } = require('../services/backgroundSeeder');
+  const db = getDb();
+  const total = db.prepare('SELECT COUNT(*) as c FROM master_leads').get().c;
+  const withEmail = db.prepare("SELECT COUNT(*) as c FROM master_leads WHERE email IS NOT NULL AND email != ''").get().c;
+  res.json({ success: true, seederStatus, total, withEmail });
+}));
+
+// ── Admin: trigger seed cycle now ───────────────────────────────────────────
+let seedNowRunning = false;
+router.post('/admin/seed-now', requireAdmin, asyncHandler(async (req, res) => {
+  if (seedNowRunning) {
+    return res.json({ success: false, error: 'Seeder already running — check back in a few minutes.' });
+  }
+  const { runSeedCycle, seederStatus } = require('../services/backgroundSeeder');
+  seedNowRunning = true;
+  // Run async — respond immediately, let it run in background
+  runSeedCycle().then(() => { seedNowRunning = false; }).catch(() => { seedNowRunning = false; });
+  res.json({ success: true, message: 'Seeder started — check status in 30–60 seconds.' });
+}));
+
 // ── Google OAuth ─────────────────────────────────────────────────────────────
 // These routes are registered directly in server.js via passport
 

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RefreshCw, Trash2, Ban, Database, Users, Mail, Target, Zap, ChevronDown, ChevronUp, Search } from 'lucide-react';
+import { RefreshCw, Trash2, Ban, Database, Users, Mail, Target, Zap, ChevronDown, ChevronUp, Search, Play } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
@@ -23,11 +23,17 @@ export default function Admin() {
   const [expandedUser, setExpandedUser] = useState(null);
   const [search, setSearch] = useState('');
   const [limitEdits, setLimitEdits] = useState({});
+  const [seederInfo, setSeederInfo] = useState(null);
+  const [scraping, setScraping] = useState(false);
+  const pollRef = useRef(null);
 
   useEffect(() => {
     if (!user?.is_admin) { navigate('/'); return; }
     load();
+    loadSeeder();
   }, [user]);
+
+  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
 
   const load = async () => {
     try {
@@ -38,6 +44,34 @@ export default function Admin() {
       setError(e.response?.data?.error || e.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadSeeder = async () => {
+    try {
+      const { data } = await api.get('/auth/admin/seeder-status');
+      setSeederInfo(data);
+    } catch {}
+  };
+
+  const scrapeNow = async () => {
+    setScraping(true);
+    try {
+      const { data } = await api.post('/auth/admin/seed-now');
+      toast.success(data.message || 'Seeder started!');
+      // Poll status every 5s for 3 minutes
+      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = setInterval(async () => {
+        await loadSeeder();
+        await load();
+      }, 5000);
+      setTimeout(() => {
+        if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+        setScraping(false);
+      }, 180000);
+    } catch (e) {
+      toast.error(e.response?.data?.error || e.message);
+      setScraping(false);
     }
   };
 
@@ -124,6 +158,55 @@ export default function Admin() {
           ))}
         </div>
       )}
+
+      {/* Seeder control */}
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 12, padding: '18px 20px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Lead Seeder</span>
+            <span style={{
+              fontSize: 10, fontWeight: 700, fontFamily: 'var(--f-mono)',
+              padding: '2px 8px', borderRadius: 99,
+              background: seederInfo?.seederStatus?.running ? '#c8f65422' : '#6e6e7a22',
+              color: seederInfo?.seederStatus?.running ? 'var(--lime)' : 'var(--text-3)',
+              border: `1px solid ${seederInfo?.seederStatus?.running ? '#c8f65444' : '#6e6e7a44'}`,
+            }}>
+              {seederInfo?.seederStatus?.running ? '● RUNNING' : '○ IDLE'}
+            </span>
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-3)', fontFamily: 'var(--f-mono)' }}>
+            {seederInfo ? (
+              <>
+                DB: <b style={{ color: 'var(--text-2)' }}>{seederInfo.withEmail?.toLocaleString()}</b> leads with email
+                {' · '}Last saved: <b style={{ color: 'var(--text-2)' }}>{seederInfo.seederStatus?.lastCycleSaved ?? '—'}</b> leads
+                {seederInfo.seederStatus?.lastCycleAt ? ` · ${new Date(seederInfo.seederStatus.lastCycleAt).toLocaleTimeString()}` : ''}
+                {seederInfo.seederStatus?.currentKeyword ? ` · Scanning: "${seederInfo.seederStatus.currentKeyword}"` : ''}
+              </>
+            ) : 'Loading…'}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={loadSeeder} style={{ ...s.refreshBtn }} title="Refresh status">
+            <RefreshCw size={13} />
+          </button>
+          <button
+            onClick={scrapeNow}
+            disabled={scraping || seederInfo?.seederStatus?.running}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              background: 'var(--lime)', color: '#0a0a0c',
+              border: 'none', borderRadius: 8,
+              padding: '8px 16px', fontSize: 12, fontWeight: 700,
+              cursor: (scraping || seederInfo?.seederStatus?.running) ? 'not-allowed' : 'pointer',
+              opacity: (scraping || seederInfo?.seederStatus?.running) ? 0.6 : 1,
+              fontFamily: 'var(--f-sans)',
+            }}
+          >
+            <Play size={12} />
+            {scraping ? 'Starting…' : seederInfo?.seederStatus?.running ? 'Running…' : 'Scrape Now'}
+          </button>
+        </div>
+      </div>
 
       {error && <div style={s.errorBox}>{error}</div>}
 

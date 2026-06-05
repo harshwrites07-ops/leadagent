@@ -314,6 +314,17 @@ export default function Layout({ children }) {
                 )}
               </NavLink>
             ))}
+            {user?.is_admin && (
+              <NavLink to="/admin" className={({ isActive }) => `sb__item${isActive ? ' is-active' : ''}`}>
+                {({ isActive }) => (
+                  <>
+                    <Icon name="settings" size={15} />
+                    <span style={{ flex: 1 }}>Admin</span>
+                    <span className="sb__item-meta" style={{ opacity: isActive ? 0.6 : 0.4, color: 'var(--lime)' }}>ADMN</span>
+                  </>
+                )}
+              </NavLink>
+            )}
           </nav>
         </div>
 

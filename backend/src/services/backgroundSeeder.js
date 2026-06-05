@@ -1,7 +1,7 @@
 /**
  * Background seeder — runs 24/7 inside Railway
  * Fills master_leads with email-verified YouTube leads continuously.
- * Respects API quota — sleeps until midnight when all keys exhausted.
+ * All API keys run in parallel. Sleeps until midnight when quota exhausted.
  */
 
 const axios = require('axios');
@@ -9,10 +9,21 @@ const { getDb } = require('../models/database');
 
 const MIN_SUBS = 1000;
 const MAX_SUBS = 5000000;
-const CONCURRENCY = 4;
-const SKIP_DOMAINS = new Set(['youtube.com','google.com','googlemail.com','googleapis.com','gstatic.com','example.com']);
+const CONCURRENCY = 20;
+const SKIP_DOMAINS = new Set(['youtube.com','google.com','googlemail.com','googleapis.com','gstatic.com','example.com','gmail.com','yahoo.com','hotmail.com','outlook.com']);
 
-// Each entry: [keyword, niche_id] — niche_id must match frontend NICHES ids exactly
+// Seeder status — readable by admin panel
+const seederStatus = {
+  running: false,
+  lastCycleAt: null,
+  lastCycleSaved: 0,
+  totalCycles: 0,
+  currentKeyword: null,
+  keysActive: 0,
+  keysTotal: 0,
+};
+
+// Each entry: [keyword, niche_id]
 const KEYWORD_NICHE_MAP = [
   // ── Business ──────────────────────────────────────────────────────────────
   ['business coach youtube', 'business'], ['entrepreneur channel', 'business'],
@@ -187,9 +198,20 @@ const KEYWORD_NICHE_MAP = [
   ['filmmaking channel youtube', 'filmmaking'], ['lightroom tutorial channel', 'photography'],
   ['wedding photography youtube', 'photography'], ['drone footage channel', 'filmmaking'],
   ['short film youtube channel', 'filmmaking'], ['documentary youtube channel', 'filmmaking'],
+  // ── Pets ──────────────────────────────────────────────────────────────────
+  ['dog training youtube', 'pets'], ['cat youtube channel', 'pets'],
+  ['pet care tips youtube', 'pets'], ['dog vlog channel', 'pets'],
+  ['reptile keeper youtube', 'pets'], ['aquarium youtube channel', 'pets'],
+  ['bird keeper youtube', 'pets'], ['exotic pets channel', 'pets'],
+  // ── Sports ────────────────────────────────────────────────────────────────
+  ['sports analysis youtube', 'sports'], ['basketball training channel', 'sports'],
+  ['soccer tips youtube', 'sports'], ['football analysis channel', 'sports'],
+  ['tennis coach youtube', 'sports'], ['golf tips channel', 'sports'],
+  ['boxing training youtube', 'sports'], ['MMA training channel', 'sports'],
+  ['cycling youtube channel', 'sports'], ['swimming coach youtube', 'sports'],
 ];
 
-const KEYWORDS = KEYWORD_NICHE_MAP.map(([kw]) => kw);
+const kwNicheMap = Object.fromEntries(KEYWORD_NICHE_MAP);
 
 function extractEmail(text) {
   if (!text) return null;
@@ -205,59 +227,28 @@ async function scrapeEmailFromWebsite(url) {
   if (!url) return null;
   try {
     const { data: html } = await axios.get(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Outreach/1.0)' },
-      timeout: 6000, maxRedirects: 3,
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Quelro/1.0)' },
+      timeout: 4000, maxRedirects: 3,
     });
-    // Check mailto links first
     const mailto = (html.match(/href="mailto:([^"?]+)/gi) || [])
       .map(m => m.replace(/href="mailto:/i, '').toLowerCase().trim())
       .find(e => e.includes('@') && !SKIP_DOMAINS.has(e.split('@')[1]));
     if (mailto) return mailto;
-    // Try contact/about subpages
     const links = (html.match(/href="([^"]*(?:contact|about)[^"]*)"/gi) || [])
-      .map(m => m.match(/href="([^"]+)"/)?.[1]).filter(Boolean).slice(0, 3);
+      .map(m => m.match(/href="([^"]+)"/)?.[1]).filter(Boolean).slice(0, 2);
     for (const link of links) {
       try {
         const subUrl = link.startsWith('http') ? link : new URL(link, url).href;
-        const { data: sub } = await axios.get(subUrl, { timeout: 5000, maxRedirects: 2,
-          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Outreach/1.0)' } });
+        const { data: sub } = await axios.get(subUrl, {
+          timeout: 3000, maxRedirects: 2,
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Quelro/1.0)' },
+        });
         const email = extractEmail(sub);
         if (email) return email;
       } catch {}
     }
     return extractEmail(html);
   } catch { return null; }
-}
-
-async function scrapeEmail(handle, channelId, websiteUrl) {
-  // 1. Try YouTube about page
-  const urls = [];
-  if (handle) urls.push(`https://www.youtube.com/${handle}/about`);
-  if (channelId) urls.push(`https://www.youtube.com/channel/${channelId}/about`);
-  for (const url of urls) {
-    try {
-      const { data } = await axios.get(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-        timeout: 7000,
-      });
-      // Also extract website link from about page
-      const siteMatch = data.match(/"url":"(https?:\/\/(?!www\.youtube\.com)[^"]+)"/);
-      const foundSite = siteMatch?.[1];
-      const email = extractEmail(data);
-      if (email) return { email, website: foundSite || websiteUrl };
-      // No email on about page — try their website
-      if (foundSite) {
-        const webEmail = await scrapeEmailFromWebsite(foundSite);
-        if (webEmail) return { email: webEmail, website: foundSite };
-      }
-    } catch {}
-  }
-  // 2. Try provided website directly
-  if (websiteUrl) {
-    const webEmail = await scrapeEmailFromWebsite(websiteUrl);
-    if (webEmail) return { email: webEmail, website: websiteUrl };
-  }
-  return null;
 }
 
 function getApiKeys() {
@@ -277,25 +268,116 @@ function msUntilMidnightPacific() {
   const pacific = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
   const midnight = new Date(pacific);
   midnight.setDate(midnight.getDate() + 1);
-  midnight.setHours(0, 5, 0, 0); // 12:05am — keys reset by then
-  return midnight - pacific;
+  midnight.setHours(0, 5, 0, 0);
+  return Math.max(midnight - pacific, 60000);
+}
+
+// Process one batch of channels for a given keyword+key
+async function processChannelBatch(db, INSERT, channels, keyword) {
+  const tasks = channels.map(async ch => {
+    const subs = parseInt(ch.statistics?.subscriberCount || 0);
+    if (subs < MIN_SUBS || subs > MAX_SUBS) return 0;
+
+    const desc = ch.snippet?.description || '';
+    const brandDesc = ch.brandingSettings?.channel?.description || '';
+    const websiteUrl = ch.brandingSettings?.channel?.keywords
+      ? null
+      : (ch.snippet?.customUrl ? null : null); // placeholder
+
+    // Try description first (instant — no network call)
+    let email = extractEmail(desc) || extractEmail(brandDesc);
+    let website = null;
+
+    // Extract website from branding links if available
+    const links = ch.brandingSettings?.channel?.unsubscribedTrailer;
+    const featuredUrl = null; // featured playlist not a website
+
+    if (!email) {
+      // Try website from snippet if any custom field holds it
+      const possibleSite = websiteUrl;
+      if (possibleSite) {
+        const webEmail = await scrapeEmailFromWebsite(possibleSite);
+        if (webEmail) { email = webEmail; website = possibleSite; }
+      }
+    }
+
+    if (!email) return 0;
+
+    const views = parseInt(ch.statistics?.viewCount || 0);
+    const videos = Math.max(1, parseInt(ch.statistics?.videoCount || 1));
+    let score = 50;
+    if (subs > 10000) score += 10;
+    if (subs > 50000) score += 10;
+    if (subs > 100000) score += 10;
+    if (views > 100000) score += 5;
+    if (views > 1000000) score += 5;
+    score += 15; // has email
+
+    const r = INSERT.run(
+      ch.id, ch.snippet?.title || 'Unknown', ch.snippet?.customUrl || null,
+      subs, Math.round(views / videos), email, website,
+      desc.substring(0, 400) || null, score,
+      subs > 100000 ? 'warm' : 'cold',
+      ch.snippet?.country || null,
+      kwNicheMap[keyword] || keyword.split(' ')[0].toLowerCase()
+    );
+    return r.changes > 0 ? 1 : 0;
+  });
+
+  const results = await Promise.allSettled(tasks);
+  return results.reduce((sum, r) => sum + (r.status === 'fulfilled' ? r.value : 0), 0);
+}
+
+// Run one key's assigned keyword list — returns { saved, exhausted }
+async function runKeyBatch(apiKey, keywords, db, INSERT) {
+  let saved = 0;
+  let exhausted = false;
+
+  for (const keyword of keywords) {
+    if (exhausted) break;
+    seederStatus.currentKeyword = keyword;
+    try {
+      const searchRes = await axios.get('https://www.googleapis.com/youtube/v3/search', {
+        params: { part: 'snippet', q: keyword, type: 'channel', maxResults: 50, key: apiKey },
+        timeout: 10000,
+      });
+      const channelIds = (searchRes.data.items || [])
+        .map(i => i.snippet?.channelId || i.id?.channelId).filter(Boolean);
+      if (!channelIds.length) continue;
+
+      const detailRes = await axios.get('https://www.googleapis.com/youtube/v3/channels', {
+        params: { part: 'snippet,statistics,brandingSettings', id: channelIds.join(','), key: apiKey },
+        timeout: 10000,
+      });
+
+      const channels = detailRes.data.items || [];
+      // Process in batches of CONCURRENCY
+      for (let i = 0; i < channels.length; i += CONCURRENCY) {
+        const batch = channels.slice(i, i + CONCURRENCY);
+        saved += await processChannelBatch(db, INSERT, batch, keyword);
+      }
+    } catch (e) {
+      if (e.response?.status === 403 || e.response?.status === 429) {
+        exhausted = true;
+        console.log(`[Seeder] Key exhausted: ${apiKey.slice(-6)}`);
+      }
+    }
+  }
+  return { saved, exhausted };
 }
 
 async function runSeedCycle() {
   const db = getDb();
   const API_KEYS = getApiKeys();
   if (!API_KEYS.length) {
-    console.log('[Seeder] No YouTube API keys found — skipping cycle');
-    return;
+    console.log('[Seeder] No YouTube API keys — skipping');
+    return true;
   }
 
-  const exhausted = new Set();
-  let keyIndex = 0;
-  const getKey = () => {
-    const active = API_KEYS.filter(k => !exhausted.has(k));
-    if (!active.length) return null;
-    return active[keyIndex % active.length];
-  };
+  seederStatus.running = true;
+  seederStatus.keysTotal = API_KEYS.length;
+  seederStatus.keysActive = API_KEYS.length;
+  console.log(`[Seeder] Cycle start — ${API_KEYS.length} keys, ${KEYWORD_NICHE_MAP.length} keywords`);
 
   const INSERT = db.prepare(`
     INSERT OR IGNORE INTO master_leads
@@ -304,81 +386,37 @@ async function runSeedCycle() {
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
   `);
 
-  // Build keyword→niche lookup
-  const kwNicheMap = Object.fromEntries(KEYWORD_NICHE_MAP);
+  // Shuffle keywords and split across keys
+  const shuffled = [...KEYWORD_NICHE_MAP].sort(() => Math.random() - 0.5).map(([kw]) => kw);
+  const chunkSize = Math.ceil(shuffled.length / API_KEYS.length);
+  const chunks = API_KEYS.map((_, i) => shuffled.slice(i * chunkSize, (i + 1) * chunkSize));
 
-  const shuffled = [...KEYWORD_NICHE_MAP].sort(() => Math.random() - 0.5);
+  // Run all keys in parallel
+  const results = await Promise.allSettled(
+    API_KEYS.map((key, i) => runKeyBatch(key, chunks[i] || [], db, INSERT))
+  );
+
   let totalSaved = 0;
-
-  for (const [keyword] of shuffled) {
-    if (exhausted.size >= API_KEYS.length) break;
-
-    const key = getKey();
-    if (!key) break;
-
-    try {
-      const searchRes = await axios.get('https://www.googleapis.com/youtube/v3/search', {
-        params: { part: 'snippet', q: keyword, type: 'channel', maxResults: 50, key },
-        timeout: 12000,
-      });
-      const channelIds = (searchRes.data.items || [])
-        .map(i => i.snippet?.channelId || i.id?.channelId).filter(Boolean);
-      if (!channelIds.length) continue;
-
-      const detailRes = await axios.get('https://www.googleapis.com/youtube/v3/channels', {
-        params: { part: 'snippet,statistics,brandingSettings', id: channelIds.join(','), key },
-        timeout: 12000,
-      });
-
-      // Process channels concurrently for speed
-      await Promise.allSettled((detailRes.data.items || []).map(async ch => {
-        const subs = parseInt(ch.statistics?.subscriberCount || 0);
-        if (subs < MIN_SUBS || subs > MAX_SUBS) return;
-
-        const desc = ch.snippet?.description || '';
-        const brandDesc = ch.brandingSettings?.channel?.description || '';
-        const websiteUrl = ch.brandingSettings?.channel?.unsubscribedTrailer || null;
-
-        // Try description first (instant), then scrape about page + website
-        let email = extractEmail(desc) || extractEmail(brandDesc);
-        let website = websiteUrl;
-
-        if (!email) {
-          const result = await scrapeEmail(ch.snippet?.customUrl, ch.id, websiteUrl);
-          if (result) { email = result.email; website = result.website || websiteUrl; }
-        }
-        if (!email) return; // email-only — skip
-
-        const views = parseInt(ch.statistics?.viewCount || 0);
-        const videos = Math.max(1, parseInt(ch.statistics?.videoCount || 1));
-        let score = 50;
-        if (subs > 10000) score += 10; if (subs > 50000) score += 10; if (subs > 100000) score += 10;
-        if (views > 100000) score += 5; if (views > 1000000) score += 5;
-        if (email) score += 15; // bonus for having email
-
-        const r = INSERT.run(
-          ch.id, ch.snippet?.title || 'Unknown', ch.snippet?.customUrl || null,
-          subs, Math.round(views / videos), email, website,
-          desc.substring(0, 400) || null, score,
-          subs > 100000 ? 'warm' : 'cold',
-          ch.snippet?.country || null,
-          kwNicheMap[keyword] || keyword.split(' ')[0].toLowerCase()
-        );
-        if (r.changes > 0) totalSaved++;
-      }));
-      keyIndex++;
-    } catch (e) {
-      if (e.response?.status === 403 || e.response?.status === 429) {
-        exhausted.add(key);
-        console.log(`[Seeder] Key exhausted (${exhausted.size}/${API_KEYS.length})`);
-      }
+  let exhaustedCount = 0;
+  for (const r of results) {
+    if (r.status === 'fulfilled') {
+      totalSaved += r.value.saved;
+      if (r.value.exhausted) exhaustedCount++;
     }
   }
 
   const total = db.prepare('SELECT COUNT(*) as c FROM master_leads').get().c;
   const withEmail = db.prepare("SELECT COUNT(*) as c FROM master_leads WHERE email IS NOT NULL AND email != ''").get().c;
-  console.log(`[Seeder] Cycle done — +${totalSaved} new | Total: ${total} | With email: ${withEmail}`);
-  return exhausted.size >= API_KEYS.length; // true = all exhausted
+  console.log(`[Seeder] Cycle done — +${totalSaved} new | DB: ${total} total | ${withEmail} with email`);
+
+  seederStatus.running = false;
+  seederStatus.lastCycleAt = new Date().toISOString();
+  seederStatus.lastCycleSaved = totalSaved;
+  seederStatus.totalCycles++;
+  seederStatus.currentKeyword = null;
+  seederStatus.keysActive = API_KEYS.length - exhaustedCount;
+
+  return exhaustedCount >= API_KEYS.length;
 }
 
 async function startBackgroundSeeder() {
@@ -387,7 +425,7 @@ async function startBackgroundSeeder() {
     return;
   }
 
-  console.log('[Seeder] Background seeder started — email-only mode, 24/7');
+  console.log('[Seeder] Background seeder started — all keys parallel, 24/7');
 
   while (true) {
     try {
@@ -395,16 +433,17 @@ async function startBackgroundSeeder() {
       if (allExhausted) {
         const wait = msUntilMidnightPacific();
         console.log(`[Seeder] All keys exhausted — sleeping ${Math.round(wait / 60000)} min until midnight Pacific`);
+        seederStatus.running = false;
         await new Promise(r => setTimeout(r, wait));
       } else {
-        // Small pause between cycles to avoid hammering
-        await new Promise(r => setTimeout(r, 5000));
+        await new Promise(r => setTimeout(r, 3000));
       }
     } catch (e) {
       console.error('[Seeder] Cycle error:', e.message);
+      seederStatus.running = false;
       await new Promise(r => setTimeout(r, 30000));
     }
   }
 }
 
-module.exports = { startBackgroundSeeder };
+module.exports = { startBackgroundSeeder, runSeedCycle, seederStatus };
