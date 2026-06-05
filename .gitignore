@@ -13,7 +13,7 @@ backend/data/*.db-shm
 backend/data/*.db-wal
 
 # Build output
-frontend/dist/
+
 
 # Logs
 *.log
@@ -27,3 +27,4 @@ Thumbs.db
 .vscode/
 *.swp
 railway-setup.ps1
+
