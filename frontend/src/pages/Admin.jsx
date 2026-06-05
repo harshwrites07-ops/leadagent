@@ -1,11 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, RefreshCw, Trash2, Ban, TrendingUp } from 'lucide-react';
+import { RefreshCw, Trash2, Ban, Database, Users, Mail, Target, Zap, ChevronDown, ChevronUp, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
 
-const PLANS = ['free', 'starter', 'growth', 'agency'];
+const ALL_PLANS = ['trial', 'free', 'starter', 'pro', 'growth', 'agency'];
+
+const PLAN_COLORS = {
+  trial: '#6e6e7a', free: '#6e6e7a', starter: '#8ec5ff',
+  pro: '#c8f654', growth: '#c8f654', agency: '#ff8a73',
+};
 
 export default function Admin() {
   const { user } = useAuth();
@@ -15,6 +20,9 @@ export default function Admin() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [actionLoading, setActionLoading] = useState('');
+  const [expandedUser, setExpandedUser] = useState(null);
+  const [search, setSearch] = useState('');
+  const [limitEdits, setLimitEdits] = useState({});
 
   useEffect(() => {
     if (!user?.is_admin) { navigate('/'); return; }
@@ -48,7 +56,7 @@ export default function Admin() {
   };
 
   const deleteUser = async id => {
-    if (!confirm('Delete this user and all their data?')) return;
+    if (!confirm('Delete this user and ALL their data? This cannot be undone.')) return;
     setActionLoading(`del-${id}`);
     try { await api.delete(`/auth/admin/users/${id}`); await load(); toast.success('User deleted'); }
     catch (e) { toast.error(e.response?.data?.error || e.message); }
@@ -57,104 +65,231 @@ export default function Admin() {
 
   const banUser = async (id, banned) => {
     setActionLoading(`ban-${id}`);
-    try { await api.put(`/auth/admin/users/${id}/ban`, { banned: !banned }); await load(); toast.success(banned ? 'User unbanned' : 'User banned'); }
-    catch (e) { toast.error(e.response?.data?.error || e.message); }
+    try {
+      await api.put(`/auth/admin/users/${id}/ban`, { banned: !banned });
+      await load();
+      toast.success(banned ? 'User unbanned' : 'User banned');
+    } catch (e) { toast.error(e.response?.data?.error || e.message); }
     setActionLoading('');
   };
+
+  const saveLimits = async id => {
+    const edits = limitEdits[id] || {};
+    if (!Object.keys(edits).length) return;
+    setActionLoading(`limits-${id}`);
+    try {
+      await api.put(`/auth/admin/users/${id}/limits`, edits);
+      setLimitEdits(prev => { const n = { ...prev }; delete n[id]; return n; });
+      await load();
+      toast.success('Limits saved');
+    } catch (e) { toast.error(e.response?.data?.error || e.message); }
+    setActionLoading('');
+  };
+
+  const editLimit = (id, key, val) => {
+    setLimitEdits(prev => ({ ...prev, [id]: { ...(prev[id] || {}), [key]: val } }));
+  };
+
+  const filtered = users.filter(u =>
+    !search || u.email?.toLowerCase().includes(search.toLowerCase()) ||
+    u.full_name?.toLowerCase().includes(search.toLowerCase())
+  );
 
   if (!user?.is_admin) return null;
 
   return (
-    <div style={styles.page}>
-      <h1 style={styles.title}>Admin Panel</h1>
+    <div style={{ padding: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+        <h1 style={s.title}>Admin Panel</h1>
+        <button onClick={load} style={s.refreshBtn} title="Refresh">
+          <RefreshCw size={13} />
+        </button>
+      </div>
 
+      {/* Stats row */}
       {stats && (
-        <div style={styles.statsRow}>
+        <div style={s.statsGrid}>
           {[
-            { label: 'Total Users', value: stats.total_users },
-            { label: 'Active (30d)', value: stats.active_users },
-            { label: 'Total Leads', value: stats.total_leads?.toLocaleString() },
-            { label: 'Total Emails', value: stats.total_emails?.toLocaleString() },
-          ].map(s => (
-            <div key={s.label} style={styles.statCard}>
-              <div style={styles.statValue}>{s.value ?? '—'}</div>
-              <div style={styles.statLabel}>{s.label}</div>
+            { icon: <Users size={16} />, label: 'Total Users', value: stats.total_users, sub: `${stats.active_users} active (30d)` },
+            { icon: <Target size={16} />, label: 'User Leads', value: stats.total_leads?.toLocaleString(), sub: 'in user DBs' },
+            { icon: <Mail size={16} />, label: 'Emails Sent', value: stats.total_emails?.toLocaleString(), sub: 'all time' },
+            { icon: <Database size={16} />, label: 'Master DB', value: stats.master_leads?.toLocaleString(), sub: `${stats.master_with_email?.toLocaleString()} with email` },
+          ].map(s2 => (
+            <div key={s2.label} style={s.statCard}>
+              <div style={{ color: 'var(--lime)', marginBottom: 8 }}>{s2.icon}</div>
+              <div style={s.statValue}>{s2.value ?? '—'}</div>
+              <div style={s.statLabel}>{s2.label}</div>
+              <div style={s.statSub}>{s2.sub}</div>
             </div>
           ))}
         </div>
       )}
 
-      {error && <div style={styles.errorBox}>{error}</div>}
+      {error && <div style={s.errorBox}>{error}</div>}
+
+      {/* Search */}
+      <div style={{ position: 'relative', marginBottom: 14 }}>
+        <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+        <input
+          value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="Search users by name or email…"
+          style={{ ...s.searchInput, paddingLeft: 30 }}
+        />
+      </div>
 
       {loading ? (
-        <p style={styles.loading}>Loading users...</p>
+        <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Loading users…</p>
       ) : (
-        <div style={styles.tableWrap}>
-          <table style={styles.table}>
-            <thead>
-              <tr>
-                {['ID', 'Name', 'Email', 'Plan', 'Leads Used', 'Emails Used', 'Joined', 'Actions'].map(h => (
-                  <th key={h} style={styles.th}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {users.map(u => (
-                <tr key={u.id} style={styles.tr}>
-                  <td style={styles.td}>{u.id}</td>
-                  <td style={styles.td}>{u.full_name || '—'}</td>
-                  <td style={styles.td}>{u.email}</td>
-                  <td style={styles.td}>
+        <div style={s.tableWrap}>
+          {filtered.map(u => {
+            const isBanned = !!(u.lockout_until && new Date(u.lockout_until) > new Date());
+            const edits = limitEdits[u.id] || {};
+            const isExpanded = expandedUser === u.id;
+            return (
+              <div key={u.id} style={{ ...s.userRow, borderBottom: '1px solid var(--border-subtle)' }}>
+                {/* Main row */}
+                <div style={s.userMain}>
+                  <div style={s.userAvatar}>
+                    {(u.full_name || u.email || '?')[0].toUpperCase()}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span style={s.userName}>{u.full_name || '—'}</span>
+                      <span style={{ ...s.planBadge, background: `${PLAN_COLORS[u.plan] || '#6e6e7a'}22`, color: PLAN_COLORS[u.plan] || '#6e6e7a', border: `1px solid ${PLAN_COLORS[u.plan] || '#6e6e7a'}44` }}>
+                        {u.plan}
+                      </span>
+                      {isBanned && <span style={{ ...s.planBadge, background: 'rgba(255,68,68,0.12)', color: '#FF4444', border: '1px solid rgba(255,68,68,0.3)' }}>BANNED</span>}
+                      {u.is_admin ? <span style={{ ...s.planBadge, background: 'rgba(200,246,84,0.12)', color: 'var(--lime)', border: '1px solid rgba(200,246,84,0.3)' }}>ADMIN</span> : null}
+                    </div>
+                    <div style={s.userEmail}>{u.email}</div>
+                    <div style={{ display: 'flex', gap: 16, marginTop: 4, flexWrap: 'wrap' }}>
+                      <span style={s.metaItem}>
+                        <Target size={10} style={{ color: 'var(--text-muted)' }} />
+                        {u.leads_used_this_month ?? 0} leads used
+                      </span>
+                      <span style={s.metaItem}>
+                        <Mail size={10} style={{ color: 'var(--text-muted)' }} />
+                        {u.emails_used_this_month ?? 0} emails used
+                      </span>
+                      <span style={s.metaItem}>
+                        Joined {u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {/* Plan select */}
                     <select
                       value={u.plan} onChange={e => setPlan(u.id, e.target.value)}
-                      disabled={actionLoading === `plan-${u.id}`}
-                      style={styles.planSelect}
+                      disabled={!!actionLoading}
+                      style={s.planSelect}
                     >
-                      {PLANS.map(p => <option key={p}>{p}</option>)}
+                      {ALL_PLANS.map(p => <option key={p}>{p}</option>)}
                     </select>
-                  </td>
-                  <td style={styles.td}>{u.leads_used_this_month ?? 0}</td>
-                  <td style={styles.td}>{u.emails_used_this_month ?? 0}</td>
-                  <td style={styles.td}>{u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}</td>
-                  <td style={styles.td}>
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      <button onClick={() => resetUsage(u.id)} disabled={!!actionLoading} title="Reset usage" style={styles.iconBtn}>
-                        <RefreshCw size={12} />
+                    {/* Actions */}
+                    <button onClick={() => resetUsage(u.id)} disabled={!!actionLoading} title="Reset usage" style={s.iconBtn}>
+                      <RefreshCw size={12} />
+                    </button>
+                    <button onClick={() => banUser(u.id, isBanned)} disabled={!!actionLoading} title={isBanned ? 'Unban' : 'Ban'} style={{ ...s.iconBtn, color: isBanned ? 'var(--ok)' : '#FF8C00' }}>
+                      <Ban size={12} />
+                    </button>
+                    {u.id !== user.id && (
+                      <button onClick={() => deleteUser(u.id)} disabled={!!actionLoading} title="Delete user" style={{ ...s.iconBtn, color: '#FF4444' }}>
+                        <Trash2 size={12} />
                       </button>
-                      <button onClick={() => banUser(u.id, u.plan_status === 'banned')} disabled={!!actionLoading} title={u.plan_status === 'banned' ? 'Unban' : 'Ban'} style={{ ...styles.iconBtn, color: u.plan_status === 'banned' ? 'var(--ok)' : '#FF8C00' }}>
-                        <Ban size={12} />
+                    )}
+                    <button onClick={() => setExpandedUser(isExpanded ? null : u.id)} style={{ ...s.iconBtn, color: 'var(--text-muted)' }}>
+                      {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Expanded: custom limits */}
+                {isExpanded && (
+                  <div style={s.expandedSection}>
+                    <div style={s.expandedTitle}>Custom Limits <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(overrides plan defaults)</span></div>
+                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                      <div>
+                        <label style={s.fieldLabel}>EMAIL LIMIT / MONTH</label>
+                        <input
+                          type="number" placeholder={`Plan default`}
+                          value={edits.emails_limit !== undefined ? edits.emails_limit : (u.custom_emails_limit ?? '')}
+                          onChange={e => editLimit(u.id, 'emails_limit', e.target.value)}
+                          style={s.limitInput}
+                        />
+                      </div>
+                      <div>
+                        <label style={s.fieldLabel}>LEAD LIMIT / MONTH</label>
+                        <input
+                          type="number" placeholder={`Plan default`}
+                          value={edits.leads_limit !== undefined ? edits.leads_limit : (u.custom_leads_limit ?? '')}
+                          onChange={e => editLimit(u.id, 'leads_limit', e.target.value)}
+                          style={s.limitInput}
+                        />
+                      </div>
+                      <div>
+                        <label style={s.fieldLabel}>EMAILS USED</label>
+                        <input
+                          type="number" placeholder={u.emails_used_this_month ?? 0}
+                          value={edits.emails_used !== undefined ? edits.emails_used : ''}
+                          onChange={e => editLimit(u.id, 'emails_used', e.target.value)}
+                          style={s.limitInput}
+                        />
+                      </div>
+                      <div>
+                        <label style={s.fieldLabel}>LEADS USED</label>
+                        <input
+                          type="number" placeholder={u.leads_used_this_month ?? 0}
+                          value={edits.leads_used !== undefined ? edits.leads_used : ''}
+                          onChange={e => editLimit(u.id, 'leads_used', e.target.value)}
+                          style={s.limitInput}
+                        />
+                      </div>
+                      <button
+                        onClick={() => saveLimits(u.id)}
+                        disabled={actionLoading === `limits-${u.id}` || !Object.keys(edits).length}
+                        style={s.saveBtn}
+                      >
+                        <Zap size={11} /> Save
                       </button>
-                      {u.id !== user.id && (
-                        <button onClick={() => deleteUser(u.id)} disabled={!!actionLoading} title="Delete user" style={{ ...styles.iconBtn, color: '#FF4444' }}>
-                          <Trash2 size={12} />
-                        </button>
-                      )}
                     </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>
+                      Leave blank to use plan default · Set to 0 to block access · Set to 999999 for unlimited
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {filtered.length === 0 && <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>No users found</div>}
         </div>
       )}
     </div>
   );
 }
 
-const styles = {
-  page: { padding: 0 },
-  title: { fontFamily: 'var(--font-heading)', fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 20px', letterSpacing: '-0.02em' },
-  statsRow: { display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' },
-  statCard: { flex: 1, minWidth: 120, background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 10, padding: '14px 16px' },
-  statValue: { fontFamily: 'var(--font-heading)', fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' },
-  statLabel: { fontSize: 11, color: 'var(--text-muted)', marginTop: 2 },
+const s = {
+  title: { fontFamily: 'var(--font-heading)', fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', margin: '0', letterSpacing: '-0.02em' },
+  refreshBtn: { background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 6, color: 'var(--text-muted)', cursor: 'pointer', padding: '6px 8px', display: 'flex', alignItems: 'center' },
+  statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 20 },
+  statCard: { background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 10, padding: '14px 16px' },
+  statValue: { fontFamily: 'var(--font-heading)', fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' },
+  statLabel: { fontSize: 11, color: 'var(--text-secondary)', marginTop: 2, fontWeight: 600 },
+  statSub: { fontSize: 10, color: 'var(--text-muted)', marginTop: 1 },
   errorBox: { background: 'rgba(255,68,68,0.12)', border: '1px solid rgba(255,68,68,0.3)', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: '#FF4444', marginBottom: 16 },
-  loading: { color: 'var(--text-muted)', fontSize: 13 },
-  tableWrap: { overflowX: 'auto', borderRadius: 10, border: '1px solid var(--border-subtle)' },
-  table: { width: '100%', borderCollapse: 'collapse', fontSize: 12 },
-  th: { padding: '10px 12px', textAlign: 'left', fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-muted)', borderBottom: '1px solid var(--border-subtle)', whiteSpace: 'nowrap', background: 'var(--bg-surface)' },
-  tr: { borderBottom: '1px solid var(--border-subtle)' },
-  td: { padding: '10px 12px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' },
-  planSelect: { background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 4, color: 'var(--text-primary)', fontSize: 11, padding: '3px 6px', fontFamily: 'var(--font-body)' },
-  iconBtn: { background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, borderRadius: 4, display: 'flex', alignItems: 'center' },
+  searchInput: { width: '100%', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '8px 12px', color: 'var(--text-primary)', fontSize: 12, fontFamily: 'var(--font-body)', outline: 'none', boxSizing: 'border-box' },
+  tableWrap: { background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 10, overflow: 'hidden' },
+  userRow: { background: 'transparent' },
+  userMain: { display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', flexWrap: 'wrap' },
+  userAvatar: { width: 36, height: 36, borderRadius: 9, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: 'var(--text-secondary)', flexShrink: 0 },
+  userName: { fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' },
+  userEmail: { fontSize: 11, color: 'var(--text-muted)', marginTop: 1 },
+  metaItem: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' },
+  planBadge: { fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 99, letterSpacing: '0.06em', fontFamily: 'var(--font-mono)', textTransform: 'uppercase' },
+  planSelect: { background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 6, color: 'var(--text-primary)', fontSize: 11, padding: '5px 8px', fontFamily: 'var(--font-body)', cursor: 'pointer' },
+  iconBtn: { background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 5, borderRadius: 5, display: 'flex', alignItems: 'center' },
+  expandedSection: { background: 'rgba(0,0,0,0.2)', borderTop: '1px solid var(--border-subtle)', padding: '14px 16px 16px' },
+  expandedTitle: { fontSize: 11, fontFamily: 'var(--font-mono)', letterSpacing: '0.1em', color: 'var(--text-secondary)', fontWeight: 700, marginBottom: 12, textTransform: 'uppercase' },
+  fieldLabel: { display: 'block', fontSize: 9, fontFamily: 'var(--font-mono)', letterSpacing: '0.12em', color: 'var(--text-muted)', marginBottom: 5, textTransform: 'uppercase' },
+  limitInput: { background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 6, color: 'var(--text-primary)', fontSize: 12, padding: '6px 10px', fontFamily: 'var(--font-body)', outline: 'none', width: 130 },
+  saveBtn: { display: 'flex', alignItems: 'center', gap: 5, background: 'var(--lime)', color: '#0a0a0c', border: 'none', borderRadius: 6, padding: '7px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font-body)' },
 };

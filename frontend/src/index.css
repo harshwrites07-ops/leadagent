@@ -209,17 +209,11 @@ a { color: inherit; text-decoration: none; }
   display: grid; place-items: center;
   color: #0a0a0c; font-weight: 800; font-size: 13px;
   font-family: var(--f-mono);
-  position: relative;
-  overflow: hidden;
-  box-shadow: 0 0 0 1px rgba(0,0,0,0.12), 0 2px 8px -1px color-mix(in srgb, var(--lime) 50%, transparent);
+  flex-shrink: 0;
 }
-.sb__logo::before {
-  content: '';
-  position: absolute; inset: 0;
-  background: linear-gradient(160deg, rgba(255,255,255,0.22) 0%, transparent 60%);
-}
+.sb__logo::before { display: none; }
 .sb__logo::after { display: none; }
-.sb__logo > span { position: relative; z-index: 1; color: #0a0a0c; }
+.sb__logo > span { color: #0a0a0c; }
 .sb__brand-name {
   font-size: 14.5px;
   font-weight: 600;

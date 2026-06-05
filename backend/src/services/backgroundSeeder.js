@@ -14,7 +14,7 @@ const SKIP_DOMAINS = new Set(['youtube.com','google.com','googlemail.com','googl
 
 // Each entry: [keyword, niche_id] — niche_id must match frontend NICHES ids exactly
 const KEYWORD_NICHE_MAP = [
-  // business
+  // ── Business ──────────────────────────────────────────────────────────────
   ['business coach youtube', 'business'], ['entrepreneur channel', 'business'],
   ['startup founder vlog', 'business'], ['agency owner youtube', 'business'],
   ['CEO vlog', 'business'], ['digital entrepreneur', 'business'],
@@ -24,7 +24,12 @@ const KEYWORD_NICHE_MAP = [
   ['freelancing tips channel', 'business'], ['passive income ideas', 'business'],
   ['solopreneur youtube', 'business'], ['business automation channel', 'business'],
   ['scaling business youtube', 'business'], ['personal brand channel', 'business'],
-  // finance
+  ['side hustle youtube channel', 'business'], ['small business owner youtube', 'business'],
+  ['marketing agency youtube', 'business'], ['cold outreach channel', 'business'],
+  ['lead generation youtube', 'business'], ['sales training channel', 'business'],
+  ['business growth hacks youtube', 'business'], ['entrepreneurship vlog', 'business'],
+  ['productized service youtube', 'business'], ['agency growth channel', 'business'],
+  // ── Finance ───────────────────────────────────────────────────────────────
   ['personal finance channel', 'finance'], ['investing tips youtube', 'finance'],
   ['stock market channel', 'finance'], ['crypto educator youtube', 'finance'],
   ['financial advisor youtube', 'finance'], ['day trading channel', 'finance'],
@@ -33,7 +38,11 @@ const KEYWORD_NICHE_MAP = [
   ['financial freedom youtube', 'finance'], ['budgeting tips channel', 'finance'],
   ['debt free journey youtube', 'finance'], ['financial independence channel', 'finance'],
   ['money mindset youtube', 'finance'], ['tax tips channel', 'finance'],
-  // fitness
+  ['index fund investing youtube', 'finance'], ['retirement planning channel', 'finance'],
+  ['credit score tips youtube', 'finance'], ['frugal living channel', 'finance'],
+  ['compound interest youtube', 'finance'], ['net worth journey vlog', 'finance'],
+  ['real estate investing finance', 'finance'], ['financial planning youtube', 'finance'],
+  // ── Fitness ───────────────────────────────────────────────────────────────
   ['fitness coach youtube', 'fitness'], ['personal trainer channel', 'fitness'],
   ['workout routine youtube', 'fitness'], ['nutrition coach channel', 'fitness'],
   ['gym motivation youtube', 'fitness'], ['weight loss channel', 'fitness'],
@@ -41,56 +50,143 @@ const KEYWORD_NICHE_MAP = [
   ['calisthenics youtube', 'fitness'], ['online fitness coaching', 'fitness'],
   ['HIIT workout channel', 'fitness'], ['running coach youtube', 'fitness'],
   ['strength training channel', 'fitness'], ['wellness coach youtube', 'fitness'],
-  // cooking
+  ['crossfit youtube channel', 'fitness'], ['marathon training vlog', 'fitness'],
+  ['powerlifting youtube', 'fitness'], ['home workout channel', 'fitness'],
+  ['sports performance youtube', 'fitness'], ['meal prep fitness youtube', 'fitness'],
+  ['fat loss coach channel', 'fitness'], ['athlete training vlog', 'fitness'],
+  ['pilates youtube channel', 'fitness'], ['physique transformation youtube', 'fitness'],
+  // ── Cooking / Food ────────────────────────────────────────────────────────
   ['cooking channel youtube', 'cooking'], ['chef youtube channel', 'cooking'],
   ['food blogger youtube', 'cooking'], ['recipe channel', 'cooking'],
   ['baking youtube channel', 'cooking'], ['meal prep channel', 'cooking'],
   ['vegan cooking youtube', 'cooking'], ['bbq youtube channel', 'cooking'],
   ['restaurant owner youtube', 'cooking'], ['food review channel', 'cooking'],
-  // tech
+  ['street food youtube', 'cooking'], ['healthy eating channel', 'cooking'],
+  ['budget meals youtube', 'cooking'], ['asian cooking channel', 'cooking'],
+  ['italian cooking youtube', 'cooking'], ['plant based diet channel', 'cooking'],
+  ['keto recipes youtube', 'cooking'], ['dessert tutorial channel', 'cooking'],
+  ['food photography youtube', 'cooking'], ['fermentation channel youtube', 'cooking'],
+  // ── Tech ──────────────────────────────────────────────────────────────────
   ['tech review channel', 'tech'], ['software tutorial youtube', 'tech'],
   ['coding tutorial channel', 'tech'], ['web development youtube', 'tech'],
   ['app development channel', 'tech'], ['AI tools youtube', 'tech'],
   ['gadget review channel', 'tech'], ['programming tips youtube', 'tech'],
   ['cybersecurity channel', 'tech'], ['data science youtube', 'tech'],
   ['machine learning channel', 'tech'], ['developer vlog youtube', 'tech'],
-  // travel
+  ['no code youtube channel', 'tech'], ['automation tools youtube', 'tech'],
+  ['python tutorial channel', 'tech'], ['javascript youtube channel', 'tech'],
+  ['cloud computing youtube', 'tech'], ['tech startup vlog', 'tech'],
+  ['blockchain developer youtube', 'tech'], ['product management youtube', 'tech'],
+  ['devops youtube channel', 'tech'], ['react js tutorial channel', 'tech'],
+  // ── Travel ────────────────────────────────────────────────────────────────
   ['travel vlogger channel', 'travel'], ['travel tips youtube', 'travel'],
   ['budget travel channel', 'travel'], ['solo travel youtube', 'travel'],
   ['digital nomad vlog', 'travel'], ['adventure travel channel', 'travel'],
   ['backpacking youtube', 'travel'], ['luxury travel vlog', 'travel'],
   ['expat youtube channel', 'travel'], ['van life youtube', 'travel'],
-  // beauty
+  ['world travel vlog', 'travel'], ['travel couple channel', 'travel'],
+  ['family travel vlog youtube', 'travel'], ['off road travel channel', 'travel'],
+  ['sailing vlog youtube', 'travel'], ['motorcycle travel youtube', 'travel'],
+  ['travel photography channel', 'travel'], ['campervan life youtube', 'travel'],
+  ['travel hacks channel', 'travel'], ['country specific vlog', 'travel'],
+  // ── Beauty / Fashion ──────────────────────────────────────────────────────
   ['beauty youtube channel', 'beauty'], ['makeup tutorial youtube', 'beauty'],
   ['skincare routine channel', 'beauty'], ['fashion channel youtube', 'beauty'],
   ['style tips youtube', 'beauty'], ['hair tutorial channel', 'beauty'],
   ['beauty influencer youtube', 'beauty'], ['nail art channel', 'beauty'],
-  // education
+  ['mens fashion youtube', 'beauty'], ['natural beauty channel', 'beauty'],
+  ['thrift haul youtube', 'beauty'], ['skincare for men youtube', 'beauty'],
+  ['ootd youtube channel', 'beauty'], ['beauty product reviews youtube', 'beauty'],
+  ['drugstore makeup youtube', 'beauty'], ['luxury fashion channel', 'beauty'],
+  // ── Education ─────────────────────────────────────────────────────────────
   ['education channel youtube', 'edu'], ['online course creator youtube', 'edu'],
   ['tutoring channel youtube', 'edu'], ['skill development youtube', 'edu'],
   ['self improvement channel', 'edu'], ['language learning youtube', 'edu'],
   ['career advice channel', 'edu'], ['study tips youtube', 'edu'],
   ['teacher youtube channel', 'edu'], ['how to channel youtube', 'edu'],
-  // saas
+  ['exam prep youtube channel', 'edu'], ['mindset coach youtube', 'edu'],
+  ['productivity tips channel', 'edu'], ['reading channel youtube', 'edu'],
+  ['journaling youtube', 'edu'], ['morning routine channel', 'edu'],
+  ['book summary channel', 'edu'], ['life skills youtube', 'edu'],
+  // ── Gaming ────────────────────────────────────────────────────────────────
+  ['gaming channel youtube', 'gaming'], ['game review channel', 'gaming'],
+  ['lets play youtube', 'gaming'], ['esports youtube channel', 'gaming'],
+  ['streaming tips youtube', 'gaming'], ['game developer youtube', 'gaming'],
+  ['minecraft youtube channel', 'gaming'], ['fortnite youtube channel', 'gaming'],
+  ['fps gaming channel', 'gaming'], ['rpg gaming youtube', 'gaming'],
+  ['twitch highlights youtube', 'gaming'], ['gaming setup channel', 'gaming'],
+  ['game lore youtube', 'gaming'], ['retro gaming channel', 'gaming'],
+  ['speedrunning youtube', 'gaming'], ['gaming news channel', 'gaming'],
+  // ── Design ────────────────────────────────────────────────────────────────
+  ['graphic design youtube', 'design'], ['UI UX design channel', 'design'],
+  ['logo design youtube', 'design'], ['Figma tutorial channel', 'design'],
+  ['motion graphics youtube', 'design'], ['freelance design channel', 'design'],
+  ['brand identity design youtube', 'design'], ['web design channel', 'design'],
+  ['illustrator tutorial youtube', 'design'], ['photoshop tutorial channel', 'design'],
+  ['3d design youtube channel', 'design'], ['product design vlog', 'design'],
+  ['typography youtube channel', 'design'], ['design portfolio channel', 'design'],
+  // ── SaaS ──────────────────────────────────────────────────────────────────
   ['saas founder youtube', 'saas'], ['software startup channel', 'saas'],
   ['product led growth youtube', 'saas'], ['indie hacker youtube', 'saas'],
   ['build in public channel', 'saas'], ['SaaS marketing youtube', 'saas'],
   ['micro saas youtube', 'saas'], ['B2B software youtube', 'saas'],
-  // realestate — IMPORTANT: tag as 'realestate' not 'real' or 'real estate'
+  ['bootstrapped startup vlog', 'saas'], ['MRR growth channel', 'saas'],
+  ['product hunt youtube', 'saas'], ['SaaS growth hacks youtube', 'saas'],
+  // ── Real Estate ───────────────────────────────────────────────────────────
   ['real estate agent youtube', 'realestate'], ['property investor channel', 'realestate'],
   ['house flipping youtube', 'realestate'], ['rental property tips youtube', 'realestate'],
   ['real estate investing channel', 'realestate'], ['realtor youtube channel', 'realestate'],
   ['real estate coach youtube', 'realestate'], ['airbnb hosting channel', 'realestate'],
   ['commercial real estate youtube', 'realestate'], ['property management youtube', 'realestate'],
   ['real estate wholesaling', 'realestate'], ['multifamily investing youtube', 'realestate'],
-  // gaming
-  ['gaming channel youtube', 'gaming'], ['game review channel', 'gaming'],
-  ['lets play youtube', 'gaming'], ['esports youtube channel', 'gaming'],
-  ['streaming tips youtube', 'gaming'], ['game developer youtube', 'gaming'],
-  // design
-  ['graphic design youtube', 'design'], ['UI UX design channel', 'design'],
-  ['logo design youtube', 'design'], ['Figma tutorial channel', 'design'],
-  ['motion graphics youtube', 'design'], ['freelance design channel', 'design'],
+  ['first time home buyer youtube', 'realestate'], ['real estate marketing channel', 'realestate'],
+  ['short term rental youtube', 'realestate'], ['real estate syndication channel', 'realestate'],
+  // ── Health / Medical ──────────────────────────────────────────────────────
+  ['doctor youtube channel', 'health'], ['nurse youtube channel', 'health'],
+  ['mental health youtube', 'health'], ['therapy advice channel', 'health'],
+  ['holistic health youtube', 'health'], ['functional medicine channel', 'health'],
+  ['naturopath youtube', 'health'], ['dentist youtube channel', 'health'],
+  ['chiropractor youtube', 'health'], ['health coach channel', 'health'],
+  ['gut health youtube', 'health'], ['immune system channel', 'health'],
+  ['sleep improvement youtube', 'health'], ['stress management channel', 'health'],
+  // ── Motivation / Personal Dev ─────────────────────────────────────────────
+  ['motivational speaker youtube', 'motivation'], ['life coach channel youtube', 'motivation'],
+  ['personal development vlog', 'motivation'], ['discipline mindset youtube', 'motivation'],
+  ['stoicism youtube channel', 'motivation'], ['success habits channel', 'motivation'],
+  ['confidence building youtube', 'motivation'], ['masculinity channel youtube', 'motivation'],
+  ['goal setting channel', 'motivation'], ['mindfulness youtube channel', 'motivation'],
+  // ── Family / Parenting ────────────────────────────────────────────────────
+  ['family vlog youtube', 'family'], ['parenting tips channel', 'family'],
+  ['dad vlog youtube', 'family'], ['mom youtube channel', 'family'],
+  ['homeschool youtube channel', 'family'], ['kids educational channel', 'family'],
+  ['pregnancy vlog youtube', 'family'], ['toddler activities channel', 'family'],
+  // ── Music ─────────────────────────────────────────────────────────────────
+  ['musician youtube channel', 'music'], ['music production channel', 'music'],
+  ['guitar tutorial youtube', 'music'], ['piano tutorial channel', 'music'],
+  ['singing coach youtube', 'music'], ['beat maker youtube', 'music'],
+  ['music theory channel', 'music'], ['vocalist youtube channel', 'music'],
+  ['music mixing tutorials', 'music'], ['bedroom producer youtube', 'music'],
+  // ── Automotive / Cars ─────────────────────────────────────────────────────
+  ['car review channel youtube', 'automotive'], ['mechanic youtube channel', 'automotive'],
+  ['car restoration vlog', 'automotive'], ['electric vehicle youtube', 'automotive'],
+  ['detailing youtube channel', 'automotive'], ['car buying tips youtube', 'automotive'],
+  ['motorcyclist youtube vlog', 'automotive'], ['supercar youtube channel', 'automotive'],
+  // ── Outdoors / Homesteading ───────────────────────────────────────────────
+  ['homesteading youtube channel', 'homesteading'], ['off grid living youtube', 'homesteading'],
+  ['farming vlog channel', 'farming'], ['gardening youtube channel', 'gardening'],
+  ['permaculture youtube', 'farming'], ['beekeeping channel youtube', 'homesteading'],
+  ['self sufficiency youtube', 'homesteading'], ['tiny house youtube', 'homesteading'],
+  // ── DIY / Woodworking ─────────────────────────────────────────────────────
+  ['DIY youtube channel', 'diy'], ['woodworking youtube channel', 'woodworking'],
+  ['home renovation vlog', 'diy'], ['carpentry tutorial youtube', 'woodworking'],
+  ['furniture making youtube', 'woodworking'], ['workshop channel youtube', 'diy'],
+  ['power tools youtube channel', 'diy'], ['building projects youtube', 'diy'],
+  // ── Photography / Filmmaking ──────────────────────────────────────────────
+  ['photographer youtube channel', 'photography'], ['camera review channel', 'photography'],
+  ['video editing tutorial youtube', 'filmmaking'], ['cinematography youtube', 'filmmaking'],
+  ['filmmaking channel youtube', 'filmmaking'], ['lightroom tutorial channel', 'photography'],
+  ['wedding photography youtube', 'photography'], ['drone footage channel', 'filmmaking'],
+  ['short film youtube channel', 'filmmaking'], ['documentary youtube channel', 'filmmaking'],
 ];
 
 const KEYWORDS = KEYWORD_NICHE_MAP.map(([kw]) => kw);

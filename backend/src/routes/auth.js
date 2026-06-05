@@ -432,11 +432,16 @@ router.get('/admin/stats', requireAdmin, asyncHandler(async (req, res) => {
   const activeToday = db.prepare(`SELECT COUNT(*) as c FROM users WHERE last_login >= datetime('now','-30 days')`).get();
   const totalLeads = db.prepare('SELECT COUNT(*) as c FROM leads').get();
   const totalEmails = db.prepare('SELECT COUNT(*) as c FROM emails').get();
+  let masterLeads = 0, masterWithEmail = 0;
+  try {
+    masterLeads = db.prepare('SELECT COUNT(*) as c FROM master_leads').get().c;
+    masterWithEmail = db.prepare("SELECT COUNT(*) as c FROM master_leads WHERE email IS NOT NULL AND email != ''").get().c;
+  } catch {}
 
   const users = db.prepare(`
     SELECT id, email, full_name, agency_name, plan, plan_status, is_admin,
            leads_used_this_month, emails_used_this_month, created_at, last_login,
-           email_verified, phone_verified
+           email_verified, phone_verified, custom_emails_limit, custom_leads_limit
     FROM users ORDER BY created_at DESC
   `).all();
 
@@ -447,6 +452,8 @@ router.get('/admin/stats', requireAdmin, asyncHandler(async (req, res) => {
       active_users: activeToday.c,
       total_leads: totalLeads.c,
       total_emails: totalEmails.c,
+      master_leads: masterLeads,
+      master_with_email: masterWithEmail,
     },
     users,
   });
@@ -454,13 +461,27 @@ router.get('/admin/stats', requireAdmin, asyncHandler(async (req, res) => {
 
 router.put('/admin/users/:id/plan', requireAdmin, asyncHandler(async (req, res) => {
   const { plan, plan_status } = req.body;
-  const validPlans = ['free', 'starter', 'growth', 'agency'];
+  const validPlans = ['free', 'trial', 'starter', 'pro', 'growth', 'agency'];
   if (plan && !validPlans.includes(plan)) {
     return res.status(400).json({ success: false, error: 'Invalid plan' });
   }
   const db = getDb();
   db.prepare(`UPDATE users SET plan=COALESCE(?,plan), plan_status=COALESCE(?,plan_status) WHERE id=?`)
     .run(plan || null, plan_status || null, req.params.id);
+  res.json({ success: true });
+}));
+
+router.put('/admin/users/:id/limits', requireAdmin, asyncHandler(async (req, res) => {
+  const { emails_limit, leads_limit, emails_used, leads_used } = req.body;
+  const db = getDb();
+  const sets = [], vals = [];
+  if (emails_limit !== undefined) { sets.push('custom_emails_limit=?'); vals.push(emails_limit === '' ? null : parseInt(emails_limit)); }
+  if (leads_limit !== undefined) { sets.push('custom_leads_limit=?'); vals.push(leads_limit === '' ? null : parseInt(leads_limit)); }
+  if (emails_used !== undefined) { sets.push('emails_used_this_month=?'); vals.push(parseInt(emails_used) || 0); }
+  if (leads_used !== undefined) { sets.push('leads_used_this_month=?'); vals.push(parseInt(leads_used) || 0); }
+  if (!sets.length) return res.json({ success: true });
+  vals.push(req.params.id);
+  db.prepare(`UPDATE users SET ${sets.join(',')} WHERE id=?`).run(...vals);
   res.json({ success: true });
 }));
 

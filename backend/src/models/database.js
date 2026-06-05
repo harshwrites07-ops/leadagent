@@ -334,6 +334,10 @@ function initSchema() {
   try { db.exec(`ALTER TABLE users ADD COLUMN trial_ends_at DATETIME DEFAULT (datetime('now', '+14 days'))`); } catch {}
   try { db.exec(`ALTER TABLE users ADD COLUMN billing_cycle_start DATETIME DEFAULT (datetime('now'))`); } catch {}
 
+  // Admin-settable custom limits (override plan limits for individual users)
+  try { db.exec(`ALTER TABLE users ADD COLUMN custom_emails_limit INTEGER`); } catch {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN custom_leads_limit INTEGER`); } catch {}
+
   // ── Master leads pool — global shared DB filled by background seeder ──────────
   db.exec(`
     CREATE TABLE IF NOT EXISTS master_leads (

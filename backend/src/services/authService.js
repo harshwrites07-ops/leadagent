@@ -234,12 +234,12 @@ async function sendOtpEmail(user, code) {
 // ── Usage limits ──────────────────────────────────────────────────────────────
 
 const PLAN_LIMITS = {
-  trial:   { leads: 50,     emails: 50 },
-  free:    { leads: 100,    emails: 100 },
-  starter: { leads: 500,    emails: 500 },
-  pro:     { leads: 5000,   emails: 2500 },
-  growth:  { leads: 2500,   emails: 2000 },
-  agency:  { leads: 10000,  emails: Infinity },
+  trial:   { leads: 100,      emails: 100 },       // free trial — 100 each
+  free:    { leads: 100,      emails: 100 },
+  starter: { leads: 5000,     emails: 2000 },      // $49/mo
+  pro:     { leads: 10000,    emails: 10000 },     // $199/mo
+  growth:  { leads: 10000,    emails: 10000 },
+  agency:  { leads: Infinity, emails: Infinity },  // $599/mo
 };
 
 function checkUsageLimit(user, type) {
@@ -265,7 +265,11 @@ function checkUsageLimit(user, type) {
     user.emails_used_this_month = 0;
   }
 
-  const limits = PLAN_LIMITS[effectivePlan] || PLAN_LIMITS.free;
+  const baseLimits = PLAN_LIMITS[effectivePlan] || PLAN_LIMITS.free;
+  const limits = {
+    leads:  user.custom_leads_limit  != null ? user.custom_leads_limit  : baseLimits.leads,
+    emails: user.custom_emails_limit != null ? user.custom_emails_limit : baseLimits.emails,
+  };
   if (type === 'leads') return { allowed: user.leads_used_this_month < limits.leads, limit: limits.leads, used: user.leads_used_this_month };
   if (type === 'emails') return { allowed: user.emails_used_this_month < limits.emails, limit: limits.emails, used: user.emails_used_this_month };
   return { allowed: true };

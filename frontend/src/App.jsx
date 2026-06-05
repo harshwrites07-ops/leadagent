@@ -24,6 +24,7 @@ import VerifyEmail from './pages/VerifyEmail';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsOfService from './pages/TermsOfService';
 import NotFound from './pages/NotFound';
+import Landing from './pages/Landing';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -42,7 +43,7 @@ function ProtectedRoute({ children }) {
     );
   }
 
-  if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
+  if (!user) return <Navigate to="/landing" state={{ from: location }} replace />;
   if (!user.onboarding_completed && location.pathname !== '/onboarding') {
     return <Navigate to="/onboarding" replace />;
   }
@@ -68,6 +69,7 @@ function AppRoutes() {
   return (
     <Routes>
       {/* Fully public — no auth required */}
+      <Route path="/landing" element={<Landing />} />
       <Route path="/privacy" element={<PrivacyPolicy />} />
       <Route path="/terms" element={<TermsOfService />} />
 
