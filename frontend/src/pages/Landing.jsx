@@ -110,7 +110,7 @@ export default function Landing() {
             </svg>
           </div>
           <span style={{ fontWeight: 700, fontSize: 15, letterSpacing: '-0.01em' }}>ContentCrafterzz</span>
-          <span style={{ fontFamily: 'monospace', fontSize: 9, color: '#46464f', letterSpacing: '0.1em', marginLeft: 4 }}>OUTREACH·OS</span>
+          <span style={{ fontFamily: 'monospace', fontSize: 9, color: '#46464f', letterSpacing: '0.1em', marginLeft: 4 }}>FOR YOUTUBE AGENCIES</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button onClick={() => navigate('/login')} style={navBtnStyle}>Log In</button>
@@ -130,12 +130,12 @@ export default function Landing() {
 
         <h1 style={{ fontSize: 'clamp(38px, 6vw, 76px)', fontWeight: 800, lineHeight: 1.08, letterSpacing: '-0.03em', margin: '0 0 20px', maxWidth: 820 }}>
           The outreach system built for{' '}
-          <span style={{ color: '#c8f654', fontStyle: 'italic', fontFamily: "'Instrument Serif', serif" }}>video editors</span>
-          {' '}who want to close clients
+          <span style={{ color: '#c8f654', fontStyle: 'italic', fontFamily: "'Instrument Serif', serif" }}>YouTube agencies</span>
+          {' '}who want to close clients on autopilot
         </h1>
 
-        <p style={{ fontSize: 18, color: '#a8a8b3', lineHeight: 1.6, maxWidth: 560, margin: '0 0 40px' }}>
-          Find verified YouTube channel leads, generate AI emails that study each creator before writing, and run follow-up sequences on autopilot.
+        <p style={{ fontSize: 18, color: '#a8a8b3', lineHeight: 1.6, maxWidth: 580, margin: '0 0 40px' }}>
+          Whether you do editing, thumbnails, scripts, SEO, or channel management — find verified leads, send AI-personalized emails, and book calls without the manual grind.
         </p>
 
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 60 }}>
@@ -241,7 +241,7 @@ export default function Landing() {
             Your next client is already on YouTube.
           </h2>
           <p style={{ fontSize: 16, color: '#a8a8b3', margin: '0 0 36px', lineHeight: 1.6 }}>
-            Stop guessing who to reach out to. Stop sending copy-paste DMs. Start using a system that finds the right creators and tells them exactly why they need you.
+            Whether you edit, design thumbnails, write scripts, or manage channels — stop sending generic cold DMs. Start using a system that finds the right creators and writes emails that speak directly to their pain.
           </p>
           <button onClick={() => navigate('/signup')} style={{ ...heroCta, fontSize: 16, padding: '14px 32px' }}>
             Get Started Free — No Card Needed →
