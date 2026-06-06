@@ -223,6 +223,13 @@ function extractEmail(text) {
   return null;
 }
 
+function extractUrlFromText(text) {
+  if (!text) return null;
+  // Find non-YouTube URLs in description — often channel owner's website
+  const match = text.match(/https?:\/\/(?!(?:www\.)?(?:youtube\.com|youtu\.be|instagram\.com|twitter\.com|x\.com|facebook\.com|tiktok\.com|t\.co))[\w.-]+\.[a-zA-Z]{2,}[^\s"')>]*/);
+  return match ? match[0].replace(/[.,;!?]+$/, '') : null;
+}
+
 async function scrapeEmailFromWebsite(url) {
   if (!url) return null;
   try {
@@ -280,25 +287,16 @@ async function processChannelBatch(db, INSERT, channels, keyword) {
 
     const desc = ch.snippet?.description || '';
     const brandDesc = ch.brandingSettings?.channel?.description || '';
-    const websiteUrl = ch.brandingSettings?.channel?.keywords
-      ? null
-      : (ch.snippet?.customUrl ? null : null); // placeholder
+    const fullText = desc + ' ' + brandDesc;
 
-    // Try description first (instant — no network call)
-    let email = extractEmail(desc) || extractEmail(brandDesc);
-    let website = null;
+    // 1. Try email directly from description (instant)
+    let email = extractEmail(fullText);
+    let website = extractUrlFromText(fullText);
 
-    // Extract website from branding links if available
-    const links = ch.brandingSettings?.channel?.unsubscribedTrailer;
-    const featuredUrl = null; // featured playlist not a website
-
-    if (!email) {
-      // Try website from snippet if any custom field holds it
-      const possibleSite = websiteUrl;
-      if (possibleSite) {
-        const webEmail = await scrapeEmailFromWebsite(possibleSite);
-        if (webEmail) { email = webEmail; website = possibleSite; }
-      }
+    // 2. If no email but found website URL in description, scrape it
+    if (!email && website) {
+      const webEmail = await scrapeEmailFromWebsite(website);
+      if (webEmail) email = webEmail;
     }
 
     if (!email) return 0;
@@ -420,12 +418,13 @@ async function runSeedCycle() {
 }
 
 async function startBackgroundSeeder() {
-  if (!process.env.YOUTUBE_API_KEY_1 && !process.env.YOUTUBE_API_KEY) {
-    console.log('[Seeder] No YouTube keys — background seeder disabled');
+  const keys = getApiKeys();
+  if (!keys.length) {
+    console.log('[Seeder] No YouTube API keys found — background seeder disabled');
     return;
   }
 
-  console.log('[Seeder] Background seeder started — all keys parallel, 24/7');
+  console.log(`[Seeder] Background seeder started — ${keys.length} keys, parallel, 24/7`);
 
   while (true) {
     try {
