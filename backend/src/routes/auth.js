@@ -432,11 +432,11 @@ router.get('/admin/stats', requireAdmin, asyncHandler(async (req, res) => {
   const activeToday = db.prepare(`SELECT COUNT(*) as c FROM users WHERE last_login >= datetime('now','-30 days')`).get();
   const totalLeads = db.prepare('SELECT COUNT(*) as c FROM leads').get();
   const totalEmails = db.prepare('SELECT COUNT(*) as c FROM emails').get();
-  let masterLeads = 0, masterWithEmail = 0;
+  let masterLeads = 0, masterWithEmail = 0, masterErr = null;
   try {
     masterLeads = db.prepare('SELECT COUNT(*) as c FROM master_leads').get().c;
     masterWithEmail = db.prepare("SELECT COUNT(*) as c FROM master_leads WHERE email IS NOT NULL AND email != ''").get().c;
-  } catch {}
+  } catch (e) { masterErr = e.message; }
 
   const users = db.prepare(`
     SELECT id, email, full_name, agency_name, plan, plan_status, is_admin,
@@ -454,6 +454,7 @@ router.get('/admin/stats', requireAdmin, asyncHandler(async (req, res) => {
       total_emails: totalEmails.c,
       master_leads: masterLeads,
       master_with_email: masterWithEmail,
+      master_err: masterErr,
     },
     users,
   });
@@ -534,6 +535,23 @@ router.post('/admin/seed-master-leads', requireAdmin, asyncHandler(async (req, r
   const total = db.prepare('SELECT COUNT(*) as c FROM master_leads').get().c;
   const withEmail = db.prepare("SELECT COUNT(*) as c FROM master_leads WHERE email IS NOT NULL AND email != ''").get().c;
   res.json({ success: true, inserted, total, withEmail });
+}));
+
+// ── Admin: raw DB debug ──────────────────────────────────────────────────────
+router.get('/admin/debug-db', requireAdmin, asyncHandler(async (req, res) => {
+  const db = getDb();
+  const results = {};
+  try { results.tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(r => r.name); } catch (e) { results.tables_err = e.message; }
+  try { results.master_count = db.prepare('SELECT COUNT(*) as c FROM master_leads').get().c; } catch (e) { results.master_count_err = e.message; }
+  try { results.master_sample = db.prepare('SELECT channel_name, email FROM master_leads WHERE email IS NOT NULL LIMIT 3').all(); } catch (e) { results.master_sample_err = e.message; }
+  try {
+    const fs = require('fs');
+    const dbPath = process.env.DB_PATH || '/app/backend/data/outreach.db';
+    results.db_path = dbPath;
+    results.db_exists = fs.existsSync(dbPath);
+    results.db_size = fs.existsSync(dbPath) ? fs.statSync(dbPath).size : 0;
+  } catch (e) { results.path_err = e.message; }
+  res.json(results);
 }));
 
 // ── Admin: seeder status ─────────────────────────────────────────────────────
