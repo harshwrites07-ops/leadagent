@@ -538,10 +538,14 @@ router.post('/admin/seed-master-leads', requireAdmin, asyncHandler(async (req, r
 
 // ── Admin: seeder status ─────────────────────────────────────────────────────
 router.get('/admin/seeder-status', requireAdmin, asyncHandler(async (req, res) => {
-  const { seederStatus } = require('../services/backgroundSeeder');
-  const db = getDb();
-  const total = db.prepare('SELECT COUNT(*) as c FROM master_leads').get().c;
-  const withEmail = db.prepare("SELECT COUNT(*) as c FROM master_leads WHERE email IS NOT NULL AND email != ''").get().c;
+  let seederStatus = { running: false, lastCycleSaved: 0, lastCycleAt: null, totalCycles: 0, currentKeyword: null, keysActive: 0, keysTotal: 0 };
+  try { seederStatus = require('../services/backgroundSeeder').seederStatus || seederStatus; } catch {}
+  let total = 0, withEmail = 0;
+  try {
+    const db = getDb();
+    total = db.prepare('SELECT COUNT(*) as c FROM master_leads').get().c || 0;
+    withEmail = db.prepare("SELECT COUNT(*) as c FROM master_leads WHERE email IS NOT NULL AND email != ''").get().c || 0;
+  } catch {}
   res.json({ success: true, seederStatus, total, withEmail });
 }));
 

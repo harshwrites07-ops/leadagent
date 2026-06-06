@@ -147,7 +147,7 @@ export default function Admin() {
             { icon: <Users size={16} />, label: 'Total Users', value: stats.total_users, sub: `${stats.active_users} active (30d)` },
             { icon: <Target size={16} />, label: 'User Leads', value: stats.total_leads?.toLocaleString(), sub: 'in user DBs' },
             { icon: <Mail size={16} />, label: 'Emails Sent', value: stats.total_emails?.toLocaleString(), sub: 'all time' },
-            { icon: <Database size={16} />, label: 'Master DB', value: stats.master_leads?.toLocaleString(), sub: `${stats.master_with_email?.toLocaleString()} with email` },
+            { icon: <Database size={16} />, label: 'Master DB', value: (stats.master_leads ?? 0).toLocaleString(), sub: `${(stats.master_with_email ?? 0).toLocaleString()} with email` },
           ].map(s2 => (
             <div key={s2.label} style={s.statCard}>
               <div style={{ color: 'var(--lime)', marginBottom: 8 }}>{s2.icon}</div>
