@@ -591,39 +591,107 @@ export default function Settings() {
 
       {/* Integrations */}
       {tab === 'integrations' && (
-        <div className="card">
-          <div className="card__body" style={{ padding: 0 }}>
-            {/* Gmail */}
-            <div className="row" style={{ padding: 16, gap: 14 }}>
-              <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', color: gmailAccounts.length > 0 ? 'var(--lime)' : 'var(--text-3)' }}>
-                <Icon name="mail" size={14} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 500 }}>Gmail</div>
-                <div className="muted" style={{ fontSize: 11.5 }}>
-                  {gmailAccounts.length > 0
-                    ? `${gmailAccounts.length} mailbox${gmailAccounts.length !== 1 ? 'es' : ''} connected — used for sending outreach emails`
-                    : 'Connect your Gmail to send outreach emails directly from your account'}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="card">
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>
+              <div className="muted" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em' }}>Email & Outreach</div>
+            </div>
+            <div className="card__body" style={{ padding: 0 }}>
+              {/* Gmail */}
+              <div className="row" style={{ padding: 16, gap: 14, borderBottom: '1px solid var(--line)' }}>
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', color: gmailAccounts.length > 0 ? 'var(--lime)' : 'var(--text-3)' }}>
+                  <Icon name="mail" size={14} />
                 </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500 }}>Gmail</div>
+                  <div className="muted" style={{ fontSize: 11.5 }}>
+                    {gmailAccounts.length > 0
+                      ? `${gmailAccounts.length} mailbox${gmailAccounts.length !== 1 ? 'es' : ''} connected — used for sending outreach emails`
+                      : 'Connect your Gmail to send outreach emails directly from your account'}
+                  </div>
+                </div>
+                {gmailAccounts.length > 0
+                  ? <span className="badge badge--lime"><Icon name="check" size={11} />Connected</span>
+                  : (
+                    <button
+                      className="btn btn--primary btn--sm"
+                      onClick={async () => {
+                        setConnectingGmail(true);
+                        try {
+                          const { data } = await api.get('/gmail/auth-url');
+                          if (data.url) window.location.href = data.url;
+                        } catch { toast.error('Failed to start Gmail connect'); }
+                        finally { setConnectingGmail(false); }
+                      }}
+                      disabled={connectingGmail}
+                    >
+                      {connectingGmail ? 'Redirecting…' : 'Connect Gmail'}
+                    </button>
+                  )}
               </div>
-              {gmailAccounts.length > 0
-                ? <span className="badge badge--lime"><Icon name="check" size={11} />Connected</span>
-                : (
-                  <button
-                    className="btn btn--primary btn--sm"
-                    onClick={async () => {
-                      setConnectingGmail(true);
-                      try {
-                        const { data } = await api.get('/gmail/auth-url');
-                        if (data.url) window.location.href = data.url;
-                      } catch { toast.error('Failed to start Gmail connect'); }
-                      finally { setConnectingGmail(false); }
-                    }}
-                    disabled={connectingGmail}
-                  >
-                    {connectingGmail ? 'Redirecting…' : 'Connect Gmail'}
+              {/* SMTP */}
+              <div className="row" style={{ padding: 16, gap: 14 }}>
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', color: 'var(--text-3)' }}>
+                  <Icon name="inbox" size={14} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500 }}>Custom SMTP</div>
+                  <div className="muted" style={{ fontSize: 11.5 }}>Connect any email provider via SMTP — Outlook, Zoho, SendGrid, etc.</div>
+                </div>
+                <span className="badge" style={{ opacity: .5 }}>Coming soon</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>
+              <div className="muted" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em' }}>CRM & Productivity</div>
+            </div>
+            <div className="card__body" style={{ padding: 0 }}>
+              {[
+                { name: 'Slack', icon: 'bell', desc: 'Get notified in Slack when a creator replies or books a call.' },
+                { name: 'HubSpot', icon: 'layers', desc: 'Sync leads and deals to your HubSpot CRM automatically.' },
+                { name: 'Notion', icon: 'pen', desc: 'Push lead data and email history to a Notion database.' },
+                { name: 'Pipedrive', icon: 'target', desc: 'Auto-create deals in Pipedrive when leads reply.' },
+              ].map((item, i, arr) => (
+                <div key={item.name} className="row" style={{ padding: 16, gap: 14, borderBottom: i < arr.length - 1 ? '1px solid var(--line)' : 'none' }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', color: 'var(--text-3)' }}>
+                    <Icon name={item.icon} size={14} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500 }}>{item.name}</div>
+                    <div className="muted" style={{ fontSize: 11.5 }}>{item.desc}</div>
+                  </div>
+                  <button className="btn btn--ghost btn--sm" onClick={() => toast('Coming soon — join the waitlist!')} style={{ fontSize: 11 }}>
+                    Request
                   </button>
-                )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="card">
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>
+              <div className="muted" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em' }}>Automation & Webhooks</div>
+            </div>
+            <div className="card__body" style={{ padding: 0 }}>
+              {[
+                { name: 'Zapier', icon: 'bolt', desc: 'Connect Quelro to 5,000+ apps via Zapier triggers.' },
+                { name: 'Webhook', icon: 'link', desc: 'Send real-time events (reply, open, bounce) to your own URL.' },
+              ].map((item, i, arr) => (
+                <div key={item.name} className="row" style={{ padding: 16, gap: 14, borderBottom: i < arr.length - 1 ? '1px solid var(--line)' : 'none' }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', color: 'var(--text-3)' }}>
+                    <Icon name={item.icon} size={14} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500 }}>{item.name}</div>
+                    <div className="muted" style={{ fontSize: 11.5 }}>{item.desc}</div>
+                  </div>
+                  <button className="btn btn--ghost btn--sm" onClick={() => toast('Coming soon — join the waitlist!')} style={{ fontSize: 11 }}>
+                    Request
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
         </div>

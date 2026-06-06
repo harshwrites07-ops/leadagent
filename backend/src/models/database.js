@@ -393,6 +393,16 @@ function initSchema() {
   try { db.exec(`ALTER TABLE users ADD COLUMN voice_dna TEXT DEFAULT '{}'`); } catch {}
   try { db.exec(`ALTER TABLE users ADD COLUMN profile_completed INTEGER DEFAULT 0`); } catch {}
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS user_followup_settings (
+      user_id INTEGER PRIMARY KEY,
+      interval_days INTEGER DEFAULT 3,
+      max_count INTEGER DEFAULT 2,
+      enabled INTEGER DEFAULT 0,
+      updated_at DATETIME DEFAULT (datetime('now'))
+    )
+  `);
+
   // user_id indexes for fast per-user queries
   try { db.exec(`CREATE INDEX IF NOT EXISTS idx_leads_user_id ON leads(user_id)`); } catch {}
   try { db.exec(`CREATE INDEX IF NOT EXISTS idx_emails_user_id ON emails(user_id)`); } catch {}

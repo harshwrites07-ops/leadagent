@@ -41,7 +41,8 @@ export default function CRM() {
     setLoading(true);
     try {
       const { data } = await api.get('/crm');
-      setLeads(data.leads || data || []);
+      const arr = Array.isArray(data.leads) ? data.leads : Array.isArray(data) ? data : [];
+      setLeads(arr);
     } catch { toast.error('Failed to load CRM'); }
     finally { setLoading(false); }
   }, []);
@@ -58,7 +59,10 @@ export default function CRM() {
         api.get(`/crm/${lead.id}/history`),
         api.get(`/pitches/by-lead/${lead.id}`),
       ]);
-      if (histRes.status === 'fulfilled') setLeadHistory(histRes.value.data.history || histRes.value.data || []);
+      if (histRes.status === 'fulfilled') {
+        const h = histRes.value.data;
+        setLeadHistory(Array.isArray(h.history) ? h.history : Array.isArray(h) ? h : []);
+      }
       if (pitchRes.status === 'fulfilled') setLeadPitch(pitchRes.value.data.pitch);
     } catch {}
   };
@@ -143,7 +147,10 @@ export default function CRM() {
                         style={isHot ? { borderColor: 'var(--coral-border)' } : undefined}
                       >
                         <div className="kb__card-head">
-                          <span className="ava" style={{ fontSize: 10, width: 26, height: 26, minWidth: 26, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-3)', color: '#0a0a0c' }}>
+                          {lead.thumbnail_url ? (
+                            <img src={lead.thumbnail_url} alt="" style={{ width: 26, height: 26, minWidth: 26, borderRadius: '50%', objectFit: 'cover' }} onError={e => { e.target.style.display='none'; e.target.nextSibling.style.display='flex'; }} />
+                          ) : null}
+                          <span className="ava" style={{ fontSize: 10, width: 26, height: 26, minWidth: 26, borderRadius: '50%', display: lead.thumbnail_url ? 'none' : 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-3)', color: '#0a0a0c' }}>
                             {(lead.channel_name || '?')[0].toUpperCase()}
                           </span>
                           <div style={{ flex: 1, minWidth: 0 }}>
@@ -195,9 +202,13 @@ export default function CRM() {
           </div>
 
           <div className="row" style={{ gap: 14, marginBottom: 18 }}>
-            <span className="ava" style={{ fontSize: 14, width: 44, height: 44, minWidth: 44, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-3)', color: '#0a0a0c' }}>
-              {(selected.channel_name || '?')[0].toUpperCase()}
-            </span>
+            {selected.thumbnail_url ? (
+              <img src={selected.thumbnail_url} alt="" style={{ width: 44, height: 44, minWidth: 44, borderRadius: '50%', objectFit: 'cover' }} />
+            ) : (
+              <span className="ava" style={{ fontSize: 14, width: 44, height: 44, minWidth: 44, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-3)', color: '#0a0a0c' }}>
+                {(selected.channel_name || '?')[0].toUpperCase()}
+              </span>
+            )}
             <div>
               <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: '-0.01em' }}>{selected.channel_name}</div>
               <div className="mono muted" style={{ fontSize: 11.5 }}>

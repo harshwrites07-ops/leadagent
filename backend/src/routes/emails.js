@@ -508,4 +508,21 @@ router.get('/spam-report', asyncHandler(async (req, res) => {
   });
 }));
 
+// ── Follow-up scheduling ──────────────────────────────────────────────────────
+router.post('/follow-up/schedule', asyncHandler(async (req, res) => {
+  const { interval_days = 3, max_count = 2 } = req.body;
+  const db = getDb();
+  db.prepare(`
+    INSERT OR REPLACE INTO user_followup_settings (user_id, interval_days, max_count, enabled, updated_at)
+    VALUES (?, ?, ?, 1, datetime('now'))
+  `).run(req.user.id, Math.max(1, parseInt(interval_days) || 3), Math.max(1, Math.min(5, parseInt(max_count) || 2)));
+  res.json({ success: true, interval_days, max_count });
+}));
+
+router.get('/follow-up/settings', asyncHandler(async (req, res) => {
+  const db = getDb();
+  const settings = db.prepare('SELECT * FROM user_followup_settings WHERE user_id=?').get(req.user.id);
+  res.json({ settings: settings || { interval_days: 3, max_count: 2, enabled: false } });
+}));
+
 module.exports = router;

@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import api from '../../utils/api';
 
 const GAP_PRESETS = [
+  { label: '10 sec', secs: 10 },
   { label: 'No gap', secs: 0 },
   { label: '1 min', secs: 60 },
   { label: '2 min', secs: 120 },
@@ -12,6 +13,13 @@ const GAP_PRESETS = [
   { label: '15 min', secs: 900 },
   { label: '30 min', secs: 1800 },
   { label: '1 hour', secs: 3600 },
+];
+
+const QUICK_DELAYS = [
+  { label: '10 sec', secs: 10 },
+  { label: '1 min',  secs: 60 },
+  { label: '2 min',  secs: 120 },
+  { label: '5 min',  secs: 300 },
 ];
 
 const INBOX_COUNT = 4;
@@ -209,7 +217,7 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
           <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
           <div style={{ flex: 1, overflowY: 'auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
             <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.75, margin: 0 }}>
-              Generate hyper-personalized pitches with <strong style={{ color: 'var(--lime)' }}>Prahvi AI</strong> and send via 4-account rotation. <strong style={{ color: 'var(--text-primary)' }}>Runs in background — close this window anytime.</strong>
+              Generate hyper-personalized pitches with <strong style={{ color: 'var(--lime)' }}>Marcus AI</strong> and send across your connected inboxes. <strong style={{ color: 'var(--text-primary)' }}>Runs in background — close this window anytime.</strong>
             </p>
 
             {/* Warmup banner */}
@@ -227,9 +235,6 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
                     {sentToday > 0 && <span style={{ color: 'var(--text-muted)', marginLeft: 8 }}>({sentToday} sent today)</span>}
                   </p>
                 </div>
-                <button onClick={applySafeDefaults} style={{ padding: '8px 14px', borderRadius: 7, background: 'rgba(var(--ok-rgb),0.15)', border: '1px solid rgba(var(--ok-rgb),0.35)', color: 'var(--ok)', fontSize: 11, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'var(--font-mono)', letterSpacing: '0.06em' }}>
-                  APPLY SAFE MAX
-                </button>
               </div>
             )}
 
@@ -251,6 +256,21 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
                 </div>
               </div>
             )}
+
+            {/* Quick delay selector */}
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 10, padding: '14px 16px' }}>
+              <p style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.12em', marginBottom: 10 }}>EMAIL DELAY TIMER</p>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {QUICK_DELAYS.map(({ label, secs }) => (
+                  <button key={secs} onClick={() => setGapSeconds(secs)} style={{ flex: 1, padding: '8px 0', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer', background: gapSeconds === secs ? 'var(--gradient-orange)' : 'var(--bg-elevated)', border: gapSeconds === secs ? 'none' : '1px solid var(--border-default)', color: gapSeconds === secs ? '#fff' : 'var(--text-secondary)', boxShadow: gapSeconds === secs ? '0 0 10px rgba(var(--lime-rgb),0.25)' : 'none' }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <p style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', marginTop: 8 }}>
+                {gapSeconds === 0 ? 'No delay — sends back to back' : `Wait ${gapSeconds < 60 ? `${gapSeconds}s` : `${gapSeconds / 60}min`} between each email`}
+              </p>
+            </div>
 
             {/* Delivery Controls */}
             <div style={{ border: '1px solid rgba(var(--lime-rgb),0.2)', borderRadius: 10, overflow: 'hidden' }}>
@@ -314,7 +334,7 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               {[
                 ['Leads targeted', leadIds ? `${leadIds.length} selected` : perAccountLimit > 0 ? `${effectiveCount} (capped)` : `Top ${count} HOT leads`],
-                ['AI persona', 'Prahvi (Gemini Flash)'],
+                ['AI persona', 'Marcus AI'],
                 ['Sending accounts', `${activeInboxCount}/${inboxes.length || INBOX_COUNT} inboxes active`],
                 ['Est. time', `~${estMins} min${estMins !== 1 ? 's' : ''}`],
               ].map(([label, val]) => (

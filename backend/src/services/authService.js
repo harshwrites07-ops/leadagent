@@ -234,8 +234,8 @@ async function sendOtpEmail(user, code) {
 // ── Usage limits ──────────────────────────────────────────────────────────────
 
 const PLAN_LIMITS = {
-  trial:   { leads: 100,      emails: 100 },       // free trial — 100 each
-  free:    { leads: 100,      emails: 100 },
+  trial:   { leads: 300,      emails: 300 },
+  free:    { leads: 300,      emails: 300 },
   starter: { leads: 5000,     emails: 2000 },      // $49/mo
   pro:     { leads: 10000,    emails: 10000 },     // $199/mo
   growth:  { leads: 10000,    emails: 10000 },

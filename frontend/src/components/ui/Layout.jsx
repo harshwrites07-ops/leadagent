@@ -247,16 +247,25 @@ export default function Layout({ children }) {
           {children}
         </div>
         <nav className="bottom-nav-bar">
-          {NAV.slice(0, 6).map(({ path, icon, label }) => (
+          {[
+            { path: '/',          icon: 'home',    label: 'Home' },
+            { path: '/leads',     icon: 'target',  label: 'Leads' },
+            { path: '/pitch',     icon: 'sparkle', label: 'Pitch' },
+            { path: '/email',     icon: 'inbox',   label: 'Email' },
+            { path: '/crm',       icon: 'layers',  label: 'CRM' },
+            { path: '/analytics', icon: 'bar',     label: 'Stats' },
+            { path: '/settings',  icon: 'settings',label: 'Settings' },
+          ].map(({ path, icon, label }) => (
             <NavLink key={path} to={path} end={path === '/'} style={{ textDecoration: 'none', flex: 1 }}>
               {({ isActive }) => (
                 <div style={{
                   display: 'flex', flexDirection: 'column', alignItems: 'center',
-                  justifyContent: 'center', height: 60, position: 'relative',
+                  justifyContent: 'center', height: 60, gap: 3, position: 'relative',
                   color: isActive ? 'var(--lime)' : 'var(--text-3)',
                 }}>
                   {isActive && <div className="bottom-nav-dot" />}
-                  <Icon name={icon} size={20} style={{ marginTop: isActive ? 8 : 0 }} />
+                  <Icon name={icon} size={18} />
+                  <span style={{ fontSize: 9, fontFamily: 'var(--f-mono)', letterSpacing: '.04em' }}>{label}</span>
                 </div>
               )}
             </NavLink>

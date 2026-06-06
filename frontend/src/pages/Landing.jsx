@@ -124,23 +124,23 @@ export default function Landing() {
         <div style={{ position: 'absolute', top: '40%', left: '50%', transform: 'translate(-50%, -50%)', width: 600, height: 600, background: 'radial-gradient(circle, rgba(200,246,84,0.06) 0%, transparent 70%)', pointerEvents: 'none' }} />
 
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(200,246,84,0.08)', border: '1px solid rgba(200,246,84,0.25)', borderRadius: 99, padding: '5px 14px 5px 8px', marginBottom: 32 }}>
-          <span style={{ background: '#c8f654', color: '#0a0a0c', fontSize: 9, fontWeight: 800, padding: '2px 8px', borderRadius: 99, fontFamily: 'monospace', letterSpacing: '0.08em' }}>NEW</span>
-          <span style={{ fontSize: 12, color: '#a8a8b3' }}>100 free emails + leads on signup — no card needed</span>
+          <span style={{ background: '#c8f654', color: '#0a0a0c', fontSize: 9, fontWeight: 800, padding: '2px 8px', borderRadius: 99, fontFamily: 'monospace', letterSpacing: '0.08em' }}>FREE</span>
+          <span style={{ fontSize: 12, color: '#a8a8b3' }}>300 free emails + leads on signup — no card needed</span>
         </div>
 
         <h1 style={{ fontSize: 'clamp(38px, 6vw, 76px)', fontWeight: 800, lineHeight: 1.08, letterSpacing: '-0.03em', margin: '0 0 20px', maxWidth: 820 }}>
-          The outreach system built for{' '}
-          <span style={{ color: '#c8f654', fontStyle: 'italic', fontFamily: "'Instrument Serif', serif" }}>everyone who sells</span>
-          {' '}to YouTube creators
+          Find YouTube creators,{' '}
+          <span style={{ color: '#c8f654', fontStyle: 'italic', fontFamily: "'Instrument Serif', serif" }}>send personalised pitches,</span>
+          {' '}land clients — on autopilot
         </h1>
 
         <p style={{ fontSize: 18, color: '#a8a8b3', lineHeight: 1.6, maxWidth: 580, margin: '0 0 40px' }}>
-          Video editors, thumbnail designers, scriptwriters, agencies — find verified YouTube creator leads, send hyper-personalized emails, and land clients on autopilot.
+          Built for video editors, thumbnail designers, scriptwriters, social media agencies, and influencer marketing agencies — find verified YouTube creator leads and close clients without the grind.
         </p>
 
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 60 }}>
           <button onClick={() => navigate('/signup')} style={heroCta}>
-            Start Free Trial — 100 emails included →
+            Start Free Trial — 300 emails included →
           </button>
           <button onClick={() => navigate('/login')} style={heroSecondary}>
             Already have an account
@@ -149,7 +149,7 @@ export default function Landing() {
 
         {/* Stats bar */}
         <div style={{ display: 'flex', gap: 40, flexWrap: 'wrap', justifyContent: 'center' }}>
-          {[['1,700+', 'Verified leads ready now'], ['80%', 'Average open rate'], ['< 60s', 'To generate a personalized pitch']].map(([val, label]) => (
+          {[['1,00,000+', 'Verified leads in database'], ['80%', 'Average open rate'], ['< 60s', 'To send multiple personalised pitches']].map(([val, label]) => (
             <div key={label} style={{ textAlign: 'center' }}>
               <div style={{ fontSize: 24, fontWeight: 800, color: '#c8f654', letterSpacing: '-0.02em' }}>{val}</div>
               <div style={{ fontSize: 12, color: '#6e6e7a', marginTop: 3 }}>{label}</div>
@@ -198,7 +198,7 @@ export default function Landing() {
           <div style={sectionLabel}>PRICING</div>
           <h2 style={sectionH2}>Start free. Scale when you're ready.</h2>
           <p style={{ fontSize: 15, color: '#a8a8b3', textAlign: 'center', margin: '-16px 0 48px' }}>
-            Every account gets 100 free emails and 100 free lead extractions. No credit card required.
+            Every account gets 300 free emails and 300 free lead extractions. No credit card required.
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
             {PRICING.map(plan => (

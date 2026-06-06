@@ -32,6 +32,9 @@ export default function EmailSender() {
   const [showPowerOverlay, setShowPowerOverlay] = useState(false);
   const [showPowerSendModal, setShowPowerSendModal] = useState(false);
   const [showSpamMonitor, setShowSpamMonitor] = useState(false);
+  const [showFollowUpModal, setShowFollowUpModal] = useState(false);
+  const [followUpDays, setFollowUpDays] = useState(3);
+  const [followUpCount, setFollowUpCount] = useState(2);
 
   const fetchStats = useCallback(async () => {
     setStatsLoading(true);
@@ -132,7 +135,7 @@ export default function EmailSender() {
           <button
             className="btn"
             style={{ background: 'var(--coral-soft)', borderColor: 'var(--coral-border)', color: 'var(--coral)' }}
-            onClick={() => setShowPowerOverlay(true)}
+            onClick={() => setShowFollowUpModal(true)}
           >
             <Icon name="bolt" size={13} />Power Follow-up
           </button>
@@ -396,6 +399,73 @@ export default function EmailSender() {
       )}
 
       {showSpamMonitor && <SpamMonitorPanel onClose={() => setShowSpamMonitor(false)} />}
+
+      {/* Follow-up modal */}
+      {showFollowUpModal && (
+        <div className="onb" onClick={e => e.target === e.currentTarget && setShowFollowUpModal(false)}>
+          <div className="onb__card" style={{ maxWidth: 480 }}>
+            <div style={{ padding: '28px 32px 8px' }}>
+              <div className="row" style={{ marginBottom: 14 }}>
+                <div className="pm__icon" style={{ width: 30, height: 30, borderRadius: 8, background: 'var(--coral-soft)', border: '1px solid var(--coral-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Icon name="bolt" size={14} color="var(--coral)" />
+                </div>
+                <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--coral)' }}>Auto Follow-up</div>
+              </div>
+              <h2 className="page__title" style={{ fontSize: 22, marginBottom: 8 }}>
+                Set up <em style={{ fontStyle: 'italic', color: 'var(--coral)' }}>automatic follow-ups</em>
+              </h2>
+              <p className="muted" style={{ fontSize: 13, lineHeight: 1.6, marginBottom: 0 }}>
+                Marcus AI will send a personalised follow-up to everyone who hasn't replied — automatically, at your chosen interval — until they respond or opt out.
+              </p>
+            </div>
+            <div style={{ padding: '20px 32px 28px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+              <div>
+                <div className="muted" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>Follow-up interval</div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {[1, 2, 3, 5, 7].map(d => (
+                    <button key={d} onClick={() => setFollowUpDays(d)} className={`btn btn--sm${followUpDays === d ? ' btn--primary' : ' btn--ghost'}`} style={{ flex: 1, justifyContent: 'center' }}>
+                      {d}d
+                    </button>
+                  ))}
+                </div>
+                <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>Send a follow-up every <strong style={{ color: 'var(--text)' }}>{followUpDays} day{followUpDays > 1 ? 's' : ''}</strong> to non-responders</div>
+              </div>
+              <div>
+                <div className="muted" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>Max follow-ups per lead</div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {[1, 2, 3, 4].map(n => (
+                    <button key={n} onClick={() => setFollowUpCount(n)} className={`btn btn--sm${followUpCount === n ? ' btn--primary' : ' btn--ghost'}`} style={{ flex: 1, justifyContent: 'center' }}>
+                      {n}×
+                    </button>
+                  ))}
+                </div>
+                <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>Stop after <strong style={{ color: 'var(--text)' }}>{followUpCount} follow-up{followUpCount > 1 ? 's' : ''}</strong> with no reply</div>
+              </div>
+              <div style={{ padding: 14, background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 10 }}>
+                <div className="muted" style={{ fontSize: 11, lineHeight: 1.6 }}>
+                  Marcus AI will write a <strong style={{ color: 'var(--text)' }}>unique follow-up</strong> for each creator based on your original pitch. Auto-stops when they reply.
+                </div>
+              </div>
+              <div className="row" style={{ gap: 8 }}>
+                <button className="btn" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setShowFollowUpModal(false)}>Cancel</button>
+                <button
+                  className="btn btn--primary"
+                  style={{ flex: 2, justifyContent: 'center', background: 'var(--coral-soft)', borderColor: 'var(--coral-border)', color: 'var(--coral)' }}
+                  onClick={async () => {
+                    try {
+                      await api.post('/emails/follow-up/schedule', { interval_days: followUpDays, max_count: followUpCount });
+                      toast.success(`Follow-ups scheduled — every ${followUpDays} day${followUpDays > 1 ? 's' : ''}, up to ${followUpCount}×`);
+                    } catch { toast.error('Failed to schedule follow-ups'); }
+                    setShowFollowUpModal(false);
+                  }}
+                >
+                  <Icon name="bolt" size={13} />Activate Auto Follow-up
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
