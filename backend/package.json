@@ -1,7 +1,7 @@
 {
-  "name": "contentcrafterzz-backend",
+  "name": "quelro-backend",
   "version": "1.0.0",
-  "description": "ContentCrafterzz Outreach OS - Backend API",
+  "description": "Quelro Outreach OS - Backend API",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

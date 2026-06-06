@@ -242,15 +242,19 @@ app.listen(PORT, '0.0.0.0', () => {
     if (localIp !== 'localhost') break;
   }
 
-  console.log(`\n🚀 ContentCrafterzz Outreach OS running on port ${PORT}`);
+  console.log(`\n🚀 Quelro Outreach OS running on port ${PORT}`);
   console.log(`   Local:   http://localhost:${PORT}`);
   console.log(`   Network: http://${localIp}:${PORT}`);
   console.log(`\n📱 PHONE ACCESS:`);
   console.log(`   Open on phone: http://${localIp}:${PORT}`);
   console.log(`   (Both devices must be on same WiFi)\n`);
 
-  startQueueProcessor();
-  console.log('   Email queue processor started');
+  try {
+    startQueueProcessor();
+    console.log('   Email queue processor started');
+  } catch (err) {
+    console.error('[QueueProcessor] Failed to start:', err.message);
+  }
 
   // Mark any jobs that were 'running' before this boot as interrupted
   // (they died when the server restarted — their async runners are gone)

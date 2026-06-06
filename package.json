@@ -1,7 +1,7 @@
 {
-  "name": "contentcrafterzz-outreach-os",
+  "name": "quelro-outreach-os",
   "version": "1.0.0",
-  "description": "ContentCrafterzz Outreach OS — Full-stack lead generation & outreach tool for video editing agencies",
+  "description": "Quelro Outreach OS — Full-stack lead generation & outreach tool for creator service providers",
   "private": true,
   "scripts": {
     "dev": "concurrently --names \"API,UI\" --prefix-colors \"cyan,magenta\" \"npm run dev:backend\" \"npm run dev:frontend\"",

@@ -70,7 +70,7 @@ function Sysbar({ sysStatus, onOpenAgent, agentOpen }) {
 /* ── Agent Panel ─────────────────────────────────────────── */
 function AgentPanel({ onClose }) {
   const [messages, setMessages] = useState([
-    { role: 'bot', text: "Hey — I'm Jack, your outreach agent. Tell me what to do: find leads, write emails, send pitches, anything." },
+    { role: 'bot', text: "Jack here. What do you need?\nTry: 'find 20 finance leads' or 'what's my reply rate' or 'send follow-ups to unopened'" },
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -322,9 +322,6 @@ export default function Layout({ children }) {
                     <Icon name={item.icon} size={15} />
                     <span style={{ flex: 1 }}>{item.label}</span>
                     {item.dot && !isActive && <span className="sb__item-dot" />}
-                    {item.tag && !item.dot && (
-                      <span className="sb__item-meta" style={{ opacity: isActive ? 0.6 : 0.4 }}>{item.tag}</span>
-                    )}
                   </>
                 )}
               </NavLink>
@@ -335,7 +332,6 @@ export default function Layout({ children }) {
                   <>
                     <Icon name="settings" size={15} />
                     <span style={{ flex: 1 }}>Admin</span>
-                    <span className="sb__item-meta" style={{ opacity: isActive ? 0.6 : 0.4, color: 'var(--lime)' }}>ADMN</span>
                   </>
                 )}
               </NavLink>
