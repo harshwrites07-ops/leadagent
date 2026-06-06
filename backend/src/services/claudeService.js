@@ -51,9 +51,9 @@ async function completeWithGeminiRotating(prompt, systemPrompt, maxTokens, model
   return null; // all keys exhausted or all overloaded
 }
 
-// Use 2.5-flash — available on both old AIzaSy keys and new AQ. keys
-const FAST_MODEL  = process.env.GEMINI_FAST_MODEL  || 'gemini-2.5-flash';
-const SMART_MODEL = process.env.GEMINI_MODEL       || 'gemini-2.5-flash';
+// 1.5-flash: 1,500 req/day free tier (vs 250/day for 2.5-flash)
+const FAST_MODEL  = process.env.GEMINI_FAST_MODEL  || 'gemini-1.5-flash';
+const SMART_MODEL = process.env.GEMINI_MODEL       || 'gemini-1.5-flash';
 
 function makeGeminiModel(key, modelName, systemPrompt) {
   const { GoogleGenerativeAI } = require('@google/generative-ai');
