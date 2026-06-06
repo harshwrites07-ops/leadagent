@@ -1088,11 +1088,15 @@ router.post('/chat', asyncHandler(async (req, res) => {
       return res.json({ reply: 'Mission complete.' });
     } catch (geminiErr) {
       console.error('[Jack] Gemini error:', geminiErr.message);
-      throw new Error('AI unavailable — all Gemini keys exhausted. Add more keys at aistudio.google.com.');
+      const isQuota = /429|quota|resource_exhausted|limit/i.test(geminiErr.message);
+      return res.json({ reply: isQuota
+        ? "My AI keys are at their daily limit right now. Add more Gemini keys in Settings → API Keys, or try again tomorrow."
+        : `Jack hit an error: ${geminiErr.message?.substring(0, 120) || 'unknown'}. Try rephrasing your request.`
+      });
     }
   }
 
-  throw new Error('No Gemini API key configured. Add a key in Settings.');
+  return res.json({ reply: "No Gemini API key configured. Go to Settings → API Keys and add a key from aistudio.google.com (it's free)." });
 }));
 
 module.exports = router;

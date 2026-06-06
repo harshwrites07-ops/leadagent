@@ -87,14 +87,20 @@ function AgentPanel({ onClose }) {
     setMessages(prev => [...prev, { role: 'user', text: msg }]);
     setLoading(true);
     try {
-      const { data } = await api.post('/assistant/chat', { message: msg });
+      // Build conversation history for context
+      const history = messages
+        .filter(m => m.role === 'user' || m.role === 'bot')
+        .map(m => ({ role: m.role === 'bot' ? 'assistant' : 'user', content: m.text }));
+      history.push({ role: 'user', content: msg });
+      const { data } = await api.post('/assistant/chat', { messages: history });
       setMessages(prev => [...prev, { role: 'bot', text: data.reply || data.message || 'Done.' }]);
-    } catch {
-      setMessages(prev => [...prev, { role: 'bot', text: 'Something went wrong. Try again.' }]);
+    } catch (err) {
+      const errMsg = err.response?.data?.error || err.message || 'Something went wrong.';
+      setMessages(prev => [...prev, { role: 'bot', text: errMsg }]);
     } finally {
       setLoading(false);
     }
-  }, [input, loading]);
+  }, [input, loading, messages]);
 
   return (
     <aside className="agent">
