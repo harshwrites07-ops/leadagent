@@ -210,9 +210,27 @@ export default function LeadFinder() {
         const d = await response.json().catch(() => ({}));
         throw new Error(d.error || `HTTP ${response.status}`);
       }
+      // Mobile Safari / some browsers may not support ReadableStream — fallback to text
+      if (!response.body || !response.body.getReader) {
+        const text = await response.text();
+        const lines = text.split('\n').filter(l => l.trim());
+        const fallbackLeads = [];
+        for (const line of lines) {
+          let event; try { event = JSON.parse(line); } catch { continue; }
+          if (event.type === 'lead') fallbackLeads.push(event.lead);
+          else if (event.type === 'done' || event.type === 'complete') {
+            const all = fallbackLeads.length ? fallbackLeads : (event.leads ?? []);
+            setYtLeads(all); setYtSearched(true); setYtProgress(null);
+            if (all.length > 0) toast.success(`${all.length} leads delivered`);
+            else toast('0 leads found — try a different keyword');
+          } else if (event.type === 'error') { toast.error(event.message || 'Failed'); }
+        }
+        setYtLoading(false); return;
+      }
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      const accumulatedLeads = [];
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -224,11 +242,26 @@ export default function LeadFinder() {
           let event; try { event = JSON.parse(line); } catch { continue; }
           if (event.type === 'progress') {
             setYtProgress(event.message);
-          } else if (event.type === 'complete') {
-            setYtLeads(event.leads ?? []);
+          } else if (event.type === 'lead') {
+            // Database delivers leads one-by-one — accumulate and show them live
+            accumulatedLeads.push(event.lead);
+            setYtLeads([...accumulatedLeads]);
+            setYtSearched(true);
+          } else if (event.type === 'done') {
+            // Database delivery complete
+            setYtLeads([...accumulatedLeads]);
             setYtSearched(true);
             setYtProgress(null);
-            const n = event.added ?? 0;
+            const n = event.saved ?? event.total ?? accumulatedLeads.length;
+            if (accumulatedLeads.length > 0) toast.success(`${accumulatedLeads.length} lead${accumulatedLeads.length !== 1 ? 's' : ''} delivered instantly`);
+            else toast('0 leads found — try a broader keyword');
+          } else if (event.type === 'complete') {
+            // Live scrape path
+            const leads = event.leads ?? [];
+            setYtLeads(leads);
+            setYtSearched(true);
+            setYtProgress(null);
+            const n = event.added ?? leads.length;
             if (n > 0) toast.success(`${n} lead${n !== 1 ? 's' : ''} added.`);
             else toast('0 leads found — try a different keyword');
           } else if (event.type === 'error') {
@@ -418,9 +451,20 @@ export default function LeadFinder() {
                         )}
                       </span>
                       {pmStatus.saved > 0 && (
-                        <button className="btn btn--ghost btn--sm" onClick={() => navigate('/crm')}>
-                          View in CRM <Icon name="arrowR" size={11} />
-                        </button>
+                        <>
+                          <button className="btn btn--ghost btn--sm" onClick={async () => {
+                            try {
+                              const { data } = await api.get('/leads', { params: { limit: pmStatus.saved || 50, sort: 'created_at', order: 'desc' } });
+                              const arr = Array.isArray(data.leads) ? data.leads : Array.isArray(data) ? data : [];
+                              if (arr.length > 0) { setYtLeads(arr); setYtSearched(true); toast.success(`${arr.length} leads loaded`); }
+                            } catch { toast.error('Failed to load leads'); }
+                          }}>
+                            View here <Icon name="eye" size={11} />
+                          </button>
+                          <button className="btn btn--ghost btn--sm" onClick={() => navigate('/crm')}>
+                            CRM <Icon name="arrowR" size={11} />
+                          </button>
+                        </>
                       )}
                     </div>
                   ) : (
