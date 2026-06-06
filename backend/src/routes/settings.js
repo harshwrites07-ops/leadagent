@@ -148,6 +148,29 @@ router.put('/', requireAdmin, asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Settings saved.' });
 }));
 
+// GET /api/settings/gemini-status — any authenticated user can check AI status
+router.get('/gemini-status', requireAuth, asyncHandler(async (req, res) => {
+  const { getGeminiKeys } = require('../services/claudeService');
+  const keys = getGeminiKeys();
+  const fromEnv = keys.some((k, i) => {
+    for (let n = 1; n <= 20; n++) {
+      if (process.env[`GEMINI_API_KEY_${n}`] === k) return true;
+    }
+    return process.env.GEMINI_API_KEY === k;
+  });
+  res.json({ configured: keys.length > 0, count: keys.length, source: fromEnv ? 'env' : 'db' });
+}));
+
+// POST /api/settings/gemini-key — any authenticated user can save a Gemini key
+router.post('/gemini-key', requireAuth, asyncHandler(async (req, res) => {
+  const { key } = req.body;
+  if (!key || !key.trim()) return res.status(400).json({ error: 'key required' });
+  const sanitized = key.trim().replace(/[\r\n\s]/g, '');
+  setSetting('gemini_api_key', sanitized);
+  writeToEnv('GEMINI_API_KEY', sanitized);
+  res.json({ success: true });
+}));
+
 // POST /api/settings/test/youtube (admin only)
 router.post('/test/youtube', requireAdmin, asyncHandler(async (req, res) => {
   const { testApiKey } = require('../services/youtubeService');

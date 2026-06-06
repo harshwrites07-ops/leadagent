@@ -1202,5 +1202,6 @@ module.exports = {
   FAST_MODEL,
   SMART_MODEL,
   getGeminiKey,
+  getGeminiKeys,
   makeGeminiModel,
 };

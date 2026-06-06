@@ -3,7 +3,7 @@ const router = express.Router();
 const path = require('path');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { getDb, getSetting, setSetting, logActivity } = require('../models/database');
-const { FAST_MODEL, SMART_MODEL, getGeminiKey, makeGeminiModel, checkAiAvailability } = require('../services/claudeService');
+const { FAST_MODEL, SMART_MODEL, getGeminiKey, getGeminiKeys, makeGeminiModel, checkAiAvailability } = require('../services/claudeService');
 const { getAllKeys: getYtKeys, isQuotaExhausted } = require('../services/youtubeService');
 
 const ENV_PATH = path.join(__dirname, '../../../.env');
@@ -1035,34 +1035,34 @@ router.post('/chat', asyncHandler(async (req, res) => {
   }
   const userId = req.user.id;
 
-  // ── Gemini (Flash — fast responses) ───────────────────────────────────────
-  const geminiModel = getGeminiChat(SYSTEM);
-  if (geminiModel) {
+  require('dotenv').config({ path: ENV_PATH, override: true });
+  const keys = getGeminiKeys();
+  if (!keys.length) {
+    return res.json({ reply: "No Gemini API key configured. Go to Settings → Integrations and add a key from aistudio.google.com (it's free)." });
+  }
+
+  const { GoogleGenerativeAI } = require('@google/generative-ai');
+  const isQuotaErr = msg => /429|quota|resource_exhausted|limit/i.test(msg || '');
+
+  const priorMsgs = messages.slice(0, -1);
+  const geminiHistory = priorMsgs.map(m => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }],
+  }));
+  const lastMsg = messages[messages.length - 1];
+  const lastMsgText = typeof lastMsg.content === 'string' ? lastMsg.content : JSON.stringify(lastMsg.content);
+
+  for (const key of keys) {
     try {
-      const geminiModelWithTools = (() => {
-        const key = getGeminiKey();
-        if (!key) return null;
-        const { GoogleGenerativeAI } = require('@google/generative-ai');
-        const genAI = new GoogleGenerativeAI(key);
-        return genAI.getGenerativeModel({
-          model: FAST_MODEL,
-          systemInstruction: SYSTEM,
-          tools: [{ functionDeclarations: GEMINI_TOOLS }],
-        });
-      })();
-      if (!geminiModelWithTools) throw new Error('No Gemini key');
+      const genAI = new GoogleGenerativeAI(key);
+      const model = genAI.getGenerativeModel({
+        model: FAST_MODEL,
+        systemInstruction: SYSTEM,
+        tools: [{ functionDeclarations: GEMINI_TOOLS }],
+      });
 
-      const priorMsgs = messages.slice(0, -1);
-      const geminiHistory = priorMsgs.map(m => ({
-        role: m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }],
-      }));
-
-      const chat = geminiModelWithTools.startChat({ history: geminiHistory });
-      const lastMsg = messages[messages.length - 1];
-      let result = await chat.sendMessage(
-        typeof lastMsg.content === 'string' ? lastMsg.content : JSON.stringify(lastMsg.content)
-      );
+      const chat = model.startChat({ history: geminiHistory });
+      let result = await chat.sendMessage(lastMsgText);
 
       for (let round = 0; round < 15; round++) {
         const parts = result.response.candidates?.[0]?.content?.parts || [];
@@ -1072,7 +1072,6 @@ router.post('/chat', asyncHandler(async (req, res) => {
           return res.json({ reply: result.response.text() || 'Done.' });
         }
 
-        // Execute all tool calls in parallel
         const toolResponses = await Promise.all(
           fnCalls.map(async p => {
             const { name, args } = p.functionCall;
@@ -1087,16 +1086,15 @@ router.post('/chat', asyncHandler(async (req, res) => {
 
       return res.json({ reply: 'Mission complete.' });
     } catch (geminiErr) {
-      console.error('[Jack] Gemini error:', geminiErr.message);
-      const isQuota = /429|quota|resource_exhausted|limit/i.test(geminiErr.message);
-      return res.json({ reply: isQuota
-        ? "My AI keys are at their daily limit right now. Add more Gemini keys in Settings → API Keys, or try again tomorrow."
-        : `Jack hit an error: ${geminiErr.message?.substring(0, 120) || 'unknown'}. Try rephrasing your request.`
-      });
+      const msg = geminiErr.message || '';
+      console.warn(`[Jack] Key ...${key.slice(-6)} error: ${msg.substring(0, 80)}`);
+      if (isQuotaErr(msg)) continue; // try next key
+      // Non-quota error — report it directly
+      return res.json({ reply: `Jack hit an error: ${msg.substring(0, 120) || 'unknown'}. Try rephrasing your request.` });
     }
   }
 
-  return res.json({ reply: "No Gemini API key configured. Go to Settings → API Keys and add a key from aistudio.google.com (it's free)." });
+  return res.json({ reply: "All Gemini keys are at their daily limit. Try again tomorrow or add more keys in Settings → Integrations." });
 }));
 
 module.exports = router;

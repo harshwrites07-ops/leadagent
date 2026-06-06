@@ -44,11 +44,38 @@ export default function Settings() {
   const [loadingPortal, setLoadingPortal] = useState(false);
   const [loadingCheckout, setLoadingCheckout] = useState(null);
 
+  const [geminiKey, setGeminiKey] = useState('');
+  const [savingGemini, setSavingGemini] = useState(false);
+  const [geminiStatus, setGeminiStatus] = useState(null);
+
   useEffect(() => {
     loadSettings();
     loadGmailAccounts();
     loadBilling();
+    checkGeminiStatus();
   }, []);
+
+  const checkGeminiStatus = async () => {
+    try {
+      const { data } = await api.get('/settings/gemini-status');
+      setGeminiStatus(data);
+    } catch {}
+  };
+
+  const saveGeminiKey = async () => {
+    if (!geminiKey.trim()) return;
+    setSavingGemini(true);
+    try {
+      await api.post('/settings/gemini-key', { key: geminiKey.trim() });
+      toast.success('Gemini key saved — Jack AI is ready');
+      setGeminiKey('');
+      checkGeminiStatus();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to save key');
+    } finally {
+      setSavingGemini(false);
+    }
+  };
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -592,6 +619,60 @@ export default function Settings() {
       {/* Integrations */}
       {tab === 'integrations' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+          {/* Railway persistence warning */}
+          <div style={{ background: 'var(--amber-dim, rgba(255,180,0,.08))', border: '1px solid rgba(255,180,0,.25)', borderRadius: 10, padding: '12px 16px', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+            <span style={{ fontSize: 16, lineHeight: 1, marginTop: 1 }}>⚠</span>
+            <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>
+              <strong style={{ color: 'var(--text-1)' }}>API keys saved here are lost on every redeploy</strong> unless you have a Railway Volume attached at <code style={{ fontSize: 11, background: 'var(--surface-2)', padding: '1px 5px', borderRadius: 4 }}>/app/backend/data</code>.<br />
+              For permanent keys: set them in <strong>Railway dashboard → your service → Variables</strong> (e.g. <code style={{ fontSize: 11, background: 'var(--surface-2)', padding: '1px 5px', borderRadius: 4 }}>GEMINI_API_KEY</code>). Those survive all deploys.
+            </div>
+          </div>
+
+          {/* AI / Gemini key */}
+          <div className="card">
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>
+              <div className="muted" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em' }}>AI Keys</div>
+            </div>
+            <div className="card__body">
+              <div className="row" style={{ gap: 10, marginBottom: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 2 }}>Gemini API Key</div>
+                  <div className="muted" style={{ fontSize: 11.5 }}>
+                    Powers Jack AI and pitch generation. Get a free key at{' '}
+                    <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" style={{ color: 'var(--lime)' }}>aistudio.google.com</a>.
+                  </div>
+                  {geminiStatus && (
+                    <div style={{ marginTop: 6, fontSize: 11, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: geminiStatus.configured ? 'var(--lime)' : 'var(--coral)', display: 'inline-block' }} />
+                      <span style={{ color: geminiStatus.configured ? 'var(--lime)' : 'var(--coral)' }}>
+                        {geminiStatus.configured
+                          ? `${geminiStatus.source === 'env' ? 'Set via Railway env var (permanent)' : `${geminiStatus.count} key${geminiStatus.count !== 1 ? 's' : ''} configured — add to Railway Variables to persist`}`
+                          : 'No key configured — Jack AI and pitch gen are unavailable'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="row" style={{ gap: 8 }}>
+                <input
+                  className="input"
+                  type="password"
+                  placeholder="AIza..."
+                  value={geminiKey}
+                  onChange={e => setGeminiKey(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && saveGeminiKey()}
+                  style={{ flex: 1, fontSize: 12 }}
+                />
+                <button className="btn btn--primary btn--sm" onClick={saveGeminiKey} disabled={savingGemini || !geminiKey.trim()}>
+                  {savingGemini ? 'Saving…' : 'Save key'}
+                </button>
+              </div>
+              <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
+                Best practice: copy this key to <strong>Railway Variables</strong> so it survives redeploys without re-entering.
+              </div>
+            </div>
+          </div>
           <div className="card">
             <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>
               <div className="muted" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em' }}>Email & Outreach</div>
