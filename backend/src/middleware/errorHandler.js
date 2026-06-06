@@ -2,6 +2,17 @@ function errorHandler(err, req, res, next) {
   console.error(`[${new Date().toISOString()}] ERROR:`, err.message);
   if (process.env.NODE_ENV === 'development') console.error(err.stack);
 
+  // Chat endpoint errors must return { reply } so the frontend shows them inline
+  if (req.path && req.path.includes('/assistant/chat')) {
+    const msg = err.message || 'Unknown error';
+    const isQuota = /exhausted|quota|resource_exhausted|429|limit/i.test(msg);
+    return res.json({
+      reply: isQuota
+        ? 'All Gemini keys are at their daily limit. Add more keys in Settings → Integrations, or try again tomorrow.'
+        : `Jack hit an error: ${msg.substring(0, 120)}. Try rephrasing your request.`,
+    });
+  }
+
   const status = err.status || err.statusCode || 500;
   res.status(status).json({
     success: false,
