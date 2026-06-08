@@ -489,6 +489,18 @@ async function runSeedCycle() {
   seederStatus.totalCycles++;
   seederStatus.currentKeyword = null;
 
+  // Push new leads to Turso cloud for persistence across deploys
+  if (totalSaved > 0) {
+    try {
+      const { pushToTurso } = require('./tursoSync');
+      // Get the leads we just saved (most recent ones)
+      const newLeads = db.prepare(
+        `SELECT * FROM master_leads WHERE email IS NOT NULL ORDER BY id DESC LIMIT ?`
+      ).all(Math.min(totalSaved * 2, 500));
+      pushToTurso(newLeads).catch(() => {}); // fire and forget
+    } catch {}
+  }
+
   return false; // never signal "all exhausted" — InnerTube always available
 }
 

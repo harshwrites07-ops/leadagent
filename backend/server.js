@@ -276,15 +276,21 @@ app.listen(PORT, '0.0.0.0', () => {
     if (promoted.changes > 0) console.log(`   Admin promoted: ${ADMIN_EMAIL}`);
   } catch {}
 
-  // Start 24/7 background lead seeder (email-only, fills master_leads)
-  setTimeout(() => {
+  // Restore master_leads from Turso cloud, then start seeder
+  setTimeout(async () => {
+    try {
+      const { pullFromTurso } = require('./src/services/tursoSync');
+      await pullFromTurso();
+    } catch (e) {
+      console.error('[Turso] Restore failed:', e.message);
+    }
     try {
       const { startBackgroundSeeder } = require('./src/services/backgroundSeeder');
       startBackgroundSeeder();
     } catch (e) {
       console.error('[Seeder] Failed to start:', e.message);
     }
-  }, 5000); // 5s delay so server is fully up first
+  }, 5000);
 
   // Self-ping every 14 minutes to prevent Railway sleep
   if (process.env.NODE_ENV === 'production' || process.env.SELF_PING === 'true') {
