@@ -270,15 +270,6 @@ function getApiKeys() {
   return keys;
 }
 
-function msUntilMidnightPacific() {
-  const now = new Date();
-  const pacific = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
-  const midnight = new Date(pacific);
-  midnight.setDate(midnight.getDate() + 1);
-  midnight.setHours(0, 5, 0, 0);
-  return Math.max(midnight - pacific, 60000);
-}
-
 // Process one batch of channels for a given keyword+key
 async function processChannelBatch(db, INSERT, channels, keyword) {
   const tasks = channels.map(async ch => {
@@ -349,7 +340,6 @@ async function runKeyBatch(apiKey, keywords, db, INSERT) {
       });
 
       const channels = detailRes.data.items || [];
-      // Process in batches of CONCURRENCY
       for (let i = 0; i < channels.length; i += CONCURRENCY) {
         const batch = channels.slice(i, i + CONCURRENCY);
         saved += await processChannelBatch(db, INSERT, batch, keyword);
@@ -364,18 +354,53 @@ async function runKeyBatch(apiKey, keywords, db, INSERT) {
   return { saved, exhausted };
 }
 
+// InnerTube seeder — no API key needed, runs when YouTube API quota exhausted
+async function runInnerTubeCycle(db, INSERT, keywords) {
+  const { searchChannelsMulti } = require('./innertubeService');
+  let totalSaved = 0;
+  const BATCH = 5; // process 5 keywords at a time to avoid rate limiting
+
+  for (let i = 0; i < keywords.length; i += BATCH) {
+    const kwBatch = keywords.slice(i, i + BATCH);
+    seederStatus.currentKeyword = kwBatch[0];
+    try {
+      const leads = await searchChannelsMulti(kwBatch, {
+        minSubs: MIN_SUBS, maxSubs: MAX_SUBS, maxResults: 30, emailOnly: true,
+      });
+
+      for (const lead of leads) {
+        if (!lead.email) continue;
+        const niche = kwNicheMap[kwBatch[0]] || kwBatch[0].split(' ')[0].toLowerCase();
+        try {
+          const r = INSERT.run(
+            lead.channel_id, lead.channel_name, lead.channel_handle || null,
+            lead.subscriber_count || 0, lead.avg_views || 0,
+            lead.email, lead.website || null,
+            (lead.channel_description || '').substring(0, 400),
+            lead.lead_score || 60,
+            (lead.subscriber_count || 0) > 100000 ? 'warm' : 'cold',
+            lead.country || null,
+            niche
+          );
+          if (r.changes > 0) totalSaved++;
+        } catch {}
+      }
+    } catch (e) {
+      console.log(`[Seeder/IT] Batch error: ${e.message?.substring(0, 80)}`);
+    }
+    // Small delay between batches to be polite
+    await new Promise(r => setTimeout(r, 2000));
+  }
+  return totalSaved;
+}
+
 async function runSeedCycle() {
   const db = getDb();
   const API_KEYS = getApiKeys();
-  if (!API_KEYS.length) {
-    console.log('[Seeder] No YouTube API keys — skipping');
-    return true;
-  }
 
   seederStatus.running = true;
   seederStatus.keysTotal = API_KEYS.length;
   seederStatus.keysActive = API_KEYS.length;
-  console.log(`[Seeder] Cycle start — ${API_KEYS.length} keys, ${KEYWORD_NICHE_MAP.length} keywords`);
 
   const INSERT = db.prepare(`
     INSERT OR IGNORE INTO master_leads
@@ -384,59 +409,62 @@ async function runSeedCycle() {
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
   `);
 
-  // Shuffle keywords and split across keys
   const shuffled = [...KEYWORD_NICHE_MAP].sort(() => Math.random() - 0.5).map(([kw]) => kw);
-  const chunkSize = Math.ceil(shuffled.length / API_KEYS.length);
-  const chunks = API_KEYS.map((_, i) => shuffled.slice(i * chunkSize, (i + 1) * chunkSize));
-
-  // Run all keys in parallel
-  const results = await Promise.allSettled(
-    API_KEYS.map((key, i) => runKeyBatch(key, chunks[i] || [], db, INSERT))
-  );
 
   let totalSaved = 0;
-  let exhaustedCount = 0;
-  for (const r of results) {
-    if (r.status === 'fulfilled') {
-      totalSaved += r.value.saved;
-      if (r.value.exhausted) exhaustedCount++;
+  let usedInnerTube = false;
+
+  if (API_KEYS.length > 0) {
+    console.log(`[Seeder] Cycle start — ${API_KEYS.length} YouTube API keys, ${KEYWORD_NICHE_MAP.length} keywords`);
+    const chunkSize = Math.ceil(shuffled.length / API_KEYS.length);
+    const chunks = API_KEYS.map((_, i) => shuffled.slice(i * chunkSize, (i + 1) * chunkSize));
+
+    const results = await Promise.allSettled(
+      API_KEYS.map((key, i) => runKeyBatch(key, chunks[i] || [], db, INSERT))
+    );
+
+    let exhaustedCount = 0;
+    for (const r of results) {
+      if (r.status === 'fulfilled') {
+        totalSaved += r.value.saved;
+        if (r.value.exhausted) exhaustedCount++;
+      }
     }
+    seederStatus.keysActive = API_KEYS.length - exhaustedCount;
+
+    if (exhaustedCount >= API_KEYS.length) {
+      console.log('[Seeder] All YouTube API keys exhausted — switching to InnerTube fallback');
+      usedInnerTube = true;
+      totalSaved += await runInnerTubeCycle(db, INSERT, shuffled.slice(0, 40));
+    }
+  } else {
+    // No API keys at all — always use InnerTube
+    console.log('[Seeder] No YouTube API keys — running on InnerTube (no quota limits)');
+    usedInnerTube = true;
+    totalSaved += await runInnerTubeCycle(db, INSERT, shuffled.slice(0, 40));
   }
 
   const total = db.prepare('SELECT COUNT(*) as c FROM master_leads').get().c;
   const withEmail = db.prepare("SELECT COUNT(*) as c FROM master_leads WHERE email IS NOT NULL AND email != ''").get().c;
-  console.log(`[Seeder] Cycle done — +${totalSaved} new | DB: ${total} total | ${withEmail} with email`);
+  console.log(`[Seeder] Cycle done — +${totalSaved} new | DB: ${total} total | ${withEmail} with email${usedInnerTube ? ' [InnerTube]' : ''}`);
 
   seederStatus.running = false;
   seederStatus.lastCycleAt = new Date().toISOString();
   seederStatus.lastCycleSaved = totalSaved;
   seederStatus.totalCycles++;
   seederStatus.currentKeyword = null;
-  seederStatus.keysActive = API_KEYS.length - exhaustedCount;
 
-  return exhaustedCount >= API_KEYS.length;
+  return false; // never signal "all exhausted" — InnerTube always available
 }
 
 async function startBackgroundSeeder() {
-  const keys = getApiKeys();
-  if (!keys.length) {
-    console.log('[Seeder] No YouTube API keys found — background seeder disabled');
-    return;
-  }
-
-  console.log(`[Seeder] Background seeder started — ${keys.length} keys, parallel, 24/7`);
+  console.log(`[Seeder] Background seeder started — 24/7, InnerTube fallback enabled`);
 
   while (true) {
     try {
-      const allExhausted = await runSeedCycle();
-      if (allExhausted) {
-        const wait = msUntilMidnightPacific();
-        console.log(`[Seeder] All keys exhausted — sleeping ${Math.round(wait / 60000)} min until midnight Pacific`);
-        seederStatus.running = false;
-        await new Promise(r => setTimeout(r, wait));
-      } else {
-        await new Promise(r => setTimeout(r, 3000));
-      }
+      await runSeedCycle();
+      // Short pause between cycles
+      await new Promise(r => setTimeout(r, 10000));
     } catch (e) {
       console.error('[Seeder] Cycle error:', e.message);
       seederStatus.running = false;
