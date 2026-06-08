@@ -367,6 +367,18 @@ function initSchema() {
   try { db.exec(`CREATE INDEX IF NOT EXISTS idx_master_email ON master_leads(email)`); } catch {}
   try { db.exec(`CREATE INDEX IF NOT EXISTS idx_master_country ON master_leads(country)`); } catch {}
 
+  // Seeder keyword pagination — tracks nextPageToken per keyword per API key
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS seeder_keyword_tokens (
+      keyword TEXT NOT NULL,
+      api_key_hash TEXT NOT NULL,
+      next_page_token TEXT,
+      pages_done INTEGER DEFAULT 0,
+      last_used DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (keyword, api_key_hash)
+    )
+  `);
+
   // gmail_accounts migrations
   try { db.exec(`ALTER TABLE gmail_accounts ADD COLUMN daily_limit INTEGER DEFAULT 500`); } catch {}
   try { db.exec(`CREATE INDEX IF NOT EXISTS idx_gmail_accounts_user_id ON gmail_accounts(user_id)`); } catch {}

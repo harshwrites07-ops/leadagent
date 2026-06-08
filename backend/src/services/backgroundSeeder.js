@@ -317,21 +317,56 @@ async function processChannelBatch(db, INSERT, channels, keyword) {
   return results.reduce((sum, r) => sum + (r.status === 'fulfilled' ? r.value : 0), 0);
 }
 
-// Run one key's assigned keyword list — returns { saved, exhausted }
+// Short hash for API key — used as DB key without storing the actual key
+function keyHash(apiKey) {
+  let h = 0;
+  for (let i = 0; i < apiKey.length; i++) { h = (Math.imul(31, h) + apiKey.charCodeAt(i)) | 0; }
+  return Math.abs(h).toString(36);
+}
+
+// Run one key's assigned keyword list — uses pagination so each cycle gets fresh channels
+// Returns { saved, exhausted }
 async function runKeyBatch(apiKey, keywords, db, INSERT) {
   let saved = 0;
   let exhausted = false;
+  const kh = keyHash(apiKey);
+
+  const getToken = db.prepare('SELECT next_page_token, pages_done FROM seeder_keyword_tokens WHERE keyword=? AND api_key_hash=?');
+  const upsertToken = db.prepare(`
+    INSERT INTO seeder_keyword_tokens (keyword, api_key_hash, next_page_token, pages_done, last_used)
+    VALUES (?,?,?,?,CURRENT_TIMESTAMP)
+    ON CONFLICT(keyword, api_key_hash) DO UPDATE SET
+      next_page_token=excluded.next_page_token,
+      pages_done=excluded.pages_done,
+      last_used=CURRENT_TIMESTAMP
+  `);
 
   for (const keyword of keywords) {
     if (exhausted) break;
     seederStatus.currentKeyword = keyword;
+
+    // Get stored page token for this keyword+key combo
+    const stored = getToken.get(keyword, kh);
+    const pageToken = stored?.next_page_token || null;
+    const pagesDone = stored?.pages_done || 0;
+
     try {
+      const params = {
+        part: 'snippet', q: keyword, type: 'channel', maxResults: 50, key: apiKey,
+      };
+      if (pageToken) params.pageToken = pageToken;
+
       const searchRes = await axios.get('https://www.googleapis.com/youtube/v3/search', {
-        params: { part: 'snippet', q: keyword, type: 'channel', maxResults: 50, key: apiKey },
-        timeout: 10000,
+        params, timeout: 10000,
       });
+
       const channelIds = (searchRes.data.items || [])
         .map(i => i.snippet?.channelId || i.id?.channelId).filter(Boolean);
+
+      // Save next page token (null = no more pages → reset to page 1 on next cycle)
+      const nextToken = searchRes.data.nextPageToken || null;
+      upsertToken.run(keyword, kh, nextToken, pagesDone + 1);
+
       if (!channelIds.length) continue;
 
       const detailRes = await axios.get('https://www.googleapis.com/youtube/v3/channels', {
