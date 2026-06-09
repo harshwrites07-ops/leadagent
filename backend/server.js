@@ -276,7 +276,7 @@ app.listen(PORT, '0.0.0.0', () => {
     if (promoted.changes > 0) console.log(`   Admin promoted: ${ADMIN_EMAIL}`);
   } catch {}
 
-  // Restore master_leads from Turso cloud, then start seeder
+  // Restore master_leads from Turso cloud, then start all seeders
   setTimeout(async () => {
     try {
       const { pullFromTurso } = require('./src/services/tursoSync');
@@ -288,7 +288,14 @@ app.listen(PORT, '0.0.0.0', () => {
       const { startBackgroundSeeder } = require('./src/services/backgroundSeeder');
       startBackgroundSeeder();
     } catch (e) {
-      console.error('[Seeder] Failed to start:', e.message);
+      console.error('[Seeder/YT] Failed to start:', e.message);
+    }
+    // Podcast seeder — iTunes API, no quota, ~70-80% email capture rate
+    try {
+      const { startPodcastSeeder } = require('./src/services/podcastSeeder');
+      startPodcastSeeder();
+    } catch (e) {
+      console.error('[Seeder/Podcast] Failed to start:', e.message);
     }
   }, 5000);
 
