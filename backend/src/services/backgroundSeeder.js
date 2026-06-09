@@ -436,6 +436,7 @@ function keyHash(apiKey) {
 }
 
 // Run one key's assigned keyword list — uses pagination so each cycle gets fresh channels
+// Keywords processed in parallel (4 at a time) for 4x faster cycle throughput.
 // Returns { saved, exhausted }
 async function runKeyBatch(apiKey, keywords, db, INSERT) {
   let saved = 0;
@@ -452,18 +453,20 @@ async function runKeyBatch(apiKey, keywords, db, INSERT) {
       last_used=CURRENT_TIMESTAMP
   `);
 
-  for (const keyword of keywords) {
-    if (exhausted) break;
+  const processKeyword = async (keyword) => {
+    if (exhausted) return 0;
     seederStatus.currentKeyword = keyword;
 
-    // Get stored page token for this keyword+key combo
     const stored = getToken.get(keyword, kh);
     const pageToken = stored?.next_page_token || null;
     const pagesDone = stored?.pages_done || 0;
 
     try {
+      // Search by VIDEO (order=date) — returns fresh channels every day as new videos are uploaded.
+      // type=channel returns the SAME 50 channels every time; type=video gives unique channels daily.
       const params = {
-        part: 'snippet', q: keyword, type: 'channel', maxResults: 50, key: apiKey,
+        part: 'snippet', q: keyword, type: 'video', order: 'date',
+        maxResults: 50, key: apiKey,
       };
       if (pageToken) params.pageToken = pageToken;
 
@@ -471,14 +474,14 @@ async function runKeyBatch(apiKey, keywords, db, INSERT) {
         params, timeout: 10000,
       });
 
-      const channelIds = (searchRes.data.items || [])
-        .map(i => i.snippet?.channelId || i.id?.channelId).filter(Boolean);
+      const channelIds = [...new Set(
+        (searchRes.data.items || []).map(i => i.snippet?.channelId).filter(Boolean)
+      )];
 
-      // Save next page token (null = no more pages → reset to page 1 on next cycle)
       const nextToken = searchRes.data.nextPageToken || null;
       upsertToken.run(keyword, kh, nextToken, pagesDone + 1);
 
-      if (!channelIds.length) continue;
+      if (!channelIds.length) return 0;
 
       const detailRes = await axios.get('https://www.googleapis.com/youtube/v3/channels', {
         params: { part: 'snippet,statistics,brandingSettings', id: channelIds.join(','), key: apiKey },
@@ -486,17 +489,30 @@ async function runKeyBatch(apiKey, keywords, db, INSERT) {
       });
 
       const channels = detailRes.data.items || [];
+      let kwSaved = 0;
       for (let i = 0; i < channels.length; i += CONCURRENCY) {
         const batch = channels.slice(i, i + CONCURRENCY);
-        saved += await processChannelBatch(db, INSERT, batch, keyword);
+        kwSaved += await processChannelBatch(db, INSERT, batch, keyword);
       }
+      return kwSaved;
     } catch (e) {
       if (e.response?.status === 403 || e.response?.status === 429) {
         exhausted = true;
         console.log(`[Seeder] Key exhausted: ${apiKey.slice(-6)}`);
       }
+      return 0;
     }
+  };
+
+  // Process 4 keywords in parallel per key — 4x faster cycle throughput
+  const PARALLEL = 4;
+  for (let i = 0; i < keywords.length; i += PARALLEL) {
+    if (exhausted) break;
+    const batch = keywords.slice(i, i + PARALLEL);
+    const results = await Promise.allSettled(batch.map(processKeyword));
+    saved += results.reduce((sum, r) => sum + (r.status === 'fulfilled' ? r.value : 0), 0);
   }
+
   return { saved, exhausted };
 }
 
