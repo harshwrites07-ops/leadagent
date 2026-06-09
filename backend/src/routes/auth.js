@@ -568,7 +568,7 @@ router.get('/admin/seeder-status', requireAdmin, asyncHandler(async (req, res) =
   let ytKeyCount = 0;
   try {
     const keys = [];
-    for (let i = 1; i <= 20; i++) { if (process.env[`YOUTUBE_API_KEY_${i}`]) keys.push(i); }
+    for (let i = 1; i <= 50; i++) { if (process.env[`YOUTUBE_API_KEY_${i}`]) keys.push(i); }
     if (process.env.YOUTUBE_API_KEY) keys.push(0);
     ytKeyCount = keys.length;
   } catch {}
