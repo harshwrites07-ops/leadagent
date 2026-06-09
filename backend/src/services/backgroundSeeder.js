@@ -393,14 +393,14 @@ async function runKeyBatch(apiKey, keywords, db, INSERT) {
 async function runInnerTubeCycle(db, INSERT, keywords) {
   const { searchChannelsMulti } = require('./innertubeService');
   let totalSaved = 0;
-  const BATCH = 5; // process 5 keywords at a time to avoid rate limiting
+  const BATCH = 3; // 3 keywords at a time — more focused, fewer wasted profile builds
 
   for (let i = 0; i < keywords.length; i += BATCH) {
     const kwBatch = keywords.slice(i, i + BATCH);
     seederStatus.currentKeyword = kwBatch[0];
     try {
       const leads = await searchChannelsMulti(kwBatch, {
-        minSubs: MIN_SUBS, maxSubs: MAX_SUBS, maxResults: 30, emailOnly: true,
+        minSubs: MIN_SUBS, maxSubs: MAX_SUBS, maxResults: 20, emailOnly: true,
       });
 
       for (const lead of leads) {
@@ -423,8 +423,7 @@ async function runInnerTubeCycle(db, INSERT, keywords) {
     } catch (e) {
       console.log(`[Seeder/IT] Batch error: ${e.message?.substring(0, 80)}`);
     }
-    // Small delay between batches to be polite
-    await new Promise(r => setTimeout(r, 2000));
+    await new Promise(r => setTimeout(r, 800));
   }
   return totalSaved;
 }
@@ -468,15 +467,15 @@ async function runSeedCycle() {
     seederStatus.keysActive = API_KEYS.length - exhaustedCount;
 
     if (exhaustedCount >= API_KEYS.length) {
-      console.log('[Seeder] All YouTube API keys exhausted — switching to InnerTube fallback');
+      console.log('[Seeder] All YouTube API keys exhausted — switching to InnerTube fallback (all keywords)');
       usedInnerTube = true;
-      totalSaved += await runInnerTubeCycle(db, INSERT, shuffled.slice(0, 40));
+      totalSaved += await runInnerTubeCycle(db, INSERT, shuffled);
     }
   } else {
-    // No API keys at all — always use InnerTube
+    // No API keys at all — always use InnerTube for all keywords
     console.log('[Seeder] No YouTube API keys — running on InnerTube (no quota limits)');
     usedInnerTube = true;
-    totalSaved += await runInnerTubeCycle(db, INSERT, shuffled.slice(0, 40));
+    totalSaved += await runInnerTubeCycle(db, INSERT, shuffled);
   }
 
   const total = db.prepare('SELECT COUNT(*) as c FROM master_leads').get().c;
