@@ -75,7 +75,13 @@ function parseCount(text) {
 
 function extractEmail(text) {
   if (!text) return null;
-  const matches = [...String(text).matchAll(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g)];
+  // Normalize obfuscated formats: [at], (at), {at}, " at ", [dot], (dot), " dot "
+  const normalized = String(text)
+    .replace(/\[at\]/gi, '@').replace(/\(at\)/gi, '@').replace(/\{at\}/gi, '@')
+    .replace(/\s+at\s+/gi, '@')
+    .replace(/\[dot\]/gi, '.').replace(/\(dot\)/gi, '.').replace(/\{dot\}/gi, '.')
+    .replace(/\s+dot\s+/gi, '.');
+  const matches = [...normalized.matchAll(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g)];
   for (const m of matches) {
     let e = m[0];
     e = e.replace(/^[^a-zA-Z0-9]+/, '').replace(/^[A-Z]{2,}-/i, '');

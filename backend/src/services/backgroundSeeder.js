@@ -326,7 +326,13 @@ const kwNicheMap = Object.fromEntries(KEYWORD_NICHE_MAP);
 
 function extractEmail(text) {
   if (!text) return null;
-  const matches = [...text.matchAll(/[\w.+%-]+@[\w.-]+\.[a-zA-Z]{2,}/g)].map(m => m[0].toLowerCase());
+  // Normalize obfuscated formats: "name [at] domain [dot] com", "(at)", "{dot}", etc.
+  const normalized = text
+    .replace(/\[at\]/gi, '@').replace(/\(at\)/gi, '@').replace(/\{at\}/gi, '@')
+    .replace(/\s+at\s+/gi, '@')
+    .replace(/\[dot\]/gi, '.').replace(/\(dot\)/gi, '.').replace(/\{dot\}/gi, '.')
+    .replace(/\s+dot\s+/gi, '.');
+  const matches = [...normalized.matchAll(/[\w.+%-]+@[\w.-]+\.[a-zA-Z]{2,}/g)].map(m => m[0].toLowerCase());
   for (const email of matches) {
     const domain = email.split('@')[1];
     if (domain && !SKIP_DOMAINS.has(domain)) return email;
@@ -334,31 +340,69 @@ function extractEmail(text) {
   return null;
 }
 
-function extractUrlFromText(text) {
-  if (!text) return null;
-  // Find non-YouTube URLs in description — often channel owner's website
-  const match = text.match(/https?:\/\/(?!(?:www\.)?(?:youtube\.com|youtu\.be|instagram\.com|twitter\.com|x\.com|facebook\.com|tiktok\.com|t\.co))[\w.-]+\.[a-zA-Z]{2,}[^\s"')>]*/);
-  return match ? match[0].replace(/[.,;!?]+$/, '') : null;
+const SOCIAL_RE = /youtube\.com|youtu\.be|instagram\.com|twitter\.com|x\.com|facebook\.com|tiktok\.com|t\.co|snapchat\.com|pinterest\.com|linkedin\.com/;
+
+// Return ALL non-social URLs from text (not just the first one)
+function extractUrlsFromText(text) {
+  if (!text) return [];
+  const matches = [...text.matchAll(/https?:\/\/[\w.-]+\.[a-zA-Z]{2,}[^\s"')>\]<]*/g)]
+    .map(m => m[0].replace(/[.,;!?]+$/, ''))
+    .filter(u => !SOCIAL_RE.test(u));
+  return [...new Set(matches)].slice(0, 6);
+}
+
+// Linktree stores all links in the Next.js SSR payload — extract creator website from it
+async function scrapeLinktreeEmail(username) {
+  try {
+    const { data: html } = await axios.get(`https://linktr.ee/${username}`, {
+      timeout: 6000,
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36' },
+    });
+    // Extract links from embedded Next.js JSON
+    const m = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
+    if (m) {
+      try {
+        const nd = JSON.parse(m[1]);
+        const links = (
+          nd?.props?.pageProps?.account?.links ||
+          nd?.props?.pageProps?.links ||
+          nd?.props?.pageProps?.pageProfile?.links || []
+        ).map(l => l.url || l.href || '').filter(u => u && !SOCIAL_RE.test(u) && u.startsWith('http'));
+        for (const link of links.slice(0, 5)) {
+          const e = await scrapeEmailFromWebsite(link);
+          if (e) return e;
+        }
+      } catch {}
+    }
+    return extractEmail(html);
+  } catch { return null; }
 }
 
 async function scrapeEmailFromWebsite(url) {
   if (!url) return null;
   try {
+    // Linktree needs special handling — JS-rendered but SSR data is in __NEXT_DATA__
+    if (/linktr\.ee\//.test(url)) {
+      const username = url.split('linktr.ee/')[1]?.split(/[/?#]/)[0];
+      if (username) return scrapeLinktreeEmail(username);
+    }
     const { data: html } = await axios.get(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Quelro/1.0)' },
-      timeout: 4000, maxRedirects: 3,
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36' },
+      timeout: 5000, maxRedirects: 3,
     });
+    // mailto: link is the most reliable signal
     const mailto = (html.match(/href="mailto:([^"?]+)/gi) || [])
       .map(m => m.replace(/href="mailto:/i, '').toLowerCase().trim())
       .find(e => e.includes('@') && !SKIP_DOMAINS.has(e.split('@')[1]));
     if (mailto) return mailto;
-    const links = (html.match(/href="([^"]*(?:contact|about)[^"]*)"/gi) || [])
+    // Try contact/about sub-pages
+    const subLinks = (html.match(/href="([^"]*(?:contact|about|hire|work-with)[^"]*)"/gi) || [])
       .map(m => m.match(/href="([^"]+)"/)?.[1]).filter(Boolean).slice(0, 2);
-    for (const link of links) {
+    for (const link of subLinks) {
       try {
         const subUrl = link.startsWith('http') ? link : new URL(link, url).href;
         const { data: sub } = await axios.get(subUrl, {
-          timeout: 3000, maxRedirects: 2,
+          timeout: 4000, maxRedirects: 2,
           headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Quelro/1.0)' },
         });
         const email = extractEmail(sub);
@@ -391,14 +435,17 @@ async function processChannelBatch(db, INSERT, channels, keyword) {
     const brandDesc = ch.brandingSettings?.channel?.description || '';
     const fullText = desc + ' ' + brandDesc;
 
-    // 1. Try email directly from description (instant)
+    // 1. Try email directly from description (handles obfuscated formats too)
     let email = extractEmail(fullText);
-    let website = extractUrlFromText(fullText);
+    const urls = extractUrlsFromText(fullText);
+    const website = urls[0] || null;
 
-    // 2. If no email but found website URL in description, scrape it
-    if (!email && website) {
-      const webEmail = await scrapeEmailFromWebsite(website);
-      if (webEmail) email = webEmail;
+    // 2. Try all non-social URLs from description — including Linktree, Beacons, etc.
+    if (!email && urls.length > 0) {
+      for (const u of urls) {
+        const webEmail = await scrapeEmailFromWebsite(u);
+        if (webEmail) { email = webEmail; break; }
+      }
     }
 
     if (!email) return 0;
