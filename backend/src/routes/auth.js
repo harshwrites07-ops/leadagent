@@ -564,7 +564,15 @@ router.get('/admin/seeder-status', requireAdmin, asyncHandler(async (req, res) =
     total = db.prepare('SELECT COUNT(*) as c FROM master_leads').get().c || 0;
     withEmail = db.prepare("SELECT COUNT(*) as c FROM master_leads WHERE email IS NOT NULL AND email != ''").get().c || 0;
   } catch {}
-  res.json({ success: true, seederStatus, total, withEmail });
+  // Show how many YouTube API keys are actually loaded
+  let ytKeyCount = 0;
+  try {
+    const keys = [];
+    for (let i = 1; i <= 20; i++) { if (process.env[`YOUTUBE_API_KEY_${i}`]) keys.push(i); }
+    if (process.env.YOUTUBE_API_KEY) keys.push(0);
+    ytKeyCount = keys.length;
+  } catch {}
+  res.json({ success: true, seederStatus, total, withEmail, ytKeyCount });
 }));
 
 // ── Admin: trigger seed cycle now ───────────────────────────────────────────

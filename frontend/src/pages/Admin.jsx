@@ -181,6 +181,10 @@ export default function Admin() {
                 {' · '}Last saved: <b style={{ color: 'var(--text-2)' }}>{seederInfo.seederStatus?.lastCycleSaved ?? '—'}</b> leads
                 {seederInfo.seederStatus?.lastCycleAt ? ` · ${new Date(seederInfo.seederStatus.lastCycleAt).toLocaleTimeString()}` : ''}
                 {seederInfo.seederStatus?.currentKeyword ? ` · Scanning: "${seederInfo.seederStatus.currentKeyword}"` : ''}
+                {' · '}
+                <span style={{ color: seederInfo.ytKeyCount > 0 ? 'var(--lime)' : 'var(--coral)' }}>
+                  {seederInfo.ytKeyCount > 0 ? `${seederInfo.ytKeyCount} YT API keys` : '⚠ NO YT API KEYS — InnerTube only'}
+                </span>
               </>
             ) : 'Loading…'}
           </div>
