@@ -417,4 +417,81 @@ async function searchChannelsMulti(keywords, options = {}) {
   return leads;
 }
 
-module.exports = { searchChannels, searchChannelsMulti, buildChannelProfile };
+// ─── Fast seeder search — videos only, 1 browse per channel (no video data) ──
+// Searches for VIDEOS (not channels) so results change every call as new videos
+// are uploaded. Channel filter EgIQAg%3D%3D always returns the same top channels.
+async function fastSeedSearch(keyword, maxChannels = 30) {
+  const seen = new Set();
+  const channelBasics = [];
+
+  let data;
+  try {
+    data = await itPost('search', { query: keyword }); // no params = video results
+  } catch (e) {
+    console.error(`[InnerTube/fast] search error (${keyword}): ${e.message}`);
+    return [];
+  }
+
+  const videoRenderers = walkForType(data, ['videoRenderer', 'compactVideoRenderer']);
+  for (const vr of videoRenderers) {
+    // Channel ID lives in different spots depending on YouTube's current renderer version
+    const endpoint = vr.shortBylineText?.runs?.[0]?.navigationEndpoint?.browseEndpoint
+      || vr.longBylineText?.runs?.[0]?.navigationEndpoint?.browseEndpoint
+      || vr.ownerText?.runs?.[0]?.navigationEndpoint?.browseEndpoint;
+    const channelId = endpoint?.browseId;
+    const handle = endpoint?.canonicalBaseUrl || null;
+    const channelName = vr.shortBylineText?.runs?.[0]?.text
+      || vr.longBylineText?.runs?.[0]?.text
+      || vr.ownerText?.runs?.[0]?.text || '';
+
+    if (!channelId || seen.has(channelId)) continue;
+    seen.add(channelId);
+    channelBasics.push({ channelId, channelName, handle });
+    if (channelBasics.length >= maxChannels) break;
+  }
+
+  if (!channelBasics.length) return [];
+
+  // Lightweight browse — just description + subs, skip video tab entirely
+  const CONCURRENCY = 5;
+  const results = [];
+
+  for (let i = 0; i < channelBasics.length; i += CONCURRENCY) {
+    const batch = channelBasics.slice(i, i + CONCURRENCY);
+    const settled = await Promise.allSettled(batch.map(async (basic) => {
+      try {
+        const browseData = await itPost('browse', { browseId: basic.channelId });
+        const meta = browseData.metadata?.channelMetadataRenderer || {};
+        const description = meta.description || '';
+        const country = meta.country || null;
+
+        // Subscriber count — try both header formats
+        let subscriberCount = 0;
+        const c4 = browseData.header?.c4TabbedHeaderRenderer;
+        if (c4) subscriberCount = parseCount(c4.subscriberCountText?.simpleText || '');
+        if (!subscriberCount) {
+          const ph = browseData.header?.pageHeaderRenderer?.content?.pageHeaderViewModel;
+          if (ph) {
+            const parts = (ph.metadata?.contentMetadataViewModel?.metadataRows || [])
+              .flatMap(r => r.metadataParts || [])
+              .map(p => p.text?.content || '');
+            const subsPart = parts.find(t => t.toLowerCase().includes('subscriber'));
+            if (subsPart) subscriberCount = parseCount(subsPart);
+          }
+        }
+
+        const email = extractEmail(description);
+        return { ...basic, description, subscriberCount, country, email };
+      } catch { return null; }
+    }));
+
+    for (const r of settled) {
+      if (r.status === 'fulfilled' && r.value) results.push(r.value);
+    }
+    await sleep(200);
+  }
+
+  return results;
+}
+
+module.exports = { searchChannels, searchChannelsMulti, buildChannelProfile, fastSeedSearch };

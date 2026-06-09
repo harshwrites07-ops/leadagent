@@ -516,41 +516,54 @@ async function runKeyBatch(apiKey, keywords, db, INSERT) {
   return { saved, exhausted };
 }
 
-// InnerTube seeder — no API key needed, runs when YouTube API quota exhausted
+// InnerTube seeder — no API key needed, runs when YouTube API quota exhausted.
+// Uses fastSeedSearch: searches for VIDEOS (not channels) so different creators
+// are returned every cycle as new videos are uploaded. Skips full profile building
+// (no video tab fetch) so it's 2x faster per channel.
 async function runInnerTubeCycle(db, INSERT, keywords) {
-  const { searchChannelsMulti } = require('./innertubeService');
+  const { fastSeedSearch } = require('./innertubeService');
   let totalSaved = 0;
-  const BATCH = 3; // 3 keywords at a time — more focused, fewer wasted profile builds
 
-  for (let i = 0; i < keywords.length; i += BATCH) {
-    const kwBatch = keywords.slice(i, i + BATCH);
+  // Process 3 keywords in parallel — balance speed vs InnerTube rate limits
+  const PARALLEL = 3;
+  for (let i = 0; i < keywords.length; i += PARALLEL) {
+    const kwBatch = keywords.slice(i, i + PARALLEL);
     seederStatus.currentKeyword = kwBatch[0];
-    try {
-      const leads = await searchChannelsMulti(kwBatch, {
-        minSubs: MIN_SUBS, maxSubs: MAX_SUBS, maxResults: 20, emailOnly: true,
-      });
 
-      for (const lead of leads) {
-        if (!lead.email) continue;
-        const niche = kwNicheMap[kwBatch[0]] || kwBatch[0].split(' ')[0].toLowerCase();
-        try {
-          const r = INSERT.run(
-            lead.channel_id, lead.channel_name, lead.channel_handle || null,
-            lead.subscriber_count || 0, lead.avg_views || 0,
-            lead.email, lead.website || null,
-            (lead.channel_description || '').substring(0, 400),
-            lead.lead_score || 60,
-            (lead.subscriber_count || 0) > 100000 ? 'warm' : 'cold',
-            lead.country || null,
-            niche
-          );
-          if (r.changes > 0) totalSaved++;
-        } catch {}
+    try {
+      const batchResults = await Promise.allSettled(
+        kwBatch.map(kw => fastSeedSearch(kw, 30))
+      );
+
+      for (let j = 0; j < kwBatch.length; j++) {
+        const r = batchResults[j];
+        if (r.status !== 'fulfilled') continue;
+        const niche = kwNicheMap[kwBatch[j]] || kwBatch[j].split(' ')[0].toLowerCase();
+
+        for (const ch of r.value) {
+          if (!ch.email) continue;
+          const subs = ch.subscriberCount || 0;
+          if (subs > 0 && (subs < MIN_SUBS || subs > MAX_SUBS)) continue;
+          try {
+            const res = INSERT.run(
+              ch.channelId, ch.channelName, ch.handle || null,
+              subs, 0,
+              ch.email, null,
+              (ch.description || '').substring(0, 400),
+              60,
+              subs > 100000 ? 'warm' : 'cold',
+              ch.country || null,
+              niche
+            );
+            if (res.changes > 0) totalSaved++;
+          } catch {}
+        }
       }
     } catch (e) {
       console.log(`[Seeder/IT] Batch error: ${e.message?.substring(0, 80)}`);
     }
-    await new Promise(r => setTimeout(r, 800));
+
+    await new Promise(r => setTimeout(r, 500));
   }
   return totalSaved;
 }
