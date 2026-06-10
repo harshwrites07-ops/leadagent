@@ -47,8 +47,13 @@ router.post('/generate/:leadId', aiLimiter, asyncHandler(async (req, res) => {
   db.prepare(`UPDATE leads SET crm_stage='studying', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(lead.id);
   logActivity('pitch_generating', `Generating pitch for ${lead.channel_name}`, lead.id, {}, req.user.id);
 
-  // ONE AI call instead of 4-6
-  const result = await claude.generateFullPitch(lead);
+  let result;
+  try {
+    result = await claude.generateFullPitch(lead);
+  } catch (e) {
+    console.error('[Pitch] AI failed for', lead.channel_name, ':', e.message);
+    return res.status(502).json({ success: false, error: `AI unavailable: ${e.message?.substring(0, 100)}` });
+  }
 
   // Optional: generate Reddit DM for reddit leads
   let redditDm = null;

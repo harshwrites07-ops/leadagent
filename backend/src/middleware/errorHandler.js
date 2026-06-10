@@ -13,10 +13,17 @@ function errorHandler(err, req, res, next) {
     });
   }
 
-  const status = err.status || err.statusCode || 500;
+  // Never propagate external API status codes (e.g. Gemini returning 404 for
+  // "model not found" must not become our API's 404 — that confuses clients).
+  const isExternalError = !!(err.isAxiosError || err.config?.url);
+  const status = isExternalError ? 502 : (err.status || err.statusCode || 500);
+  const message = isExternalError
+    ? `AI service error: ${err.response?.data?.error?.message || err.message || 'External API failed'}`
+    : (err.message || 'Internal server error');
+
   res.status(status).json({
     success: false,
-    error: err.message || 'Internal server error',
+    error: message,
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
   });
 }
