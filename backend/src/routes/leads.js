@@ -77,7 +77,7 @@ async function expandKeywords(keyword) {
     try {
       const { GoogleGenerativeAI } = require('@google/generative-ai');
       const genAI = new GoogleGenerativeAI(geminiKey);
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const model = genAI.getGenerativeModel({ model: process.env.GEMINI_FAST_MODEL || 'gemini-2.0-flash' });
       const result = await model.generateContent(
         `Give me 4 YouTube search keywords related to "${keyword}" for finding creators who need video editing. Return only keywords, one per line, no numbering.`
       );

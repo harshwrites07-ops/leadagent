@@ -51,9 +51,9 @@ async function completeWithGeminiRotating(prompt, systemPrompt, maxTokens, model
   return null; // all keys exhausted or all overloaded
 }
 
-// 1.5-flash: 1,500 req/day free tier (vs 250/day for 2.5-flash)
-const FAST_MODEL  = process.env.GEMINI_FAST_MODEL  || 'gemini-1.5-flash';
-const SMART_MODEL = process.env.GEMINI_MODEL       || 'gemini-1.5-flash';
+// gemini-2.0-flash: current default, 1500 req/day free tier
+const FAST_MODEL  = process.env.GEMINI_FAST_MODEL  || 'gemini-2.0-flash';
+const SMART_MODEL = process.env.GEMINI_MODEL       || 'gemini-2.0-flash';
 
 function makeGeminiModel(key, modelName, systemPrompt) {
   const { GoogleGenerativeAI } = require('@google/generative-ai');
