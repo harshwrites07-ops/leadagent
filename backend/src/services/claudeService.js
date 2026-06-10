@@ -1,9 +1,6 @@
-const path = require('path');
-const ENV_PATH = path.join(__dirname, '../../../.env');
 const { getSetting, getDb } = require('../models/database');
 
 function getGeminiKeys() {
-  require('dotenv').config({ path: ENV_PATH, override: true });
   const keys = [];
   try {
     const dbKey = getSetting('gemini_api_key');
