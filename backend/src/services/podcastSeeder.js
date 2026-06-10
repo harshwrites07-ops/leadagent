@@ -9,10 +9,10 @@ const axios = require('axios');
 const { getDb } = require('../models/database');
 
 const SKIP_DOMAINS = new Set([
-  'gmail.com','yahoo.com','hotmail.com','outlook.com','icloud.com',
-  'me.com','mac.com','live.com','aol.com','protonmail.com',
-  'apple.com','google.com','example.com',
+  'apple.com','google.com','example.com','feedburner.com',
+  'podbean.com','buzzsprout.com','anchor.fm','spotify.com',
 ]);
+const PERSONAL_DOMAINS = new Set(['gmail.com','yahoo.com','hotmail.com','outlook.com','icloud.com','me.com','mac.com','live.com','aol.com','protonmail.com']);
 
 // 200 keywords across the same niches as the YouTube seeder
 const PODCAST_KEYWORDS = [
@@ -187,6 +187,7 @@ async function runPodcastCycle() {
 
         const p = batch[j];
         const niche = guessNiche(keyword);
+        const isPersonal = PERSONAL_DOMAINS.has(email.split('@')[1]);
         try {
           const res = INSERT.run(
             `podcast:${p.collectionId}`,
@@ -196,7 +197,7 @@ async function runPodcastCycle() {
             email,
             website || p.collectionViewUrl || null,
             (p.description || p.shortDescription || '').substring(0, 400),
-            65,
+            isPersonal ? 50 : 65,
             'cold',
             p.country || null,
             niche

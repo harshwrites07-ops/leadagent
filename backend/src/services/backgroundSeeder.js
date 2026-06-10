@@ -10,7 +10,10 @@ const { getDb } = require('../models/database');
 const MIN_SUBS = 1000;
 const MAX_SUBS = 5000000;
 const CONCURRENCY = 20;
-const SKIP_DOMAINS = new Set(['youtube.com','google.com','googlemail.com','googleapis.com','gstatic.com','example.com','gmail.com','yahoo.com','hotmail.com','outlook.com']);
+// Only skip truly junk/internal domains — NOT gmail/yahoo/outlook.
+// Many real creators use gmail as their business inquiry email.
+const SKIP_DOMAINS = new Set(['youtube.com','google.com','googlemail.com','googleapis.com','gstatic.com','ggpht.com','ytimg.com','example.com','sentry.io']);
+const PERSONAL_DOMAINS = new Set(['gmail.com','yahoo.com','hotmail.com','outlook.com','icloud.com','me.com','live.com','aol.com','protonmail.com']);
 
 // Seeder status — readable by admin panel
 const seederStatus = {
@@ -450,8 +453,17 @@ async function processChannelBatch(db, INSERT, channels, keyword) {
 
     if (!email) return 0;
 
+    // Check channel is still active — YouTube API search type=video gives us
+    // channels that recently uploaded, so most are active. But add a recency
+    // signal if publishedAt is available on the search snippet.
+    const publishedAt = ch.snippet?.publishedAt;
+    const channelAgeDays = publishedAt
+      ? (Date.now() - new Date(publishedAt).getTime()) / 86400000 : 0;
+
     const views = parseInt(ch.statistics?.viewCount || 0);
     const videos = Math.max(1, parseInt(ch.statistics?.videoCount || 1));
+    const isPersonalEmail = PERSONAL_DOMAINS.has(email.split('@')[1]);
+
     let score = 50;
     if (subs > 10000) score += 10;
     if (subs > 50000) score += 10;
@@ -459,12 +471,13 @@ async function processChannelBatch(db, INSERT, channels, keyword) {
     if (views > 100000) score += 5;
     if (views > 1000000) score += 5;
     score += 15; // has email
+    if (isPersonalEmail) score -= 15; // personal email = lower priority
 
     const r = INSERT.run(
       ch.id, ch.snippet?.title || 'Unknown', ch.snippet?.customUrl || null,
       subs, Math.round(views / videos), email, website,
       desc.substring(0, 400) || null, score,
-      subs > 100000 ? 'warm' : 'cold',
+      subs > 100000 ? 'warm' : (isPersonalEmail ? 'cold' : 'cold'),
       ch.snippet?.country || null,
       kwNicheMap[keyword] || keyword.split(' ')[0].toLowerCase()
     );
