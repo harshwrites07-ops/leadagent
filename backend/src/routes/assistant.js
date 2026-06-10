@@ -1045,10 +1045,13 @@ router.post('/chat', asyncHandler(async (req, res) => {
   const isQuotaErr = msg => /429|quota|resource_exhausted|limit/i.test(msg || '');
 
   const priorMsgs = messages.slice(0, -1);
-  const geminiHistory = priorMsgs.map(m => ({
+  let geminiHistory = priorMsgs.map(m => ({
     role: m.role === 'assistant' ? 'model' : 'user',
     parts: [{ text: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }],
   }));
+  // Gemini requires history to start with 'user' and strictly alternate roles
+  while (geminiHistory.length && geminiHistory[0].role !== 'user') geminiHistory.shift();
+  geminiHistory = geminiHistory.filter((m, i, arr) => i === arr.length - 1 || m.role !== arr[i + 1].role);
   const lastMsg = messages[messages.length - 1];
   const lastMsgText = typeof lastMsg.content === 'string' ? lastMsg.content : JSON.stringify(lastMsg.content);
 
