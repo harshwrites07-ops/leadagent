@@ -264,15 +264,21 @@ export default function AssistantChat() {
     setMessages(updated);
     setLoading(true);
     try {
-      const apiMessages = updated.filter((m, idx) => !(idx === 0 && m.role === 'assistant'));
+      // Gemini requires history to start with user — strip all leading assistant messages
+      const firstUserIdx = updated.findIndex(m => m.role === 'user');
+      const apiMessages = firstUserIdx >= 0 ? updated.slice(firstUserIdx) : updated;
       const { data } = await api.post('/assistant/chat', { messages: apiMessages });
       const reply = data.reply || 'Done.';
       setMessages(prev => [...prev, { role: 'assistant', content: reply }]);
       speak(reply);
     } catch (err) {
       const msg = err.response?.data?.error || err.message || 'Something went wrong';
-      const errText = `Error: ${msg}`;
-      setMessages(prev => [...prev, { role: 'assistant', content: errText }]);
+      const errText = `Something went wrong — ${msg.replace(/\[GoogleGenerativeAI Error\]:\s*/i, '')}`;
+      setMessages(prev => {
+        // Don't store error messages in history — they break subsequent requests
+        const withoutErr = prev.filter(m => !m.content?.startsWith('Something went wrong'));
+        return [...withoutErr, { role: 'assistant', content: errText }];
+      });
       speak(errText);
     } finally {
       setLoading(false);
