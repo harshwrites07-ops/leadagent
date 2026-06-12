@@ -286,11 +286,12 @@ app.listen(PORT, '0.0.0.0', () => {
     if (promoted.changes > 0) console.log(`   Admin promoted: ${ADMIN_EMAIL}`);
   } catch {}
 
-  // Restore master_leads from Turso cloud, then start all seeders
+  // Restore master_leads + user leads from Turso cloud, then start all seeders
   setTimeout(async () => {
     try {
-      const { pullFromTurso } = require('./src/services/tursoSync');
+      const { pullFromTurso, pullUserLeadsFromTurso } = require('./src/services/tursoSync');
       await pullFromTurso();
+      await pullUserLeadsFromTurso();
     } catch (e) {
       console.error('[Turso] Restore failed:', e.message);
     }

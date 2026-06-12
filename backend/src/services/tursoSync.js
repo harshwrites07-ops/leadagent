@@ -200,4 +200,137 @@ async function pushToTurso(leads) {
   }
 }
 
-module.exports = { pullFromTurso, pushToTurso, getCfg };
+async function ensureLeadsSchema(cfg) {
+  await tursoExec(cfg, `
+    CREATE TABLE IF NOT EXISTS user_leads (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      channel_id TEXT UNIQUE,
+      channel_name TEXT NOT NULL,
+      channel_handle TEXT,
+      subscriber_count INTEGER DEFAULT 0,
+      avg_views REAL DEFAULT 0,
+      email TEXT,
+      website TEXT,
+      niche TEXT,
+      channel_description TEXT,
+      lead_score INTEGER DEFAULT 0,
+      temperature TEXT DEFAULT 'cold',
+      crm_stage TEXT DEFAULT 'new_lead',
+      country TEXT,
+      platform TEXT DEFAULT 'youtube',
+      thumbnail_url TEXT,
+      social_links TEXT DEFAULT '{}',
+      pain_points TEXT DEFAULT '[]',
+      scrape_source TEXT DEFAULT 'youtube_api',
+      created_at DATETIME DEFAULT (datetime('now'))
+    )
+  `);
+}
+
+async function pushUserLeadsToTurso(db) {
+  const cfg = getCfg();
+  if (!cfg) return 0;
+  try {
+    await ensureLeadsSchema(cfg);
+    const leads = db.prepare(`SELECT * FROM leads WHERE email IS NOT NULL AND email != ''`).all();
+    if (!leads.length) return 0;
+    const BATCH = 50;
+    let pushed = 0;
+    for (let i = 0; i < leads.length; i += BATCH) {
+      const batch = leads.slice(i, i + BATCH);
+      const stmts = batch.map(l => ({
+        sql: `INSERT OR IGNORE INTO user_leads
+                (channel_id, channel_name, channel_handle, subscriber_count, avg_views,
+                 email, website, niche, channel_description, lead_score, temperature,
+                 crm_stage, country, platform, thumbnail_url, social_links, pain_points, scrape_source)
+              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        args: [
+          l.channel_id || null, l.channel_name, l.channel_handle || null,
+          l.subscriber_count || 0, l.avg_views || 0,
+          l.email, l.website || null, l.niche || null,
+          (l.channel_description || '').substring(0, 400),
+          l.lead_score || 0, l.temperature || 'cold',
+          l.crm_stage || 'new_lead', l.country || null,
+          l.platform || 'youtube', l.thumbnail_url || null,
+          l.social_links || '{}', l.pain_points || '[]',
+          l.scrape_source || 'youtube_api',
+        ],
+      }));
+      await tursoExecBatch(cfg, stmts);
+      pushed += batch.length;
+    }
+    console.log(`[Turso] Pushed ${pushed} user leads to cloud`);
+    return pushed;
+  } catch (e) {
+    console.error('[Turso] pushUserLeads error:', e.message);
+    return 0;
+  }
+}
+
+async function pullUserLeadsFromTurso() {
+  const cfg = getCfg();
+  if (!cfg) return 0;
+  try {
+    await ensureLeadsSchema(cfg);
+    const { getDb } = require('../models/database');
+    const db = getDb();
+    const localCount = db.prepare('SELECT COUNT(*) as c FROM leads').get().c;
+    console.log(`[Turso] Pull user_leads starting — local DB has ${localCount} leads`);
+
+    const INSERT = db.prepare(`
+      INSERT OR IGNORE INTO leads
+        (channel_id, channel_name, channel_handle, subscriber_count, avg_views,
+         email, website, niche, channel_description, lead_score, temperature,
+         crm_stage, country, platform, thumbnail_url, social_links, pain_points, scrape_source, user_id)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)
+    `);
+
+    let offset = 0;
+    const batchSize = 500;
+    let total = 0;
+    while (true) {
+      const result = await tursoExec(cfg,
+        `SELECT channel_id, channel_name, channel_handle, subscriber_count, avg_views,
+                email, website, niche, channel_description, lead_score, temperature,
+                crm_stage, country, platform, thumbnail_url, social_links, pain_points, scrape_source
+         FROM user_leads WHERE email IS NOT NULL AND email != '' LIMIT ? OFFSET ?`,
+        [batchSize, offset]
+      );
+      const cols = (result?.cols || []).map(c => c.name);
+      const rows = result?.rows || [];
+      if (!rows.length) break;
+      const ins = db.transaction(rows => {
+        let n = 0;
+        for (const row of rows) {
+          const r = {};
+          cols.forEach((col, i) => { r[col] = row[i]?.value ?? null; });
+          try {
+            const res = INSERT.run(
+              r.channel_id, r.channel_name, r.channel_handle,
+              Number(r.subscriber_count) || 0, Number(r.avg_views) || 0,
+              r.email, r.website, r.niche,
+              (r.channel_description || '').substring(0, 400),
+              Number(r.lead_score) || 0, r.temperature,
+              r.crm_stage || 'new_lead', r.country,
+              r.platform || 'youtube', r.thumbnail_url,
+              r.social_links || '{}', r.pain_points || '[]',
+              r.scrape_source || 'youtube_api'
+            );
+            if (res.changes > 0) n++;
+          } catch {}
+        }
+        return n;
+      });
+      total += ins(rows);
+      offset += rows.length;
+      if (rows.length < batchSize) break;
+    }
+    console.log(`[Turso] Pull user_leads complete — restored ${total} leads`);
+    return total;
+  } catch (e) {
+    console.error('[Turso] pullUserLeads error:', e.message);
+    return 0;
+  }
+}
+
+module.exports = { pullFromTurso, pushToTurso, getCfg, pushUserLeadsToTurso, pullUserLeadsFromTurso };
