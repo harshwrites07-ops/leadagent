@@ -85,7 +85,7 @@ passport.deserializeUser((id, done) => {
 
 if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
   const appUrl = process.env.APP_URL || `http://localhost:${PORT}`;
-  const googleCallbackURL = process.env.GOOGLE_AUTH_CALLBACK_URL || `${appUrl}/api/auth/google/callback`;
+  const googleCallbackURL = `${appUrl}/api/auth/google/callback`;
   console.log(`[Google OAuth] Strategy initialized — callback: ${googleCallbackURL}`);
   passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
