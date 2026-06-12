@@ -194,6 +194,16 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '1.0.0' });
 });
 
+// OAuth debug (public, temp)
+app.get('/api/debug/oauth', (req, res) => {
+  const appUrl = process.env.APP_URL || `http://localhost:${PORT}`;
+  res.json({
+    client_id: process.env.GOOGLE_CLIENT_ID || 'NOT SET',
+    callback_url: `${appUrl}/api/auth/google/callback`,
+    app_url: appUrl,
+  });
+});
+
 // Protected API routes
 app.use('/api/leads',     requireAuth, requireActiveSubscription, require('./src/routes/leads'));
 app.use('/api/pitches',   requireAuth, requireActiveSubscription, require('./src/routes/pitches'));
