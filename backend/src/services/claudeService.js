@@ -52,6 +52,37 @@ async function completeWithGeminiRotating(prompt, systemPrompt, maxTokens, model
 const FAST_MODEL  = process.env.GEMINI_FAST_MODEL  || 'gemini-2.0-flash';
 const SMART_MODEL = process.env.GEMINI_MODEL       || 'gemini-2.0-flash';
 
+// Claude models (used when ANTHROPIC_API_KEY is set)
+const CLAUDE_FAST  = 'claude-haiku-4-5-20251001';
+const CLAUDE_SMART = 'claude-sonnet-4-6';
+
+async function completeWithClaude(prompt, systemPrompt, maxTokens, model) {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) return null;
+  const axios = require('axios');
+  const body = {
+    model: model || CLAUDE_FAST,
+    max_tokens: maxTokens || 1200,
+    messages: [{ role: 'user', content: prompt }],
+  };
+  if (systemPrompt) body.system = systemPrompt;
+  const { data } = await axios.post(
+    'https://api.anthropic.com/v1/messages',
+    body,
+    {
+      headers: {
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      },
+      timeout: 30000,
+    }
+  );
+  const text = data.content?.[0]?.text;
+  if (!text) throw new Error('Empty response from Claude');
+  return text;
+}
+
 function makeGeminiModel(key, modelName, systemPrompt) {
   const { GoogleGenerativeAI } = require('@google/generative-ai');
   const genAI = new GoogleGenerativeAI(key);
@@ -95,22 +126,40 @@ function isOverloadError(err) {
          msg.includes('service unavailable') || msg.includes('try again later');
 }
 
-// Standard complete — rotates all Gemini keys
+// Standard complete — Claude first, Gemini fallback
 async function complete(prompt, systemPrompt = '', maxTokens = 1200) {
+  if (process.env.ANTHROPIC_API_KEY) {
+    try { return await completeWithClaude(prompt, systemPrompt, maxTokens, CLAUDE_FAST); } catch (e) {
+      console.warn('[AI] Claude failed, falling back to Gemini:', e.message);
+    }
+  }
   const result = await completeWithGeminiRotating(prompt, systemPrompt, maxTokens, FAST_MODEL);
   if (result !== null) return result;
-  throw new Error('AI unavailable — all Gemini keys exhausted. Add more keys at aistudio.google.com.');
+  throw new Error('AI unavailable — all keys exhausted.');
 }
 
-// Smart complete — rotates all Gemini keys
+// Smart complete — Claude Sonnet first, Gemini fallback
 async function completeSmart(prompt, systemPrompt = '', maxTokens = 2000) {
+  if (process.env.ANTHROPIC_API_KEY) {
+    try { return await completeWithClaude(prompt, systemPrompt, maxTokens, CLAUDE_SMART); } catch (e) {
+      console.warn('[AI] Claude failed, falling back to Gemini:', e.message);
+    }
+  }
   const result = await completeWithGeminiRotating(prompt, systemPrompt, maxTokens, SMART_MODEL);
   if (result !== null) return result;
-  throw new Error('AI unavailable — all Gemini keys exhausted. Add more keys at aistudio.google.com.');
+  throw new Error('AI unavailable — all keys exhausted.');
 }
 
 // Quick check: returns which AI provider is currently available
 async function checkAiAvailability() {
+  if (process.env.ANTHROPIC_API_KEY) {
+    try {
+      await completeWithClaude('Say OK', '', 5, CLAUDE_FAST);
+      return { ok: true, provider: 'claude', model: CLAUDE_FAST };
+    } catch (e) {
+      console.warn('[AI] Claude availability check failed:', e.message);
+    }
+  }
   const geminiKey = getGeminiKey();
   if (geminiKey) {
     try {
@@ -118,12 +167,12 @@ async function checkAiAvailability() {
       return { ok: true, provider: 'gemini', model: FAST_MODEL };
     } catch (e) {
       if (isQuotaError(e)) {
-        return { ok: false, error: 'All Gemini keys exhausted', retry_in: 'Keys reset every 60 seconds (free tier) — try again shortly or add more keys at aistudio.google.com' };
+        return { ok: false, error: 'All Gemini keys exhausted', retry_in: 'Try again shortly or add more keys at aistudio.google.com' };
       }
       return { ok: false, error: e.message };
     }
   }
-  return { ok: false, error: 'No Gemini API key configured. Add keys at aistudio.google.com.' };
+  return { ok: false, error: 'No AI key configured.' };
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -487,7 +536,7 @@ RULES:
 Return ONLY valid JSON:
 {"subject": "under 6 words", "body": "email body", "day": ${step.day}}`;
 
-      const raw = await completeWithGeminiRotating(prompt, '', 600, FAST_MODEL);
+      const raw = await complete(prompt, '', 600);
       if (raw) {
         const match = raw.match(/\{[\s\S]*\}/);
         if (match) {
@@ -578,7 +627,7 @@ async function generateFullPitch(lead, userId = null) {
   const PASS_SCORE   = 80; // require 80+ before stopping early
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    const raw = await completeWithGeminiRotating(prompt, '', 900, FAST_MODEL);
+    const raw = await complete(prompt, '', 900);
     if (!raw) break;
 
     const parsed = parsePitchResponseV2(raw, lead);
