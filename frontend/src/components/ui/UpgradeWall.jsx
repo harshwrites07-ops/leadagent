@@ -64,7 +64,7 @@ export default function UpgradeWall() {
           alignItems: 'center', justifyContent: 'center',
           margin: '0 auto 20px',
         }}>
-          <span style={{ fontWeight: 900, fontSize: 18, color: '#0a0a0c', fontFamily: 'var(--f-sans)' }}>CC</span>
+          <svg width="16" height="16" viewBox="0 0 14 14" fill="none"><path d="M8.5 1L3 7.5H7L5.5 13L11 6.5H7L8.5 1Z" fill="#0a0a0c" strokeLinejoin="round"/></svg>
         </div>
 
         <h2 style={{ fontFamily: 'var(--f-serif)', fontSize: 32, color: 'var(--text)', margin: '0 0 8px', fontStyle: 'italic' }}>

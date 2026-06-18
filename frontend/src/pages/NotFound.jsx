@@ -14,7 +14,7 @@ export default function NotFound() {
         width: 48, height: 48, borderRadius: 12, background: 'var(--lime)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24,
       }}>
-        <span style={{ fontWeight: 900, fontSize: 18, color: '#0a0a0c' }}>CC</span>
+        <svg width="18" height="18" viewBox="0 0 14 14" fill="none"><path d="M8.5 1L3 7.5H7L5.5 13L11 6.5H7L8.5 1Z" fill="#0a0a0c" strokeLinejoin="round"/></svg>
       </div>
 
       <div style={{

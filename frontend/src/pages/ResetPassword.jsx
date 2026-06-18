@@ -35,7 +35,7 @@ export default function ResetPassword() {
     <div style={styles.page}>
       <div style={styles.card}>
         <div style={styles.logo}>
-          <div style={styles.logoIcon}><span style={styles.logoText}>CC</span></div>
+          <div style={styles.logoIcon}><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M8.5 1L3 7.5H7L5.5 13L11 6.5H7L8.5 1Z" fill="#0a0a0c" strokeLinejoin="round"/></svg></div>
           <div>
             <p style={styles.logoName}>Quelro</p>
             <p style={styles.logoSub}>OUTREACH OS</p>
