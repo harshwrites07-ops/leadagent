@@ -220,6 +220,51 @@ app.use('/api/campaigns', requireAuth, requireActiveSubscription, require('./src
 app.use('/api/quality',   requireAuth, require('./src/routes/qualityLeads'));
 app.use('/api/stripe',    requireAuth, stripeRouter);
 
+// ── Quelro marketing website proxy ──────────────────────────────────────────
+// Public marketing pages (/, /pricing, /about, /features, /blog, etc.) are
+// served by a separate Railway static service. We proxy them here so they
+// appear at app.quelro.com without exposing the Railway URL.
+const { createProxyMiddleware } = require('http-proxy-middleware');
+
+const QUELRO_SITE = process.env.QUELRO_SITE_URL || 'https://web-production-58f048.up.railway.app';
+
+// SaaS app routes — these stay on the React app, NOT proxied
+const SAAS_PATHS = new Set([
+  '/login', '/signup', '/dashboard', '/leads', '/campaigns',
+  '/email-generator', '/crm', '/settings', '/onboarding', '/landing',
+  '/privacy', '/terms', '/forgot-password', '/reset-password', '/verify-email',
+]);
+
+const marketingProxy = createProxyMiddleware({
+  target: QUELRO_SITE,
+  changeOrigin: true,
+  on: {
+    error: (_err, _req, res) => { res.status(502).send('Marketing site temporarily unavailable'); },
+  },
+});
+
+// Root homepage → marketing site
+app.get('/', marketingProxy);
+
+// Marketing asset paths that the quelro-website HTML/CSS references
+const MARKETING_PREFIXES = [
+  '/pricing', '/about', '/features', '/contact-us',
+  '/blog', '/case-studies', '/webinars', '/whitepapers', '/demo',
+  '/css', '/js', '/images', '/fonts', '/video',
+  '/wp-content', '/wp-json', '/wp-includes',
+];
+
+app.use((req, res, next) => {
+  const p = req.path;
+  // Skip if it's a SaaS app route or an API/auth route
+  if (SAAS_PATHS.has(p) || p.startsWith('/api') || p.startsWith('/auth')) return next();
+  // Proxy any path that starts with a known marketing prefix
+  if (MARKETING_PREFIXES.some(prefix => p === prefix || p.startsWith(prefix + '/'))) {
+    return marketingProxy(req, res, next);
+  }
+  next();
+});
+
 // Serve frontend build (production mode)
 if (isProd) {
   app.use(express.static(FRONTEND_DIST, {

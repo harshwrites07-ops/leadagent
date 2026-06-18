@@ -19,6 +19,7 @@
     "express-rate-limit": "^7.3.1",
     "express-session": "^1.19.0",
     "googleapis": "^172.0.0",
+    "http-proxy-middleware": "^4.1.1",
     "imap-simple": "^5.1.0",
     "mailparser": "^3.7.1",
     "node-cron": "^3.0.3",
