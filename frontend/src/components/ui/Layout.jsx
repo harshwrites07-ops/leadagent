@@ -25,6 +25,8 @@ const NAV = [
   { path: '/pitch',     label: 'Pitch Gen',       icon: 'sparkle',  tag: 'PTCH' },
   { path: '/email',     label: 'Email Sender',    icon: 'inbox',    tag: 'MAIL', dot: true },
   { path: '/crm',       label: 'CRM',             icon: 'layers',   tag: 'CRM_' },
+  { path: '/campaigns', label: 'Campaigns',        icon: 'bar',      tag: 'CAMP' },
+  { path: '/quality',   label: 'Quality Leads',   icon: 'target',   tag: 'QLT_' },
   { path: '/analytics', label: 'Analytics',       icon: 'bar',      tag: 'DATA' },
   { path: '/settings',  label: 'Settings',        icon: 'settings', tag: 'CONF' },
 ];

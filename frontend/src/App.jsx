@@ -25,6 +25,8 @@ import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsOfService from './pages/TermsOfService';
 import NotFound from './pages/NotFound';
 import Landing from './pages/Landing';
+import Campaigns from './pages/Campaigns';
+import QualityLeads from './pages/QualityLeads';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -99,6 +101,8 @@ function AppRoutes() {
                 <Route path="/pitch/:leadId?" element={<PitchGenerator />} />
                 <Route path="/email" element={<EmailSender />} />
                 <Route path="/crm" element={<CRM />} />
+                <Route path="/campaigns" element={<Campaigns />} />
+                <Route path="/quality" element={<QualityLeads />} />
                 <Route path="/analytics" element={<Analytics />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/admin" element={<Admin />} />

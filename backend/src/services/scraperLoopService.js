@@ -1,0 +1,150 @@
+/**
+ * 24/7 quality-first scraper loop
+ * Runs every 2 hours:
+ *   1. Scans Reddit for buying signals
+ *   2. Scores any new master_leads (incremental)
+ * Niche-tiered weighting: Tier 1 (Finance/Business/Education/Tech) gets highest priority.
+ */
+
+const { getDb } = require('../models/database');
+const { scanSubreddits } = require('./redditSignalService');
+const { scoreNewMasterLeads, getDistribution } = require('./qualityLeadsService');
+
+const INTERVAL_MS = 2 * 60 * 60 * 1000; // 2 hours
+
+// Niche tiers — determines scraping priority and minimum subs threshold
+const NICHE_TIERS = {
+  1: { niches: ['finance', 'business', 'education', 'tech'], min_subs: 5000, label: 'Finance/Business/Education/Tech' },
+  2: { niches: ['fitness', 'gaming'], min_subs: 10000, label: 'Fitness/Gaming' },
+  3: { niches: ['vlogging', 'travel', 'cooking', 'lifestyle'], min_subs: 25000, label: 'Vlogging/Travel/Lifestyle' },
+};
+
+let loopActive = false;
+let loopTimer = null;
+let cycleCount = 0;
+
+const status = {
+  running: false,
+  started_at: null,
+  last_cycle_at: null,
+  next_cycle_at: null,
+  total_cycles: 0,
+  hot_added_total: 0,
+  reddit_signals_total: 0,
+  errors: [],
+};
+
+async function runOneCycle() {
+  if (status.running) {
+    console.log('[QualityLoop] Cycle already running — skipping');
+    return;
+  }
+
+  status.running = true;
+  status.last_cycle_at = new Date().toISOString();
+  cycleCount++;
+
+  const db = getDb();
+  const runId = `cycle-${cycleCount}-${Date.now()}`;
+  let logId;
+
+  try {
+    logId = db.prepare(
+      `INSERT INTO scraper_logs (run_id, scraper_type, status) VALUES (?, 'quality_loop', 'running')`
+    ).run(runId).lastInsertRowid;
+
+    // Step 1: Scan Reddit for buying signals
+    console.log('[QualityLoop] Scanning Reddit...');
+    let redditResult = { found: 0, saved: 0, errors: [] };
+    try {
+      redditResult = await scanSubreddits();
+      status.reddit_signals_total += redditResult.saved;
+      console.log(`[QualityLoop] Reddit: scanned=${redditResult.scanned} found=${redditResult.found} saved=${redditResult.saved}`);
+    } catch (e) {
+      console.error('[QualityLoop] Reddit scan failed:', e.message);
+      status.errors.push({ time: new Date().toISOString(), step: 'reddit', error: e.message });
+    }
+
+    // Step 2: Score new master_leads (incremental — only unscored)
+    console.log('[QualityLoop] Scoring new master_leads...');
+    const scoreResult = scoreNewMasterLeads();
+    status.hot_added_total += scoreResult.hot;
+    console.log(`[QualityLoop] Scored: total=${scoreResult.total} hot=${scoreResult.hot} warm=${scoreResult.warm} cold=${scoreResult.cold}`);
+
+    // Step 3: Log summary
+    const dist = getDistribution();
+    console.log(`[QualityLoop] DB state: quality_leads=${dist.hot} (${dist.hot_pct}%) warm=${dist.warm} cold=${dist.cold}`);
+
+    if (logId) {
+      db.prepare(`
+        UPDATE scraper_logs SET
+          status='completed',
+          channels_found=?, channels_scored=?,
+          hot_added=?, warm_archived=?, cold_discarded=?,
+          errors=?, error_log=?, completed_at=datetime('now')
+        WHERE id=?
+      `).run(
+        scoreResult.total, scoreResult.total - scoreResult.errors,
+        scoreResult.hot, scoreResult.warm, scoreResult.cold,
+        redditResult.errors.length, JSON.stringify(redditResult.errors.slice(0, 10)),
+        logId,
+      );
+    }
+
+  } catch (e) {
+    console.error('[QualityLoop] Cycle error:', e.message);
+    status.errors.push({ time: new Date().toISOString(), step: 'cycle', error: e.message });
+    status.errors = status.errors.slice(-30);
+
+    if (logId) {
+      try {
+        db.prepare(
+          `UPDATE scraper_logs SET status='error', completed_at=datetime('now') WHERE id=?`
+        ).run(logId);
+      } catch {}
+    }
+  } finally {
+    status.running = false;
+    status.total_cycles++;
+  }
+}
+
+function scheduleNext() {
+  status.next_cycle_at = new Date(Date.now() + INTERVAL_MS).toISOString();
+  loopTimer = setTimeout(async () => {
+    await runOneCycle();
+    if (loopActive) scheduleNext();
+  }, INTERVAL_MS);
+}
+
+function startLoop() {
+  if (loopActive) {
+    console.log('[QualityLoop] Already running');
+    return;
+  }
+  loopActive = true;
+  status.started_at = new Date().toISOString();
+
+  // First cycle after 60s (let server fully start)
+  console.log('[QualityLoop] Starting — first cycle in 60s, then every 2 hours');
+  setTimeout(async () => {
+    await runOneCycle();
+    if (loopActive) scheduleNext();
+  }, 60 * 1000);
+}
+
+function stopLoop() {
+  loopActive = false;
+  if (loopTimer) { clearTimeout(loopTimer); loopTimer = null; }
+  console.log('[QualityLoop] Stopped');
+}
+
+function getLoopStatus() {
+  return {
+    ...status,
+    loop_active: loopActive,
+    errors: status.errors.slice(-5),
+  };
+}
+
+module.exports = { startLoop, stopLoop, getLoopStatus, runOneCycle };

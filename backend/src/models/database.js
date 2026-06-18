@@ -452,6 +452,172 @@ function initSchema() {
     try { getDb().prepare(`DELETE FROM password_reset_tokens WHERE expires_at < datetime('now')`).run(); } catch {}
   }, 24 * 60 * 60 * 1000);
 
+  // ── Intent + Campaign system tables ──────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS campaigns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      niche TEXT,
+      service_type TEXT,
+      credentials TEXT,
+      status TEXT DEFAULT 'draft',
+      ab_test_enabled INTEGER DEFAULT 0,
+      ab_variant_a TEXT DEFAULT 'Problem Angle',
+      ab_variant_b TEXT DEFAULT 'Story Angle',
+      total_leads INTEGER DEFAULT 0,
+      hot_leads INTEGER DEFAULT 0,
+      warm_leads INTEGER DEFAULT 0,
+      cold_leads INTEGER DEFAULT 0,
+      emails_sent INTEGER DEFAULT 0,
+      emails_opened INTEGER DEFAULT 0,
+      emails_replied INTEGER DEFAULT 0,
+      calls_booked INTEGER DEFAULT 0,
+      clients_closed INTEGER DEFAULT 0,
+      avg_intent_score REAL DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS campaign_leads (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+      lead_id INTEGER NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+      intent_score REAL DEFAULT 0,
+      intent_signals TEXT DEFAULT '{}',
+      intent_rank INTEGER,
+      intent_reason TEXT,
+      intent_confidence TEXT DEFAULT 'Low',
+      temperature TEXT DEFAULT 'cold',
+      psychology_profile TEXT DEFAULT '{}',
+      angles TEXT DEFAULT '[]',
+      selected_angle TEXT,
+      email_subject TEXT,
+      email_body TEXT,
+      email_subject_edited TEXT,
+      email_body_edited TEXT,
+      email_quality_score INTEGER DEFAULT 0,
+      ab_variant TEXT,
+      email_id INTEGER REFERENCES emails(id),
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(campaign_id, lead_id)
+    );
+  `);
+
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_campaign_leads_campaign_id ON campaign_leads(campaign_id)`); } catch {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_campaign_leads_lead_id ON campaign_leads(lead_id)`); } catch {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_campaigns_user_id ON campaigns(user_id)`); } catch {}
+
+  // Add intent score columns to leads (migrations)
+  try { db.exec(`ALTER TABLE leads ADD COLUMN intent_score REAL DEFAULT NULL`); } catch {}
+  try { db.exec(`ALTER TABLE leads ADD COLUMN intent_confidence TEXT DEFAULT NULL`); } catch {}
+  try { db.exec(`ALTER TABLE leads ADD COLUMN intent_reason TEXT DEFAULT NULL`); } catch {}
+  try { db.exec(`ALTER TABLE leads ADD COLUMN intent_signals TEXT DEFAULT NULL`); } catch {}
+
+  // Add tracking columns to emails
+  try { db.exec(`ALTER TABLE emails ADD COLUMN angle_type TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE emails ADD COLUMN campaign_id INTEGER REFERENCES campaigns(id)`); } catch {}
+  try { db.exec(`ALTER TABLE emails ADD COLUMN reply_sentiment TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE emails ADD COLUMN call_booked INTEGER DEFAULT 0`); } catch {}
+  try { db.exec(`ALTER TABLE emails ADD COLUMN client_closed INTEGER DEFAULT 0`); } catch {}
+  try { db.exec(`ALTER TABLE emails ADD COLUMN client_value REAL DEFAULT 0`); } catch {}
+  try { db.exec(`ALTER TABLE emails ADD COLUMN ab_variant TEXT`); } catch {}
+
+  // ── Quality-first lead system tables ─────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS quality_leads (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      creator_id TEXT UNIQUE NOT NULL,
+      channel_url TEXT,
+      channel_name TEXT NOT NULL,
+      channel_handle TEXT,
+      subscriber_count INTEGER DEFAULT 0,
+      niche TEXT,
+      email TEXT,
+      thumbnail_url TEXT,
+      intent_score REAL NOT NULL DEFAULT 0,
+      intent_tier TEXT NOT NULL DEFAULT 'HOT',
+      sig_upload_frequency REAL DEFAULT 0,
+      sig_view_growth REAL DEFAULT 0,
+      sig_title_keywords REAL DEFAULT 0,
+      sig_description_keywords REAL DEFAULT 0,
+      sig_engagement REAL DEFAULT 0,
+      sig_consistency REAL DEFAULT 0,
+      psychology_profile TEXT DEFAULT '{}',
+      personality_type TEXT,
+      primary_pain_point TEXT,
+      communication_style TEXT,
+      source TEXT DEFAULT 'master_pool',
+      buying_signal_text TEXT,
+      outreached INTEGER DEFAULT 0,
+      outreached_at DATETIME,
+      reply_received INTEGER DEFAULT 0,
+      call_booked INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS archived_leads (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      creator_id TEXT UNIQUE NOT NULL,
+      channel_name TEXT,
+      subscriber_count INTEGER DEFAULT 0,
+      niche TEXT,
+      email TEXT,
+      intent_score REAL DEFAULT 0,
+      intent_tier TEXT DEFAULT 'COLD',
+      archived_reason TEXT DEFAULT 'below_threshold',
+      archived_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS scraper_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      run_id TEXT,
+      scraper_type TEXT NOT NULL,
+      tier INTEGER,
+      niche TEXT,
+      status TEXT DEFAULT 'running',
+      channels_found INTEGER DEFAULT 0,
+      channels_scored INTEGER DEFAULT 0,
+      hot_added INTEGER DEFAULT 0,
+      warm_archived INTEGER DEFAULT 0,
+      cold_discarded INTEGER DEFAULT 0,
+      errors INTEGER DEFAULT 0,
+      error_log TEXT DEFAULT '[]',
+      started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      completed_at DATETIME
+    );
+
+    CREATE TABLE IF NOT EXISTS buying_signals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      source TEXT NOT NULL DEFAULT 'reddit',
+      post_id TEXT UNIQUE,
+      subreddit TEXT,
+      post_title TEXT,
+      post_body TEXT,
+      post_url TEXT,
+      creator_handle TEXT,
+      channel_url TEXT,
+      subscriber_count INTEGER,
+      budget_mentioned TEXT,
+      intent_classification TEXT DEFAULT 'CURIOUS',
+      keywords_matched TEXT DEFAULT '[]',
+      quality_lead_id INTEGER REFERENCES quality_leads(id),
+      processed INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  // Indexes for quality system
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_quality_leads_niche ON quality_leads(niche)`); } catch {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_quality_leads_score ON quality_leads(intent_score DESC)`); } catch {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_quality_leads_subs ON quality_leads(subscriber_count)`); } catch {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_quality_leads_source ON quality_leads(source)`); } catch {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_archived_leads_tier ON archived_leads(intent_tier)`); } catch {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_scraper_logs_type ON scraper_logs(scraper_type)`); } catch {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_buying_signals_source ON buying_signals(source)`); } catch {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_buying_signals_class ON buying_signals(intent_classification)`); } catch {}
+
   // Seed default settings
   const defaults = {
     daily_send_limit: '150',

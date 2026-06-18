@@ -216,6 +216,8 @@ app.use('/api/scraper',   requireAuth, requireActiveSubscription, require('./src
 app.use('/api/analyzer',  requireAuth, requireActiveSubscription, require('./src/routes/analyzer'));
 app.use('/api/assistant', requireAuth, requireActiveSubscription, require('./src/routes/assistant'));
 app.use('/api/followups', requireAuth, requireActiveSubscription, require('./src/routes/followups'));
+app.use('/api/campaigns', requireAuth, requireActiveSubscription, require('./src/routes/campaigns'));
+app.use('/api/quality',   requireAuth, require('./src/routes/qualityLeads'));
 app.use('/api/stripe',    requireAuth, stripeRouter);
 
 // Serve frontend build (production mode)
@@ -264,6 +266,14 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log('   Email queue processor started');
   } catch (err) {
     console.error('[QueueProcessor] Failed to start:', err.message);
+  }
+
+  try {
+    const { startLoop } = require('./src/services/scraperLoopService');
+    startLoop();
+    console.log('   Quality scraper loop started (2-hour cycle)');
+  } catch (err) {
+    console.error('[QualityLoop] Failed to start:', err.message);
   }
 
   // Mark any jobs that were 'running' before this boot as interrupted
