@@ -29,7 +29,7 @@ function Sparkline({ data = [], color = 'var(--lime)', height = 36 }) {
 
 function Avatar({ name, color }) {
   const init = (name || '?').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase();
-  const palette = ['#c8f654', '#ff8a73', '#8ec5ff', '#c4b5fd', '#f4ecd8', '#6ee7a8', '#ffd166'];
+  const palette = ['#D4FF00', '#ff8a73', '#8ec5ff', '#c4b5fd', '#f4ecd8', '#6ee7a8', '#ffd166'];
   const bg = color || palette[(name?.charCodeAt(0) ?? 0) % palette.length];
   return <span className="ava" style={{ background: bg, color: '#0a0a0c' }}>{init}</span>;
 }

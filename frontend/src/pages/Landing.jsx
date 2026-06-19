@@ -101,7 +101,7 @@ export default function Landing() {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{
-            width: 28, height: 28, borderRadius: 8, background: '#c8f654',
+            width: 28, height: 28, borderRadius: 8, background: '#D4FF00',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             boxShadow: '0 0 0 1px rgba(0,0,0,0.12)',
           }}>
@@ -124,13 +124,13 @@ export default function Landing() {
         <div style={{ position: 'absolute', top: '40%', left: '50%', transform: 'translate(-50%, -50%)', width: 600, height: 600, background: 'radial-gradient(circle, rgba(200,246,84,0.06) 0%, transparent 70%)', pointerEvents: 'none' }} />
 
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(200,246,84,0.08)', border: '1px solid rgba(200,246,84,0.25)', borderRadius: 99, padding: '5px 14px 5px 8px', marginBottom: 32 }}>
-          <span style={{ background: '#c8f654', color: '#0a0a0c', fontSize: 9, fontWeight: 800, padding: '2px 8px', borderRadius: 99, fontFamily: 'monospace', letterSpacing: '0.08em' }}>FREE</span>
+          <span style={{ background: '#D4FF00', color: '#0a0a0c', fontSize: 9, fontWeight: 800, padding: '2px 8px', borderRadius: 99, fontFamily: 'monospace', letterSpacing: '0.08em' }}>FREE</span>
           <span style={{ fontSize: 12, color: '#a8a8b3' }}>300 free emails + leads on signup — no card needed</span>
         </div>
 
         <h1 style={{ fontSize: 'clamp(38px, 6vw, 76px)', fontWeight: 800, lineHeight: 1.08, letterSpacing: '-0.03em', margin: '0 0 20px', maxWidth: 820 }}>
           Find YouTube creators,{' '}
-          <span style={{ color: '#c8f654', fontStyle: 'italic', fontFamily: "'Instrument Serif', serif" }}>send personalised pitches,</span>
+          <span style={{ color: '#D4FF00', fontStyle: 'italic', fontFamily: "'Instrument Serif', serif" }}>send personalised pitches,</span>
           {' '}land clients — on autopilot
         </h1>
 
@@ -151,7 +151,7 @@ export default function Landing() {
         <div style={{ display: 'flex', gap: 40, flexWrap: 'wrap', justifyContent: 'center' }}>
           {[['1,00,000+', 'Verified leads in database'], ['80%', 'Average open rate'], ['< 60s', 'To send multiple personalised pitches']].map(([val, label]) => (
             <div key={label} style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 24, fontWeight: 800, color: '#c8f654', letterSpacing: '-0.02em' }}>{val}</div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: '#D4FF00', letterSpacing: '-0.02em' }}>{val}</div>
               <div style={{ fontSize: 12, color: '#6e6e7a', marginTop: 3 }}>{label}</div>
             </div>
           ))}
@@ -166,7 +166,7 @@ export default function Landing() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 20, marginTop: 48 }}>
             {HOW_IT_WORKS.map(item => (
               <div key={item.step} style={stepCard}>
-                <div style={{ fontSize: 11, fontFamily: 'monospace', color: '#c8f654', fontWeight: 700, letterSpacing: '0.1em', marginBottom: 16 }}>{item.step}</div>
+                <div style={{ fontSize: 11, fontFamily: 'monospace', color: '#D4FF00', fontWeight: 700, letterSpacing: '0.1em', marginBottom: 16 }}>{item.step}</div>
                 <h3 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 10px', letterSpacing: '-0.01em' }}>{item.title}</h3>
                 <p style={{ fontSize: 14, color: '#a8a8b3', lineHeight: 1.6, margin: 0 }}>{item.desc}</p>
               </div>
@@ -204,13 +204,13 @@ export default function Landing() {
             {PRICING.map(plan => (
               <div key={plan.name} style={{ ...pricingCard, ...(plan.highlight ? pricingCardHighlight : {}) }}>
                 {plan.tag && (
-                  <div style={{ position: 'absolute', top: -11, left: '50%', transform: 'translateX(-50%)', background: '#c8f654', color: '#0a0a0c', fontSize: 9, fontWeight: 800, padding: '3px 12px', borderRadius: 99, fontFamily: 'monospace', letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>
+                  <div style={{ position: 'absolute', top: -11, left: '50%', transform: 'translateX(-50%)', background: '#D4FF00', color: '#0a0a0c', fontSize: 9, fontWeight: 800, padding: '3px 12px', borderRadius: 99, fontFamily: 'monospace', letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>
                     {plan.tag}
                   </div>
                 )}
                 <div style={{ marginBottom: 6, fontWeight: 700, fontSize: 15 }}>{plan.name}</div>
                 <div style={{ marginBottom: 20 }}>
-                  <span style={{ fontSize: 42, fontWeight: 800, letterSpacing: '-0.03em', color: plan.highlight ? '#c8f654' : '#f3f3f5' }}>${plan.price}</span>
+                  <span style={{ fontSize: 42, fontWeight: 800, letterSpacing: '-0.03em', color: plan.highlight ? '#D4FF00' : '#f3f3f5' }}>${plan.price}</span>
                   <span style={{ fontSize: 14, color: '#6e6e7a' }}>/{plan.period}</span>
                 </div>
                 <div style={{ marginBottom: 6, fontSize: 13, color: '#a8a8b3' }}>✓ <strong style={{ color: '#f3f3f5' }}>{plan.emails} emails</strong>/month</div>
@@ -218,7 +218,7 @@ export default function Landing() {
                 <div style={{ borderTop: '1px solid #23232c', paddingTop: 20, marginBottom: 24 }}>
                   {plan.features.map(f => (
                     <div key={f} style={{ fontSize: 12, color: '#a8a8b3', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 7 }}>
-                      <span style={{ color: plan.highlight ? '#c8f654' : '#6ee7a8', flexShrink: 0 }}>✓</span> {f}
+                      <span style={{ color: plan.highlight ? '#D4FF00' : '#6ee7a8', flexShrink: 0 }}>✓</span> {f}
                     </div>
                   ))}
                 </div>
@@ -252,7 +252,7 @@ export default function Landing() {
       {/* ── Footer ── */}
       <footer style={{ borderTop: '1px solid #23232c', padding: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ width: 22, height: 22, borderRadius: 6, background: '#c8f654', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ width: 22, height: 22, borderRadius: 6, background: '#D4FF00', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <svg width="11" height="11" viewBox="0 0 14 14" fill="none">
               <path d="M8.5 1L3 7.5H7L5.5 13L11 6.5H7L8.5 1Z" fill="#0a0a0c" strokeLinejoin="round"/>
             </svg>
@@ -271,8 +271,8 @@ export default function Landing() {
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 const navBtnStyle = { background: 'none', border: '1px solid #23232c', borderRadius: 8, padding: '7px 16px', color: '#a8a8b3', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' };
-const ctaNavStyle = { background: '#c8f654', border: 'none', borderRadius: 8, padding: '7px 16px', color: '#0a0a0c', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' };
-const heroCta = { background: '#c8f654', color: '#0a0a0c', border: 'none', borderRadius: 10, padding: '13px 26px', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', letterSpacing: '-0.01em' };
+const ctaNavStyle = { background: '#D4FF00', border: 'none', borderRadius: 8, padding: '7px 16px', color: '#0a0a0c', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' };
+const heroCta = { background: '#D4FF00', color: '#0a0a0c', border: 'none', borderRadius: 10, padding: '13px 26px', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', letterSpacing: '-0.01em' };
 const heroSecondary = { background: 'none', color: '#a8a8b3', border: '1px solid #23232c', borderRadius: 10, padding: '13px 26px', fontSize: 15, cursor: 'pointer', fontFamily: 'inherit' };
 const section = { padding: '64px 24px' };
 const sectionInner = { maxWidth: 1080, margin: '0 auto' };
@@ -283,4 +283,4 @@ const featureCard = { background: '#131318', border: '1px solid #23232c', border
 const pricingCard = { background: '#131318', border: '1px solid #23232c', borderRadius: 16, padding: '32px 28px', position: 'relative' };
 const pricingCardHighlight = { background: '#181820', border: '1px solid rgba(200,246,84,0.35)', boxShadow: '0 0 40px -8px rgba(200,246,84,0.12)' };
 const pricingBtn = { width: '100%', background: '#1f1f28', color: '#f3f3f5', border: '1px solid #2c2c37', borderRadius: 9, padding: '11px 0', fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' };
-const pricingBtnHighlight = { background: '#c8f654', color: '#0a0a0c', border: 'none' };
+const pricingBtnHighlight = { background: '#D4FF00', color: '#0a0a0c', border: 'none' };

@@ -9,7 +9,7 @@ const ALL_PLANS = ['trial', 'free', 'starter', 'pro', 'growth', 'agency'];
 
 const PLAN_COLORS = {
   trial: '#6e6e7a', free: '#6e6e7a', starter: '#8ec5ff',
-  pro: '#c8f654', growth: '#c8f654', agency: '#ff8a73',
+  pro: '#D4FF00', growth: '#D4FF00', agency: '#ff8a73',
 };
 
 export default function Admin() {
@@ -167,9 +167,9 @@ export default function Admin() {
             <span style={{
               fontSize: 10, fontWeight: 700, fontFamily: 'var(--f-mono)',
               padding: '2px 8px', borderRadius: 99,
-              background: seederInfo?.seederStatus?.running ? '#c8f65422' : '#6e6e7a22',
+              background: seederInfo?.seederStatus?.running ? '#D4FF0022' : '#6e6e7a22',
               color: seederInfo?.seederStatus?.running ? 'var(--lime)' : 'var(--text-3)',
-              border: `1px solid ${seederInfo?.seederStatus?.running ? '#c8f65444' : '#6e6e7a44'}`,
+              border: `1px solid ${seederInfo?.seederStatus?.running ? '#D4FF0044' : '#6e6e7a44'}`,
             }}>
               {seederInfo?.seederStatus?.running ? '● RUNNING' : '○ IDLE'}
             </span>
