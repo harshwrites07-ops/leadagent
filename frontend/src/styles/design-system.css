@@ -21,14 +21,16 @@
 }
 
 /* ============ BASE STYLES ============ */
-*, *::before, *::after {
+* {
+  margin: 0;
+  padding: 0;
   box-sizing: border-box;
 }
 
 html, body {
   background: var(--bg-primary);
   color: var(--text-primary);
-  font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -40,10 +42,27 @@ h1, h2, h3, h4, h5, h6 {
   line-height: 1.2;
 }
 
-h1 { font-size: 40px; margin: 0 0 8px 0; }
-h2 { font-size: 32px; margin: 0 0 8px 0; }
-h3 { font-size: 24px; margin: 0 0 8px 0; font-weight: 600; }
-h4 { font-size: 18px; margin: 0 0 4px 0; font-weight: 600; }
+h1 {
+  font-size: 40px;
+  margin: 0 0 8px 0;
+}
+
+h2 {
+  font-size: 32px;
+  margin: 0 0 8px 0;
+}
+
+h3 {
+  font-size: 24px;
+  margin: 0 0 8px 0;
+  font-weight: 600;
+}
+
+h4 {
+  font-size: 18px;
+  margin: 0 0 4px 0;
+  font-weight: 600;
+}
 
 p {
   color: var(--text-secondary);
@@ -52,14 +71,21 @@ p {
   margin: 0;
 }
 
-.text-muted { color: var(--text-muted); font-size: 14px; }
-.text-sm    { font-size: 14px; }
-.text-xs    { font-size: 12px; }
+.text-muted {
+  color: var(--text-muted);
+  font-size: 14px;
+}
 
-/* ============ CARDS ============ */
-/* NOTE: only targeting .card — not [class*="card"] wildcard
-   to avoid clobbering .kb__card, .auth-card, .onb__card padding */
-.card {
+.text-sm {
+  font-size: 14px;
+}
+
+.text-xs {
+  font-size: 12px;
+}
+
+/* ============ CARDS & CONTAINERS ============ */
+.card, [class*="card"] {
   background: linear-gradient(135deg, var(--bg-secondary) 0%, rgba(37, 37, 65, 0.5) 100%);
   border: 1px solid rgba(212, 255, 0, 0.08);
   border-radius: 12px;
@@ -73,7 +99,10 @@ p {
 .card::before {
   content: '';
   position: absolute;
-  top: 0; left: 0; right: 0; bottom: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   background: linear-gradient(135deg, rgba(212, 255, 0, 0.03) 0%, transparent 100%);
   pointer-events: none;
 }
@@ -86,7 +115,7 @@ p {
 }
 
 /* Stat Cards */
-.stat-card, .metric {
+.stat-card, [class*="stat"], .metric {
   background: linear-gradient(135deg, var(--bg-secondary) 0%, rgba(37, 37, 65, 0.5) 100%);
   border: 1px solid rgba(212, 255, 0, 0.08);
   border-radius: 12px;
@@ -95,82 +124,94 @@ p {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
-.stat-card:hover, .metric:hover {
+.stat-card:hover {
   border-color: rgba(212, 255, 0, 0.15);
   box-shadow: 0 12px 32px rgba(212, 255, 0, 0.15);
   transform: translateY(-6px) scale(1.02);
 }
 
-/* ============ BUTTONS ============
-   FIX: removed bare `button { padding: 12px 24px }` — it overrides
-   .btn--sm, icon buttons (30×30), topbar buttons. Scoped to named classes only. */
+/* ============ BUTTONS ============ */
+button, .btn, [type="button"], [type="submit"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  text-decoration: none;
+}
 
-.btn-primary, button[class*="--primary"] {
+/* Primary Button */
+button[class*="primary"], .btn-primary, button[class*="accent"] {
   background: var(--accent);
   color: var(--bg-primary);
   box-shadow: 0 4px 12px rgba(212, 255, 0, 0.2);
 }
 
-.btn-primary:hover, button[class*="--primary"]:hover {
+button[class*="primary"]:hover, .btn-primary:hover, button[class*="accent"]:hover {
   background: var(--accent-hover);
   box-shadow: 0 8px 24px rgba(212, 255, 0, 0.35);
   transform: translateY(-2px);
 }
 
-.btn-primary:active, button[class*="--primary"]:active {
+button[class*="primary"]:active, .btn-primary:active {
   transform: translateY(0);
   box-shadow: 0 4px 12px rgba(212, 255, 0, 0.2);
 }
 
-.btn-secondary {
+/* Secondary Button */
+button[class*="secondary"], .btn-secondary {
   background: var(--bg-secondary);
   color: var(--text-primary);
   border: 1px solid rgba(212, 255, 0, 0.12);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
-.btn-secondary:hover {
+button[class*="secondary"]:hover, .btn-secondary:hover {
   background: var(--bg-tertiary);
   border-color: rgba(212, 255, 0, 0.25);
   box-shadow: 0 6px 16px rgba(212, 255, 0, 0.1);
   transform: translateY(-1px);
 }
 
-.btn-ghost {
+/* Ghost Button */
+button[class*="ghost"], .btn-ghost {
   background: transparent;
   color: var(--text-primary);
   border: 1px solid var(--text-muted);
 }
 
-.btn-ghost:hover {
+button[class*="ghost"]:hover, .btn-ghost:hover {
   border-color: var(--accent);
   color: var(--accent);
   box-shadow: 0 4px 12px rgba(212, 255, 0, 0.1);
 }
 
-/* Button Ripple — scoped to primary only so icon/small buttons don't glitch */
-.btn--primary {
-  position: relative;
-  overflow: hidden;
-}
-
-.btn--primary::after {
+/* Button Ripple Effect */
+button::after {
   content: '';
   position: absolute;
-  top: 50%; left: 50%;
-  width: 0; height: 0;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.5);
   transform: translate(-50%, -50%);
-  transition: width 600ms, height 600ms, opacity 500ms;
-  opacity: 0;
-  pointer-events: none;
+  transition: width 600ms, height 600ms;
 }
 
-.btn--primary:active::after {
+button:active::after {
   width: 300px;
   height: 300px;
-  opacity: 0;
 }
 
 /* ============ INPUTS & FORMS ============ */
@@ -180,7 +221,7 @@ input, textarea, select {
   border-radius: 8px;
   color: var(--text-primary);
   padding: 12px 16px;
-  font-family: 'Geist', 'Inter', sans-serif;
+  font-family: 'Inter', sans-serif;
   font-size: 14px;
   transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -208,6 +249,7 @@ input:focus, textarea:focus, select:focus {
 }
 
 [class*="sidebar"] a:hover, nav[class*="nav"] a:hover, [class*="nav-item"]:hover {
+  color: var(--accent);
   background: rgba(212, 255, 0, 0.05);
 }
 
@@ -219,7 +261,11 @@ input:focus, textarea:focus, select:focus {
 }
 
 /* ============ TABLES ============ */
-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
 
 thead {
   background: rgba(212, 255, 0, 0.05);
@@ -242,19 +288,37 @@ td {
   color: var(--text-secondary);
 }
 
-tbody tr { transition: background 150ms cubic-bezier(0.4, 0, 0.2, 1); }
+tbody tr {
+  transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
 
 tbody tr:hover {
   background: rgba(212, 255, 0, 0.05);
-  /* removed border-left: 3px — causes layout shift on hover */
+  border-left: 3px solid var(--accent);
+  padding-left: 13px;
 }
 
 /* ============ CHARTS & SPARKLINES ============ */
+svg {
+  transition: all 250ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 [class*="sparkline"], [class*="chart"], [class*="graph"] {
   filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.3));
 }
 
 /* ============ BADGES & LABELS ============ */
+[class*="badge"], [class*="label"], [class*="tag"] {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
 [class*="badge-success"], [class*="label-success"] {
   background: rgba(0, 208, 132, 0.15);
   color: var(--success);
@@ -288,78 +352,171 @@ tbody tr:hover {
   animation: modalSlideIn 300ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* ============ ANIMATIONS ============ */
 @keyframes modalSlideIn {
-  from { opacity: 0; transform: translateY(20px) scale(0.95); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
+/* ============ ANIMATIONS ============ */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes slideInLeft {
-  from { opacity: 0; transform: translateX(-20px); }
-  to   { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 @keyframes slideInRight {
-  from { opacity: 0; transform: translateX(20px); }
-  to   { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 @keyframes pulse {
   0%, 100% { opacity: 1; }
-  50%       { opacity: 0.5; }
+  50% { opacity: 0.5; }
 }
 
 @keyframes shimmer {
-  0%   { background-position: -1000px 0; }
-  100% { background-position:  1000px 0; }
+  0% { background-position: -1000px 0; }
+  100% { background-position: 1000px 0; }
 }
 
 @keyframes glow {
   0%, 100% { box-shadow: 0 0 20px rgba(212, 255, 0, 0.2); }
-  50%       { box-shadow: 0 0 30px rgba(212, 255, 0, 0.35); }
+  50% { box-shadow: 0 0 30px rgba(212, 255, 0, 0.35); }
 }
 
-/* FIX: removed `* { animation: fadeIn }` — animates every span/div/input
-   on every React re-render, making every keystroke/click flash the whole page.
-   Use .fade-in class explicitly instead. */
-.fade-in         { animation: fadeIn 300ms ease-out; }
-.slide-in-left   { animation: slideInLeft 250ms ease-out; }
-.slide-in-right  { animation: slideInRight 250ms ease-out; }
-[class*="loading"] { animation: pulse 2s infinite; }
-.glow            { animation: glow 2s infinite; }
+/* Apply animations */
+* {
+  animation: fadeIn 300ms ease-out;
+}
+
+[class*="loading"] {
+  animation: pulse 2s infinite;
+}
+
+.glow {
+  animation: glow 2s infinite;
+}
 
 /* ============ SCROLLBAR ============ */
-::-webkit-scrollbar       { width: 8px; height: 8px; }
-::-webkit-scrollbar-track { background: var(--bg-primary); }
-::-webkit-scrollbar-thumb { background: var(--bg-tertiary); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(212, 255, 0, 0.25); }
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
 
-/* ============ LINKS ============
-   FIX: removed `a { color: lime }` and `a::after { underline }` —
-   turns every sidebar NavLink lime and adds sliding underlines to
-   breadcrumbs, table links, "View CRM" buttons, etc. */
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  transition: all 200ms ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(212, 255, 0, 0.25);
+  border-radius: 4px;
+}
+
+/* ============ LINKS ============ */
+a {
+  color: var(--accent);
+  text-decoration: none;
+  transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+a:hover {
+  color: var(--accent-hover);
+  text-shadow: 0 0 10px rgba(212, 255, 0, 0.3);
+}
+
+a::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background: var(--accent);
+  transition: width 250ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+a:hover::after {
+  width: 100%;
+}
 
 /* ============ UTILITY CLASSES ============ */
-.shadow-sm { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2); }
-.shadow-md { box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3); }
-.shadow-lg { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); }
-.shadow-xl { box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5); }
+.shadow-sm {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
 
-.border-accent { border: 1px solid var(--accent); box-shadow: inset 0 0 10px rgba(212, 255, 0, 0.1); }
+.shadow-md {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
 
-.rounded      { border-radius: 8px; }
-.rounded-lg   { border-radius: 12px; }
-.rounded-full { border-radius: 9999px; }
+.shadow-lg {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
 
-.opacity-50 { opacity: 0.5; }
-.opacity-75 { opacity: 0.75; }
+.shadow-xl {
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
 
-/* Spacing */
+.border-accent {
+  border: 1px solid var(--accent);
+  box-shadow: inset 0 0 10px rgba(212, 255, 0, 0.1);
+}
+
+.rounded {
+  border-radius: 8px;
+}
+
+.rounded-lg {
+  border-radius: 12px;
+}
+
+.rounded-full {
+  border-radius: 9999px;
+}
+
+.opacity-50 {
+  opacity: 0.5;
+}
+
+.opacity-75 {
+  opacity: 0.75;
+}
+
+/* ============ SPACING UTILITIES ============ */
 .gap-4 { gap: 16px; }
 .gap-6 { gap: 24px; }
 .gap-8 { gap: 32px; }
@@ -374,9 +531,9 @@ tbody tr:hover {
 .mt-6 { margin-top: 24px; }
 .mt-8 { margin-top: 32px; }
 
-.p-4  { padding: 16px; }
-.p-6  { padding: 24px; }
-.p-8  { padding: 32px; }
+.p-4 { padding: 16px; }
+.p-6 { padding: 24px; }
+.p-8 { padding: 32px; }
 
 .py-4 { padding-top: 16px; padding-bottom: 16px; }
 .py-6 { padding-top: 24px; padding-bottom: 24px; }
@@ -385,43 +542,54 @@ tbody tr:hover {
 .px-4 { padding-left: 16px; padding-right: 16px; }
 .px-6 { padding-left: 24px; padding-right: 24px; }
 
-/* Flex */
-.flex         { display: flex; }
+/* ============ FLEXBOX UTILITIES ============ */
+.flex { display: flex; }
 .flex-between { display: flex; justify-content: space-between; align-items: center; }
-.flex-center  { display: flex; justify-content: center; align-items: center; }
-.flex-col     { display: flex; flex-direction: column; }
+.flex-center { display: flex; justify-content: center; align-items: center; }
+.flex-col { flex-direction: column; }
 
-/* Grid */
-.grid   { display: grid; }
-.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
-.grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
-.grid-4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+/* ============ GRID UTILITIES ============ */
+.grid { display: grid; }
+.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+.grid-4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
 
-/* Text */
-.text-center   { text-align: center; }
-.text-left     { text-align: left; }
-.text-right    { text-align: right; }
-.font-bold     { font-weight: 700; }
+/* ============ TEXT UTILITIES ============ */
+.text-center { text-align: center; }
+.text-left { text-align: left; }
+.text-right { text-align: right; }
+
+.font-bold { font-weight: 700; }
 .font-semibold { font-weight: 600; }
-.font-medium   { font-weight: 500; }
-.text-accent   { color: var(--accent); }
-.text-success  { color: var(--success); }
-.text-warning  { color: var(--warning); }
-.text-danger   { color: var(--danger); }
-.bg-accent     { background: var(--accent); color: var(--bg-primary); }
+.font-medium { font-weight: 500; }
 
-/* Transitions */
-[class*="card"], [class*="btn"] {
+.text-accent { color: var(--accent); }
+.text-success { color: var(--success); }
+.text-warning { color: var(--warning); }
+.text-danger { color: var(--danger); }
+
+.bg-accent { background: var(--accent); color: var(--bg-primary); }
+
+/* ============ TRANSITIONS ============ */
+button, a, input, select, textarea, [class*="card"], [class*="btn"] {
   transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Focus */
+/* ============ FOCUS STATES ============ */
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
-/* ============ MOBILE ============ */
+/* ============ DARK MODE (default, already dark) ============ */
+@media (prefers-color-scheme: dark) {
+  body {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+  }
+}
+
+/* ============ MOBILE RESPONSIVE ============ */
 @media (max-width: 768px) {
   h1 { font-size: 28px; }
   h2 { font-size: 24px; }
@@ -429,5 +597,9 @@ tbody tr:hover {
 
   .card { padding: 16px; }
 
-  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  .grid-2, .grid-3, .grid-4 {
+    grid-template-columns: 1fr;
+  }
+
+  button { padding: 10px 16px; font-size: 13px; }
 }
