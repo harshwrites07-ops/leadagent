@@ -1,1 +1,1 @@
-web: npx http-server -p $PORT -c-1 --gzip
+web: npm start
