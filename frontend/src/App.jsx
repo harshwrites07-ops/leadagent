@@ -28,24 +28,35 @@ import Landing from './pages/Landing';
 import Campaigns from './pages/Campaigns';
 import QualityLeads from './pages/QualityLeads';
 
+const LoadingScreen = () => (
+  <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+      <div style={{ width: 36, height: 36, borderRadius: 9, background: 'var(--lime)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M8.5 1L3 7.5H7L5.5 13L11 6.5H7L8.5 1Z" fill="#0a0a0c" strokeLinejoin="round"/></svg>
+      </div>
+      <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.14em', color: 'var(--text-3)' }}>LOADING...</span>
+    </div>
+  </div>
+);
+
+// Root "/" — unauthenticated users see Landing, authenticated users enter the app
+function RootRoute() {
+  const { user, loading } = useAuth();
+  if (loading) return <LoadingScreen />;
+  if (user) {
+    if (!user.onboarding_completed) return <Navigate to="/onboarding" replace />;
+    return <Navigate to="/leads" replace />;
+  }
+  return <Landing />;
+}
+
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
   const location = useLocation();
 
-  if (loading) {
-    return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 9, background: 'var(--lime)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M8.5 1L3 7.5H7L5.5 13L11 6.5H7L8.5 1Z" fill="#0a0a0c" strokeLinejoin="round"/></svg>
-          </div>
-          <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.14em', color: 'var(--text-3)' }}>LOADING...</span>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <LoadingScreen />;
 
-  if (!user) return <Navigate to="/landing" state={{ from: location }} replace />;
+  if (!user) return <Navigate to="/" state={{ from: location }} replace />;
   if (!user.onboarding_completed && location.pathname !== '/onboarding') {
     return <Navigate to="/onboarding" replace />;
   }
@@ -55,7 +66,7 @@ function ProtectedRoute({ children }) {
 function PublicRoute({ children }) {
   const { user, loading } = useAuth();
   if (loading) return null;
-  if (user) return <Navigate to="/" replace />;
+  if (user) return <Navigate to="/leads" replace />;
   return children;
 }
 
@@ -70,8 +81,8 @@ function ProtectedAllowOnboarding({ children }) {
 function AppRoutes() {
   return (
     <Routes>
-      {/* Fully public — no auth required */}
-      <Route path="/landing" element={<Landing />} />
+      {/* Root — Landing for unauth, redirect to app for auth */}
+      <Route path="/" element={<RootRoute />} />
       <Route path="/privacy" element={<PrivacyPolicy />} />
       <Route path="/terms" element={<TermsOfService />} />
 

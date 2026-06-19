@@ -268,10 +268,9 @@ MARKETING_DIRS.forEach(dir => {
   app.use('/' + dir, express.static(path.join(QUELRO_SITE_DIR, dir), { maxAge: '1h' }));
 });
 
-// Root: authenticated users → dashboard, others → marketing homepage
+// Root: authenticated users → React app (SPA handles routing), others → React Landing
 app.get('/', (req, res) => {
-  if (req.session && req.session.userId) return res.redirect('/dashboard');
-  res.sendFile(path.join(QUELRO_SITE_DIR, 'index.html'));
+  res.sendFile(path.join(FRONTEND_DIST, 'index.html'));
 });
 
 // Serve frontend build (production mode)
