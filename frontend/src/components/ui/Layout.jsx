@@ -134,7 +134,7 @@ export default function Layout({ children }) {
                   cursor: 'pointer',
                   transition: 'all 120ms cubic-bezier(0.16,1,0.3,1)',
                   textDecoration: 'none',
-                  background: active ? 'rgba(200,246,84,0.08)' : 'transparent',
+                  background: active ? 'rgba(200,246,84,0.06)' : 'transparent',
                   boxShadow: active ? 'inset 3px 0 0 var(--lime)' : 'none',
                   position: 'relative',
                 }}

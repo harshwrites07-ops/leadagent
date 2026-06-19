@@ -172,10 +172,7 @@ export default function Dashboard() {
       }}>
         {/* LEADS FOUND */}
         <div className="stat">
-          <div className="stat__label">
-            <span className="dot dot--lime" style={{ width: 5, height: 5 }} />
-            Leads Found
-          </div>
+          <div className="stat__label">Leads Found</div>
           <div className="stat__value stat__value--mono">{formatNumber(stats.leadsFound)}</div>
           <div className="stat__spark">
             <Sparkline data={s?.charts?.weekly_leads?.map(d => d.count) || [0,1,2,1,3,2,4,3,5,4,6,5,8,7,10]} color="var(--lime)" />
@@ -188,10 +185,7 @@ export default function Dashboard() {
 
         {/* PITCHES SENT */}
         <div className="stat">
-          <div className="stat__label">
-            <span className="dot dot--lime" style={{ width: 5, height: 5 }} />
-            Pitches Sent
-          </div>
+          <div className="stat__label">Pitches Sent</div>
           <div className="stat__value stat__value--mono">
             {stats.pitchesSent}
             <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--text-3)', marginLeft: 4 }}>today</span>
@@ -207,10 +201,7 @@ export default function Dashboard() {
 
         {/* OPENS */}
         <div className="stat">
-          <div className="stat__label">
-            <span className="dot" style={{ width: 5, height: 5, background: 'var(--coral)' }} />
-            Opens
-          </div>
+          <div className="stat__label">Opens</div>
           <div className="stat__value">{stats.openRate}%</div>
           <div className="stat__spark">
             <Sparkline data={spark2} color="var(--coral)" />
@@ -223,10 +214,7 @@ export default function Dashboard() {
 
         {/* IN THE PIPE */}
         <div className="stat">
-          <div className="stat__label">
-            <span className="dot dot--ok" style={{ width: 5, height: 5 }} />
-            In The Pipe
-          </div>
+          <div className="stat__label">In The Pipe</div>
           <div className="stat__value stat__value--mono" style={{ color: 'var(--ok)' }}>
             ${stats.pipeline}
           </div>
