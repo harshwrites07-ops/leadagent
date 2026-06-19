@@ -1,404 +1,432 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import Icon from './Icon';
-import api from '../../utils/api';
 import { useAuth } from '../../context/AuthContext';
-import TrialBanner from './TrialBanner';
-import UpgradeWall from './UpgradeWall';
+import {
+  LayoutDashboard, Search, BarChart2, Mail, Users,
+  Zap, Star, TrendingUp, Settings, Shield, Bell,
+  HelpCircle, LogOut, Youtube, Cpu, ChevronRight,
+  Sparkles,
+} from 'lucide-react';
 
-export function useIsMobile() {
-  const [isMobile, setIsMobile] = useState(
-    typeof window !== 'undefined' && window.innerWidth < 768
-  );
-  useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', handler);
-    return () => window.removeEventListener('resize', handler);
-  }, []);
-  return isMobile;
-}
-
-const NAV = [
-  { path: '/',          label: 'Dashboard',       icon: 'home',     tag: 'DASH' },
-  { path: '/leads',     label: 'Lead Finder',     icon: 'target',   tag: 'FIND' },
-  { path: '/analyzer',  label: 'Channel Analyzer',icon: 'eye',      tag: 'SCAN' },
-  { path: '/pitch',     label: 'Pitch Gen',       icon: 'sparkle',  tag: 'PTCH' },
-  { path: '/email',     label: 'Email Sender',    icon: 'inbox',    tag: 'MAIL', dot: true },
-  { path: '/crm',       label: 'CRM',             icon: 'layers',   tag: 'CRM_' },
-  { path: '/campaigns', label: 'Campaigns',        icon: 'bar',      tag: 'CAMP' },
-  { path: '/quality',   label: 'Quality Leads',   icon: 'target',   tag: 'QLT_' },
-  { path: '/analytics', label: 'Analytics',       icon: 'bar',      tag: 'DATA' },
-  { path: '/settings',  label: 'Settings',        icon: 'settings', tag: 'CONF' },
+const NAV_ITEMS = [
+  { to: '/',          icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/leads',     icon: Search,          label: 'Lead Finder' },
+  { to: '/analyzer',  icon: Youtube,         label: 'Channel Analyzer' },
+  { to: '/pitch',     icon: Zap,             label: 'Pitch Gen' },
+  { to: '/email',     icon: Mail,            label: 'Email Sender', dot: true },
+  { to: '/crm',       icon: Users,           label: 'CRM' },
+  { to: '/campaigns', icon: TrendingUp,      label: 'Campaigns' },
+  { to: '/quality',   icon: Star,            label: 'Quality Leads' },
+  { to: '/analytics', icon: BarChart2,       label: 'Analytics' },
+  { to: '/settings',  icon: Settings,        label: 'Settings' },
 ];
 
-const ROUTE_CRUMBS = {
-  '/':          ['Dashboard'],
-  '/leads':     ['Outreach', 'Lead Finder'],
-  '/analyzer':  ['Outreach', 'Channel Analyzer'],
-  '/pitch':     ['Outreach', 'Pitch Gen'],
-  '/email':     ['Outreach', 'Email Sender'],
-  '/crm':       ['CRM'],
-  '/analytics': ['Analytics'],
-  '/settings':  ['Settings'],
-  '/admin':     ['Admin'],
-  '/admin/settings': ['Admin', 'Settings'],
-};
-
-const SUGGESTED = [
-  'Find 50 Tech creators 100k–300k',
-  'Why did my reply rate drop?',
-  'Launch a Finance campaign',
-  'Show me hot leads in CRM',
+const ADMIN_ITEMS = [
+  { to: '/admin', icon: Shield, label: 'Admin' },
 ];
 
-/* ── Sysbar ─────────────────────────────────────────────── */
-function Sysbar({ sysStatus, onOpenAgent, agentOpen }) {
-  return (
-    <div className={`sysbar${agentOpen ? ' sysbar--agent' : ''}`} style={agentOpen ? { right: 420 } : {}}>
-      <span style={{ color: 'var(--text-4)', fontSize: 10.5, fontFamily: 'var(--f-mono)' }}>v2.5.0</span>
-      <span className="spacer" />
-      <span className="sysbar__svc">
-        <button
-          onClick={onOpenAgent}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--text-2)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--f-mono)', fontSize: 10.5 }}
-        >
-          Ask Jack <kbd>⌘K</kbd>
-        </button>
-      </span>
-    </div>
-  );
-}
-
-/* ── Agent Panel ─────────────────────────────────────────── */
-function AgentPanel({ onClose }) {
-  const [messages, setMessages] = useState([
-    { role: 'bot', text: "Jack here. What do you need?\nTry: 'find 20 finance leads' or 'what's my reply rate' or 'send follow-ups to unopened'" },
-  ]);
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const bottomRef = useRef(null);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  const send = useCallback(async (text) => {
-    const msg = (text ?? input).trim();
-    if (!msg || loading) return;
-    setInput('');
-    setMessages(prev => [...prev, { role: 'user', text: msg }]);
-    setLoading(true);
-    try {
-      // Build conversation history for context
-      const history = messages
-        .filter(m => m.role === 'user' || m.role === 'bot')
-        .map(m => ({ role: m.role === 'bot' ? 'assistant' : 'user', content: m.text }));
-      history.push({ role: 'user', content: msg });
-      const { data } = await api.post('/assistant/chat', { messages: history });
-      setMessages(prev => [...prev, { role: 'bot', text: data.reply || data.message || 'Done.' }]);
-    } catch (err) {
-      const errMsg = err.response?.data?.error || err.message || 'Something went wrong.';
-      setMessages(prev => [...prev, { role: 'bot', text: errMsg }]);
-    } finally {
-      setLoading(false);
-    }
-  }, [input, loading, messages]);
-
-  return (
-    <aside className="agent">
-      <div className="agent__head">
-        <div className="agent__avatar" />
-        <div>
-          <h3>Jack</h3>
-          <div className="muted">Online · your outreach agent</div>
-        </div>
-        <button className="agent__close" onClick={onClose}><Icon name="x" size={14} /></button>
-      </div>
-
-      <div className="agent__body">
-        {messages.map((m, i) => (
-          <div key={i} className={`agent__msg agent__msg--${m.role}`}>
-            {m.role === 'bot' && <div className="agent__bot-avatar" />}
-            <div className="agent__bubble">
-              <div>{m.text}</div>
-            </div>
-          </div>
-        ))}
-        {loading && (
-          <div className="agent__msg agent__msg--bot">
-            <div className="agent__bot-avatar" />
-            <div className="agent__bubble">
-              <div style={{ color: 'var(--text-3)' }}>Thinking…</div>
-            </div>
-          </div>
-        )}
-        <div ref={bottomRef} />
-
-        <div className="agent__chips">
-          {SUGGESTED.map(s => (
-            <button key={s} className="agent__chip" onClick={() => send(s)}>{s}</button>
-          ))}
-        </div>
-      </div>
-
-      <div className="agent__composer">
-        <div className="agent__composer-inner">
-          <textarea
-            className="agent__input"
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
-            placeholder="Ask Jack to find leads, write emails, send pitches…"
-            rows={1}
-          />
-          <button className="agent__send" disabled={!input.trim() || loading} onClick={() => send()}>
-            <Icon name="arrowUp" size={13} />
-          </button>
-        </div>
-        <div className="agent__hint">
-          <span><kbd>↵</kbd> send</span>
-          <span><kbd>⇧↵</kbd> new line</span>
-          <span><kbd>⌘K</kbd> toggle</span>
-        </div>
-      </div>
-    </aside>
-  );
-}
-
-/* ── User section (inline, no floating) ─────────────────── */
-function UserFooter({ user, logout }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <div className="sb__org" style={{ cursor: 'default' }}>
-        <div className="sb__org-ava" style={{ fontSize: 10, fontWeight: 700 }}>
-          {(user?.full_name || user?.email || '?').slice(0, 2).toUpperCase()}
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="sb__org-name" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.full_name || user?.email}</div>
-          <div className="sb__org-role">{user?.plan || 'Free'} plan</div>
-        </div>
-      </div>
-      <button
-        onClick={logout}
-        style={{
-          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-          padding: '8px 12px', background: 'var(--coral-soft)',
-          border: '1px solid var(--coral-border, #ff6b6b44)',
-          cursor: 'pointer', color: 'var(--bad)', fontSize: 12, fontWeight: 600,
-          borderRadius: 'var(--r)', textAlign: 'center',
-        }}
-      >
-        <Icon name="logout" size={13} /> Sign Out
-      </button>
-    </div>
-  );
-}
-
-/* ── Layout ─────────────────────────────────────────────── */
 export default function Layout({ children }) {
-  const [agentOpen, setAgentOpen] = useState(false);
-  const [sysStatus, setSysStatus] = useState({ gemini: false, smtp: false, youtube: { configured: true, exhausted: false }, innertube: { online: true } });
-  const [emailUsage, setEmailUsage] = useState({ sent: 0, limit: 500 });
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const location = useLocation();
-  const isMobile = useIsMobile();
-  const { user, logout, trialExpired } = useAuth();
 
-  const crumbs = ROUTE_CRUMBS[location.pathname] || ['Quelro'];
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
+  };
 
-  useEffect(() => {
-    const toggle = e => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setAgentOpen(o => !o); }
-    };
-    document.addEventListener('keydown', toggle);
-    return () => document.removeEventListener('keydown', toggle);
-  }, []);
+  const isActive = (to) => {
+    if (to === '/') return location.pathname === '/';
+    return location.pathname.startsWith(to);
+  };
 
-  useEffect(() => {
-    const fetchStatus = async () => {
-      try {
-        const { data } = await api.get('/assistant/status');
-        setSysStatus({
-          gemini: data.gemini?.configured || false,
-          smtp: data.smtp?.configured || false,
-          youtube: { configured: data.youtube?.configured ?? true, exhausted: data.youtube?.exhausted ?? false },
-          innertube: { online: data.innertube?.online ?? true },
-        });
-        if (data.smtp?.sent_today !== undefined) {
-          setEmailUsage({ sent: data.smtp.sent_today || 0, limit: data.smtp.daily_limit || 500 });
-        }
-      } catch {}
-    };
-    fetchStatus();
-    const interval = setInterval(fetchStatus, 60000);
-    return () => clearInterval(interval);
-  }, []);
-
-  if (isMobile) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--bg)' }}>
-        <header style={{
-          height: 48, flexShrink: 0, display: 'flex', alignItems: 'center',
-          justifyContent: 'space-between', padding: '0 16px',
-          background: 'var(--bg-2)', borderBottom: '1px solid var(--line)',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div className="sb__logo" style={{ width: 24, height: 24 }}>
-              <svg width="12" height="12" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M8.5 1L3 7.5H7L5.5 13L11 6.5H7L8.5 1Z" fill="#0a0a0c" strokeLinejoin="round"/>
-              </svg>
-            </div>
-            <span style={{ fontSize: 13, fontWeight: 600 }}>Quelro</span>
-          </div>
-          {user && <UserFooter user={user} logout={logout} />}
-        </header>
-        <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 60 }}>
-          {children}
-        </div>
-        <nav className="bottom-nav-bar">
-          {[
-            { path: '/',          icon: 'home',    label: 'Home' },
-            { path: '/leads',     icon: 'target',  label: 'Leads' },
-            { path: '/pitch',     icon: 'sparkle', label: 'Pitch' },
-            { path: '/email',     icon: 'inbox',   label: 'Email' },
-            { path: '/crm',       icon: 'layers',  label: 'CRM' },
-            { path: '/analytics', icon: 'bar',     label: 'Stats' },
-            { path: '/settings',  icon: 'settings',label: 'Settings' },
-          ].map(({ path, icon, label }) => (
-            <NavLink key={path} to={path} end={path === '/'} style={{ textDecoration: 'none', flex: 1 }}>
-              {({ isActive }) => (
-                <div style={{
-                  display: 'flex', flexDirection: 'column', alignItems: 'center',
-                  justifyContent: 'center', height: 60, gap: 3, position: 'relative',
-                  color: isActive ? 'var(--lime)' : 'var(--text-3)',
-                }}>
-                  {isActive && <div className="bottom-nav-dot" />}
-                  <Icon name={icon} size={18} />
-                  <span style={{ fontSize: 9, fontFamily: 'var(--f-mono)', letterSpacing: '.04em' }}>{label}</span>
-                </div>
-              )}
-            </NavLink>
-          ))}
-        </nav>
-      </div>
-    );
-  }
+  const displayName = user?.full_name || user?.name || 'User';
+  const userPlan = user?.plan || 'free';
 
   return (
-    <div className={`app${agentOpen ? ' agent-open' : ''}`}>
-      {/* ── Sidebar ── */}
-      <aside className="sb">
-        <div className="sb__brand">
-          <div className="sb__logo">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)' }}>
+
+      {/* ══════════════════════════════
+          SIDEBAR
+      ══════════════════════════════ */}
+      <aside style={{
+        position: 'fixed',
+        top: 0, left: 0,
+        width: 'var(--sidebar-w)',
+        height: '100vh',
+        background: 'var(--bg-2)',
+        borderRight: '1px solid var(--line)',
+        display: 'flex',
+        flexDirection: 'column',
+        zIndex: 40,
+        overflow: 'hidden',
+      }}>
+
+        {/* Brand */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          padding: '0 16px',
+          height: 'var(--topbar-h)',
+          borderBottom: '1px solid var(--line)',
+          flexShrink: 0,
+        }}>
+          <div style={{
+            width: 28, height: 28,
+            borderRadius: 6,
+            background: 'var(--lime)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+            boxShadow: '0 0 12px rgba(200,246,84,0.4)',
+          }}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path d="M8.5 1L3 7.5H7L5.5 13L11 6.5H7L8.5 1Z" fill="#0a0a0c" strokeLinejoin="round"/>
             </svg>
           </div>
           <div>
-            <div className="sb__brand-name">Quelro</div>
-            <div className="muted" style={{ fontSize: 10.5, marginTop: 1, fontFamily: 'var(--f-mono)', letterSpacing: '.08em' }}>OUTREACH·OS</div>
+            <div style={{
+              fontSize: 14, fontWeight: 700,
+              letterSpacing: '-0.3px', color: 'var(--text)',
+              lineHeight: 1.2,
+            }}>Quelro</div>
+            <div style={{
+              fontSize: 9, fontWeight: 600,
+              letterSpacing: '1.5px',
+              textTransform: 'uppercase',
+              color: 'var(--text-4)',
+              fontFamily: 'var(--f-mono)',
+            }}>OUTREACH OS</div>
           </div>
         </div>
 
-        <button className="sb__org" onClick={() => setAgentOpen(true)}>
-          <div className="agent__bot-avatar" style={{ width: 24, height: 24, borderRadius: 7 }} />
-          <div>
-            <div className="sb__org-name">Ask Jack</div>
-            <div className="sb__org-role">
-              Press <kbd style={{ fontFamily: 'var(--f-mono)', fontSize: 9.5, background: 'var(--bg-2)', border: '1px solid var(--line)', padding: '0 4px', borderRadius: 3 }}>⌘K</kbd>
-            </div>
-          </div>
-        </button>
+        {/* Nav */}
+        <nav style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
 
-        <div>
-          <div className="sb__section">Workspace</div>
-          <nav className="sb__nav">
-            {NAV.map(item => (
+          <div style={{
+            padding: '16px 16px 4px',
+            fontSize: 9, fontWeight: 700,
+            letterSpacing: '1.5px',
+            textTransform: 'uppercase',
+            color: 'var(--text-4)',
+            fontFamily: 'var(--f-mono)',
+          }}>WORKSPACE</div>
+
+          {NAV_ITEMS.map(({ to, icon: Icon, label, dot }) => {
+            const active = isActive(to);
+            return (
               <NavLink
-                key={item.path}
-                to={item.path}
-                end={item.path === '/'}
-                className={({ isActive }) => `sb__item${isActive ? ' is-active' : ''}`}
+                key={to}
+                to={to}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 9,
+                  padding: '0 12px',
+                  height: 36,
+                  margin: '1px 8px',
+                  borderRadius: 6,
+                  fontSize: 13,
+                  fontWeight: active ? 600 : 500,
+                  color: active ? 'var(--lime)' : 'var(--text-3)',
+                  cursor: 'pointer',
+                  transition: 'all 120ms cubic-bezier(0.16,1,0.3,1)',
+                  textDecoration: 'none',
+                  background: active ? 'rgba(200,246,84,0.08)' : 'transparent',
+                  boxShadow: active ? 'inset 3px 0 0 var(--lime)' : 'none',
+                  position: 'relative',
+                }}
+                onMouseEnter={e => {
+                  if (!active) {
+                    e.currentTarget.style.background = 'var(--hover)';
+                    e.currentTarget.style.color = 'var(--text)';
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (!active) {
+                    e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.color = 'var(--text-3)';
+                  }
+                }}
               >
-                {({ isActive }) => (
-                  <>
-                    <Icon name={item.icon} size={15} />
-                    <span style={{ flex: 1 }}>{item.label}</span>
-                    {item.dot && !isActive && <span className="sb__item-dot" />}
-                  </>
+                <Icon size={15} style={{
+                  flexShrink: 0,
+                  opacity: active ? 1 : 0.6,
+                  color: active ? 'var(--lime)' : 'inherit',
+                }} />
+                {label}
+                {dot && (
+                  <span style={{
+                    marginLeft: 'auto',
+                    width: 6, height: 6,
+                    borderRadius: '50%',
+                    background: 'var(--coral)',
+                    boxShadow: '0 0 6px var(--coral)',
+                    animation: 'pulse-coral 2s infinite',
+                  }} />
                 )}
               </NavLink>
-            ))}
-            {user?.is_admin && (
-              <NavLink to="/admin" className={({ isActive }) => `sb__item${isActive ? ' is-active' : ''}`}>
-                {({ isActive }) => (
-                  <>
-                    <Icon name="settings" size={15} />
-                    <span style={{ flex: 1 }}>Admin</span>
-                  </>
-                )}
-              </NavLink>
-            )}
-          </nav>
-        </div>
+            );
+          })}
 
-        <div className="sb__foot">
-          <div className="sb__credit">
-            <div style={{ flex: 1 }}>
-              <div className="sb__credit-label">Emails this month</div>
-              <div className="sb__credit-bar" style={{ marginTop: 6 }}>
-                <div className="sb__credit-fill" style={{ width: `${Math.min(100, Math.round((emailUsage.sent / Math.max(1, emailUsage.limit)) * 100))}%` }} />
+          {user?.is_admin && (
+            <>
+              <div style={{
+                padding: '16px 16px 4px',
+                fontSize: 9, fontWeight: 700,
+                letterSpacing: '1.5px',
+                textTransform: 'uppercase',
+                color: 'var(--text-4)',
+                fontFamily: 'var(--f-mono)',
+              }}>ADMIN</div>
+              {ADMIN_ITEMS.map(({ to, icon: Icon, label }) => {
+                const active = isActive(to);
+                return (
+                  <NavLink key={to} to={to} style={{
+                    display: 'flex', alignItems: 'center', gap: 9,
+                    padding: '0 12px', height: 36, margin: '1px 8px',
+                    borderRadius: 6, fontSize: 13,
+                    fontWeight: active ? 600 : 500,
+                    color: active ? 'var(--lime)' : 'var(--text-3)',
+                    textDecoration: 'none',
+                    background: active ? 'rgba(200,246,84,0.08)' : 'transparent',
+                    boxShadow: active ? 'inset 3px 0 0 var(--lime)' : 'none',
+                    transition: 'all 120ms',
+                  }}>
+                    <Icon size={15} style={{ flexShrink: 0, opacity: active ? 1 : 0.6 }} />
+                    {label}
+                  </NavLink>
+                );
+              })}
+            </>
+          )}
+        </nav>
+
+        {/* Ask Jack + User */}
+        <div style={{ padding: '12px 8px 8px', borderTop: '1px solid var(--line)', flexShrink: 0 }}>
+          <button style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '8px 12px',
+            borderRadius: 8,
+            background: 'linear-gradient(135deg, rgba(200,246,84,0.1) 0%, rgba(200,246,84,0.05) 100%)',
+            border: '1px solid rgba(200,246,84,0.2)',
+            color: 'var(--lime)',
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: 'pointer',
+            transition: 'all 150ms',
+            marginBottom: 8,
+          }}>
+            <Sparkles size={13} />
+            Ask Jack
+            <span style={{
+              marginLeft: 'auto',
+              fontFamily: 'var(--f-mono)',
+              fontSize: 9,
+              color: 'var(--text-4)',
+              background: 'var(--surface-3)',
+              padding: '2px 5px',
+              borderRadius: 3,
+            }}>⌘K</span>
+          </button>
+
+          {/* User row */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '6px 4px',
+          }}>
+            <div style={{
+              width: 28, height: 28,
+              borderRadius: '50%',
+              background: 'var(--surface-3)',
+              border: '1px solid var(--line-2)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 11,
+              fontWeight: 700,
+              color: 'var(--text-2)',
+              flexShrink: 0,
+            }}>
+              {displayName[0]?.toUpperCase() || 'U'}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontSize: 12, fontWeight: 600,
+                color: 'var(--text)',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}>
+                {displayName}
+              </div>
+              <div style={{
+                fontSize: 9,
+                color: 'var(--text-4)',
+                fontFamily: 'var(--f-mono)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+              }}>
+                {userPlan}
               </div>
             </div>
-            <div className="sb__credit-meta">{emailUsage.sent.toLocaleString()} / {emailUsage.limit.toLocaleString()}</div>
+            <button
+              onClick={handleLogout}
+              title="Log out"
+              style={{
+                color: 'var(--text-4)',
+                padding: 4,
+                borderRadius: 6,
+                transition: 'all 120ms',
+                cursor: 'pointer',
+                flexShrink: 0,
+                background: 'none',
+                border: 'none',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.color = 'var(--bad)'; }}
+              onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-4)'; }}
+            >
+              <LogOut size={14} />
+            </button>
           </div>
-          {user && <UserFooter user={user} logout={logout} />}
         </div>
       </aside>
 
-      {/* ── Upgrade wall (trial expired) ── */}
-      {trialExpired && <UpgradeWall />}
+      {/* ══════════════════════════════
+          TOPBAR
+      ══════════════════════════════ */}
+      <header style={{
+        position: 'fixed',
+        top: 0,
+        left: 'var(--sidebar-w)',
+        right: 0,
+        height: 'var(--topbar-h)',
+        background: 'rgba(10,10,12,0.85)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        borderBottom: '1px solid var(--line)',
+        display: 'flex',
+        alignItems: 'center',
+        padding: '0 24px',
+        gap: 12,
+        zIndex: 30,
+      }}>
+        {/* Page label */}
+        <span style={{
+          fontSize: 13,
+          fontWeight: 600,
+          color: 'var(--text-3)',
+          whiteSpace: 'nowrap',
+        }}>
+          {[...NAV_ITEMS, ...ADMIN_ITEMS].find(i => isActive(i.to))?.label || 'Quelro'}
+        </span>
 
-      {/* ── Main ── */}
-      <main className="main">
-        {/* Trial countdown banner */}
-        <TrialBanner />
-        {/* Topbar */}
-        <header className="tb">
-          <div className="tb__crumbs">
-            {crumbs.map((c, i) => (
-              <React.Fragment key={i}>
-                {i > 0 && <Icon name="chev" size={12} className="tb__sep" />}
-                <span className={`tb__crumb${i === crumbs.length - 1 ? ' is-current' : ''}`}>{c}</span>
-              </React.Fragment>
-            ))}
-          </div>
-
-          <div className="tb__search">
-            <Icon name="search" size={13} />
-            <span>Search leads, campaigns, replies…</span>
-            <kbd>⌘K</kbd>
-          </div>
-
-          <div className="tb__right">
-            <button className="btn btn--ghost btn--sm" onClick={() => setAgentOpen(true)}>
-              <Icon name="sparkle" size={11} />Agent <kbd style={{ fontFamily: 'var(--f-mono)', fontSize: 10, padding: '0 4px', borderRadius: 3, background: 'var(--bg-2)', border: '1px solid var(--line)', marginLeft: 2 }}>⌘K</kbd>
-            </button>
-            <button className="tb__icon-btn"><Icon name="help" /></button>
-            <button className="tb__icon-btn"><Icon name="bell" /></button>
-          </div>
-        </header>
-
-        {/* Page scroll container */}
-        <div className="page-content-scroll" style={{ overflowY: 'auto', flex: 1 }}>
-          {children}
+        {/* Search bar */}
+        <div style={{
+          flex: 1,
+          maxWidth: 400,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          background: 'var(--surface)',
+          border: '1px solid var(--line)',
+          borderRadius: 8,
+          padding: '0 12px',
+          height: 34,
+          fontSize: 13,
+          color: 'var(--text-3)',
+          cursor: 'pointer',
+          transition: 'border-color 120ms',
+        }}>
+          <Search size={13} style={{ flexShrink: 0, opacity: 0.5 }} />
+          <span style={{ flex: 1, fontSize: 12 }}>Search leads, campaigns, replies...</span>
+          <span style={{
+            fontFamily: 'var(--f-mono)',
+            fontSize: 9,
+            color: 'var(--text-4)',
+            background: 'var(--surface-3)',
+            padding: '2px 5px',
+            borderRadius: 3,
+            whiteSpace: 'nowrap',
+          }}>⌘K</span>
         </div>
+
+        {/* Right actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
+          <button
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 32, height: 32, borderRadius: 6,
+              color: 'var(--text-3)', cursor: 'pointer',
+              transition: 'all 120ms',
+              background: 'transparent',
+              border: 'none',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'var(--hover)'; e.currentTarget.style.color = 'var(--text)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-3)'; }}
+          >
+            <Bell size={15} />
+          </button>
+
+          <button
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 32, height: 32, borderRadius: 6,
+              color: 'var(--text-3)', cursor: 'pointer',
+              transition: 'all 120ms',
+              background: 'transparent',
+              border: 'none',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'var(--hover)'; e.currentTarget.style.color = 'var(--text)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-3)'; }}
+          >
+            <HelpCircle size={15} />
+          </button>
+
+          <button
+            style={{
+              display: 'flex', alignItems: 'center',
+              gap: 6, padding: '0 12px',
+              height: 32, borderRadius: 6,
+              color: 'var(--text-2)',
+              fontSize: 12, fontWeight: 600,
+              cursor: 'pointer',
+              background: 'var(--surface)',
+              border: '1px solid var(--line-2)',
+              transition: 'all 120ms',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--lime-border)'; e.currentTarget.style.color = 'var(--lime)'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--line-2)'; e.currentTarget.style.color = 'var(--text-2)'; }}
+          >
+            <Cpu size={13} />
+            Agent
+            <span style={{
+              fontFamily: 'var(--f-mono)', fontSize: 9,
+              color: 'var(--text-4)',
+            }}>⌘K</span>
+          </button>
+        </div>
+      </header>
+
+      {/* ══════════════════════════════
+          MAIN CONTENT
+      ══════════════════════════════ */}
+      <main style={{
+        marginLeft: 'var(--sidebar-w)',
+        marginTop: 'var(--topbar-h)',
+        flex: 1,
+        minHeight: 'calc(100vh - var(--topbar-h))',
+        width: 'calc(100vw - var(--sidebar-w))',
+      }}>
+        {children}
       </main>
-
-      {/* ── Agent slide-out ── */}
-      {agentOpen && <AgentPanel onClose={() => setAgentOpen(false)} />}
-
-      {/* ── Sysbar ── */}
-      <Sysbar sysStatus={sysStatus} onOpenAgent={() => setAgentOpen(o => !o)} agentOpen={agentOpen} />
     </div>
   );
 }

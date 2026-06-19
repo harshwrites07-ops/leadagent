@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Zap } from 'lucide-react';
 import Icon from '../components/ui/Icon';
 import PowerSendOverlay from '../components/ui/PowerSendOverlay';
 import { useApp } from '../context/AppContext';
@@ -46,6 +47,17 @@ const activityTagMap = {
   viral_detected:   { tag: 'research',      acc: 'var(--lime)',  human: false },
 };
 
+const stageLabels = {
+  new_lead: 'New Lead', studying: 'Studying', pitch_ready: 'Pitch Ready',
+  email_sent: 'Email Sent', replied: 'Replied', call_booked: 'Call Booked',
+  closed: 'Closed', not_interested: 'Not Interested',
+};
+const stageColors = {
+  new_lead: 'var(--text-4)', studying: 'var(--sky)', pitch_ready: 'var(--violet)',
+  email_sent: 'var(--lime)', replied: 'var(--coral)', call_booked: 'var(--ok)',
+  closed: 'var(--ok)', not_interested: 'var(--bad)',
+};
+
 export default function Dashboard() {
   const { dashboardStats, activities, loadingDash, refreshDashboard } = useApp();
   const { user } = useAuth();
@@ -53,91 +65,197 @@ export default function Dashboard() {
   const [showPowerOverlay, setShowPowerOverlay] = useState(false);
 
   const s = dashboardStats;
-  const firstName = user?.full_name?.split(' ')[0] || 'there';
+  const firstName = user?.full_name?.split(' ')[0] || user?.name?.split(' ')[0] || 'there';
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Hey' : 'Good evening';
+  const urgentCount = activities.filter(a => a.type === 'reply_received').length;
 
   const spark1 = s?.charts?.weekly_emails?.map(d => d.count) || [12, 18, 14, 22, 24, 20, 30, 28, 36, 40, 38, 44, 52, 48, 60];
   const spark2 = [40, 38, 42, 36, 44, 40, 48, 44, 52, 50, 58, 54, 62, 60, 66];
   const spark3 = s?.charts?.weekly_replies?.map(d => d.count) || [5, 6, 5, 7, 6, 8, 7, 9, 8, 10, 11, 10, 12, 13, 14];
 
-  const emailsSent = formatNumber(s?.emails_month ?? 0);
-  const replyRate = s?.reply_rate != null ? `${Number(s.reply_rate).toFixed(1)}%` : '—';
-  const meetingsBooked = formatNumber(s?.call_booked ?? 0);
-  const deliverability = '98.6%';
+  const stats = {
+    leadsFound:       s?.total_leads ?? 0,
+    leadsToday:       s?.leads_today ?? 0,
+    pitchesSent:      s?.emails_today ?? 0,
+    pitchesMonth:     formatNumber(s?.emails_month ?? 0),
+    openRate:         s?.open_rate != null ? Number(s.open_rate).toFixed(1) : '0.0',
+    replyRate:        s?.reply_rate != null ? Number(s.reply_rate).toFixed(1) : '0.0',
+    pipeline:         formatNumber(s?.pipeline_value ?? 0),
+    callsBooked:      s?.call_booked ?? 0,
+    totalLeads:       formatNumber(s?.total_leads ?? 0),
+    queueSize:        s?.queue_size ?? 0,
+    hotLeads:         s?.hot_leads ?? 0,
+    activeCampaigns:  s?.active_campaigns ?? 0,
+  };
 
-  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  const crmStages = s?.stage_distribution
+    ? Object.entries(s.stage_distribution)
+        .filter(([, v]) => v > 0)
+        .map(([stage, count]) => ({
+          name: stage,
+          label: stageLabels[stage] || stage,
+          color: stageColors[stage] || 'var(--text-4)',
+          count,
+        }))
+    : [];
 
   if (loadingDash) {
     return (
-      <div className="page">
-        <div className="grid g-4" style={{ marginBottom: 24 }}>
+      <div style={{ padding: '28px 32px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 24 }}>
           {[0, 1, 2, 3].map(i => (
-            <div key={i} className="stat" style={{ height: 120, background: 'var(--surface-2)', animation: 'none' }} />
+            <div key={i} className="skeleton" style={{ height: 130, borderRadius: 12 }} />
           ))}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12 }}>
+          <div className="skeleton" style={{ height: 320, borderRadius: 12 }} />
+          <div className="skeleton" style={{ height: 320, borderRadius: 12 }} />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="page">
-      {/* Page header */}
-      <div className="page__head">
-        <div>
-          <div className="muted" style={{ fontSize: 11.5, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>
-            {today}
+    <div style={{ padding: '28px 32px', maxWidth: 1360, margin: '0 auto' }}>
+
+      {/* ── Page Header ── */}
+      <div style={{ marginBottom: 28 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 20 }}>
+          <div>
+            <h1 style={{
+              fontFamily: 'var(--f-serif)',
+              fontStyle: 'italic',
+              fontSize: 32,
+              fontWeight: 400,
+              color: 'var(--text)',
+              letterSpacing: '-0.5px',
+              lineHeight: 1.15,
+              margin: 0,
+            }}>
+              {greeting},{' '}
+              <span style={{ color: 'var(--text-2)' }}>{firstName}</span>
+              {' '}—{' '}
+              <span style={{ color: 'var(--text-3)', fontWeight: 300 }}>
+                {stats.pitchesSent === 0 ? 'ready to start sending.' : `${stats.pitchesSent} pitches out the door.`}
+              </span>
+            </h1>
+            {urgentCount > 0 && (
+              <p style={{ marginTop: 6, fontSize: 13, color: 'var(--coral)', fontWeight: 500, margin: '6px 0 0' }}>
+                <span style={{ fontWeight: 700 }}>{urgentCount} conversation{urgentCount !== 1 ? 's' : ''}</span> need a human.{' '}
+                <span style={{ color: 'var(--text-3)' }}>Everything else is on autopilot.</span>
+              </p>
+            )}
           </div>
-          <h1 className="page__title">
-            {new Date().getHours() < 12 ? 'Morning' : new Date().getHours() < 17 ? 'Hey' : 'Evening'}, {firstName} — <em>{emailsSent === '0' ? 'ready to start sending.' : `${emailsSent} emails out the door.`}</em>
-          </h1>
-          <div className="page__sub">
-            <span style={{ color: 'var(--coral)' }}>{activities.filter(a => a.type === 'reply_received').length} conversations need a human.</span>
-            {' '}Everything else is on autopilot.
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0, alignItems: 'center' }}>
+            <button className="btn" onClick={() => navigate('/leads')}>
+              + Import leads
+            </button>
+            <button
+              className="btn btn--primary"
+              onClick={() => setShowPowerOverlay(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              <Zap size={13} />
+              Power Email
+            </button>
           </div>
-        </div>
-        <div className="page__actions">
-          <button className="btn btn--ghost" onClick={() => navigate('/leads')}><Icon name="plus" />Import leads</button>
-          <button className="btn btn--primary" onClick={() => setShowPowerOverlay(true)}><Icon name="rocket" size={14} />Power Email</button>
         </div>
       </div>
 
-      {/* KPI row */}
-      <div className="grid g-4">
+      {/* ── Stat Tiles ── */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(4, 1fr)',
+        gap: 12,
+        marginBottom: 20,
+      }}>
+        {/* LEADS FOUND */}
         <div className="stat">
-          <div className="stat__label">Leads found</div>
-          <div className="stat__value stat__value--mono">{formatNumber(s?.total_leads ?? 0)}</div>
-          <div className="stat__delta stat__delta--up"><Icon name="arrowUp" size={11} />+{s?.leads_today ?? 0} today</div>
-          <div className="stat__spark"><Sparkline data={s?.charts?.weekly_leads?.map(d => d.count) || [0,1,2,1,3,2,4,3,5,4,6,5,8,7,10]} color="var(--lime)" /></div>
+          <div className="stat__label">
+            <span className="dot dot--lime" style={{ width: 5, height: 5 }} />
+            Leads Found
+          </div>
+          <div className="stat__value stat__value--mono">{formatNumber(stats.leadsFound)}</div>
+          <div className="stat__spark">
+            <Sparkline data={s?.charts?.weekly_leads?.map(d => d.count) || [0,1,2,1,3,2,4,3,5,4,6,5,8,7,10]} color="var(--lime)" />
+          </div>
+          <div className="stat__delta stat__delta--up">
+            <Icon name="arrowUp" size={11} />
+            +{stats.leadsToday} today
+          </div>
         </div>
+
+        {/* PITCHES SENT */}
         <div className="stat">
-          <div className="stat__label">Pitches sent</div>
-          <div className="stat__value stat__value--mono">{formatNumber(s?.emails_today ?? 0)}<span className="muted" style={{ fontSize: 14, fontWeight: 400 }}> today</span></div>
-          <div className="stat__delta"><Icon name="arrowR" size={11} />{formatNumber(s?.emails_month ?? 0)} this month</div>
-          <div className="stat__spark"><Sparkline data={spark1} /></div>
+          <div className="stat__label">
+            <span className="dot dot--lime" style={{ width: 5, height: 5 }} />
+            Pitches Sent
+          </div>
+          <div className="stat__value stat__value--mono">
+            {stats.pitchesSent}
+            <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--text-3)', marginLeft: 4 }}>today</span>
+          </div>
+          <div className="stat__spark">
+            <Sparkline data={spark1} color="var(--lime)" />
+          </div>
+          <div className="stat__delta">
+            <Icon name="arrowR" size={11} />
+            {stats.pitchesMonth} this month
+          </div>
         </div>
+
+        {/* OPENS */}
         <div className="stat">
-          <div className="stat__label">Opens</div>
-          <div className="stat__value">{s?.open_rate != null ? `${Number(s.open_rate).toFixed(1)}%` : '—'}</div>
-          <div className="stat__delta"><Icon name="arrowR" size={11} />reply rate {replyRate}</div>
-          <div className="stat__spark"><Sparkline data={spark2} color="var(--coral)" /></div>
+          <div className="stat__label">
+            <span className="dot" style={{ width: 5, height: 5, background: 'var(--coral)' }} />
+            Opens
+          </div>
+          <div className="stat__value">{stats.openRate}%</div>
+          <div className="stat__spark">
+            <Sparkline data={spark2} color="var(--coral)" />
+          </div>
+          <div className="stat__delta">
+            <Icon name="arrowR" size={11} />
+            reply rate {stats.replyRate}%
+          </div>
         </div>
+
+        {/* IN THE PIPE */}
         <div className="stat">
-          <div className="stat__label">In the pipe</div>
+          <div className="stat__label">
+            <span className="dot dot--ok" style={{ width: 5, height: 5 }} />
+            In The Pipe
+          </div>
           <div className="stat__value stat__value--mono" style={{ color: 'var(--ok)' }}>
-            ${formatNumber(s?.pipeline_value ?? 0)}
+            ${stats.pipeline}
           </div>
-          <div className="stat__delta stat__delta--up"><Icon name="arrowUp" size={11} />{meetingsBooked} calls booked</div>
-          <div className="stat__spark"><Sparkline data={[200,400,350,600,800,750,1000,1200,1100,1400,1600,1800,2000,2200,2400]} color="var(--ok)" /></div>
+          <div className="stat__spark">
+            <Sparkline data={[200,400,350,600,800,750,1000,1200,1100,1400,1600,1800,2000,2200,2400]} color="var(--ok)" />
+          </div>
+          <div className="stat__delta stat__delta--up">
+            <Icon name="arrowUp" size={11} />
+            {stats.callsBooked} calls booked
+          </div>
         </div>
       </div>
 
-      {/* Two-column: agent activity + schedule */}
-      <div className="grid" style={{ gridTemplateColumns: '2fr 1fr', marginTop: 24 }}>
-        {/* Agent activity */}
+      {/* ── Main Grid (2fr 1fr) ── */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '2fr 1fr',
+        gap: 12,
+        marginBottom: 12,
+      }}>
+        {/* What's happening */}
         <div className="card">
           <div className="card__head">
             <div className="row">
               <div className="card__title">What's happening</div>
-              <Badge kind="lime"><span className="dot dot--pulse" />Live</Badge>
+              <Badge kind="lime">
+                <span className="dot dot--pulse" />
+                Live
+              </Badge>
             </div>
             <div className="row">
               <button className="btn btn--ghost btn--sm">Last 24h</button>
@@ -146,26 +264,43 @@ export default function Dashboard() {
           </div>
           <div className="card__body" style={{ padding: 0 }}>
             {activities.length === 0 ? (
-              <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>
-                No activity yet. Start a campaign to see live updates here.
+              <div className="empty" style={{ padding: '32px 16px' }}>
+                <div className="empty__title">No activity yet</div>
+                <div className="empty__desc">Start a campaign to see live updates here.</div>
               </div>
             ) : activities.slice(0, 5).map((row, i) => {
               const meta = activityTagMap[row.type] ?? activityTagMap.lead_found;
               return (
-                <div key={i} style={{ display: 'flex', gap: 14, padding: '14px 16px', borderBottom: i < 4 ? '1px solid var(--line)' : 'none', background: meta.human ? 'var(--coral-soft)' : 'transparent' }}>
-                  <div className="mono" style={{ color: 'var(--text-3)', fontSize: 11, width: 56, flexShrink: 0, paddingTop: 2 }}>{formatDate(row.created_at)}</div>
+                <div key={i} style={{
+                  display: 'flex', gap: 14, padding: '14px 16px',
+                  borderBottom: i < Math.min(activities.length - 1, 4) ? '1px solid var(--line)' : 'none',
+                  background: meta.human ? 'var(--coral-soft)' : 'transparent',
+                }}>
+                  <div className="mono" style={{ color: 'var(--text-3)', fontSize: 11, width: 56, flexShrink: 0, paddingTop: 2 }}>
+                    {formatDate(row.created_at)}
+                  </div>
                   <div style={{ width: 8, marginTop: 6, flexShrink: 0 }}>
                     <span className="dot" style={{ color: meta.acc, width: 6, height: 6 }} />
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div className="row" style={{ gap: 8, marginBottom: 2 }}>
-                      <span className="mono" style={{ color: meta.acc, fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.06em' }}>{meta.tag}</span>
+                      <span className="mono" style={{ color: meta.acc, fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.06em' }}>
+                        {meta.tag}
+                      </span>
                     </div>
                     <div style={{ fontSize: 13 }}>{row.message}</div>
-                    {row.channel_name && <div className="muted" style={{ fontSize: 11, marginTop: 2, fontFamily: 'var(--f-mono)' }}>{row.channel_name}</div>}
+                    {row.channel_name && (
+                      <div className="muted" style={{ fontSize: 11, marginTop: 2, fontFamily: 'var(--f-mono)' }}>
+                        {row.channel_name}
+                      </div>
+                    )}
                   </div>
                   {meta.human && (
-                    <button className="btn btn--sm btn--coral" style={{ alignSelf: 'center' }} onClick={() => navigate('/email')}>
+                    <button
+                      className="btn btn--sm btn--coral"
+                      style={{ alignSelf: 'center' }}
+                      onClick={() => navigate('/email')}
+                    >
                       Reply <Icon name="arrowR" size={11} />
                     </button>
                   )}
@@ -175,52 +310,87 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Quick stats */}
+        {/* Where deals stand */}
         <div className="card">
           <div className="card__head">
             <div className="card__title">Where deals stand</div>
-            <button className="btn btn--ghost btn--sm" onClick={() => navigate('/crm')}>View CRM</button>
+            <button className="btn btn--ghost btn--sm" onClick={() => navigate('/crm')}>
+              View CRM
+            </button>
           </div>
           <div className="card__body" style={{ padding: 0 }}>
-            {s?.stage_distribution && Object.entries(s.stage_distribution).filter(([, v]) => v > 0).map(([stage, count], i, arr) => {
-              const stageLabels = { new_lead: 'New Lead', studying: 'Studying', pitch_ready: 'Pitch Ready', email_sent: 'Email Sent', replied: 'Replied', call_booked: 'Call Booked', closed: 'Closed', not_interested: 'Not Interested' };
-              const stageColors = { new_lead: 'var(--text-4)', studying: 'var(--sky)', pitch_ready: 'var(--violet)', email_sent: 'var(--lime)', replied: 'var(--coral)', call_booked: 'var(--ok)', closed: 'var(--ok)', not_interested: 'var(--bad)' };
-              return (
-                <div key={stage} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: i < arr.length - 1 ? '1px solid var(--line)' : 'none' }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: stageColors[stage] || 'var(--text-4)', flexShrink: 0 }} />
-                  <div style={{ flex: 1, fontSize: 12.5 }}>{stageLabels[stage] || stage}</div>
-                  <span className="mono" style={{ fontSize: 12 }}>{count}</span>
-                </div>
-              );
-            })}
-            {(!s?.stage_distribution || Object.values(s.stage_distribution).every(v => v === 0)) && (
-              <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--text-3)', fontSize: 12 }}>
-                No leads in pipeline yet.
+            {crmStages.length === 0 ? (
+              <div className="empty" style={{ padding: '24px 16px' }}>
+                <div className="empty__title">No leads in pipeline yet</div>
+                <div className="empty__desc">Add leads to your CRM to track deals here.</div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {crmStages.map((stage, i) => (
+                  <div key={stage.name} style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '12px 16px',
+                    borderBottom: i < crmStages.length - 1 ? '1px solid var(--line)' : 'none',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{
+                        width: 8, height: 8,
+                        borderRadius: '50%',
+                        background: stage.color,
+                        boxShadow: `0 0 6px ${stage.color}`,
+                        flexShrink: 0,
+                      }} />
+                      <span style={{ fontSize: 12.5, color: 'var(--text-2)' }}>{stage.label}</span>
+                    </div>
+                    <span style={{
+                      fontSize: 12,
+                      fontWeight: 700,
+                      fontFamily: 'var(--f-mono)',
+                      color: 'var(--text)',
+                    }}>{stage.count}</span>
+                  </div>
+                ))}
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* Bottom row: Inbox + Stats */}
-      <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', marginTop: 24 }}>
+      {/* ── Bottom Grid (1fr 1fr) ── */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: 12,
+      }}>
+        {/* Recent replies */}
         <div className="card">
           <div className="card__head">
             <div className="row">
               <div className="card__title">Humans responded</div>
-              {activities.filter(a => a.type === 'reply_received').length > 0 && (
-                <Badge kind="coral"><span className="dot dot--pulse-coral" />{activities.filter(a => a.type === 'reply_received').length} unread</Badge>
+              {urgentCount > 0 && (
+                <Badge kind="coral">
+                  <span className="dot dot--pulse-coral" />
+                  {urgentCount} unread
+                </Badge>
               )}
             </div>
-            <button className="btn btn--ghost btn--sm" onClick={() => navigate('/email')}>View inbox <Icon name="chev" size={11} /></button>
+            <button className="btn btn--ghost btn--sm" onClick={() => navigate('/email')}>
+              View inbox <Icon name="chev" size={11} />
+            </button>
           </div>
           <div className="card__body" style={{ padding: 0 }}>
-            {activities.filter(a => a.type === 'reply_received').length === 0 ? (
-              <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--text-3)', fontSize: 12 }}>
-                All caught up. No pending replies.
+            {urgentCount === 0 ? (
+              <div className="empty" style={{ padding: '24px 16px' }}>
+                <div className="empty__title">All caught up</div>
+                <div className="empty__desc">No pending replies — everything's being handled.</div>
               </div>
             ) : activities.filter(a => a.type === 'reply_received').slice(0, 3).map((row, i, arr) => (
-              <div key={i} style={{ display: 'flex', gap: 12, padding: 14, borderBottom: i < arr.length - 1 ? '1px solid var(--line)' : 'none' }}>
+              <div key={i} style={{
+                display: 'flex', gap: 12, padding: 14,
+                borderBottom: i < arr.length - 1 ? '1px solid var(--line)' : 'none',
+              }}>
                 <Avatar name={row.channel_name || 'Unknown'} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="row" style={{ justifyContent: 'space-between', marginBottom: 2 }}>
@@ -234,22 +404,37 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* Quick numbers */}
         <div className="card">
           <div className="card__head">
-            <div className="card__title">Numbers</div>
-            <Badge kind="ok"><Icon name="check" size={11} />Live data</Badge>
+            <div className="card__title">Quick Numbers</div>
+            <Badge kind="ok">
+              <Icon name="check" size={11} />
+              Live data
+            </Badge>
           </div>
-          <div className="card__body">
-            <div className="grid g-2" style={{ gap: 16 }}>
+          <div className="card__body" style={{ padding: '8px 16px 16px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
               {[
-                { l: 'Total leads', v: formatNumber(s?.total_leads ?? 0) },
-                { l: 'Leads today',  v: formatNumber(s?.leads_today ?? 0) },
-                { l: 'Emails today', v: formatNumber(s?.emails_today ?? 0) },
-                { l: 'Conversion',   v: s?.conversion_rate != null ? `${Number(s.conversion_rate).toFixed(1)}%` : '—' },
-              ].map((m, i) => (
-                <div key={i} style={{ padding: 12, border: '1px solid var(--line)', borderRadius: 'var(--r)', background: 'var(--bg-2)' }}>
-                  <div className="mono muted" style={{ fontSize: 10.5, marginBottom: 6 }}>{m.l.toUpperCase()}</div>
-                  <div className="mono" style={{ fontSize: 20, letterSpacing: '-0.02em' }}>{m.v}</div>
+                { label: 'Total Leads in DB',    value: stats.totalLeads,      color: 'var(--text)' },
+                { label: 'Leads Today',           value: formatNumber(s?.leads_today ?? 0), color: 'var(--lime)' },
+                { label: 'HOT Leads Available',   value: formatNumber(stats.hotLeads),      color: 'var(--coral)' },
+                { label: 'Campaigns Active',      value: formatNumber(stats.activeCampaigns), color: 'var(--lime)' },
+                { label: 'Conversion Rate',       value: s?.conversion_rate != null ? `${Number(s.conversion_rate).toFixed(1)}%` : '—', color: 'var(--ok)' },
+              ].map(({ label, value, color }) => (
+                <div key={label} style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '9px 0',
+                  borderBottom: '1px solid var(--line)',
+                }}>
+                  <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{label}</span>
+                  <span style={{
+                    fontSize: 13, fontWeight: 700,
+                    fontFamily: 'var(--f-mono)',
+                    color,
+                  }}>{value}</span>
                 </div>
               ))}
             </div>
@@ -258,7 +443,10 @@ export default function Dashboard() {
       </div>
 
       {showPowerOverlay && (
-        <PowerSendOverlay maxLeads={100} onClose={() => { setShowPowerOverlay(false); refreshDashboard(); }} />
+        <PowerSendOverlay
+          maxLeads={100}
+          onClose={() => { setShowPowerOverlay(false); refreshDashboard(); }}
+        />
       )}
     </div>
   );
