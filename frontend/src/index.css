@@ -90,6 +90,8 @@
 
   /* ── Legacy aliases (keep pages working) ── */
   --gradient-orange:  linear-gradient(135deg, #ff9f00, #ff6b00);
+  --bg-base:          var(--bg);
+  --bg-surface:       var(--surface);
   --bg-primary:       var(--bg);
   --bg-secondary:     var(--surface);
   --bg-card:          var(--surface);

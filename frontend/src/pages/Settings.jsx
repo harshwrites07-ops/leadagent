@@ -463,7 +463,7 @@ export default function Settings() {
             </div>
           </div>
 
-          <button className="btn btn--lime btn--lg" onClick={saveVoiceProfile} disabled={savingVoice} style={{ alignSelf: 'flex-end', minWidth: 200 }}>
+          <button className="btn btn--primary btn--lg" onClick={saveVoiceProfile} disabled={savingVoice} style={{ alignSelf: 'flex-end', minWidth: 200 }}>
             {savingVoice ? 'Saving & rebuilding...' : 'Save voice profile'}
           </button>
         </div>
