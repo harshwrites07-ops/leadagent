@@ -7,24 +7,25 @@ import api from '../utils/api';
 
 const ALL_PLANS = ['trial', 'free', 'starter', 'pro', 'growth', 'agency'];
 
-const PLAN_COLORS = {
-  trial: '#6e6e7a', free: '#6e6e7a', starter: '#8ec5ff',
-  pro: '#D4FF00', growth: '#D4FF00', agency: '#ff8a73',
-};
+function planBadgeClass(plan) {
+  if (plan === 'agency') return 'badge badge--lime';
+  if (plan === 'pro' || plan === 'growth') return 'badge badge--ok';
+  return 'badge badge--neutral';
+}
 
 export default function Admin() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [users, setUsers] = useState([]);
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [users, setUsers]           = useState([]);
+  const [stats, setStats]           = useState(null);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState('');
   const [actionLoading, setActionLoading] = useState('');
-  const [expandedUser, setExpandedUser] = useState(null);
-  const [search, setSearch] = useState('');
+  const [expandedUser, setExpandedUser]   = useState(null);
+  const [search, setSearch]         = useState('');
   const [limitEdits, setLimitEdits] = useState({});
   const [seederInfo, setSeederInfo] = useState(null);
-  const [scraping, setScraping] = useState(false);
+  const [scraping, setScraping]     = useState(false);
   const pollRef = useRef(null);
 
   useEffect(() => {
@@ -48,10 +49,8 @@ export default function Admin() {
   };
 
   const loadSeeder = async () => {
-    try {
-      const { data } = await api.get('/auth/admin/seeder-status');
-      setSeederInfo(data);
-    } catch {}
+    try { const { data } = await api.get('/auth/admin/seeder-status'); setSeederInfo(data); }
+    catch {}
   };
 
   const scrapeNow = async () => {
@@ -59,20 +58,10 @@ export default function Admin() {
     try {
       const { data } = await api.post('/auth/admin/seed-now');
       toast.success(data.message || 'Seeder started!');
-      // Poll status every 5s for 3 minutes
       if (pollRef.current) clearInterval(pollRef.current);
-      pollRef.current = setInterval(async () => {
-        await loadSeeder();
-        await load();
-      }, 5000);
-      setTimeout(() => {
-        if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-        setScraping(false);
-      }, 180000);
-    } catch (e) {
-      toast.error(e.response?.data?.error || e.message);
-      setScraping(false);
-    }
+      pollRef.current = setInterval(async () => { await loadSeeder(); await load(); }, 5000);
+      setTimeout(() => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } setScraping(false); }, 180000);
+    } catch (e) { toast.error(e.response?.data?.error || e.message); setScraping(false); }
   };
 
   const setPlan = async (id, plan) => {
@@ -131,252 +120,192 @@ export default function Admin() {
 
   if (!user?.is_admin) return null;
 
+  const isSeeding = scraping || seederInfo?.seederStatus?.running;
+
   return (
-    <div style={{ padding: 0 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-        <h1 style={s.title}>Admin Panel</h1>
-        <button onClick={load} style={s.refreshBtn} title="Refresh">
-          <RefreshCw size={13} />
-        </button>
+    <div style={{ padding: '28px 32px', maxWidth: 1360, margin: '0 auto' }}>
+      <div className="page__head">
+        <h1 className="page__title">Admin Panel</h1>
+        <button onClick={load} className="btn btn--ghost btn--sm" title="Refresh"><RefreshCw size={13} /></button>
       </div>
 
-      {/* Stats row */}
       {stats && (
-        <div style={s.statsGrid}>
+        <div className="grid g-4" style={{ marginBottom: 20 }}>
           {[
-            { icon: <Users size={16} />, label: 'Total Users', value: stats.total_users, sub: `${stats.active_users} active (30d)` },
-            { icon: <Target size={16} />, label: 'User Leads', value: stats.total_leads?.toLocaleString(), sub: 'in user DBs' },
-            { icon: <Mail size={16} />, label: 'Emails Sent', value: stats.total_emails?.toLocaleString(), sub: 'all time' },
+            { icon: <Users size={16} />, label: 'Total Users',  value: stats.total_users, sub: `${stats.active_users} active (30d)` },
+            { icon: <Target size={16} />, label: 'User Leads',  value: stats.total_leads?.toLocaleString(), sub: 'in user DBs' },
+            { icon: <Mail size={16} />, label: 'Emails Sent',   value: stats.total_emails?.toLocaleString(), sub: 'all time' },
             { icon: <Database size={16} />, label: 'Master DB', value: (stats.master_leads ?? 0).toLocaleString(), sub: `${(stats.master_with_email ?? 0).toLocaleString()} with email` },
-          ].map(s2 => (
-            <div key={s2.label} style={s.statCard}>
-              <div style={{ color: 'var(--lime)', marginBottom: 8 }}>{s2.icon}</div>
-              <div style={s.statValue}>{s2.value ?? '—'}</div>
-              <div style={s.statLabel}>{s2.label}</div>
-              <div style={s.statSub}>{s2.sub}</div>
+          ].map(item => (
+            <div key={item.label} className="stat">
+              <div style={{ color: 'var(--lime)', marginBottom: 8 }}>{item.icon}</div>
+              <div className="stat__value--mono">{item.value ?? '—'}</div>
+              <div className="stat__label" style={{ marginTop: 4, marginBottom: 0 }}>{item.label}</div>
+              <div className="stat__meta">{item.sub}</div>
             </div>
           ))}
         </div>
       )}
 
-      {/* Seeder control */}
-      <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 12, padding: '18px 20px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Lead Seeder</span>
-            <span style={{
-              fontSize: 10, fontWeight: 700, fontFamily: 'var(--f-mono)',
-              padding: '2px 8px', borderRadius: 99,
-              background: seederInfo?.seederStatus?.running ? '#D4FF0022' : '#6e6e7a22',
-              color: seederInfo?.seederStatus?.running ? 'var(--lime)' : 'var(--text-3)',
-              border: `1px solid ${seederInfo?.seederStatus?.running ? '#D4FF0044' : '#6e6e7a44'}`,
-            }}>
-              {seederInfo?.seederStatus?.running ? '● RUNNING' : '○ IDLE'}
-            </span>
+      <div className="card" style={{ marginBottom: 16, padding: '18px 20px' }}>
+        <div className="row row--between" style={{ justifyContent: 'space-between' }}>
+          <div>
+            <div className="row" style={{ gap: 8, marginBottom: 4 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Lead Seeder</span>
+              <span className={`badge ${isSeeding ? 'badge--warn' : 'badge--neutral'}`}>
+                {isSeeding ? '● RUNNING' : '○ IDLE'}
+              </span>
+            </div>
+            <div className="t-mono t-muted" style={{ fontSize: 12 }}>
+              {seederInfo ? (
+                <>
+                  DB: <b style={{ color: 'var(--text-2)' }}>{seederInfo.withEmail?.toLocaleString()}</b> leads with email
+                  {' · '}Last saved: <b style={{ color: 'var(--text-2)' }}>{seederInfo.seederStatus?.lastCycleSaved ?? '—'}</b> leads
+                  {seederInfo.seederStatus?.lastCycleAt ? ` · ${new Date(seederInfo.seederStatus.lastCycleAt).toLocaleTimeString()}` : ''}
+                  {' · '}
+                  <span style={{ color: seederInfo.ytKeyCount > 0 ? 'var(--lime)' : 'var(--coral)' }}>
+                    {seederInfo.ytKeyCount > 0 ? `${seederInfo.ytKeyCount} YT API keys` : '⚠ NO YT API KEYS'}
+                  </span>
+                </>
+              ) : 'Loading…'}
+            </div>
           </div>
-          <div style={{ fontSize: 12, color: 'var(--text-3)', fontFamily: 'var(--f-mono)' }}>
-            {seederInfo ? (
-              <>
-                DB: <b style={{ color: 'var(--text-2)' }}>{seederInfo.withEmail?.toLocaleString()}</b> leads with email
-                {' · '}Last saved: <b style={{ color: 'var(--text-2)' }}>{seederInfo.seederStatus?.lastCycleSaved ?? '—'}</b> leads
-                {seederInfo.seederStatus?.lastCycleAt ? ` · ${new Date(seederInfo.seederStatus.lastCycleAt).toLocaleTimeString()}` : ''}
-                {seederInfo.seederStatus?.currentKeyword ? ` · Scanning: "${seederInfo.seederStatus.currentKeyword}"` : ''}
-                {' · '}
-                <span style={{ color: seederInfo.ytKeyCount > 0 ? 'var(--lime)' : 'var(--coral)' }}>
-                  {seederInfo.ytKeyCount > 0 ? `${seederInfo.ytKeyCount} YT API keys` : '⚠ NO YT API KEYS — InnerTube only'}
-                </span>
-              </>
-            ) : 'Loading…'}
+          <div className="row" style={{ gap: 8 }}>
+            <button onClick={loadSeeder} className="btn btn--ghost btn--sm" title="Refresh status"><RefreshCw size={13} /></button>
+            <button onClick={scrapeNow} disabled={isSeeding} className="btn btn--primary">
+              <Play size={12} />{scraping ? 'Starting…' : isSeeding ? 'Running…' : 'Scrape Now'}
+            </button>
           </div>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={loadSeeder} style={{ ...s.refreshBtn }} title="Refresh status">
-            <RefreshCw size={13} />
-          </button>
-          <button
-            onClick={scrapeNow}
-            disabled={scraping || seederInfo?.seederStatus?.running}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              background: 'var(--lime)', color: '#0a0a0c',
-              border: 'none', borderRadius: 8,
-              padding: '8px 16px', fontSize: 12, fontWeight: 700,
-              cursor: (scraping || seederInfo?.seederStatus?.running) ? 'not-allowed' : 'pointer',
-              opacity: (scraping || seederInfo?.seederStatus?.running) ? 0.6 : 1,
-              fontFamily: 'var(--f-sans)',
-            }}
-          >
-            <Play size={12} />
-            {scraping ? 'Starting…' : seederInfo?.seederStatus?.running ? 'Running…' : 'Scrape Now'}
-          </button>
         </div>
       </div>
 
-      {error && <div style={s.errorBox}>{error}</div>}
+      {error && (
+        <div style={{ background: 'rgba(255,68,68,0.12)', border: '1px solid rgba(255,68,68,0.3)', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: '#FF4444', marginBottom: 16 }}>
+          {error}
+        </div>
+      )}
 
-      {/* Search */}
-      <div style={{ position: 'relative', marginBottom: 14 }}>
-        <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+      <div className="field" style={{ marginBottom: 14, position: 'relative' }}>
+        <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', pointerEvents: 'none' }} />
         <input
           value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Search users by name or email…"
-          style={{ ...s.searchInput, paddingLeft: 30 }}
+          className="input" style={{ paddingLeft: 30 }}
         />
       </div>
 
       {loading ? (
-        <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Loading users…</p>
+        <p className="t-muted" style={{ fontSize: 13 }}>Loading users…</p>
       ) : (
-        <div style={s.tableWrap}>
-          {filtered.map(u => {
-            const isBanned = !!(u.lockout_until && new Date(u.lockout_until) > new Date());
-            const edits = limitEdits[u.id] || {};
-            const isExpanded = expandedUser === u.id;
-            return (
-              <div key={u.id} style={{ ...s.userRow, borderBottom: '1px solid var(--border-subtle)' }}>
-                {/* Main row */}
-                <div style={s.userMain}>
-                  <div style={s.userAvatar}>
-                    {(u.full_name || u.email || '?')[0].toUpperCase()}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <span style={s.userName}>{u.full_name || '—'}</span>
-                      <span style={{ ...s.planBadge, background: `${PLAN_COLORS[u.plan] || '#6e6e7a'}22`, color: PLAN_COLORS[u.plan] || '#6e6e7a', border: `1px solid ${PLAN_COLORS[u.plan] || '#6e6e7a'}44` }}>
-                        {u.plan}
-                      </span>
-                      {isBanned && <span style={{ ...s.planBadge, background: 'rgba(255,68,68,0.12)', color: '#FF4444', border: '1px solid rgba(255,68,68,0.3)' }}>BANNED</span>}
-                      {u.is_admin ? <span style={{ ...s.planBadge, background: 'rgba(200,246,84,0.12)', color: 'var(--lime)', border: '1px solid rgba(200,246,84,0.3)' }}>ADMIN</span> : null}
-                    </div>
-                    <div style={s.userEmail}>{u.email}</div>
-                    <div style={{ display: 'flex', gap: 16, marginTop: 4, flexWrap: 'wrap' }}>
-                      <span style={s.metaItem}>
-                        <Target size={10} style={{ color: 'var(--text-muted)' }} />
-                        {u.leads_used_this_month ?? 0} leads used
-                      </span>
-                      <span style={s.metaItem}>
-                        <Mail size={10} style={{ color: 'var(--text-muted)' }} />
-                        {u.emails_used_this_month ?? 0} emails used
-                      </span>
-                      <span style={s.metaItem}>
-                        Joined {u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}
-                      </span>
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {/* Plan select */}
-                    <select
-                      value={u.plan} onChange={e => setPlan(u.id, e.target.value)}
-                      disabled={!!actionLoading}
-                      style={s.planSelect}
-                    >
-                      {ALL_PLANS.map(p => <option key={p}>{p}</option>)}
-                    </select>
-                    {/* Actions */}
-                    <button onClick={() => resetUsage(u.id)} disabled={!!actionLoading} title="Reset usage" style={s.iconBtn}>
-                      <RefreshCw size={12} />
-                    </button>
-                    <button onClick={() => banUser(u.id, isBanned)} disabled={!!actionLoading} title={isBanned ? 'Unban' : 'Ban'} style={{ ...s.iconBtn, color: isBanned ? 'var(--ok)' : '#FF8C00' }}>
-                      <Ban size={12} />
-                    </button>
-                    {u.id !== user.id && (
-                      <button onClick={() => deleteUser(u.id)} disabled={!!actionLoading} title="Delete user" style={{ ...s.iconBtn, color: '#FF4444' }}>
-                        <Trash2 size={12} />
-                      </button>
+        <div className="card" style={{ padding: 0 }}>
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>User</th><th>Plan</th><th>Leads</th><th>Emails</th><th>Joined</th><th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(u => {
+                const isBanned = !!(u.lockout_until && new Date(u.lockout_until) > new Date());
+                const edits = limitEdits[u.id] || {};
+                const isExpanded = expandedUser === u.id;
+                return (
+                  <React.Fragment key={u.id}>
+                    <tr>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span className="ava ava--lg" style={{ background: 'var(--surface-3)', color: 'var(--text-2)', fontSize: 14 }}>
+                            {(u.full_name || u.email || '?')[0].toUpperCase()}
+                          </span>
+                          <div>
+                            <div style={{ fontWeight: 600, color: 'var(--text)', fontSize: 13 }}>{u.full_name || '—'}</div>
+                            <div className="t-xs t-muted">{u.email}</div>
+                            <div className="row" style={{ gap: 10, marginTop: 3, flexWrap: 'wrap' }}>
+                              <span className="t-mono t-muted" style={{ fontSize: 10, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <Target size={10} />{u.leads_used_this_month ?? 0} leads
+                              </span>
+                              <span className="t-mono t-muted" style={{ fontSize: 10, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <Mail size={10} />{u.emails_used_this_month ?? 0} emails
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <span className={planBadgeClass(u.plan)}>{u.plan}</span>
+                        {isBanned && <span className="badge badge--bad" style={{ marginLeft: 4 }}>BANNED</span>}
+                        {u.is_admin && <span className="badge badge--lime" style={{ marginLeft: 4 }}>ADMIN</span>}
+                      </td>
+                      <td className="mono">{u.leads_used_this_month ?? 0}</td>
+                      <td className="mono">{u.emails_used_this_month ?? 0}</td>
+                      <td className="t-sm t-muted">{u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}</td>
+                      <td>
+                        <div className="row" style={{ gap: 6 }}>
+                          <select value={u.plan} onChange={e => setPlan(u.id, e.target.value)} disabled={!!actionLoading}
+                            className="input" style={{ height: 28, padding: '0 8px', fontSize: 11, width: 'auto' }}>
+                            {ALL_PLANS.map(p => <option key={p}>{p}</option>)}
+                          </select>
+                          <button onClick={() => resetUsage(u.id)} disabled={!!actionLoading} title="Reset usage" className="btn btn--ghost btn--sm"><RefreshCw size={12} /></button>
+                          <button onClick={() => banUser(u.id, isBanned)} disabled={!!actionLoading} title={isBanned ? 'Unban' : 'Ban'}
+                            className="btn btn--ghost btn--sm" style={{ color: isBanned ? 'var(--ok)' : '#FF8C00' }}>
+                            <Ban size={12} />
+                          </button>
+                          {u.id !== user.id && (
+                            <button onClick={() => deleteUser(u.id)} disabled={!!actionLoading} title="Delete user" className="btn btn--danger btn--sm">
+                              <Trash2 size={12} />
+                            </button>
+                          )}
+                          <button onClick={() => setExpandedUser(isExpanded ? null : u.id)} className="btn btn--ghost btn--sm">
+                            {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr>
+                        <td colSpan={6} style={{ padding: 0 }}>
+                          <div style={{ background: 'rgba(0,0,0,0.2)', borderTop: '1px solid var(--line)', padding: '14px 16px 16px' }}>
+                            <div className="t-mono" style={{ fontSize: 11, letterSpacing: '0.1em', color: 'var(--text-2)', fontWeight: 700, marginBottom: 12, textTransform: 'uppercase' }}>
+                              Custom Limits <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>(overrides plan defaults)</span>
+                            </div>
+                            <div className="row" style={{ flexWrap: 'wrap', alignItems: 'flex-end', gap: 12 }}>
+                              {[
+                                { key: 'emails_limit', label: 'EMAIL LIMIT / MONTH', val: u.custom_emails_limit },
+                                { key: 'leads_limit',  label: 'LEAD LIMIT / MONTH',  val: u.custom_leads_limit },
+                                { key: 'emails_used',  label: 'EMAILS USED',          val: u.emails_used_this_month },
+                                { key: 'leads_used',   label: 'LEADS USED',           val: u.leads_used_this_month },
+                              ].map(({ key, label, val }) => (
+                                <div key={key}>
+                                  <label className="field__label">{label}</label>
+                                  <input
+                                    type="number" placeholder={`Plan default`}
+                                    value={edits[key] !== undefined ? edits[key] : (val ?? '')}
+                                    onChange={e => editLimit(u.id, key, e.target.value)}
+                                    className="input" style={{ width: 130, padding: '6px 10px', fontSize: 12 }}
+                                  />
+                                </div>
+                              ))}
+                              <button onClick={() => saveLimits(u.id)} disabled={actionLoading === `limits-${u.id}` || !Object.keys(edits).length} className="btn btn--primary">
+                                <Zap size={11} /> Save
+                              </button>
+                            </div>
+                            <div className="t-muted" style={{ marginTop: 8, fontSize: 11 }}>
+                              Leave blank to use plan default · Set to 0 to block access · Set to 999999 for unlimited
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
                     )}
-                    <button onClick={() => setExpandedUser(isExpanded ? null : u.id)} style={{ ...s.iconBtn, color: 'var(--text-muted)' }}>
-                      {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Expanded: custom limits */}
-                {isExpanded && (
-                  <div style={s.expandedSection}>
-                    <div style={s.expandedTitle}>Custom Limits <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(overrides plan defaults)</span></div>
-                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                      <div>
-                        <label style={s.fieldLabel}>EMAIL LIMIT / MONTH</label>
-                        <input
-                          type="number" placeholder={`Plan default`}
-                          value={edits.emails_limit !== undefined ? edits.emails_limit : (u.custom_emails_limit ?? '')}
-                          onChange={e => editLimit(u.id, 'emails_limit', e.target.value)}
-                          style={s.limitInput}
-                        />
-                      </div>
-                      <div>
-                        <label style={s.fieldLabel}>LEAD LIMIT / MONTH</label>
-                        <input
-                          type="number" placeholder={`Plan default`}
-                          value={edits.leads_limit !== undefined ? edits.leads_limit : (u.custom_leads_limit ?? '')}
-                          onChange={e => editLimit(u.id, 'leads_limit', e.target.value)}
-                          style={s.limitInput}
-                        />
-                      </div>
-                      <div>
-                        <label style={s.fieldLabel}>EMAILS USED</label>
-                        <input
-                          type="number" placeholder={u.emails_used_this_month ?? 0}
-                          value={edits.emails_used !== undefined ? edits.emails_used : ''}
-                          onChange={e => editLimit(u.id, 'emails_used', e.target.value)}
-                          style={s.limitInput}
-                        />
-                      </div>
-                      <div>
-                        <label style={s.fieldLabel}>LEADS USED</label>
-                        <input
-                          type="number" placeholder={u.leads_used_this_month ?? 0}
-                          value={edits.leads_used !== undefined ? edits.leads_used : ''}
-                          onChange={e => editLimit(u.id, 'leads_used', e.target.value)}
-                          style={s.limitInput}
-                        />
-                      </div>
-                      <button
-                        onClick={() => saveLimits(u.id)}
-                        disabled={actionLoading === `limits-${u.id}` || !Object.keys(edits).length}
-                        style={s.saveBtn}
-                      >
-                        <Zap size={11} /> Save
-                      </button>
-                    </div>
-                    <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>
-                      Leave blank to use plan default · Set to 0 to block access · Set to 999999 for unlimited
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-          {filtered.length === 0 && <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>No users found</div>}
+                  </React.Fragment>
+                );
+              })}
+              {filtered.length === 0 && (
+                <tr><td colSpan={6} style={{ textAlign: 'center', padding: 24, color: 'var(--text-3)', fontSize: 13 }}>No users found</td></tr>
+              )}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
   );
 }
-
-const s = {
-  title: { fontFamily: 'var(--font-heading)', fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', margin: '0', letterSpacing: '-0.02em' },
-  refreshBtn: { background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 6, color: 'var(--text-muted)', cursor: 'pointer', padding: '6px 8px', display: 'flex', alignItems: 'center' },
-  statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 20 },
-  statCard: { background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 10, padding: '14px 16px' },
-  statValue: { fontFamily: 'var(--font-heading)', fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' },
-  statLabel: { fontSize: 11, color: 'var(--text-secondary)', marginTop: 2, fontWeight: 600 },
-  statSub: { fontSize: 10, color: 'var(--text-muted)', marginTop: 1 },
-  errorBox: { background: 'rgba(255,68,68,0.12)', border: '1px solid rgba(255,68,68,0.3)', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: '#FF4444', marginBottom: 16 },
-  searchInput: { width: '100%', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '8px 12px', color: 'var(--text-primary)', fontSize: 12, fontFamily: 'var(--font-body)', outline: 'none', boxSizing: 'border-box' },
-  tableWrap: { background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 10, overflow: 'hidden' },
-  userRow: { background: 'transparent' },
-  userMain: { display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', flexWrap: 'wrap' },
-  userAvatar: { width: 36, height: 36, borderRadius: 9, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: 'var(--text-secondary)', flexShrink: 0 },
-  userName: { fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' },
-  userEmail: { fontSize: 11, color: 'var(--text-muted)', marginTop: 1 },
-  metaItem: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' },
-  planBadge: { fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 99, letterSpacing: '0.06em', fontFamily: 'var(--font-mono)', textTransform: 'uppercase' },
-  planSelect: { background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 6, color: 'var(--text-primary)', fontSize: 11, padding: '5px 8px', fontFamily: 'var(--font-body)', cursor: 'pointer' },
-  iconBtn: { background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 5, borderRadius: 5, display: 'flex', alignItems: 'center' },
-  expandedSection: { background: 'rgba(0,0,0,0.2)', borderTop: '1px solid var(--border-subtle)', padding: '14px 16px 16px' },
-  expandedTitle: { fontSize: 11, fontFamily: 'var(--font-mono)', letterSpacing: '0.1em', color: 'var(--text-secondary)', fontWeight: 700, marginBottom: 12, textTransform: 'uppercase' },
-  fieldLabel: { display: 'block', fontSize: 9, fontFamily: 'var(--font-mono)', letterSpacing: '0.12em', color: 'var(--text-muted)', marginBottom: 5, textTransform: 'uppercase' },
-  limitInput: { background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 6, color: 'var(--text-primary)', fontSize: 12, padding: '6px 10px', fontFamily: 'var(--font-body)', outline: 'none', width: 130 },
-  saveBtn: { display: 'flex', alignItems: 'center', gap: 5, background: 'var(--lime)', color: '#0a0a0c', border: 'none', borderRadius: 6, padding: '7px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font-body)' },
-};

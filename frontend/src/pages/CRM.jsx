@@ -5,14 +5,14 @@ import Icon from '../components/ui/Icon';
 import api, { formatNumber, formatDate } from '../utils/api';
 
 const STAGES = [
-  { id: 'new_lead',       label: 'Discovered',  color: 'var(--text-3)' },
+  { id: 'new_lead',       label: 'Discovered',  color: 'var(--text-4)' },
   { id: 'studying',       label: 'Enriched',    color: 'var(--sky)' },
   { id: 'pitch_ready',    label: 'Pitch Ready', color: 'var(--violet)' },
-  { id: 'email_sent',     label: 'Sent',        color: 'var(--lime-dim)' },
-  { id: 'replied',        label: 'Replied',     color: 'var(--coral)' },
-  { id: 'call_booked',    label: 'Call Booked', color: 'var(--ok)' },
+  { id: 'email_sent',     label: 'Sent',        color: 'var(--lime)' },
+  { id: 'replied',        label: 'Replied',     color: 'var(--ok)' },
+  { id: 'call_booked',    label: 'Call Booked', color: 'var(--coral)' },
   { id: 'closed',         label: 'Won',         color: 'var(--ok)' },
-  { id: 'not_interested', label: 'Lost',        color: 'var(--text-4)' },
+  { id: 'not_interested', label: 'Lost',        color: 'var(--bad)' },
 ];
 
 const NICHE_COLORS = {
@@ -31,6 +31,7 @@ export default function CRM() {
   const [leadPitch, setLeadPitch] = useState(null);
   const [newNote, setNewNote] = useState('');
   const [detailTab, setDetailTab] = useState('Timeline');
+  const [showAddModal, setShowAddModal] = useState(false);
 
   const columns = STAGES.map(s => ({
     ...s,
@@ -175,12 +176,26 @@ export default function CRM() {
                     );
                   })}
                 </div>
-                <button className="kb__add" onClick={() => navigate('/leads')}>
+                <button className="kb__add" onClick={() => setShowAddModal(true)}>
                   <Icon name="plus" size={11} /> Add
                 </button>
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Add lead modal */}
+      {showAddModal && (
+        <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && setShowAddModal(false)}>
+          <div className="modal" style={{ maxWidth: 400, padding: 28 }}>
+            <h2 style={{ fontFamily: 'var(--f-serif)', fontStyle: 'italic', fontSize: 20, fontWeight: 400, color: 'var(--text)', margin: '0 0 12px' }}>Add to Pipeline</h2>
+            <p style={{ fontSize: 13, color: 'var(--text-3)', margin: '0 0 20px' }}>Find a lead in your leads database and add them to the CRM pipeline.</p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button className="btn btn--ghost" onClick={() => setShowAddModal(false)}>Cancel</button>
+              <button className="btn btn--primary" onClick={() => { setShowAddModal(false); navigate('/leads'); }}>Browse Leads →</button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -190,6 +205,7 @@ export default function CRM() {
           position: 'fixed', top: 0, right: 0, bottom: 28, width: 440,
           background: 'var(--bg-2)', borderLeft: '1px solid var(--line)',
           zIndex: 20, overflowY: 'auto', padding: '24px 26px',
+          animation: 'slideIn 300ms cubic-bezier(0.16,1,0.3,1)',
         }}>
           <div className="row" style={{ marginBottom: 16 }}>
             <button className="btn btn--ghost btn--sm" onClick={() => setSelected(null)}>
