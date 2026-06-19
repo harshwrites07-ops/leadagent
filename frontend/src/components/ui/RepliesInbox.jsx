@@ -66,7 +66,7 @@ function ConversationView({ reply, onBack, onReplySent }) {
         </div>
         <div className="text-right flex-shrink-0">
           <p className="text-xs" style={{ color: 'var(--text-3)' }}>via</p>
-          <p className="text-xs font-semibold" style={{ color: '#a78bfa' }}>{reply.from_email}</p>
+          <p className="text-xs font-semibold" style={{ color: 'var(--violet)' }}>{reply.from_email}</p>
         </div>
       </div>
 
@@ -121,7 +121,7 @@ function ConversationView({ reply, onBack, onReplySent }) {
             <div className="max-w-[85%] rounded-2xl rounded-tr-sm px-4 py-3" style={{ background: 'var(--surface-2)', border: '1px solid var(--line)' }}>
               <p className="text-sm whitespace-pre-wrap leading-relaxed" style={{ color: 'var(--text-2)' }}>{r.body}</p>
             </div>
-            <div className="flex items-center gap-1 text-xs text-green-400">
+            <div className="flex items-center gap-1 text-xs" style={{ color: 'var(--ok)' }}>
               <Check size={11} /> Sent
             </div>
           </div>
@@ -301,8 +301,8 @@ export default function RepliesInbox({ onClose }) {
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 flex-shrink-0" style={{ borderBottom: '1px solid var(--line)' }}>
                   <div className="flex items-center gap-3">
-                    <div className="p-2 bg-purple-500/20 rounded-lg">
-                      <MessageSquare size={18} className="text-purple-400" />
+                    <div className="p-2 rounded-lg" style={{ background: 'var(--coral-soft)' }}>
+                      <MessageSquare size={18} style={{ color: 'var(--coral)' }} />
                     </div>
                     <div>
                       <h2 className="font-bold text-lg" style={{ color: 'var(--text)' }}>Replies Inbox</h2>
@@ -329,7 +329,7 @@ export default function RepliesInbox({ onClose }) {
                 <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-1">
                   {loading ? (
                     <div className="flex items-center justify-center h-48 gap-3">
-                      <RefreshCw size={24} className="animate-spin text-purple-400" />
+                      <RefreshCw size={24} className="animate-spin" style={{ color: 'var(--coral)' }} />
                       <span style={{ color: 'var(--text-2)' }}>Loading replies...</span>
                     </div>
                   ) : replies.length === 0 ? (
