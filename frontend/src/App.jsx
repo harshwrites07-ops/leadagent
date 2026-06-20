@@ -45,7 +45,7 @@ function RootRoute() {
   if (loading) return <LoadingScreen />;
   if (user) {
     if (!user.onboarding_completed) return <Navigate to="/onboarding" replace />;
-    return <Navigate to="/leads" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
   return <Landing />;
 }
@@ -106,7 +106,7 @@ function AppRoutes() {
           <AppProvider>
             <Layout>
               <Routes>
-                <Route path="/" element={<Dashboard />} />
+                <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/leads" element={<LeadFinder />} />
                 <Route path="/analyzer" element={<ChannelAnalyzer />} />
                 <Route path="/pitch/:leadId?" element={<PitchGenerator />} />
