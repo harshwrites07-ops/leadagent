@@ -1,5 +1,6 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import Icon from '../components/ui/Icon';
 import api, { formatNumber } from '../utils/api';
@@ -21,7 +22,7 @@ function CopyButton({ text }) {
   );
 }
 
-function ResultDossier({ result, navigate }) {
+function ResultDossier({ result, navigate, motionIndex = 0 }) {
   const [studyOpen, setStudyOpen] = useState(false);
   const [savedCrm, setSavedCrm] = useState(false);
   const { channel, deep_study, email, dm, subject_variants } = result;
@@ -54,7 +55,12 @@ function ResultDossier({ result, navigate }) {
   const scoreBadge = scoreNum >= 90 ? 'coral' : scoreNum >= 80 ? 'lime' : '';
 
   return (
-    <div className="dossier">
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, ease: [0.16,1,0.3,1], delay: motionIndex * 0.08 }}
+      className="dossier"
+    >
       {/* Hero (left, sticky) */}
       <div className="dossier__hero">
         <div className="dossier__channel-img">
@@ -84,12 +90,25 @@ function ResultDossier({ result, navigate }) {
         )}
 
         <div className="dossier__metric-grid">
-          <div className="dossier__metric"><div className="dossier__metric-l">Subs</div><div className="dossier__metric-v">{formatNumber(channel.subscriber_count ?? 0)}</div></div>
-          <div className="dossier__metric"><div className="dossier__metric-l">Avg views</div><div className="dossier__metric-v">{formatNumber(channel.avg_views ?? 0)}</div></div>
-          <div className="dossier__metric"><div className="dossier__metric-l">Engagement</div><div className="dossier__metric-v">{channel.engagement_rate != null ? `${channel.engagement_rate}%` : '—'}</div></div>
-          <div className="dossier__metric"><div className="dossier__metric-l">Upload rate</div><div className="dossier__metric-v">{channel.upload_frequency_days ? `${channel.upload_frequency_days}d` : '—'}</div></div>
-          <div className="dossier__metric"><div className="dossier__metric-l">Last upload</div><div className="dossier__metric-v">{channel.days_since_upload != null ? `${channel.days_since_upload}d` : '—'}</div></div>
-          <div className="dossier__metric"><div className="dossier__metric-l">Videos</div><div className="dossier__metric-v">{formatNumber(channel.total_videos ?? 0)}</div></div>
+          {[
+            { l: 'Subs',        v: formatNumber(channel.subscriber_count ?? 0) },
+            { l: 'Avg views',   v: formatNumber(channel.avg_views ?? 0) },
+            { l: 'Engagement',  v: channel.engagement_rate != null ? `${channel.engagement_rate}%` : '—' },
+            { l: 'Upload rate', v: channel.upload_frequency_days ? `${channel.upload_frequency_days}d` : '—' },
+            { l: 'Last upload', v: channel.days_since_upload != null ? `${channel.days_since_upload}d` : '—' },
+            { l: 'Videos',      v: formatNumber(channel.total_videos ?? 0) },
+          ].map((m, i) => (
+            <motion.div
+              key={m.l}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.05 + 0.1 }}
+              className="dossier__metric"
+            >
+              <div className="dossier__metric-l">{m.l}</div>
+              <div className="dossier__metric-v">{m.v}</div>
+            </motion.div>
+          ))}
         </div>
 
         {channel.email && (
@@ -104,7 +123,9 @@ function ResultDossier({ result, navigate }) {
         )}
 
         <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <button
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.97 }}
             className="btn btn--primary"
             disabled={savedCrm}
             onClick={handleSaveCrm}
@@ -112,15 +133,25 @@ function ResultDossier({ result, navigate }) {
           >
             <Icon name={savedCrm ? 'check' : 'star'} size={12} />
             {savedCrm ? 'In CRM' : 'Save to CRM'}
-          </button>
+          </motion.button>
           {channel.email && (
-            <button className="btn btn--ghost" onClick={handleSendEmail}>
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.97 }}
+              className="btn btn--ghost"
+              onClick={handleSendEmail}
+            >
               <Icon name="mail" size={12} />Send Email
-            </button>
+            </motion.button>
           )}
-          <button className="btn btn--coral" onClick={() => navigate(`/pitch?lead=${result.lead_id}`)}>
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.97 }}
+            className="btn btn--coral"
+            onClick={() => navigate(`/pitch?lead=${result.lead_id}`)}
+          >
             <Icon name="sparkle" size={12} />Draft pitch
-          </button>
+          </motion.button>
         </div>
       </div>
 
@@ -141,11 +172,19 @@ function ResultDossier({ result, navigate }) {
               <Icon name={studyOpen ? 'chevd' : 'chev'} size={11} />
               {studyOpen ? 'Collapse' : 'Read full analysis'}
             </button>
-            {studyOpen && (
-              <pre style={{ fontSize: 12, color: 'var(--text-2)', whiteSpace: 'pre-wrap', fontFamily: 'var(--f-mono)', lineHeight: 1.7, background: 'var(--bg-2)', borderRadius: 'var(--r)', padding: '12px 14px', border: '1px solid var(--line)', marginTop: 8 }}>
-                {deep_study}
-              </pre>
-            )}
+            <AnimatePresence>
+              {studyOpen && (
+                <motion.pre
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.25, ease: [0.16,1,0.3,1] }}
+                  style={{ fontSize: 12, color: 'var(--text-2)', whiteSpace: 'pre-wrap', fontFamily: 'var(--f-mono)', lineHeight: 1.7, background: 'var(--bg-2)', borderRadius: 'var(--r)', padding: '12px 14px', border: '1px solid var(--line)', marginTop: 8, overflow: 'hidden' }}
+                >
+                  {deep_study}
+                </motion.pre>
+              )}
+            </AnimatePresence>
           </div>
         )}
 
@@ -154,14 +193,20 @@ function ResultDossier({ result, navigate }) {
           <div className="dossier__section">
             <h3>Recommended angles <span className="muted">ranked by predicted reply rate</span></h3>
             {subject_variants.filter(Boolean).map((s, i) => (
-              <div key={i} className={`angle ${i === 0 ? 'angle--top' : ''}`}>
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.06 }}
+                className={`angle ${i === 0 ? 'angle--top' : ''}`}
+              >
                 <div className="angle__head">
                   <span className="angle__score">{95 - i * 8}/100</span>
                   <span style={{ fontSize: 13, fontWeight: 500, flex: 1 }}>{s}</span>
                   {i === 0 && <span className="badge badge--coral">Recommended</span>}
                   <CopyButton text={s} />
                 </div>
-              </div>
+              </motion.div>
             ))}
           </div>
         )}
@@ -171,7 +216,13 @@ function ResultDossier({ result, navigate }) {
           <div className="dossier__section">
             <h3>Recent uploads <span className="muted">last {recentVideos.length}</span></h3>
             {recentVideos.map((v, i) => (
-              <div key={i} className="vid-row">
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, x: -6 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.05 }}
+                className="vid-row"
+              >
                 <div className="vid-thumb">▶</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="vid-title">{v.title}</div>
@@ -180,7 +231,7 @@ function ResultDossier({ result, navigate }) {
                 <div className="muted mono" style={{ fontSize: 10.5, alignSelf: 'center' }}>
                   <Icon name="eye" size={11} />
                 </div>
-              </div>
+              </motion.div>
             ))}
           </div>
         )}
@@ -191,9 +242,16 @@ function ResultDossier({ result, navigate }) {
             <h3>Audience signal <span className="muted">from comment analysis</span></h3>
             <div className="row" style={{ gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
               {painPoints.map((p, i) => (
-                <span key={i} className="chan" style={{ padding: '4px 9px', fontSize: 11.5 }}>
+                <motion.span
+                  key={i}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: i * 0.05 }}
+                  className="chan"
+                  style={{ padding: '4px 9px', fontSize: 11.5 }}
+                >
                   {typeof p === 'object' ? p.label : p}
-                </span>
+                </motion.span>
               ))}
             </div>
           </div>
@@ -234,7 +292,7 @@ function ResultDossier({ result, navigate }) {
           </div>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -323,150 +381,249 @@ export default function ChannelAnalyzer() {
   return (
     <div className="page">
       {/* Page nav */}
-      <div className="row" style={{ marginBottom: 20, gap: 8 }}>
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, ease: [0.16,1,0.3,1] }}
+        className="row"
+        style={{ marginBottom: 20, gap: 8 }}
+      >
         <button className="btn btn--ghost btn--sm" onClick={() => navigate('/leads')}>
           <Icon name="chev" size={12} style={{ transform: 'rotate(180deg)' }} />Back to Lead Finder
         </button>
         <span className="muted" style={{ fontSize: 12 }}>·</span>
         <span className="mono muted" style={{ fontSize: 11.5 }}>Channel Analyzer · AI-powered dossier</span>
         <div style={{ flex: 1 }} />
-        {results.length > 0 && (
-          <button className="btn btn--ghost btn--sm" onClick={exportToCsv}>
-            <Icon name="download" size={12} />Export CSV
-          </button>
-        )}
-        {results.length > 0 && (
-          <button className="btn btn--coral" onClick={() => navigate(`/pitch?lead=${results[0]?.lead_id}`)}>
-            <Icon name="sparkle" size={12} />Draft pitch with this brief
-          </button>
-        )}
-      </div>
+        <AnimatePresence>
+          {results.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, x: 8 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 8 }}
+              className="row"
+              style={{ gap: 8 }}
+            >
+              <button className="btn btn--ghost btn--sm" onClick={exportToCsv}>
+                <Icon name="download" size={12} />Export CSV
+              </button>
+              <button className="btn btn--coral" onClick={() => navigate(`/pitch?lead=${results[0]?.lead_id}`)}>
+                <Icon name="sparkle" size={12} />Draft pitch with this brief
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
 
       {/* Input card */}
-      {(!results.length && !processing) && (
-        <div className="pm" style={{ marginBottom: 20 }}>
-          <div className="pm__head">
-            <div className="pm__icon"><Icon name="eye" size={18} /></div>
-            <div style={{ flex: 1 }}>
-              <div className="pm__title">Channel Analyzer</div>
-              <div className="pm__sub">Paste a YouTube URL. The agent scrapes, enriches, and writes your outreach.</div>
-            </div>
-          </div>
-
-          {/* Mode tabs */}
-          <div className="tabs" style={{ marginBottom: 16 }}>
-            {[
-              { key: 'single', label: 'Single URL',      sub: 'one channel' },
-              { key: 'paste',  label: 'Paste Multiple',  sub: 'line by line' },
-              { key: 'file',   label: 'Upload File',     sub: '.xlsx · .csv' },
-            ].map(t => (
-              <div key={t.key} className={`tab ${mode === t.key ? 'is-active' : ''}`} onClick={() => setMode(t.key)} style={{ padding: '8px 14px' }}>
-                <div style={{ fontWeight: 500, fontSize: 13 }}>{t.label}</div>
-                <div className="muted" style={{ fontSize: 10.5, marginTop: 1 }}>{t.sub}</div>
+      <AnimatePresence>
+        {(!results.length && !processing) && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.3, ease: [0.16,1,0.3,1] }}
+            className="pm"
+            style={{ marginBottom: 20 }}
+          >
+            <div className="pm__head">
+              <div className="pm__icon"><Icon name="eye" size={18} /></div>
+              <div style={{ flex: 1 }}>
+                <div className="pm__title">Channel Analyzer</div>
+                <div className="pm__sub">Paste a YouTube URL. The agent scrapes, enriches, and writes your outreach.</div>
               </div>
-            ))}
-          </div>
-
-          {mode === 'single' && (
-            <div className="field" style={{ marginBottom: 16 }}>
-              <div className="field__label">YouTube URL or @handle</div>
-              <input
-                className="input"
-                placeholder="https://youtube.com/@MrBeast  or  @handle  or  channel URL"
-                value={singleUrl}
-                onChange={e => setSingleUrl(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && !processing && handleProcess()}
-              />
-              <div className="muted" style={{ fontSize: 10.5, marginTop: 4 }}>Accepts: full YouTube URL, @handle, /channel/UC..., or custom URL</div>
             </div>
-          )}
 
-          {mode === 'paste' && (
-            <div className="field" style={{ marginBottom: 16 }}>
-              <div className="field__label">Channel URLs — one per line</div>
-              <textarea
-                className="input"
-                rows={6}
-                placeholder={'https://youtube.com/@MrBeast\nhttps://youtube.com/@mkbhd\n@veritasium'}
-                value={pasteText}
-                onChange={e => setPasteText(e.target.value)}
-                style={{ fontFamily: 'var(--f-mono)', fontSize: 12, lineHeight: 1.7, resize: 'vertical', width: '100%', boxSizing: 'border-box' }}
-              />
-              <div className="muted" style={{ fontSize: 10.5, marginTop: 4 }}>{getUrlList().length} channels detected</div>
+            {/* Mode tabs */}
+            <div className="tabs" style={{ marginBottom: 16 }}>
+              {[
+                { key: 'single', label: 'Single URL',      sub: 'one channel' },
+                { key: 'paste',  label: 'Paste Multiple',  sub: 'line by line' },
+                { key: 'file',   label: 'Upload File',     sub: '.xlsx · .csv' },
+              ].map(t => (
+                <div key={t.key} className={`tab ${mode === t.key ? 'is-active' : ''}`} onClick={() => setMode(t.key)} style={{ padding: '8px 14px' }}>
+                  <div style={{ fontWeight: 500, fontSize: 13 }}>{t.label}</div>
+                  <div className="muted" style={{ fontSize: 10.5, marginTop: 1 }}>{t.sub}</div>
+                </div>
+              ))}
             </div>
-          )}
 
-          {mode === 'file' && (
-            <div
-              onClick={() => fileRef.current?.click()}
-              style={{ border: '2px dashed var(--line-2)', borderRadius: 'var(--r)', padding: '32px 24px', textAlign: 'center', cursor: 'pointer', marginBottom: 16 }}
-            >
-              <Icon name="upload" size={26} style={{ color: 'var(--text-3)', margin: '0 auto 12px', display: 'block' }} />
-              {fileName ? (
-                <>
-                  <div style={{ color: 'var(--text)', fontWeight: 500, fontSize: 13 }}>{fileName}</div>
-                  <div className="mono" style={{ color: 'var(--ok)', fontSize: 11, marginTop: 4 }}>{fileUrls.length} channels loaded</div>
-                </>
-              ) : (
-                <>
-                  <div style={{ color: 'var(--text-2)', fontSize: 13, fontWeight: 500 }}>Drop your Excel or CSV file here</div>
-                  <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Column A = YouTube URL or @handle · .xlsx and .csv supported</div>
-                </>
+            <AnimatePresence mode="wait">
+              {mode === 'single' && (
+                <motion.div
+                  key="single"
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.2 }}
+                  className="field"
+                  style={{ marginBottom: 16 }}
+                >
+                  <div className="field__label">YouTube URL or @handle</div>
+                  <input
+                    className="input"
+                    placeholder="https://youtube.com/@MrBeast  or  @handle  or  channel URL"
+                    value={singleUrl}
+                    onChange={e => setSingleUrl(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && !processing && handleProcess()}
+                  />
+                  <div className="muted" style={{ fontSize: 10.5, marginTop: 4 }}>Accepts: full YouTube URL, @handle, /channel/UC..., or custom URL</div>
+                </motion.div>
               )}
-              <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} onChange={handleFileChange} />
+
+              {mode === 'paste' && (
+                <motion.div
+                  key="paste"
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.2 }}
+                  className="field"
+                  style={{ marginBottom: 16 }}
+                >
+                  <div className="field__label">Channel URLs — one per line</div>
+                  <textarea
+                    className="input"
+                    rows={6}
+                    placeholder={'https://youtube.com/@MrBeast\nhttps://youtube.com/@mkbhd\n@veritasium'}
+                    value={pasteText}
+                    onChange={e => setPasteText(e.target.value)}
+                    style={{ fontFamily: 'var(--f-mono)', fontSize: 12, lineHeight: 1.7, resize: 'vertical', width: '100%', boxSizing: 'border-box' }}
+                  />
+                  <div className="muted" style={{ fontSize: 10.5, marginTop: 4 }}>{getUrlList().length} channels detected</div>
+                </motion.div>
+              )}
+
+              {mode === 'file' && (
+                <motion.div
+                  key="file"
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <div
+                    onClick={() => fileRef.current?.click()}
+                    style={{ border: '2px dashed var(--line-2)', borderRadius: 'var(--r)', padding: '32px 24px', textAlign: 'center', cursor: 'pointer', marginBottom: 16 }}
+                  >
+                    <motion.div
+                      animate={{ y: [0, -5, 0] }}
+                      transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
+                    >
+                      <Icon name="upload" size={26} style={{ color: 'var(--text-3)', margin: '0 auto 12px', display: 'block' }} />
+                    </motion.div>
+                    {fileName ? (
+                      <>
+                        <div style={{ color: 'var(--text)', fontWeight: 500, fontSize: 13 }}>{fileName}</div>
+                        <div className="mono" style={{ color: 'var(--ok)', fontSize: 11, marginTop: 4 }}>{fileUrls.length} channels loaded</div>
+                      </>
+                    ) : (
+                      <>
+                        <div style={{ color: 'var(--text-2)', fontSize: 13, fontWeight: 500 }}>Drop your Excel or CSV file here</div>
+                        <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Column A = YouTube URL or @handle · .xlsx and .csv supported</div>
+                      </>
+                    )}
+                    <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} onChange={handleFileChange} />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <motion.button
+              whileHover={!processing && urlCount > 0 ? { scale: 1.01, y: -1 } : {}}
+              whileTap={!processing && urlCount > 0 ? { scale: 0.98 } : {}}
+              className="pm__cta"
+              onClick={handleProcess}
+              disabled={processing || urlCount === 0}
+            >
+              {processing
+                ? <><span className="dot dot--pulse" style={{ background: '#0a0a0c', width: 8, height: 8 }} /> Analyzing {progress.current}/{progress.total}...</>
+                : <><Icon name="bolt" size={16} />Analyze {urlCount > 1 ? `${urlCount} Channels` : 'Channel'}</>
+              }
+            </motion.button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Processing */}
+      <AnimatePresence>
+        {processing && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.97 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0 }}
+            className="card"
+            style={{ marginBottom: 20, textAlign: 'center', padding: '48px 24px' }}
+          >
+            <div className="row" style={{ justifyContent: 'center', gap: 10, marginBottom: 12 }}>
+              <span className="dot dot--pulse" />
+              <span style={{ fontSize: 13, color: 'var(--text-2)' }}>Scraping channel data... ({progress.current}/{progress.total})</span>
             </div>
-          )}
-
-          <button className="pm__cta" onClick={handleProcess} disabled={processing || urlCount === 0}>
-            {processing
-              ? <><span className="dot dot--pulse" style={{ background: '#0a0a0c', width: 8, height: 8 }} /> Analyzing {progress.current}/{progress.total}...</>
-              : <><Icon name="bolt" size={16} />Analyze {urlCount > 1 ? `${urlCount} Channels` : 'Channel'}</>
-            }
-          </button>
-        </div>
-      )}
-
-      {/* Progress */}
-      {processing && (
-        <div className="card" style={{ marginBottom: 20, textAlign: 'center', padding: '48px 24px' }}>
-          <div className="row" style={{ justifyContent: 'center', gap: 10, marginBottom: 12 }}>
-            <span className="dot dot--pulse" />
-            <span style={{ fontSize: 13, color: 'var(--text-2)' }}>Scraping channel data... ({progress.current}/{progress.total})</span>
-          </div>
-          {progress.total > 1 && (
-            <div style={{ maxWidth: 400, margin: '0 auto' }}>
-              <div style={{ height: 3, background: 'var(--line)', borderRadius: 99, overflow: 'hidden' }}>
-                <div style={{ height: '100%', background: 'var(--lime)', borderRadius: 99, width: `${(progress.current / progress.total) * 100}%`, transition: 'width 0.4s' }} />
+            {progress.total > 1 && (
+              <div style={{ maxWidth: 400, margin: '0 auto' }}>
+                <div style={{ height: 3, background: 'var(--line)', borderRadius: 99, overflow: 'hidden' }}>
+                  <motion.div
+                    animate={{ width: `${Math.round((progress.current / progress.total) * 100)}%` }}
+                    transition={{ duration: 0.5, ease: 'easeOut' }}
+                    style={{ height: '100%', background: 'var(--lime)', borderRadius: 99 }}
+                  />
+                </div>
               </div>
-            </div>
-          )}
-          <div className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>This takes 5–15 seconds per channel</div>
-        </div>
-      )}
+            )}
+            <div className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>This takes 5–15 seconds per channel</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Errors */}
-      {errors.length > 0 && (
-        <div className="card" style={{ borderColor: 'var(--coral-border)', background: 'var(--coral-soft)', marginBottom: 16 }}>
-          <div className="row" style={{ gap: 6, marginBottom: 8 }}>
-            <Icon name="x" size={12} style={{ color: 'var(--coral)' }} />
-            <span className="mono" style={{ fontSize: 11, color: 'var(--coral)' }}>{errors.length} error{errors.length > 1 ? 's' : ''}</span>
-          </div>
-          {errors.map((e, i) => (
-            <div key={i} className="muted" style={{ fontSize: 11 }}>
-              <span style={{ color: 'var(--text-2)' }}>{e.url}: </span>{e.error}
+      <AnimatePresence>
+        {errors.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="card"
+            style={{ borderColor: 'var(--coral-border)', background: 'var(--coral-soft)', marginBottom: 16 }}
+          >
+            <div className="row" style={{ gap: 6, marginBottom: 8 }}>
+              <Icon name="x" size={12} style={{ color: 'var(--coral)' }} />
+              <span className="mono" style={{ fontSize: 11, color: 'var(--coral)' }}>{errors.length} error{errors.length > 1 ? 's' : ''}</span>
             </div>
-          ))}
-        </div>
-      )}
+            {errors.map((e, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, x: -6 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.05 }}
+                className="muted"
+                style={{ fontSize: 11 }}
+              >
+                <span style={{ color: 'var(--text-2)' }}>{e.url}: </span>{e.error}
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Results — single dossier layout */}
-      {results.length === 1 && (
-        <ResultDossier result={results[0]} navigate={navigate} />
-      )}
+      <AnimatePresence>
+        {results.length === 1 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
+          >
+            <ResultDossier result={results[0]} navigate={navigate} motionIndex={0} />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Results — multiple cards */}
       {results.length > 1 && (
-        <>
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3 }}
+        >
           <div className="section-head">
             <h3>{results.length} channels analyzed</h3>
             <button className="btn btn--ghost btn--sm" onClick={exportToCsv}>
@@ -475,20 +632,33 @@ export default function ChannelAnalyzer() {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))', gap: 20 }}>
             {results.map((r, i) => (
-              <ResultDossier key={r.lead_id ?? i} result={r} navigate={navigate} />
+              <ResultDossier key={r.lead_id ?? i} result={r} navigate={navigate} motionIndex={i} />
             ))}
           </div>
-        </>
+        </motion.div>
       )}
 
       {/* Empty state */}
-      {!processing && results.length === 0 && errors.length === 0 && (
-        <div className="card" style={{ textAlign: 'center', padding: '48px 24px', opacity: 0.6 }}>
-          <Icon name="youtube" size={38} style={{ color: 'var(--coral)', margin: '0 auto 16px', display: 'block', opacity: 0.5 }} />
-          <div style={{ color: 'var(--text-2)', fontSize: 13 }}>Enter a YouTube channel URL above and click Analyze</div>
-          <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Works with @handles, channel URLs, and bulk uploads</div>
-        </div>
-      )}
+      <AnimatePresence>
+        {!processing && results.length === 0 && errors.length === 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="card"
+            style={{ textAlign: 'center', padding: '48px 24px', opacity: 0.6 }}
+          >
+            <motion.div
+              animate={{ y: [0, -6, 0] }}
+              transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              <Icon name="youtube" size={38} style={{ color: 'var(--coral)', margin: '0 auto 16px', display: 'block', opacity: 0.5 }} />
+            </motion.div>
+            <div style={{ color: 'var(--text-2)', fontSize: 13 }}>Enter a YouTube channel URL above and click Analyze</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Works with @handles, channel URLs, and bulk uploads</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

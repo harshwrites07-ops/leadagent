@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Flame, Thermometer, Snowflake, ChevronRight, ChevronDown, BarChart2, Target, Zap, CheckCircle, AlertCircle, Phone, RefreshCw } from 'lucide-react';
 import api from '../utils/api';
+import { useCountUp } from '../hooks/useCountUp';
 
 const TEMP_ICONS = { hot: Flame, warm: Thermometer, cold: Snowflake };
 
@@ -21,7 +23,12 @@ function IntentBar({ score }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       <div style={{ flex: 1, height: 4, background: 'var(--line-2)', borderRadius: 99, overflow: 'hidden' }}>
-        <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 99, transition: 'width 0.4s ease' }} />
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${pct}%` }}
+          transition={{ duration: 0.6, ease: [0.16,1,0.3,1], delay: 0.2 }}
+          style={{ height: '100%', background: color, borderRadius: 99 }}
+        />
       </div>
       <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color, minWidth: 36, textAlign: 'right' }}>{pct}%</span>
     </div>
@@ -50,8 +57,9 @@ function SignalGrid({ signals }) {
 function AngleCard({ angle, selected, onSelect }) {
   const isSelected = selected === angle.angle_name;
   return (
-    <div
+    <motion.div
       onClick={() => onSelect(angle)}
+      whileHover={{ scale: 1.01, y: -1 }}
       style={{
         border: `1px solid ${isSelected ? 'var(--lime)' : 'var(--line)'}`,
         borderRadius: 'var(--r)', padding: 14, cursor: 'pointer',
@@ -70,7 +78,7 @@ function AngleCard({ angle, selected, onSelect }) {
       <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6, whiteSpace: 'pre-wrap', fontFamily: 'var(--f-sans)', borderTop: '1px solid var(--line)', paddingTop: 8 }}>
         {angle.full_email}
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -131,7 +139,12 @@ function LeadRow({ cl, campaignId, onUpdate }) {
   };
 
   return (
-    <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: 8 }}>
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="card"
+      style={{ padding: 0, overflow: 'hidden', marginBottom: 8 }}
+    >
       <div onClick={() => setExpanded(e => !e)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', cursor: 'pointer' }}>
         {cl.thumbnail_url && (
           <img src={cl.thumbnail_url} alt="" style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} />
@@ -162,75 +175,82 @@ function LeadRow({ cl, campaignId, onUpdate }) {
         </div>
       </div>
 
-      {expanded && (
-        <div style={{ borderTop: '1px solid var(--line)', padding: '16px 16px 20px' }}>
-          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--text-3)', marginBottom: 8 }}>
-            REASON: {cl.intent_reason || '—'}
-          </div>
-          <SignalGrid signals={cl.intent_signals || {}} />
-
-          <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
-            <button onClick={runPsychology} disabled={!!loading} className="btn btn--ghost">
-              {loading === 'psych' ? <RefreshCw size={12} className="spin" /> : <Target size={12} />}
-              {angles.length ? 'Re-analyze' : 'Analyze Psychology + Generate Angles'}
-            </button>
-            {angles.length > 0 && (
-              <button onClick={runAngles} disabled={!!loading} className="btn btn--ghost">
-                {loading === 'angles' ? <RefreshCw size={12} /> : <Zap size={12} />}
-                Regenerate Angles
-              </button>
-            )}
-          </div>
-
-          {angles.length > 0 && (
-            <div style={{ marginTop: 16 }}>
-              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--text-4)', letterSpacing: '0.1em', marginBottom: 10 }}>SELECT AN ANGLE</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {angles.map(a => <AngleCard key={a.angle_name} angle={a} selected={selectedAngle} onSelect={selectAngle} />)}
-              </div>
+      <AnimatePresence>
+        {expanded && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            style={{ borderTop: '1px solid var(--line)', padding: '16px 16px 20px' }}
+          >
+            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--text-3)', marginBottom: 8 }}>
+              REASON: {cl.intent_reason || '—'}
             </div>
-          )}
+            <SignalGrid signals={cl.intent_signals || {}} />
 
-          {selectedAngle && (
-            <div style={{ marginTop: 16 }}>
-              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--text-4)', letterSpacing: '0.1em', marginBottom: 10 }}>EDIT EMAIL</div>
-              <label className="field__label">SUBJECT</label>
-              <input className="input" style={{ marginBottom: 10 }} value={editSubject} onChange={e => setEditSubject(e.target.value)} onBlur={saveEdits} placeholder="Email subject..." />
-              <label className="field__label">BODY</label>
-              <textarea className="input" style={{ minHeight: 160, resize: 'vertical', lineHeight: 1.6 }} value={editBody} onChange={e => setEditBody(e.target.value)} onBlur={saveEdits} placeholder="Email body..." />
-              {cl.email_quality_score > 0 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
-                  <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--text-4)' }}>EMAIL QUALITY</span>
-                  <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, fontWeight: 600, color: cl.email_quality_score >= 70 ? 'var(--ok)' : cl.email_quality_score >= 50 ? '#f59e0b' : 'var(--bad)' }}>
-                    {cl.email_quality_score}/100
-                  </span>
-                </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
+              <button onClick={runPsychology} disabled={!!loading} className="btn btn--ghost">
+                {loading === 'psych' ? <RefreshCw size={12} className="spin" /> : <Target size={12} />}
+                {angles.length ? 'Re-analyze' : 'Analyze Psychology + Generate Angles'}
+              </button>
+              {angles.length > 0 && (
+                <button onClick={runAngles} disabled={!!loading} className="btn btn--ghost">
+                  {loading === 'angles' ? <RefreshCw size={12} /> : <Zap size={12} />}
+                  Regenerate Angles
+                </button>
               )}
             </div>
-          )}
 
-          <div style={{ marginTop: 16, padding: 12, background: 'var(--bg)', borderRadius: 'var(--r)', border: '1px solid var(--line)' }}>
-            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--text-4)', letterSpacing: '0.1em', marginBottom: 10 }}>OUTCOME TRACKING</div>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              <button
-                onClick={() => { setCallBooked(v => !v); trackEvent({ call_booked: !callBooked }); }}
-                className="btn btn--ghost"
-                style={{ background: callBooked ? 'rgba(200,246,84,0.1)' : 'transparent', borderColor: callBooked ? 'var(--lime)' : 'var(--line)', color: callBooked ? 'var(--lime)' : 'var(--text-3)' }}
-              >
-                <Phone size={11} /> Call Booked
-              </button>
-              <button
-                onClick={() => { setClient(v => !v); trackEvent({ client_closed: !clientClosed }); }}
-                className="btn btn--ghost"
-                style={{ background: clientClosed ? 'rgba(255,138,115,0.1)' : 'transparent', borderColor: clientClosed ? 'var(--coral)' : 'var(--line)', color: clientClosed ? 'var(--coral)' : 'var(--text-3)' }}
-              >
-                <CheckCircle size={11} /> Client Closed
-              </button>
+            {angles.length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--text-4)', letterSpacing: '0.1em', marginBottom: 10 }}>SELECT AN ANGLE</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {angles.map(a => <AngleCard key={a.angle_name} angle={a} selected={selectedAngle} onSelect={selectAngle} />)}
+                </div>
+              </div>
+            )}
+
+            {selectedAngle && (
+              <div style={{ marginTop: 16 }}>
+                <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--text-4)', letterSpacing: '0.1em', marginBottom: 10 }}>EDIT EMAIL</div>
+                <label className="field__label">SUBJECT</label>
+                <input className="input" style={{ marginBottom: 10 }} value={editSubject} onChange={e => setEditSubject(e.target.value)} onBlur={saveEdits} placeholder="Email subject..." />
+                <label className="field__label">BODY</label>
+                <textarea className="input" style={{ minHeight: 160, resize: 'vertical', lineHeight: 1.6 }} value={editBody} onChange={e => setEditBody(e.target.value)} onBlur={saveEdits} placeholder="Email body..." />
+                {cl.email_quality_score > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                    <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--text-4)' }}>EMAIL QUALITY</span>
+                    <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, fontWeight: 600, color: cl.email_quality_score >= 70 ? 'var(--ok)' : cl.email_quality_score >= 50 ? '#f59e0b' : 'var(--bad)' }}>
+                      {cl.email_quality_score}/100
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div style={{ marginTop: 16, padding: 12, background: 'var(--bg)', borderRadius: 'var(--r)', border: '1px solid var(--line)' }}>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--text-4)', letterSpacing: '0.1em', marginBottom: 10 }}>OUTCOME TRACKING</div>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => { setCallBooked(v => !v); trackEvent({ call_booked: !callBooked }); }}
+                  className="btn btn--ghost"
+                  style={{ background: callBooked ? 'rgba(200,246,84,0.1)' : 'transparent', borderColor: callBooked ? 'var(--lime)' : 'var(--line)', color: callBooked ? 'var(--lime)' : 'var(--text-3)' }}
+                >
+                  <Phone size={11} /> Call Booked
+                </button>
+                <button
+                  onClick={() => { setClient(v => !v); trackEvent({ client_closed: !clientClosed }); }}
+                  className="btn btn--ghost"
+                  style={{ background: clientClosed ? 'rgba(255,138,115,0.1)' : 'transparent', borderColor: clientClosed ? 'var(--coral)' : 'var(--line)', color: clientClosed ? 'var(--coral)' : 'var(--text-3)' }}
+                >
+                  <CheckCircle size={11} /> Client Closed
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
-    </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }
 
@@ -253,8 +273,22 @@ function CreateModal({ onClose, onCreate }) {
   };
 
   return (
-    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 520, padding: 32 }}>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="modal-backdrop"
+      onClick={e => e.target === e.currentTarget && onClose()}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 16 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 8 }}
+        transition={{ duration: 0.25, ease: [0.16,1,0.3,1] }}
+        className="modal"
+        style={{ maxWidth: 520, padding: 32 }}
+        onClick={e => e.stopPropagation()}
+      >
         <h2 style={{ fontFamily: 'var(--f-serif)', fontStyle: 'italic', fontSize: 22, fontWeight: 400, color: 'var(--text)', margin: '0 0 24px' }}>
           New Campaign
         </h2>
@@ -294,12 +328,18 @@ function CreateModal({ onClose, onCreate }) {
         )}
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
           <button className="btn btn--ghost" onClick={onClose}>Cancel</button>
-          <button className="btn btn--primary" onClick={submit} disabled={loading || !form.name.trim()}>
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.97 }}
+            className="btn btn--primary"
+            onClick={submit}
+            disabled={loading || !form.name.trim()}
+          >
             {loading ? 'Creating…' : 'Create Campaign'}
-          </button>
+          </motion.button>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
@@ -320,14 +360,35 @@ function AddLeadsModal({ campaign, onClose, onDone }) {
   };
 
   return (
-    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 520, padding: 32 }}>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="modal-backdrop"
+      onClick={e => e.target === e.currentTarget && onClose()}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 16 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        transition={{ duration: 0.25, ease: [0.16,1,0.3,1] }}
+        className="modal"
+        style={{ maxWidth: 520, padding: 32 }}
+        onClick={e => e.stopPropagation()}
+      >
         <h2 style={{ fontFamily: 'var(--f-serif)', fontStyle: 'italic', fontSize: 20, fontWeight: 400, color: 'var(--text)', margin: '0 0 20px' }}>
           Add Leads → Intent Score
         </h2>
         {result ? (
           <div style={{ textAlign: 'center', padding: '20px 0' }}>
-            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 40, color: 'var(--lime)', marginBottom: 12 }}>{result.added}</div>
+            <motion.div
+              initial={{ scale: 0.5, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: 'spring', stiffness: 200 }}
+              style={{ fontFamily: 'var(--f-mono)', fontSize: 40, color: 'var(--lime)', marginBottom: 12 }}
+            >
+              {result.added}
+            </motion.div>
             <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 20 }}>leads scored and added</div>
             <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginBottom: 24 }}>
               {[{ label: 'HOT', val: result.hot, color: 'var(--coral)' }, { label: 'WARM', val: result.warm, color: '#f59e0b' }, { label: 'COLD', val: result.cold, color: 'var(--text-3)' }].map(({ label, val, color }) => (
@@ -363,19 +424,19 @@ function AddLeadsModal({ campaign, onClose, onDone }) {
             </div>
           </>
         )}
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
 function CampaignCard({ campaign, onSelect }) {
   return (
-    <div
+    <motion.div
       className="card"
-      style={{ cursor: 'pointer', transition: 'border-color 0.15s', padding: 20 }}
+      whileHover={{ y: -2, borderColor: 'var(--line-2)' }}
+      transition={{ duration: 0.15 }}
+      style={{ cursor: 'pointer', padding: 20 }}
       onClick={() => onSelect(campaign)}
-      onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--line-2)'}
-      onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--line)'}
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
         <div>
@@ -403,7 +464,7 @@ function CampaignCard({ campaign, onSelect }) {
           </div>
         ))}
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -447,13 +508,17 @@ function CampaignDetail({ campaign: initialCampaign, onBack }) {
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}
+      >
         <button onClick={onBack} className="btn btn--ghost btn--sm">← Back</button>
         <div>
           <h2 style={{ fontFamily: 'var(--f-serif)', fontStyle: 'italic', fontSize: 22, fontWeight: 400, color: 'var(--text)', margin: 0 }}>{campaign.name}</h2>
           <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--text-3)', marginTop: 4 }}>{campaign.niche ? `#${campaign.niche}` : ''} {campaign.service_type}</div>
         </div>
-      </div>
+      </motion.div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10, marginBottom: 20 }}>
         {[
@@ -463,11 +528,19 @@ function CampaignDetail({ campaign: initialCampaign, onBack }) {
           { label: 'REPLY RATE', value: `${replyRate}%`,              color: replyRate >= 40 ? 'var(--ok)' : replyRate >= 20 ? '#f59e0b' : 'var(--text-3)' },
           { label: 'CALLS',      value: campaign.calls_booked || 0,   color: 'var(--lime)' },
           { label: 'CLIENTS',    value: campaign.clients_closed || 0, color: 'var(--coral)' },
-        ].map(({ label, value, color }) => (
-          <div key={label} className="stat" style={{ textAlign: 'center', padding: '14px 16px' }}>
+        ].map(({ label, value, color }, i) => (
+          <motion.div
+            key={label}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.05, duration: 0.35 }}
+            whileHover={{ y: -2 }}
+            className="stat"
+            style={{ textAlign: 'center', padding: '14px 16px' }}
+          >
             <div className="stat__value--mono" style={{ color: color || 'var(--text)', fontSize: 22, marginTop: 0 }}>{value}</div>
             <div className="stat__label" style={{ marginBottom: 0, marginTop: 4 }}>{label}</div>
-          </div>
+          </motion.div>
         ))}
       </div>
 
@@ -506,7 +579,12 @@ function CampaignDetail({ campaign: initialCampaign, onBack }) {
       </div>
 
       {accuracy && (
-        <div className="card" style={{ marginBottom: 16, padding: 16, background: accuracy.overall_passing ? 'rgba(200,246,84,0.05)' : 'rgba(255,138,115,0.05)', borderColor: accuracy.overall_passing ? 'var(--lime)' : 'var(--coral)' }}>
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="card"
+          style={{ marginBottom: 16, padding: 16, background: accuracy.overall_passing ? 'rgba(200,246,84,0.05)' : 'rgba(255,138,115,0.05)', borderColor: accuracy.overall_passing ? 'var(--lime)' : 'var(--coral)' }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             {accuracy.overall_passing ? <CheckCircle size={14} style={{ color: 'var(--lime)' }} /> : <AlertCircle size={14} style={{ color: 'var(--coral)' }} />}
             <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, fontWeight: 600, color: accuracy.overall_passing ? 'var(--lime)' : 'var(--coral)' }}>
@@ -523,27 +601,39 @@ function CampaignDetail({ campaign: initialCampaign, onBack }) {
             ))}
           </div>
           <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--text-3)', marginTop: 10 }}>{accuracy.recommendation}</div>
-        </div>
+        </motion.div>
       )}
 
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-4)', fontFamily: 'var(--f-mono)', fontSize: 12 }}>Loading leads…</div>
-      ) : displayed.length === 0 ? (
-        <div className="empty">
-          <div className="empty__title">{leads.length === 0 ? 'No leads yet' : `No ${tab} leads`}</div>
-          <div className="empty__desc">{leads.length === 0 ? 'Click "Add Leads + Score Intent" to get started.' : 'Try a different temperature tab.'}</div>
-        </div>
-      ) : (
-        displayed.map(cl => <LeadRow key={`${cl.campaign_id}-${cl.lead_id}`} cl={cl} campaignId={campaign.id} onUpdate={load} />)
-      )}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={tab}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -4 }}
+          transition={{ duration: 0.2 }}
+        >
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-4)', fontFamily: 'var(--f-mono)', fontSize: 12 }}>Loading leads…</div>
+          ) : displayed.length === 0 ? (
+            <div className="empty">
+              <div className="empty__title">{leads.length === 0 ? 'No leads yet' : `No ${tab} leads`}</div>
+              <div className="empty__desc">{leads.length === 0 ? 'Click "Add Leads + Score Intent" to get started.' : 'Try a different temperature tab.'}</div>
+            </div>
+          ) : (
+            displayed.map(cl => <LeadRow key={`${cl.campaign_id}-${cl.lead_id}`} cl={cl} campaignId={campaign.id} onUpdate={load} />)
+          )}
+        </motion.div>
+      </AnimatePresence>
 
-      {showAddLeads && (
-        <AddLeadsModal
-          campaign={campaign}
-          onClose={() => setShowAddLeads(false)}
-          onDone={(updated) => { setCampaign(updated); setShowAddLeads(false); load(); }}
-        />
-      )}
+      <AnimatePresence>
+        {showAddLeads && (
+          <AddLeadsModal
+            campaign={campaign}
+            onClose={() => setShowAddLeads(false)}
+            onDone={(updated) => { setCampaign(updated); setShowAddLeads(false); load(); }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -566,6 +656,9 @@ export default function Campaigns() {
 
   useEffect(() => { loadCampaigns(); }, []);
 
+  const animSent    = useCountUp(overview?.total_sent ?? 0, 800, 100);
+  const animReplied = useCountUp(overview?.total_replied ?? 0, 800, 200);
+
   if (selected) {
     return (
       <div style={{ padding: '28px 32px', maxWidth: 1360, margin: '0 auto' }}>
@@ -576,54 +669,111 @@ export default function Campaigns() {
 
   return (
     <div style={{ padding: '28px 32px', maxWidth: 1360, margin: '0 auto' }}>
-      <div className="page__head">
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, ease: [0.16,1,0.3,1] }}
+        className="page__head"
+      >
         <div>
           <h1 className="page__title">Campaigns</h1>
           <p className="page__sub">Intent Prediction · Psychology Analysis · A/B Testing</p>
         </div>
-        <button className="btn btn--primary" onClick={() => setShowCreate(true)}>
+        <motion.button
+          whileHover={{ scale: 1.02, y: -1 }}
+          whileTap={{ scale: 0.97 }}
+          className="btn btn--primary"
+          onClick={() => setShowCreate(true)}
+        >
           <Plus size={14} /> New Campaign
-        </button>
-      </div>
+        </motion.button>
+      </motion.div>
 
       {overview && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 28 }}>
           {[
-            { label: 'CAMPAIGNS',     value: overview.total_campaigns },
-            { label: 'EMAILS SENT',   value: overview.total_sent },
-            { label: 'TOTAL REPLIES', value: overview.total_replied },
-            { label: 'REPLY RATE',    value: `${overview.reply_rate}%`, color: overview.reply_rate >= 40 ? 'var(--ok)' : 'var(--text-2)' },
-            { label: 'CLIENTS',       value: overview.total_clients,    color: overview.total_clients > 0 ? 'var(--lime)' : 'var(--text)' },
-          ].map(({ label, value, color }) => (
-            <div key={label} className="stat">
+            { label: 'CAMPAIGNS',     value: overview.total_campaigns, delay: 0 },
+            { label: 'EMAILS SENT',   value: animSent, delay: 0.06 },
+            { label: 'TOTAL REPLIES', value: animReplied, delay: 0.12 },
+            { label: 'REPLY RATE',    value: `${overview.reply_rate}%`, color: overview.reply_rate >= 40 ? 'var(--ok)' : 'var(--text-2)', delay: 0.18 },
+            { label: 'CLIENTS',       value: overview.total_clients, color: overview.total_clients > 0 ? 'var(--lime)' : 'var(--text)', delay: 0.24 },
+          ].map(({ label, value, color, delay }) => (
+            <motion.div
+              key={label}
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay, duration: 0.4, ease: [0.16,1,0.3,1] }}
+              whileHover={{ y: -3 }}
+              className="stat"
+            >
               <div className="stat__label">{label}</div>
               <div className="stat__value--mono" style={{ color: color || 'var(--text)', fontSize: 26 }}>{value}</div>
-            </div>
+            </motion.div>
           ))}
         </div>
       )}
 
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-4)', fontFamily: 'var(--f-mono)', fontSize: 12 }}>Loading campaigns…</div>
-      ) : campaigns.length === 0 ? (
-        <div className="empty">
-          <Target size={32} className="empty__icon" />
-          <div className="empty__title">No campaigns yet</div>
-          <div className="empty__desc">Create a campaign to score intent, analyze psychology, and generate personalized emails.</div>
-          <button className="btn btn--primary mt-12" onClick={() => setShowCreate(true)}><Plus size={13} /> Create First Campaign</button>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {campaigns.map(c => <CampaignCard key={c.id} campaign={c} onSelect={setSelected} />)}
-        </div>
-      )}
+      <AnimatePresence mode="wait">
+        {loading ? (
+          <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            style={{ textAlign: 'center', padding: 60, color: 'var(--text-4)', fontFamily: 'var(--f-mono)', fontSize: 12 }}>
+            Loading campaigns…
+          </motion.div>
+        ) : campaigns.length === 0 ? (
+          <motion.div
+            key="empty"
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="empty"
+          >
+            <motion.div
+              animate={{ y: [0, -6, 0] }}
+              transition={{ duration: 3, repeat: Infinity }}
+              className="empty__icon"
+            >
+              <Target size={40} />
+            </motion.div>
+            <div className="empty__title">No campaigns yet</div>
+            <div className="empty__desc">Create a campaign to score intent, analyze psychology, and generate personalized emails.</div>
+            <motion.button
+              whileHover={{ scale: 1.03, y: -2 }}
+              whileTap={{ scale: 0.97 }}
+              className="btn btn--primary mt-12"
+              onClick={() => setShowCreate(true)}
+            >
+              <Plus size={13} /> Create First Campaign
+            </motion.button>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="list"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            style={{ display: 'flex', flexDirection: 'column', gap: 12 }}
+          >
+            {campaigns.map((c, i) => (
+              <motion.div
+                key={c.id}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.06, duration: 0.4 }}
+              >
+                <CampaignCard campaign={c} onSelect={setSelected} />
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {showCreate && (
-        <CreateModal
-          onClose={() => setShowCreate(false)}
-          onCreate={(c) => { setCampaigns(prev => [c, ...prev]); setShowCreate(false); setSelected(c); }}
-        />
-      )}
+      <AnimatePresence>
+        {showCreate && (
+          <CreateModal
+            onClose={() => setShowCreate(false)}
+            onCreate={(c) => { setCampaigns(prev => [c, ...prev]); setShowCreate(false); setSelected(c); }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
