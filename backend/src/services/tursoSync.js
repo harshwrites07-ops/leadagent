@@ -333,4 +333,282 @@ async function pullUserLeadsFromTurso() {
   }
 }
 
-module.exports = { pullFromTurso, pushToTurso, getCfg, pushUserLeadsToTurso, pullUserLeadsFromTurso };
+// ─────────────────────────────────────────────────────────────────
+// USERS
+// ─────────────────────────────────────────────────────────────────
+
+const USER_COLS = [
+  'id', 'email', 'password', 'google_id', 'full_name', 'agency_name', 'role',
+  'plan', 'plan_status', 'is_admin', 'email_verified', 'phone_verified', 'phone_number',
+  'profile_picture', 'onboarding_completed', 'created_at', 'last_login',
+  'target_niches', 'target_platforms', 'portfolio_url', 'daily_email_limit', 'auto_find_leads',
+  'service_type', 'one_liner', 'experience_years', 'best_result', 'pricing_range',
+  'personality_traits', 'outreach_goal', 'origin_story', 'unique_difference',
+  'profile_completed', 'voice_dna',
+  'trial_ends_at', 'custom_emails_limit', 'custom_leads_limit',
+  'leads_used_this_month', 'emails_used_this_month', 'usage_reset_date',
+];
+
+async function ensureUsersSchema(cfg) {
+  await tursoExec(cfg, `
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY,
+      email TEXT UNIQUE NOT NULL,
+      password TEXT,
+      google_id TEXT,
+      full_name TEXT,
+      agency_name TEXT,
+      role TEXT,
+      plan TEXT DEFAULT 'trial',
+      plan_status TEXT DEFAULT 'active',
+      is_admin INTEGER DEFAULT 0,
+      email_verified INTEGER DEFAULT 0,
+      phone_verified INTEGER DEFAULT 0,
+      phone_number TEXT,
+      profile_picture TEXT,
+      onboarding_completed INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT (datetime('now')),
+      last_login DATETIME,
+      target_niches TEXT,
+      target_platforms TEXT,
+      portfolio_url TEXT,
+      daily_email_limit INTEGER DEFAULT 50,
+      auto_find_leads INTEGER DEFAULT 0,
+      service_type TEXT,
+      one_liner TEXT,
+      experience_years TEXT,
+      best_result TEXT,
+      pricing_range TEXT,
+      personality_traits TEXT,
+      outreach_goal TEXT,
+      origin_story TEXT,
+      unique_difference TEXT,
+      profile_completed INTEGER DEFAULT 0,
+      voice_dna TEXT DEFAULT '{}',
+      trial_ends_at DATETIME,
+      custom_emails_limit INTEGER,
+      custom_leads_limit INTEGER,
+      leads_used_this_month INTEGER DEFAULT 0,
+      emails_used_this_month INTEGER DEFAULT 0,
+      usage_reset_date DATE
+    )
+  `);
+}
+
+async function syncUsersToTurso(db) {
+  const cfg = getCfg();
+  if (!cfg) return 0;
+  try {
+    await ensureUsersSchema(cfg);
+    const colList = USER_COLS.join(', ');
+    const users = db.prepare(`SELECT ${colList} FROM users`).all();
+    if (!users.length) return 0;
+    const BATCH = 20;
+    let pushed = 0;
+    const sql = `INSERT OR REPLACE INTO users (${colList}) VALUES (${USER_COLS.map(() => '?').join(',')})`;
+    for (let i = 0; i < users.length; i += BATCH) {
+      const batch = users.slice(i, i + BATCH);
+      const stmts = batch.map(u => ({ sql, args: USER_COLS.map(col => u[col] ?? null) }));
+      await tursoExecBatch(cfg, stmts);
+      pushed += batch.length;
+    }
+    console.log(`[Turso] Pushed ${pushed} users to cloud`);
+    return pushed;
+  } catch (e) {
+    console.error('[Turso] syncUsers error:', e.message);
+    return 0;
+  }
+}
+
+async function pullUsersFromTurso() {
+  const cfg = getCfg();
+  if (!cfg) return 0;
+  try {
+    await ensureUsersSchema(cfg);
+    const { getDb } = require('../models/database');
+    const db = getDb();
+    const localCount = db.prepare('SELECT COUNT(*) as c FROM users').get().c;
+    console.log(`[Turso] Pull users starting — local DB has ${localCount} users`);
+
+    const colList = USER_COLS.join(', ');
+    const INSERT = db.prepare(
+      `INSERT OR REPLACE INTO users (${colList}) VALUES (${USER_COLS.map(() => '?').join(',')})`
+    );
+
+    let offset = 0;
+    const batchSize = 100;
+    let total = 0;
+
+    while (true) {
+      const result = await tursoExec(cfg,
+        `SELECT ${colList} FROM users ORDER BY id LIMIT ? OFFSET ?`,
+        [batchSize, offset]
+      );
+      const cols = (result?.cols || []).map(c => c.name);
+      const rows = result?.rows || [];
+      if (!rows.length) break;
+
+      const ins = db.transaction(rows => {
+        let n = 0;
+        for (const row of rows) {
+          const r = {};
+          cols.forEach((col, i) => { r[col] = row[i]?.value ?? null; });
+          try {
+            const res = INSERT.run(USER_COLS.map(col => r[col] ?? null));
+            if (res.changes > 0) n++;
+          } catch {}
+        }
+        return n;
+      });
+      total += ins(rows);
+      offset += rows.length;
+      if (rows.length < batchSize) break;
+    }
+
+    console.log(`[Turso] Pull users complete — restored ${total} users`);
+    return total;
+  } catch (e) {
+    console.error('[Turso] pullUsers error:', e.message);
+    return 0;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// QUALITY LEADS
+// ─────────────────────────────────────────────────────────────────
+
+const QL_COLS = [
+  'creator_id', 'channel_url', 'channel_name', 'channel_handle', 'subscriber_count',
+  'niche', 'email', 'intent_score', 'intent_tier',
+  'sig_upload_frequency', 'sig_view_growth', 'sig_title_keywords',
+  'sig_description_keywords', 'sig_engagement', 'sig_consistency',
+  'source', 'outreached', 'updated_at',
+];
+
+async function ensureQualityLeadsSchema(cfg) {
+  await tursoExec(cfg, `
+    CREATE TABLE IF NOT EXISTS quality_leads (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      creator_id TEXT UNIQUE NOT NULL,
+      channel_url TEXT,
+      channel_name TEXT,
+      channel_handle TEXT,
+      subscriber_count INTEGER DEFAULT 0,
+      niche TEXT,
+      email TEXT,
+      intent_score REAL DEFAULT 0,
+      intent_tier TEXT DEFAULT 'COLD',
+      sig_upload_frequency REAL DEFAULT 0,
+      sig_view_growth REAL DEFAULT 0,
+      sig_title_keywords REAL DEFAULT 0,
+      sig_description_keywords REAL DEFAULT 0,
+      sig_engagement REAL DEFAULT 0,
+      sig_consistency REAL DEFAULT 0,
+      source TEXT DEFAULT 'master_pool',
+      outreached INTEGER DEFAULT 0,
+      updated_at DATETIME DEFAULT (datetime('now')),
+      created_at DATETIME DEFAULT (datetime('now'))
+    )
+  `);
+}
+
+async function syncQualityLeadsToTurso(db) {
+  const cfg = getCfg();
+  if (!cfg) return 0;
+  try {
+    await ensureQualityLeadsSchema(cfg);
+    const colList = QL_COLS.join(', ');
+    const leads = db.prepare(
+      `SELECT ${colList} FROM quality_leads WHERE intent_tier = 'HOT'`
+    ).all();
+    if (!leads.length) return 0;
+    const BATCH = 50;
+    let pushed = 0;
+    const sql = `INSERT OR REPLACE INTO quality_leads (${colList}) VALUES (${QL_COLS.map(() => '?').join(',')})`;
+    for (let i = 0; i < leads.length; i += BATCH) {
+      const batch = leads.slice(i, i + BATCH);
+      const stmts = batch.map(l => ({ sql, args: QL_COLS.map(col => l[col] ?? null) }));
+      await tursoExecBatch(cfg, stmts);
+      pushed += batch.length;
+    }
+    console.log(`[Turso] Pushed ${pushed} HOT quality_leads to cloud`);
+    return pushed;
+  } catch (e) {
+    console.error('[Turso] syncQualityLeads error:', e.message);
+    return 0;
+  }
+}
+
+async function pullQualityLeadsFromTurso() {
+  const cfg = getCfg();
+  if (!cfg) return 0;
+  try {
+    await ensureQualityLeadsSchema(cfg);
+    const { getDb } = require('../models/database');
+    const db = getDb();
+    const localCount = db.prepare('SELECT COUNT(*) as c FROM quality_leads').get().c;
+    console.log(`[Turso] Pull quality_leads starting — local DB has ${localCount} quality leads`);
+
+    const colList = QL_COLS.join(', ');
+    const INSERT = db.prepare(
+      `INSERT OR REPLACE INTO quality_leads (${colList}) VALUES (${QL_COLS.map(() => '?').join(',')})`
+    );
+
+    let offset = 0;
+    const batchSize = 500;
+    let total = 0;
+
+    while (true) {
+      const result = await tursoExec(cfg,
+        `SELECT ${colList} FROM quality_leads ORDER BY intent_score DESC LIMIT ? OFFSET ?`,
+        [batchSize, offset]
+      );
+      const cols = (result?.cols || []).map(c => c.name);
+      const rows = result?.rows || [];
+      if (!rows.length) break;
+
+      const ins = db.transaction(rows => {
+        let n = 0;
+        for (const row of rows) {
+          const r = {};
+          cols.forEach((col, i) => { r[col] = row[i]?.value ?? null; });
+          try {
+            const res = INSERT.run(QL_COLS.map(col => r[col] ?? null));
+            if (res.changes > 0) n++;
+          } catch {}
+        }
+        return n;
+      });
+      total += ins(rows);
+      offset += rows.length;
+      if (rows.length < batchSize) break;
+    }
+
+    console.log(`[Turso] Pull quality_leads complete — restored ${total} HOT leads`);
+    return total;
+  } catch (e) {
+    console.error('[Turso] pullQualityLeads error:', e.message);
+    return 0;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// MASTER BOOT SYNC
+// ─────────────────────────────────────────────────────────────────
+
+async function syncAllOnBoot() {
+  console.log('[Turso] Starting boot sync...');
+  await pullUsersFromTurso();        // Auth works immediately
+  await pullFromTurso();             // master_leads restored
+  await pullQualityLeadsFromTurso(); // HOT quality leads restored
+  await pullUserLeadsFromTurso();    // Per-user leads restored
+  console.log('[Turso] Boot sync complete');
+}
+
+module.exports = {
+  pullFromTurso, pushToTurso, getCfg,
+  pushUserLeadsToTurso, pullUserLeadsFromTurso,
+  syncUsersToTurso, pullUsersFromTurso,
+  syncQualityLeadsToTurso, pullQualityLeadsFromTurso,
+  syncAllOnBoot,
+};

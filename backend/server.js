@@ -379,12 +379,11 @@ app.listen(PORT, '0.0.0.0', () => {
     }
   } catch {}
 
-  // Restore master_leads + user leads from Turso cloud, then start all seeders
+  // Restore all data from Turso cloud on boot, then start all seeders
   setTimeout(async () => {
     try {
-      const { pullFromTurso, pullUserLeadsFromTurso } = require('./src/services/tursoSync');
-      await pullFromTurso();
-      await pullUserLeadsFromTurso();
+      const { syncAllOnBoot } = require('./src/services/tursoSync');
+      await syncAllOnBoot();
     } catch (e) {
       console.error('[Turso] Restore failed:', e.message);
     }

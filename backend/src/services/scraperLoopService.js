@@ -13,6 +13,7 @@ const { scanUpworkJobs } = require('./upworkService');
 const { scanTwitterSignals } = require('./twitterSignalService');
 const { runAdvancedScan } = require('./youtubeAdvancedService');
 const { runConfirmedSignalScan } = require('./confirmedSignalService');
+const { syncUsersToTurso, syncQualityLeadsToTurso } = require('./tursoSync');
 
 const INTERVAL_MS = 2 * 60 * 60 * 1000; // 2 hours
 
@@ -109,11 +110,28 @@ async function runOneCycle() {
       console.log(`[Loop] Confirmed signal scan error: ${e.message}`);
     }
 
+    // Step 1f: Turso backup every 6th cycle (~12 hours)
+    if (cycleCount % 6 === 0) {
+      console.log('[Loop] Running Turso backup...');
+      try {
+        await syncUsersToTurso(db);
+        await syncQualityLeadsToTurso(db);
+        console.log('[Loop] Turso backup complete');
+      } catch (e) {
+        console.log(`[Loop] Turso backup error: ${e.message}`);
+      }
+    }
+
     // Step 2: Score new master_leads (incremental — only unscored)
     console.log('[QualityLoop] Scoring new master_leads...');
     const scoreResult = scoreNewMasterLeads();
     status.hot_added_total += scoreResult.hot;
     console.log(`[QualityLoop] Scored: total=${scoreResult.total} hot=${scoreResult.hot} warm=${scoreResult.warm} cold=${scoreResult.cold}`);
+
+    // Push any newly promoted HOT leads to Turso right after scoring
+    if (scoreResult.hot > 0) {
+      syncQualityLeadsToTurso(db).catch(e => console.log(`[Loop] Quality leads Turso push error: ${e.message}`));
+    }
 
     // Step 3: Log summary
     const dist = getDistribution();

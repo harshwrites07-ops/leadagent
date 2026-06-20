@@ -80,6 +80,14 @@ router.post('/register', asyncHandler(async (req, res) => {
 
   const user = getUserById(result.lastInsertRowid);
 
+  // Back up new user to Turso immediately (fire-and-forget)
+  setImmediate(async () => {
+    try {
+      const { syncUsersToTurso } = require('../services/tursoSync');
+      await syncUsersToTurso(getDb());
+    } catch {}
+  });
+
   // Send email verification — await so we can include verifyUrl in response if email fails
   const emailResult = await sendVerificationEmail(user).catch(e => ({ ok: false, error: e.message }));
 
