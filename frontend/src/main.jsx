@@ -19,10 +19,30 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             color: 'var(--text)',
             border: '1px solid var(--line-2)',
             borderRadius: '10px',
+            fontSize: '13px',
             fontFamily: 'var(--f-sans)',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+            padding: '10px 14px',
           },
-          success: { iconTheme: { primary: 'var(--ok)', secondary: 'var(--bg)' } },
-          error: { iconTheme: { primary: 'var(--bad)', secondary: 'var(--bg)' } },
+          success: {
+            iconTheme: {
+              primary: 'var(--lime)',
+              secondary: 'var(--bg)',
+            },
+            style: {
+              border: '1px solid var(--lime-border)',
+            },
+          },
+          error: {
+            iconTheme: {
+              primary: 'var(--bad)',
+              secondary: 'var(--bg)',
+            },
+            style: {
+              border: '1px solid rgba(255,59,48,0.3)',
+            },
+          },
+          duration: 3000,
         }}
       />
     </BrowserRouter>

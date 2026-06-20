@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
 import {
   LayoutDashboard, Search, BarChart2, Mail, Users,
@@ -120,36 +121,7 @@ export default function Layout({ children }) {
               <NavLink
                 key={to}
                 to={to}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 9,
-                  padding: '0 12px',
-                  height: 36,
-                  margin: '1px 8px',
-                  borderRadius: 6,
-                  fontSize: 13,
-                  fontWeight: active ? 600 : 500,
-                  color: active ? 'var(--lime)' : 'var(--text-3)',
-                  cursor: 'pointer',
-                  transition: 'all 120ms cubic-bezier(0.16,1,0.3,1)',
-                  textDecoration: 'none',
-                  background: active ? 'rgba(200,246,84,0.06)' : 'transparent',
-                  boxShadow: active ? 'inset 3px 0 0 var(--lime)' : 'none',
-                  position: 'relative',
-                }}
-                onMouseEnter={e => {
-                  if (!active) {
-                    e.currentTarget.style.background = 'var(--hover)';
-                    e.currentTarget.style.color = 'var(--text)';
-                  }
-                }}
-                onMouseLeave={e => {
-                  if (!active) {
-                    e.currentTarget.style.background = 'transparent';
-                    e.currentTarget.style.color = 'var(--text-3)';
-                  }
-                }}
+                className={`sb__nav-item${active ? ' active' : ''}`}
               >
                 <Icon size={15} style={{
                   flexShrink: 0,
@@ -184,17 +156,7 @@ export default function Layout({ children }) {
               {ADMIN_ITEMS.map(({ to, icon: Icon, label }) => {
                 const active = isActive(to);
                 return (
-                  <NavLink key={to} to={to} style={{
-                    display: 'flex', alignItems: 'center', gap: 9,
-                    padding: '0 12px', height: 36, margin: '1px 8px',
-                    borderRadius: 6, fontSize: 13,
-                    fontWeight: active ? 600 : 500,
-                    color: active ? 'var(--lime)' : 'var(--text-3)',
-                    textDecoration: 'none',
-                    background: active ? 'rgba(200,246,84,0.08)' : 'transparent',
-                    boxShadow: active ? 'inset 3px 0 0 var(--lime)' : 'none',
-                    transition: 'all 120ms',
-                  }}>
+                  <NavLink key={to} to={to} className={`sb__nav-item${active ? ' active' : ''}`}>
                     <Icon size={15} style={{ flexShrink: 0, opacity: active ? 1 : 0.6 }} />
                     {label}
                   </NavLink>
@@ -425,7 +387,21 @@ export default function Layout({ children }) {
         minHeight: 'calc(100vh - var(--topbar-h))',
         width: 'calc(100vw - var(--sidebar-w))',
       }}>
-        {children}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={location.pathname}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{
+              duration: 0.2,
+              ease: [0.16, 1, 0.3, 1],
+            }}
+            style={{ minHeight: '100%' }}
+          >
+            {children}
+          </motion.div>
+        </AnimatePresence>
       </main>
     </div>
   );
