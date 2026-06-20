@@ -340,13 +340,31 @@ app.listen(PORT, '0.0.0.0', () => {
     const stuckQueue = db.prepare(`UPDATE email_queue SET status='failed' WHERE status='sending'`).run();
     if (stuckQueue.changes > 0) console.log(`   Cleared ${stuckQueue.changes} stuck queue item(s) from previous session`);
 
-    // Auto-promote admin email to admin + agency plan (runs every boot, idempotent)
+    // Auto-create + promote admin account on every boot (idempotent)
     const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'harshwrites07@gmail.com';
-    const promoted = db.prepare(`
-      UPDATE users SET is_admin=1, plan='agency', plan_status='active', email_verified=1, onboarding_completed=1
-      WHERE email=? AND (is_admin IS NULL OR is_admin=0)
-    `).run(ADMIN_EMAIL);
-    if (promoted.changes > 0) console.log(`   Admin promoted: ${ADMIN_EMAIL}`);
+    const existingAdmin = db.prepare('SELECT id FROM users WHERE email=?').get(ADMIN_EMAIL);
+    if (!existingAdmin) {
+      // Fresh DB (Railway redeploy wiped container) — recreate admin if password env var is set
+      const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+      if (ADMIN_PASSWORD) {
+        const bcrypt = require('bcryptjs');
+        const hashed = bcrypt.hashSync(ADMIN_PASSWORD, 12);
+        db.prepare(`
+          INSERT INTO users (email, password, full_name, plan, plan_status, is_admin, email_verified, onboarding_completed)
+          VALUES (?, ?, 'Admin', 'agency', 'active', 1, 1, 1)
+        `).run(ADMIN_EMAIL, hashed);
+        console.log(`   Admin account auto-created: ${ADMIN_EMAIL}`);
+      } else {
+        console.warn(`   [WARN] Admin account missing and ADMIN_PASSWORD env var not set — set it in Railway to auto-create on boot`);
+      }
+    } else {
+      // Ensure existing account has admin rights
+      const promoted = db.prepare(`
+        UPDATE users SET is_admin=1, plan='agency', plan_status='active', email_verified=1, onboarding_completed=1
+        WHERE email=? AND (is_admin IS NULL OR is_admin=0)
+      `).run(ADMIN_EMAIL);
+      if (promoted.changes > 0) console.log(`   Admin promoted: ${ADMIN_EMAIL}`);
+    }
   } catch {}
 
   // Restore master_leads + user leads from Turso cloud, then start all seeders
