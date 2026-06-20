@@ -4,6 +4,9 @@ const { getDb } = require('../models/database');
 const { calibrate, scoreAndPopulate, scoreNewMasterLeads, getStats, getDistribution } = require('../services/qualityLeadsService');
 const { scanSubreddits } = require('../services/redditSignalService');
 const { startLoop, stopLoop, getLoopStatus, runOneCycle } = require('../services/scraperLoopService');
+const { scanUpworkJobs, getUpworkStats } = require('../services/upworkService');
+const { runAdvancedScan } = require('../services/youtubeAdvancedService');
+const { runConfirmedSignalScan, getConfirmedSignalStats, deepScanDescriptions } = require('../services/confirmedSignalService');
 
 // GET /api/quality/stats
 router.get('/stats', (req, res) => {
@@ -221,6 +224,100 @@ router.get('/validation', (req, res) => {
     cold: { outreached: 0, replied: 0, reply_rate: null, target: 10, status: 'insufficient_data' },
     note: 'Validation requires leads to be outreached first. Track replies in the Email Sender.',
   });
+});
+
+// GET /api/quality/upwork/stats
+router.get('/upwork/stats', async (req, res) => {
+  try {
+    const stats = await getUpworkStats();
+    res.json({ success: true, data: stats });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/quality/upwork/scan
+router.post('/upwork/scan', async (req, res) => {
+  try {
+    const result = await scanUpworkJobs();
+    res.json({ success: true, data: result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/quality/platform-signals
+router.get('/platform-signals', (req, res) => {
+  try {
+    const db = getDb();
+    const signals = db.prepare(`
+      SELECT platform, signal_type, COUNT(*) as count,
+             AVG(confidence) as avg_confidence
+      FROM platform_signals
+      GROUP BY platform, signal_type
+      ORDER BY count DESC
+    `).all();
+
+    const total = db.prepare('SELECT COUNT(*) as count FROM platform_signals').get();
+    const confirmed = db.prepare(`
+      SELECT COUNT(*) as count FROM platform_signals
+      WHERE signal_type = 'confirmed_hiring'
+    `).get();
+    const upwork = db.prepare('SELECT COUNT(*) as count FROM upwork_signals').get();
+
+    res.json({
+      success: true,
+      data: {
+        total_signals: total.count,
+        confirmed_hiring: confirmed.count,
+        upwork_jobs: upwork.count,
+        by_platform: signals,
+      }
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/quality/youtube/advanced-scan
+router.post('/youtube/advanced-scan', async (req, res) => {
+  try {
+    const result = await runAdvancedScan(50);
+    res.json({ success: true, data: result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/quality/confirmed/scan — full confirmed signal scan
+router.post('/confirmed/scan', async (req, res) => {
+  try {
+    console.log('[API] Starting confirmed signal scan...');
+    const result = await runConfirmedSignalScan();
+    res.json({ success: true, data: result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/quality/confirmed/stats
+router.get('/confirmed/stats', async (req, res) => {
+  try {
+    const stats = await getConfirmedSignalStats();
+    res.json({ success: true, data: stats });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/quality/confirmed/scan-descriptions — fast description-only scan
+router.post('/confirmed/scan-descriptions', async (req, res) => {
+  try {
+    const result = await deepScanDescriptions();
+    res.json({ success: true, data: result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 module.exports = router;

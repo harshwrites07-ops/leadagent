@@ -608,6 +608,49 @@ function initSchema() {
     );
   `);
 
+  // ── Multi-platform signal tables ─────────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS platform_signals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      creator_id TEXT NOT NULL,
+      platform TEXT NOT NULL,
+      signal_type TEXT NOT NULL,
+      signal_text TEXT,
+      signal_url TEXT,
+      confidence REAL DEFAULT 0.5,
+      budget_mentioned INTEGER DEFAULT 0,
+      found_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(creator_id, platform, signal_url)
+    );
+
+    CREATE TABLE IF NOT EXISTS creator_profiles (
+      creator_id TEXT PRIMARY KEY,
+      channel_name TEXT,
+      youtube_score REAL DEFAULT 0,
+      platform_score REAL DEFAULT 0,
+      combined_score REAL DEFAULT 0,
+      tier TEXT DEFAULT 'COLD',
+      signals_found INTEGER DEFAULT 0,
+      confirmed_hiring INTEGER DEFAULT 0,
+      last_updated DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS upwork_signals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      job_id TEXT UNIQUE,
+      title TEXT,
+      description TEXT,
+      budget TEXT,
+      posted_at TEXT,
+      job_url TEXT,
+      creator_name TEXT,
+      email TEXT,
+      matched_channel_id TEXT,
+      processed INTEGER DEFAULT 0,
+      found_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
   // Indexes for quality system
   try { db.exec(`CREATE INDEX IF NOT EXISTS idx_quality_leads_niche ON quality_leads(niche)`); } catch {}
   try { db.exec(`CREATE INDEX IF NOT EXISTS idx_quality_leads_score ON quality_leads(intent_score DESC)`); } catch {}

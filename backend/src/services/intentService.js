@@ -1,5 +1,7 @@
 // Intent Prediction Algorithm — scores each creator 0-1.0 for likelihood to hire
 
+const { getDb } = require('../models/database');
+
 const SERVICE_KEYWORDS = [
   'editor', 'editing', 'thumbnail', 'thumbnails', 'script', 'scriptwriting',
   'designer', 'design', 'production', 'producer', 'course', 'coaching',
@@ -315,17 +317,114 @@ function scoreMasterLead(ml) {
 
   // Niche is the dominant proxy signal for master_leads (no upload/engagement data available)
   const score = (0.50 * niche_score) + (0.35 * subs_score) + (0.10 * views_score) + (0.05 * desc_score);
-  const intent_score = Math.min(Math.round(score * 100) / 100, 1.0);
+  const base_score   = Math.min(Math.round(score * 100) / 100, 1.0);
+  const intent_score = scoreWithPlatformSignals(ml.channel_id, base_score);
   const temperature  = intent_score >= 0.75 ? 'hot' : intent_score >= 0.50 ? 'warm' : 'cold';
 
+  // Determine if a confirmed hiring signal exists (for downstream enrichment)
+  let is_confirmed = false;
+  let signal_source = null;
+  try {
+    const db = getDb();
+    const confirmedSignal = db.prepare(`
+      SELECT platform FROM platform_signals
+      WHERE creator_id = ? AND signal_type = 'confirmed_hiring'
+      ORDER BY confidence DESC LIMIT 1
+    `).get(ml.channel_id);
+    if (confirmedSignal) { is_confirmed = true; signal_source = confirmedSignal.platform; }
+  } catch (e) {}
+
   return {
-    intent_score, confidence: 'Low', temperature,
+    intent_score, confidence: is_confirmed ? 'High' : 'Low', temperature,
+    is_confirmed, signal_source, base_score, signal_boost: Math.round((intent_score - base_score) * 100) / 100,
     signals: {
       niche_score, subs_score, views_score, desc_score,
       upload_frequency: null, view_growth: null, title_keywords: null,
       description_keywords: desc_score, engagement_rate: null, upload_consistency: null,
     },
   };
+}
+
+/**
+ * MULTI-PLATFORM INTENT SCORER
+ * Combines YouTube signals with cross-platform signals
+ * Makes 0.75+ actually mean something real
+ */
+function scoreWithPlatformSignals(creatorId, baseScore) {
+  const db = getDb();
+
+  const signals = db.prepare(`
+    SELECT platform, signal_type, confidence, budget_mentioned
+    FROM platform_signals
+    WHERE creator_id = ?
+    ORDER BY confidence DESC
+  `).all(creatorId);
+
+  if (signals.length === 0) return baseScore;
+
+  let platformBoost = 0;
+  let hasConfirmedHiring = false;
+
+  for (const signal of signals) {
+    if (signal.signal_type === 'confirmed_hiring') {
+      hasConfirmedHiring = true;
+    }
+    switch (signal.platform) {
+      case 'upwork':
+        platformBoost = Math.max(platformBoost, 0.35);
+        hasConfirmedHiring = true;
+        if (signal.budget_mentioned) platformBoost = Math.max(platformBoost, 0.38);
+        break;
+
+      case 'youtube_description':
+        platformBoost = Math.max(platformBoost, 0.30);
+        hasConfirmedHiring = true;
+        break;
+
+      case 'google_search':
+        platformBoost = Math.max(platformBoost, 0.28);
+        hasConfirmedHiring = true;
+        break;
+
+      case 'linkedin':
+        platformBoost = Math.max(platformBoost, 0.25);
+        hasConfirmedHiring = true;
+        break;
+
+      case 'twitter':
+        platformBoost = Math.max(platformBoost, 0.25);
+        hasConfirmedHiring = true;
+        break;
+
+      case 'youtube_community':
+        platformBoost = Math.max(platformBoost, 0.28);
+        hasConfirmedHiring = true;
+        break;
+
+      case 'reddit':
+        platformBoost = Math.max(platformBoost, 0.20);
+        hasConfirmedHiring = true;
+        break;
+
+      case 'youtube_comments':
+        platformBoost = Math.max(platformBoost, 0.08);
+        break;
+
+      case 'email_analysis':
+        platformBoost = Math.max(platformBoost, 0.08);
+        break;
+    }
+  }
+
+  platformBoost = Math.min(platformBoost, 0.40);
+
+  const finalScore = Math.min(baseScore + platformBoost, 0.99);
+
+  if (hasConfirmedHiring && finalScore < 0.80) {
+    return 0.80;
+  }
+
+  return finalScore;
 }
 
 // Calibrate: test 4 weight options against an array of leads, return distribution for each
@@ -370,5 +469,5 @@ function calibrateWeights(leads) {
 module.exports = {
   calculateIntentScore, calculateIntentScoreWithWeights,
   scoreAndRankLeads, classifyLeads, assessAlgorithmAccuracy,
-  scoreMasterLead, calibrateWeights, DEFAULT_WEIGHTS,
+  scoreMasterLead, calibrateWeights, DEFAULT_WEIGHTS, scoreWithPlatformSignals,
 };

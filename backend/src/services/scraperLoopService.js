@@ -9,6 +9,10 @@
 const { getDb } = require('../models/database');
 const { scanSubreddits } = require('./redditSignalService');
 const { scoreNewMasterLeads, getDistribution } = require('./qualityLeadsService');
+const { scanUpworkJobs } = require('./upworkService');
+const { scanTwitterSignals } = require('./twitterSignalService');
+const { runAdvancedScan } = require('./youtubeAdvancedService');
+const { runConfirmedSignalScan } = require('./confirmedSignalService');
 
 const INTERVAL_MS = 2 * 60 * 60 * 1000; // 2 hours
 
@@ -63,6 +67,46 @@ async function runOneCycle() {
     } catch (e) {
       console.error('[QualityLoop] Reddit scan failed:', e.message);
       status.errors.push({ time: new Date().toISOString(), step: 'reddit', error: e.message });
+    }
+
+    // Step 1b: Upwork scan (every cycle)
+    console.log('[Loop] Scanning Upwork jobs...');
+    try {
+      const upworkResult = await scanUpworkJobs();
+      console.log(`[Loop] Upwork: ${upworkResult.new_jobs} new hiring signals found`);
+    } catch (e) {
+      console.log(`[Loop] Upwork scan error: ${e.message}`);
+    }
+
+    // Step 1c: Twitter scan (every other cycle to save quota)
+    if (cycleCount % 2 === 0) {
+      console.log('[Loop] Scanning Twitter signals...');
+      try {
+        const twitterResult = await scanTwitterSignals();
+        console.log(`[Loop] Twitter: ${twitterResult.new_signals || 0} new signals found`);
+      } catch (e) {
+        console.log(`[Loop] Twitter scan error: ${e.message}`);
+      }
+    }
+
+    // Step 1d: YouTube advanced scan (every 3rd cycle)
+    if (cycleCount % 3 === 0) {
+      console.log('[Loop] Running YouTube advanced scan...');
+      try {
+        const ytResult = await runAdvancedScan(30);
+        console.log(`[Loop] YT Advanced: ${ytResult.community_signals} community signals found`);
+      } catch (e) {
+        console.log(`[Loop] YT advanced scan error: ${e.message}`);
+      }
+    }
+
+    // Step 1e: Confirmed signal scan (every cycle)
+    console.log('[Loop] Running confirmed signal scan...');
+    try {
+      const confirmedResult = await runConfirmedSignalScan();
+      console.log(`[Loop] Confirmed signals: ${confirmedResult.description_scan?.confirmed || 0} description hits, ${confirmedResult.total_confirmed_signals || 0} total confirmed`);
+    } catch (e) {
+      console.log(`[Loop] Confirmed signal scan error: ${e.message}`);
     }
 
     // Step 2: Score new master_leads (incremental — only unscored)

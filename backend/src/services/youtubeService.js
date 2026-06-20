@@ -488,4 +488,4 @@ function isQuotaExhausted() {
   return keys.length > 0 && keys.every(k => exhaustedKeys.has(k));
 }
 
-module.exports = { searchChannels, searchChannelsMulti, buildChannelProfile, testApiKey, detectViralChannels, resolveChannelUrl, getChannelByUrl, getAllKeys, getKeyPoolStatus, isQuotaExhausted };
+module.exports = { searchChannels, searchChannelsMulti, buildChannelProfile, testApiKey, detectViralChannels, resolveChannelUrl, getChannelByUrl, getAllKeys, getKeyPoolStatus, isQuotaExhausted, getNextKey: getKey };

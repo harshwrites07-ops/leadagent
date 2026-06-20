@@ -137,6 +137,7 @@ export default function QualityLeads() {
   const [nicheFilter, setNicheFilter] = useState('');
   const [tierFilter, setTierFilter] = useState('all');
   const [niches, setNiches]         = useState([]);
+  const [confirmedStats, setConfirmedStats] = useState(null);
 
   const flash = (m) => { setMsg(m); setTimeout(() => setMsg(''), 4000); };
 
@@ -200,6 +201,26 @@ export default function QualityLeads() {
 
   async function doStartLoop() { await fetch(`${API}/loop/start`, { method: 'POST' }); flash('Quality loop started'); load(); }
   async function doStopLoop()  { await fetch(`${API}/loop/stop`,  { method: 'POST' }); flash('Quality loop stopped'); load(); }
+
+  async function handleRunConfirmedScan() {
+    setBusy(true);
+    try {
+      const r = await fetch(`${API}/confirmed/scan`, { method: 'POST' }).then(r => r.json());
+      if (r.success) {
+        flash(`Confirmed scan complete — ${r.data.total_confirmed_signals || 0} total confirmed signals, ${r.data.final_hot_leads || 0} HOT leads`);
+        load();
+        fetch(`${API}/confirmed/stats`).then(r => r.json()).then(r => r.success && setConfirmedStats(r.data)).catch(() => {});
+      }
+    } catch (e) { flash(`Scan failed: ${e.message}`); }
+    finally { setBusy(false); }
+  }
+
+  useEffect(() => {
+    fetch(`${API}/confirmed/stats`)
+      .then(r => r.json())
+      .then(r => { if (r.success) setConfirmedStats(r.data); })
+      .catch(() => {});
+  }, []);
 
   const TABS = ['dashboard', 'leads', 'signals', 'calibration', 'logs'];
   const nextRun = loopStatus?.next_cycle_at ? new Date(loopStatus.next_cycle_at).toLocaleTimeString() : '—';
@@ -305,6 +326,128 @@ export default function QualityLeads() {
                   )}
                 </motion.div>
               )}
+
+              {/* Confirmed HOT Signal Sources */}
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.35 }}
+                className="card"
+                style={{ padding: 20 }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
+                      Confirmed HOT Signal Sources
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-4)', fontFamily: 'var(--f-mono)', marginTop: 2 }}>
+                      Creators who LITERALLY said they need help
+                    </div>
+                  </div>
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.97 }}
+                    className="btn btn--primary btn--sm"
+                    onClick={handleRunConfirmedScan}
+                    disabled={busy}
+                  >
+                    {busy ? 'Scanning…' : 'Scan Now'}
+                  </motion.button>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
+                  {[
+                    {
+                      label: 'Description Says "Hiring"',
+                      icon: '📝',
+                      description: 'Channel description contains hiring keywords',
+                      value: confirmedStats?.description_hiring_signals ?? 0,
+                      confidence: '85%',
+                      color: 'var(--lime)',
+                      active: true,
+                    },
+                    {
+                      label: 'Business Email',
+                      icon: '📧',
+                      description: 'Has business@ collab@ hire@ email',
+                      value: confirmedStats?.business_emails ?? 0,
+                      confidence: '72%',
+                      color: 'var(--ok)',
+                      active: true,
+                    },
+                    {
+                      label: 'Upwork Job Post',
+                      icon: '💼',
+                      description: 'Posted "need video editor" on Upwork',
+                      value: confirmedStats?.upwork_jobs ?? 0,
+                      confidence: '95%',
+                      color: 'var(--coral)',
+                      active: true,
+                    },
+                    {
+                      label: 'Twitter Hiring Post',
+                      icon: '🐦',
+                      description: 'Tweeted "looking for editor"',
+                      value: confirmedStats?.twitter_signals ?? 0,
+                      confidence: '90%',
+                      color: 'var(--sky, #8ec5ff)',
+                      active: (confirmedStats?.twitter_signals ?? 0) > 0,
+                    },
+                    {
+                      label: 'Community Post',
+                      icon: '📺',
+                      description: 'YouTube community post mentions hiring',
+                      value: confirmedStats?.community_signals ?? 0,
+                      confidence: '85%',
+                      color: 'var(--lime)',
+                      active: (confirmedStats?.community_signals ?? 0) > 0,
+                    },
+                    {
+                      label: 'Google Found',
+                      icon: '🔍',
+                      description: 'Google indexed public hiring post',
+                      value: confirmedStats?.google_signals ?? 0,
+                      confidence: '88%',
+                      color: '#f5a623',
+                      active: true,
+                    },
+                  ].map(({ label, icon, description, value, confidence, color, active }) => (
+                    <motion.div
+                      key={label}
+                      whileHover={{ y: -3 }}
+                      style={{
+                        padding: '14px 16px',
+                        background: active ? 'rgba(255,255,255,0.03)' : 'var(--surface-2, rgba(255,255,255,0.02))',
+                        border: `1px solid ${active ? color + '30' : 'var(--line)'}`,
+                        borderRadius: 12,
+                        opacity: active ? 1 : 0.5,
+                        transition: 'all 200ms',
+                      }}
+                    >
+                      <div style={{ fontSize: 20, marginBottom: 8 }}>{icon}</div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: active ? 'var(--text)' : 'var(--text-3)', marginBottom: 4, lineHeight: 1.3 }}>
+                        {label}
+                      </div>
+                      <div style={{ fontSize: 10, color: 'var(--text-4)', marginBottom: 10, lineHeight: 1.5 }}>
+                        {description}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span style={{ fontSize: 20, fontWeight: 900, fontFamily: 'var(--f-mono)', color: active ? color : 'var(--text-4)' }}>
+                          {value.toLocaleString()}
+                        </span>
+                        <span style={{
+                          fontSize: 9, fontWeight: 700, fontFamily: 'var(--f-mono)',
+                          background: active ? color + '18' : 'transparent',
+                          color: active ? color : 'var(--text-4)',
+                          padding: '2px 6px', borderRadius: 4, letterSpacing: '0.3px',
+                        }}>
+                          {confidence} INTENT
+                        </span>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </motion.div>
 
               {stats?.by_niche?.length > 0 && (
                 <motion.div

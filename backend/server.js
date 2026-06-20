@@ -329,6 +329,18 @@ app.listen(PORT, '0.0.0.0', () => {
     console.error('[QualityLoop] Failed to start:', err.message);
   }
 
+  // Run confirmed signal scan 30s after boot (description + email + Google)
+  setTimeout(async () => {
+    console.log('[Boot] Running initial confirmed signal scan...');
+    try {
+      const { runConfirmedSignalScan } = require('./src/services/confirmedSignalService');
+      const result = await runConfirmedSignalScan();
+      console.log(`[Boot] Initial scan complete — ${result.total_confirmed_signals || 0} confirmed signals, ${result.final_hot_leads || 0} HOT leads`);
+    } catch (e) {
+      console.error('[Boot] Initial scan error:', e.message);
+    }
+  }, 30 * 1000);
+
   // Mark any jobs that were 'running' before this boot as interrupted
   // (they died when the server restarted — their async runners are gone)
   try {
