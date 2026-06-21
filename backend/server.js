@@ -119,13 +119,15 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
         return done(null, getUserById(userByGoogleId.id));
       }
 
-      // 3. Link to admin if admin has no google_id yet (single-user SaaS setup)
-      const adminUser = db.prepare('SELECT * FROM users WHERE id=1').get();
-      if (adminUser && !adminUser.google_id) {
-        db.prepare('UPDATE users SET google_id=?, last_login=CURRENT_TIMESTAMP WHERE id=1').run(profile.id);
-        const linked = getUserById(1);
-        console.log(`[Google OAuth] Linked Google account ${email} → admin user id=1`);
-        return done(null, linked);
+      // 3. Link to admin ONLY if this Google email matches ADMIN_EMAIL env var
+      const ADMIN_EMAIL_ENV = (process.env.ADMIN_EMAIL || '').toLowerCase().trim();
+      if (ADMIN_EMAIL_ENV && email.toLowerCase() === ADMIN_EMAIL_ENV) {
+        const adminUser = db.prepare('SELECT * FROM users WHERE email=?').get(ADMIN_EMAIL_ENV);
+        if (adminUser && !adminUser.google_id) {
+          db.prepare('UPDATE users SET google_id=?, last_login=CURRENT_TIMESTAMP WHERE id=?').run(profile.id, adminUser.id);
+          console.log(`[Google OAuth] Linked Google account → admin user id=${adminUser.id}`);
+          return done(null, getUserById(adminUser.id));
+        }
       }
 
       // 4. Create new user
