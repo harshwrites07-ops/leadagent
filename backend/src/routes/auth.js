@@ -151,6 +151,11 @@ router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
   req.session.userId = user.id;
   if (remember) req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000; // 30 days
 
+  // Keep Turso in sync so all users survive Railway redeploys
+  setImmediate(async () => {
+    try { const { syncUsersToTurso } = require('../services/tursoSync'); await syncUsersToTurso(getDb()); } catch {}
+  });
+
   const limits = PLAN_LIMITS[user.plan] || PLAN_LIMITS.free;
   req.session.save(err => {
     if (err) console.error('[AUTH] Session save error:', err);

@@ -1027,6 +1027,87 @@ router.get('/status', asyncHandler(async (req, res) => {
   });
 }));
 
+// ── Claude agentic loop for Jack ──────────────────────────────────────────────
+async function runJackWithClaude(messages, userId) {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) return null;
+
+  const axios = require('axios');
+
+  // Build Claude-format message history (must start with user, alternate roles)
+  let claudeMsgs = messages.map(m => ({
+    role: m.role === 'assistant' ? 'assistant' : 'user',
+    content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+  }));
+  while (claudeMsgs.length && claudeMsgs[0].role !== 'user') claudeMsgs.shift();
+  // Merge consecutive same-role messages (Claude requires strict alternation)
+  const merged = [];
+  for (const m of claudeMsgs) {
+    if (merged.length && merged[merged.length - 1].role === m.role) {
+      merged[merged.length - 1].content += '\n' + m.content;
+    } else {
+      merged.push({ ...m });
+    }
+  }
+  claudeMsgs = merged;
+
+  const claudeTools = TOOLS.map(t => ({
+    name: t.name,
+    description: t.description,
+    input_schema: t.input_schema,
+  }));
+
+  let currentMessages = claudeMsgs;
+
+  for (let round = 0; round < 20; round++) {
+    const { data } = await axios.post(
+      'https://api.anthropic.com/v1/messages',
+      {
+        model: 'claude-sonnet-4-6',
+        max_tokens: 4096,
+        system: SYSTEM,
+        tools: claudeTools,
+        messages: currentMessages,
+      },
+      {
+        headers: {
+          'x-api-key': key,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+        },
+        timeout: 90000,
+      }
+    );
+
+    if (data.stop_reason === 'end_turn') {
+      const textBlock = data.content.find(b => b.type === 'text');
+      return textBlock?.text || 'Done.';
+    }
+
+    if (data.stop_reason === 'tool_use') {
+      currentMessages = [...currentMessages, { role: 'assistant', content: data.content }];
+      const toolUses = data.content.filter(b => b.type === 'tool_use');
+      const results = await Promise.all(
+        toolUses.map(async block => {
+          let output;
+          try { output = await runTool(block.name, block.input || {}, userId); }
+          catch (err) { output = { error: err.message }; }
+          console.log(`[Jack/Claude] ${block.name} →`, JSON.stringify(output).substring(0, 120));
+          return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(output) };
+        })
+      );
+      currentMessages = [...currentMessages, { role: 'user', content: results }];
+      continue;
+    }
+
+    // Unexpected stop reason — return any text present
+    const textBlock = data.content?.find(b => b.type === 'text');
+    return textBlock?.text || 'Done.';
+  }
+
+  return 'Mission complete — all tasks executed.';
+}
+
 // ── Route ─────────────────────────────────────────────────────────────────────
 router.post('/chat', asyncHandler(async (req, res) => {
   const { messages } = req.body;
@@ -1036,9 +1117,23 @@ router.post('/chat', asyncHandler(async (req, res) => {
   const userId = req.user.id;
 
   require('dotenv').config({ path: ENV_PATH, override: true });
+
+  // ── Claude first (best tool use, highest accuracy) ─────────────────────────
+  if (process.env.ANTHROPIC_API_KEY) {
+    try {
+      const reply = await runJackWithClaude(messages, userId);
+      if (reply) return res.json({ reply });
+    } catch (err) {
+      const msg = err.response?.data?.error?.message || err.message || '';
+      console.warn('[Jack] Claude error, falling back to Gemini:', msg.substring(0, 120));
+      // Fall through to Gemini
+    }
+  }
+
+  // ── Gemini fallback ────────────────────────────────────────────────────────
   const keys = getGeminiKeys();
   if (!keys.length) {
-    return res.json({ reply: "No Gemini API key configured. Go to Settings → Integrations and add a key from aistudio.google.com (it's free)." });
+    return res.json({ reply: "Jack needs an API key to work. Go to Settings → Integrations and add your Anthropic key (ANTHROPIC_API_KEY) or a Gemini key from aistudio.google.com." });
   }
 
   const { GoogleGenerativeAI } = require('@google/generative-ai');
@@ -1049,7 +1144,6 @@ router.post('/chat', asyncHandler(async (req, res) => {
     role: m.role === 'assistant' ? 'model' : 'user',
     parts: [{ text: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }],
   }));
-  // Gemini requires history to start with 'user' and strictly alternate roles
   while (geminiHistory.length && geminiHistory[0].role !== 'user') geminiHistory.shift();
   geminiHistory = geminiHistory.filter((m, i, arr) => i === arr.length - 1 || m.role !== arr[i + 1].role);
   const lastMsg = messages[messages.length - 1];
@@ -1090,14 +1184,13 @@ router.post('/chat', asyncHandler(async (req, res) => {
       return res.json({ reply: 'Mission complete.' });
     } catch (geminiErr) {
       const msg = geminiErr.message || '';
-      console.warn(`[Jack] Key ...${key.slice(-6)} error: ${msg.substring(0, 80)}`);
-      if (isQuotaErr(msg)) continue; // try next key
-      // Non-quota error — report it directly
+      console.warn(`[Jack] Gemini key ...${key.slice(-6)} error: ${msg.substring(0, 80)}`);
+      if (isQuotaErr(msg)) continue;
       return res.json({ reply: `Jack hit an error: ${msg.substring(0, 120) || 'unknown'}. Try rephrasing your request.` });
     }
   }
 
-  return res.json({ reply: "All Gemini keys are at their daily limit. Try again tomorrow or add more keys in Settings → Integrations." });
+  return res.json({ reply: "All AI keys are at their daily limit. Add more keys in Settings → Integrations or try again tomorrow." });
 }));
 
 module.exports = router;

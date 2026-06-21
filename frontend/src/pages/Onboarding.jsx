@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
@@ -11,9 +11,16 @@ const EXPERIENCE = [['just_starting','Just starting out (under 1 year)'],['getti
 const GOALS = [['get_reply','Start a conversation (get a reply)'],['book_call','Book a discovery call'],['close_deal','Close a deal directly']];
 const STEPS = ['Tell us about yourself','Your work','How you communicate','Your story'];
 
+function useMobile() {
+  const [m, setM] = useState(() => window.innerWidth < 640);
+  useEffect(() => { const fn = () => setM(window.innerWidth < 640); window.addEventListener('resize', fn); return () => window.removeEventListener('resize', fn); }, []);
+  return m;
+}
+
 export default function Onboarding() {
   const navigate = useNavigate();
   const { user, refreshUser } = useAuth();
+  const isMobile = useMobile();
 
   const [step, setStep] = useState(0);
   const [done, setDone] = useState(false);
@@ -144,7 +151,7 @@ export default function Onboarding() {
   );
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', padding: 24 }}>
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', justifyContent: 'center', background: 'var(--bg)', padding: isMobile ? '16px 12px 80px' : 24 }}>
       <div style={{ maxWidth: 560, width: '100%' }}>
 
         {/* Header */}
@@ -160,7 +167,15 @@ export default function Onboarding() {
             </div>
             <span className="muted mono" style={{ fontSize: 10, letterSpacing: '.1em' }}>VOICE PROFILE SETUP</span>
           </div>
-          <span className="muted mono" style={{ fontSize: 10 }}>Step {step + 1} of {STEPS.length}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span className="muted mono" style={{ fontSize: 10 }}>Step {step + 1} of {STEPS.length}</span>
+            <button
+              onClick={skipOnboarding}
+              style={{ background: 'none', border: '1px solid var(--line-2)', borderRadius: 6, fontSize: 11, color: 'var(--text-3)', cursor: 'pointer', padding: '4px 10px', fontFamily: 'var(--f-sans)', whiteSpace: 'nowrap' }}
+            >
+              Skip
+            </button>
+          </div>
         </motion.div>
 
         {/* Progress bar */}
@@ -181,7 +196,7 @@ export default function Onboarding() {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: direction * -30 }}
             transition={{ duration: 0.25, ease: [0.16,1,0.3,1] }}
-            style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 16, padding: '32px 32px 28px' }}
+            style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 16, padding: isMobile ? '20px 16px 20px' : '32px 32px 28px' }}
           >
             <p style={{ fontFamily: 'var(--f-mono)', fontSize: 9, color: 'var(--lime)', letterSpacing: '.14em', textTransform: 'uppercase', marginBottom: 8 }}>{STEPS[step]}</p>
             <h2 style={{ fontFamily: 'var(--f-heading)', fontSize: 26, fontWeight: 800, marginBottom: 6, lineHeight: 1.2 }}>
@@ -387,17 +402,8 @@ export default function Onboarding() {
           )}
         </div>
 
-        {/* Skip link */}
-        <div style={{ textAlign: 'center', marginTop: 16 }}>
-          <button
-            onClick={skipOnboarding}
-            style={{ background: 'none', border: 'none', fontSize: 12, color: 'var(--text-4)', cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 3 }}
-          >
-            Skip voice profile for now
-          </button>
-          <div style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 4 }}>
-            You'll need to complete it before sending emails
-          </div>
+        <div style={{ textAlign: 'center', marginTop: 12 }}>
+          <span style={{ fontSize: 11, color: 'var(--text-4)' }}>You can always complete the profile later from Settings</span>
         </div>
       </div>
     </div>

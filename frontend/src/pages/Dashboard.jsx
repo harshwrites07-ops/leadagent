@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -64,11 +64,18 @@ const stageColors = {
   closed: 'var(--ok)', not_interested: 'var(--bad)',
 };
 
+function useMobile() {
+  const [m, setM] = useState(() => window.innerWidth < 860);
+  useEffect(() => { const fn = () => setM(window.innerWidth < 860); window.addEventListener('resize', fn); return () => window.removeEventListener('resize', fn); }, []);
+  return m;
+}
+
 export default function Dashboard() {
   const { dashboardStats, activities, loadingDash, refreshDashboard } = useApp();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [showPowerOverlay, setShowPowerOverlay] = useState(false);
+  const isMobile = useMobile();
 
   const s = dashboardStats;
   const firstName = user?.full_name?.split(' ')[0] || user?.name?.split(' ')[0] || 'there';
@@ -120,22 +127,22 @@ export default function Dashboard() {
 
   if (loadingDash) {
     return (
-      <div style={{ padding: '28px 32px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 24 }}>
+      <div style={{ padding: isMobile ? '14px 14px' : '28px 32px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: 12, marginBottom: 24 }}>
           {[0, 1, 2, 3].map(i => (
-            <div key={i} className="skeleton" style={{ height: 130, borderRadius: 12 }} />
+            <div key={i} className="skeleton" style={{ height: isMobile ? 90 : 130, borderRadius: 12 }} />
           ))}
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12 }}>
-          <div className="skeleton" style={{ height: 320, borderRadius: 12 }} />
-          <div className="skeleton" style={{ height: 320, borderRadius: 12 }} />
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '2fr 1fr', gap: 12 }}>
+          <div className="skeleton" style={{ height: isMobile ? 200 : 320, borderRadius: 12 }} />
+          <div className="skeleton" style={{ height: isMobile ? 200 : 320, borderRadius: 12 }} />
         </div>
       </div>
     );
   }
 
   return (
-    <div style={{ padding: '28px 32px', maxWidth: 1360, margin: '0 auto' }}>
+    <div style={{ padding: isMobile ? '14px 14px 80px' : '28px 32px', maxWidth: 1360, margin: '0 auto' }}>
 
       {/* ── Page Header ── */}
       <motion.div
@@ -144,17 +151,18 @@ export default function Dashboard() {
         transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
         style={{
           display: 'flex',
-          alignItems: 'flex-start',
+          flexDirection: isMobile ? 'column' : 'row',
+          alignItems: isMobile ? 'flex-start' : 'flex-start',
           justifyContent: 'space-between',
-          marginBottom: 24,
-          gap: 16,
+          marginBottom: isMobile ? 14 : 24,
+          gap: isMobile ? 10 : 16,
         }}
       >
         <div>
           <h1 style={{
             fontFamily: 'var(--f-serif)',
             fontStyle: 'italic',
-            fontSize: 30,
+            fontSize: isMobile ? 22 : 30,
             fontWeight: 400,
             color: 'var(--text)',
             letterSpacing: '-0.5px',
@@ -193,7 +201,7 @@ export default function Dashboard() {
       </motion.div>
 
       {/* ── Stat Tiles ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: isMobile ? 8 : 12, marginBottom: isMobile ? 10 : 16 }}>
         {[
           {
             label: 'LEADS FOUND',
@@ -282,7 +290,7 @@ export default function Dashboard() {
       </div>
 
       {/* ── Main Grid (2fr 1fr) ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12, marginBottom: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '2fr 1fr', gap: isMobile ? 8 : 12, marginBottom: isMobile ? 8 : 12 }}>
 
         {/* Activity Feed */}
         <motion.div
@@ -464,7 +472,7 @@ export default function Dashboard() {
       </div>
 
       {/* ── Bottom Grid (1fr 1fr) ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? 8 : 12 }}>
 
         {/* Recent Replies */}
         <motion.div

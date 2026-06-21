@@ -2,15 +2,15 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { X, Send, Bot, User, Loader2, Trash2, Minus, GripHorizontal, Mic, MicOff, Volume2, VolumeX, Radio } from 'lucide-react';
 import api from '../../utils/api';
 
-const WELCOME = `Captain Levi online. Outreach OS is live.\n\nTry **"find 50 leads"**, **"daily briefing"**, or just speak — I execute without questions.`;
+const WELCOME = `Jack online. Full control of your outreach OS.\n\nTry **"daily briefing"**, **"find 50 fitness leads"**, **"send emails to hot leads"**, or **"power follow-up"** — I execute immediately, no questions asked.`;
 
 const SUGGESTIONS = [
   'Daily briefing',
   'Find 50 fitness leads',
-  'Find and pitch 10 gaming channels',
-  'Show my hot leads',
+  'Send emails to hot leads',
+  'Power follow-up',
   'Clean dead leads',
-  'Turn on automation',
+  'Show database report',
 ];
 
 // Strip markdown for TTS
@@ -97,7 +97,7 @@ export default function AssistantChat() {
   const [minimized, setMinimized] = useState(false);
   const [messages, setMessages] = useState(() => {
     try {
-      const stored = localStorage.getItem('levi_chat_history');
+      const stored = localStorage.getItem('jack_chat_history');
       if (stored) return JSON.parse(stored);
     } catch {}
     return [{ role: 'assistant', content: WELCOME }];
@@ -126,7 +126,7 @@ export default function AssistantChat() {
     messagesRef.current = messages;
     try {
       const capped = messages.slice(-50);
-      localStorage.setItem('levi_chat_history', JSON.stringify(capped));
+      localStorage.setItem('jack_chat_history', JSON.stringify(capped));
     } catch {}
   }, [messages]);
 
@@ -165,7 +165,7 @@ export default function AssistantChat() {
     };
 
     rec.onerror = (e) => {
-      console.warn('[Levi Voice] Recognition error:', e.error);
+      console.warn('[Jack Voice] Recognition error:', e.error);
       intentionalStop.current = false;
       setListening(false);
     };
@@ -295,7 +295,7 @@ export default function AssistantChat() {
     window.speechSynthesis?.cancel();
     const fresh = [{ role: 'assistant', content: WELCOME }];
     setMessages(fresh);
-    try { localStorage.removeItem('levi_chat_history'); } catch {}
+    try { localStorage.removeItem('jack_chat_history'); } catch {}
   };
 
   const toggleMic = () => {
@@ -314,7 +314,7 @@ export default function AssistantChat() {
         recognitionRef.current.start();
         setListening(true);
       } catch (e) {
-        console.warn('[Levi Voice] Could not start recognition:', e.message);
+        console.warn('[Jack Voice] Could not start recognition:', e.message);
       }
     }
   };
@@ -329,7 +329,7 @@ export default function AssistantChat() {
     return (
       <button
         onClick={() => setOpen(true)}
-        title="Open Captain Levi — Outreach OS"
+        title="Open Jack — Outreach OS"
         style={{
           ...posStyle, width: 56, height: 56, borderRadius: '50%', zIndex: 9999,
           background: 'var(--lime)',
@@ -383,7 +383,7 @@ export default function AssistantChat() {
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <p style={{ fontSize: 13, fontWeight: 700, color: '#fff', margin: 0 }}>Captain Levi</p>
+            <p style={{ fontSize: 13, fontWeight: 700, color: '#fff', margin: 0 }}>Jack</p>
             {speaking
               ? <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 20, fontWeight: 700, background: 'rgba(200,246,84,0.15)', color: 'var(--lime)', border: '1px solid rgba(200,246,84,0.3)' }}>SPEAKING</span>
               : listening
@@ -392,7 +392,7 @@ export default function AssistantChat() {
             }
           </div>
           <p style={{ fontSize: 10, color: '#555', margin: 0 }}>
-            {speaking ? 'Captain Levi is speaking...' : listening ? 'Listening to you...' : 'Quelro · Outreach OS'}
+            {speaking ? 'Jack is speaking...' : listening ? 'Listening to you...' : 'Quelro · Outreach OS'}
           </p>
         </div>
         <GripHorizontal size={14} color="#333" style={{ flexShrink: 0 }} />
@@ -440,7 +440,7 @@ export default function AssistantChat() {
             {speaking && !listening && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: 'rgba(200,246,84,0.06)', border: '1px solid rgba(200,246,84,0.2)', borderRadius: 12 }}>
                 <VoiceWave color="var(--lime)" bars={6} />
-                <span style={{ fontSize: 11, color: 'var(--lime)' }}>Captain Levi is speaking</span>
+                <span style={{ fontSize: 11, color: 'var(--lime)' }}>Jack is speaking</span>
                 <button onClick={stopSpeaking} style={{ marginLeft: 'auto', fontSize: 10, color: '#555', background: 'none', border: 'none', cursor: 'pointer' }}>stop</button>
               </div>
             )}
@@ -482,7 +482,7 @@ export default function AssistantChat() {
                 <button
                   onClick={toggleMic}
                   disabled={loading}
-                  title={listening ? 'Stop listening' : 'Speak to Captain Levi'}
+                  title={listening ? 'Stop listening' : 'Speak to Jack'}
                   style={{
                     flexShrink: 0, width: 36, height: 36, borderRadius: 10, border: 'none',
                     background: listening ? 'rgba(var(--ok-rgb),0.15)' : '#111',
@@ -531,7 +531,7 @@ export default function AssistantChat() {
 
             {hasSpeechSupport && (
               <p style={{ fontSize: 9, color: '#333', textAlign: 'center', marginTop: 5, margin: '5px 0 0' }}>
-                {voiceOut ? '🔊 Voice on — Captain Levi will speak replies' : '🔇 Voice muted — tap 🔊 in header to unmute'}
+                {voiceOut ? '🔊 Voice on — Jack will speak replies' : '🔇 Voice muted — tap 🔊 in header to unmute'}
               </p>
             )}
           </div>

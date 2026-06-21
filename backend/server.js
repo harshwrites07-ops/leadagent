@@ -137,6 +137,10 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
       `).run(email, profile.id, profile.displayName || email.split('@')[0], profile.photos?.[0]?.value || null);
       const newUser = getUserById(result.lastInsertRowid);
       console.log(`[Google OAuth] New user created: id=${newUser.id} email=${email}`);
+      // Push all users to Turso so new accounts survive Railway redeploys
+      setImmediate(async () => {
+        try { const { syncUsersToTurso } = require('./src/services/tursoSync'); await syncUsersToTurso(db); } catch {}
+      });
       done(null, newUser);
     } catch (e) {
       console.error('[Google OAuth] Strategy error:', e.message);
@@ -182,6 +186,10 @@ app.get('/api/auth/google/callback',
   (req, res) => {
     console.log(`[Google OAuth] Session created for user ${req.user?.id} — redirecting`);
     req.session.userId = req.user.id;
+    // Keep Turso in sync on every Google login
+    setImmediate(async () => {
+      try { const { syncUsersToTurso } = require('./src/services/tursoSync'); await syncUsersToTurso(getDb()); } catch {}
+    });
     req.session.save(err => {
       if (err) console.error('[Google OAuth] Session save error:', err.message);
       const user = req.user;
@@ -421,6 +429,14 @@ app.listen(PORT, '0.0.0.0', () => {
       console.error('[Seeder/Podcast] Failed to start:', e.message);
     }
   }, 5000);
+
+  // Periodic Turso user sync — runs every 10 minutes so accounts always survive redeploys
+  setInterval(async () => {
+    try {
+      const { syncUsersToTurso } = require('./src/services/tursoSync');
+      await syncUsersToTurso(getDb());
+    } catch {}
+  }, 10 * 60 * 1000);
 
   // Self-ping every 14 minutes to prevent Railway sleep
   if (process.env.NODE_ENV === 'production' || process.env.SELF_PING === 'true') {

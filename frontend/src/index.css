@@ -1601,6 +1601,41 @@ html {
 /* Hide scrollbar on mobile nav elements */
 @media (max-width: 860px) {
   ::-webkit-scrollbar { width: 0; height: 0; }
+
+  /* ── Force pages to not overflow ── */
+  html, body, #root { max-width: 100vw; overflow-x: hidden; }
+
+  /* ── Force any inline-padded page containers to shrink ── */
+  [style*="padding: 28px"], [style*="padding: 32px"] {
+    padding: 14px !important;
+  }
+  [style*="padding: 24px 32px"], [style*="padding:24px 32px"] {
+    padding: 16px !important;
+  }
+
+  /* ── Inline grid overrides: force to 1-col on mobile ── */
+  [style*="grid-template-columns: repeat(4"],
+  [style*="grid-template-columns: repeat(3"],
+  [style*="gridTemplateColumns: \"repeat(4"],
+  [style*="gridTemplateColumns: \"repeat(3"] {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  /* ── Font size scale-down for mobile ── */
+  html { font-size: 13px; }
+
+  /* ── Stat cards: smaller numbers on mobile ── */
+  .stat__value { font-size: 24px !important; }
+  .stat__value--mono { font-size: 20px !important; }
+  .page__title { font-size: 22px !important; }
+
+  /* ── Tables: always scrollable on mobile ── */
+  table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* ── Cards with inline max-width: let them fill ── */
+  [style*="maxWidth: 1200"], [style*="maxWidth: 1300"], [style*="maxWidth: 900"] {
+    max-width: 100% !important;
+  }
 }
 
 /* Selection */
