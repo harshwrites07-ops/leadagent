@@ -329,6 +329,24 @@ app.listen(PORT, '0.0.0.0', () => {
     console.error('[QualityLoop] Failed to start:', err.message);
   }
 
+  // Rescore all master_leads if HOT count = 0 (catches weight-fix deploys)
+  setTimeout(async () => {
+    try {
+      const db = getDb();
+      const hotCount = db.prepare("SELECT COUNT(*) as c FROM quality_leads WHERE intent_tier='HOT'").get().c;
+      if (hotCount === 0) {
+        console.log('[Boot] HOT leads = 0 — rescoring all master_leads with updated weights...');
+        const { scoreAndPopulate } = require('./src/services/qualityLeadsService');
+        const result = await scoreAndPopulate();
+        console.log(`[Boot] Rescore complete: HOT=${result.hot} WARM=${result.warm} COLD=${result.cold} TOTAL=${result.total}`);
+      } else {
+        console.log(`[Boot] HOT leads already present (${hotCount}) — skipping rescore`);
+      }
+    } catch (e) {
+      console.error('[Boot] Rescore error:', e.message);
+    }
+  }, 15 * 1000);
+
   // Run confirmed signal scan 30s after boot (description + email + Google)
   setTimeout(async () => {
     console.log('[Boot] Running initial confirmed signal scan...');

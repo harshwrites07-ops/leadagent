@@ -283,21 +283,21 @@ function scoreMasterLead(ml) {
     if (niche.includes(key)) { niche_score = val; break; }
   }
 
-  // Signal 2: Subscriber sweet spot (30% weight) — 10K-500K needs services most
+  // Signal 2: Subscriber sweet spot (40% weight) — 10K-500K needs services most
   const subs = ml.subscriber_count || 0;
   let subs_score;
   if      (subs >= 20000  && subs <= 200000)  subs_score = 1.00; // ideal range
   else if (subs >= 10000  && subs <  20000)   subs_score = 0.90;
-  else if (subs > 200000  && subs <= 500000)  subs_score = 0.85;
+  else if (subs > 200000  && subs <= 500000)  subs_score = 0.90; // still needs help scaling
   else if (subs >= 5000   && subs <  10000)   subs_score = 0.70;
   else if (subs > 500000  && subs <= 2000000) subs_score = 0.60; // big, likely has team
   else if (subs >= 2000   && subs <  5000)    subs_score = 0.45;
   else if (subs > 2000000)                    subs_score = 0.30; // massive, definitely has team
   else                                        subs_score = 0.15; // under 2K too small
 
-  // Signal 3: Views-to-subs ratio (20% weight) — proxy for channel activity & engagement
+  // Signal 3: Views-to-subs ratio (15% weight) — proxy for channel activity & engagement
   const avgViews = ml.avg_views || 0;
-  let views_score = 0.30; // default when no view data
+  let views_score = 0.40; // neutral default when no view data (don't punish missing data)
   if (avgViews > 0 && subs > 0) {
     const ratio = avgViews / subs;
     if      (ratio >= 0.30) views_score = 1.00;
@@ -315,8 +315,8 @@ function scoreMasterLead(ml) {
   const descKwCount = SERVICE_KEYWORDS.filter(kw => descText.includes(kw)).length;
   const desc_score = Math.min(descKwCount / 2, 1.0); // 2 keywords = perfect
 
-  // Niche is the dominant proxy signal for master_leads (no upload/engagement data available)
-  const score = (0.50 * niche_score) + (0.35 * subs_score) + (0.10 * views_score) + (0.05 * desc_score);
+  // Niche + subs are co-equal proxy signals; views as tiebreaker
+  const score = (0.40 * niche_score) + (0.40 * subs_score) + (0.15 * views_score) + (0.05 * desc_score);
   const base_score   = Math.min(Math.round(score * 100) / 100, 1.0);
   const intent_score = scoreWithPlatformSignals(ml.channel_id, base_score);
   const temperature  = intent_score >= 0.75 ? 'hot' : intent_score >= 0.50 ? 'warm' : 'cold';
