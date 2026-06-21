@@ -11,11 +11,11 @@ const GMAIL_SCOPES = [
 const GMAIL_DAILY_LIMIT = 500;
 
 const PLAN_GMAIL_LIMITS = {
-  trial:   0,
-  free:    0,
-  starter: 1,
-  pro:     3,
-  growth:  3,
+  trial:   1,
+  free:    1,
+  starter: 2,
+  pro:     4,
+  growth:  4,
   agency:  10,
 };
 
