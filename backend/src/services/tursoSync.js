@@ -405,7 +405,18 @@ async function syncUsersToTurso(db) {
     if (!users.length) return 0;
     const BATCH = 20;
     let pushed = 0;
-    const sql = `INSERT OR REPLACE INTO users (${colList}) VALUES (${USER_COLS.map(() => '?').join(',')})`;
+
+    // Use upsert that NEVER downgrades onboarding_completed from 1→0.
+    // Once a user completes/skips onboarding, that flag must be sticky in Turso.
+    const setCols = USER_COLS
+      .filter(c => c !== 'id')
+      .map(c => c === 'onboarding_completed'
+        ? `onboarding_completed = MAX(users.onboarding_completed, excluded.onboarding_completed)`
+        : `${c} = excluded.${c}`)
+      .join(', ');
+    const sql = `INSERT INTO users (${colList}) VALUES (${USER_COLS.map(() => '?').join(',')})
+      ON CONFLICT(id) DO UPDATE SET ${setCols}`;
+
     for (let i = 0; i < users.length; i += BATCH) {
       const batch = users.slice(i, i + BATCH);
       const stmts = batch.map(u => ({ sql, args: USER_COLS.map(col => u[col] ?? null) }));
@@ -466,6 +477,22 @@ async function pullUsersFromTurso() {
     }
 
     console.log(`[Turso] Pull users complete — restored ${total} users`);
+
+    // Heal: if Turso had stale onboarding_completed=0 for users who have profile
+    // data (service_type set = they went through onboarding), fix it locally and
+    // immediately push the correction back to Turso so it never happens again.
+    try {
+      const healed = db.prepare(`
+        UPDATE users SET onboarding_completed = 1
+        WHERE onboarding_completed = 0
+          AND service_type IS NOT NULL AND service_type != ''
+      `).run();
+      if (healed.changes > 0) {
+        console.log(`[Turso] Healed onboarding_completed for ${healed.changes} users — syncing fix to Turso`);
+        await syncUsersToTurso(db);
+      }
+    } catch {}
+
     return total;
   } catch (e) {
     console.error('[Turso] pullUsers error:', e.message);

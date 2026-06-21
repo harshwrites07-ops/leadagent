@@ -39,12 +39,21 @@ const LoadingScreen = () => (
   </div>
 );
 
+// True if user needs to go through onboarding.
+// service_type being set means they completed/skipped it before — don't redirect
+// even if onboarding_completed flag was corrupted by a stale Turso restore.
+function needsOnboarding(user) {
+  if (user.onboarding_completed) return false;
+  if (user.service_type) return false; // has profile data = already did onboarding
+  return true;
+}
+
 // Root "/" — unauthenticated users see Landing, authenticated users enter the app
 function RootRoute() {
   const { user, loading } = useAuth();
   if (loading) return <LoadingScreen />;
   if (user) {
-    if (!user.onboarding_completed) return <Navigate to="/onboarding" replace />;
+    if (needsOnboarding(user)) return <Navigate to="/onboarding" replace />;
     return <Navigate to="/dashboard" replace />;
   }
   return <Landing />;
@@ -57,7 +66,7 @@ function ProtectedRoute({ children }) {
   if (loading) return <LoadingScreen />;
 
   if (!user) return <Navigate to="/" state={{ from: location }} replace />;
-  if (!user.onboarding_completed && location.pathname !== '/onboarding') {
+  if (needsOnboarding(user) && location.pathname !== '/onboarding') {
     return <Navigate to="/onboarding" replace />;
   }
   return children;

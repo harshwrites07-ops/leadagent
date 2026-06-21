@@ -148,6 +148,13 @@ router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
   // Reset attempts on success
   db.prepare(`UPDATE users SET login_attempts=0, lockout_until=NULL, last_login=CURRENT_TIMESTAMP WHERE id=?`).run(user.id);
 
+  // Heal: if onboarding_completed got reset to 0 by a stale Turso pull but user
+  // has profile data, fix it now BEFORE syncing so we don't push stale 0 to Turso.
+  const freshUser = db.prepare('SELECT * FROM users WHERE id=?').get(user.id);
+  if (!freshUser.onboarding_completed && freshUser.service_type) {
+    db.prepare('UPDATE users SET onboarding_completed=1 WHERE id=?').run(user.id);
+  }
+
   req.session.userId = user.id;
   if (remember) req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000; // 30 days
 
