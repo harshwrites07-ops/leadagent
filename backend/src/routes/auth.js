@@ -374,6 +374,14 @@ router.put('/onboarding', requireAuth, asyncHandler(async (req, res) => {
     await rebuildVoiceDNA(req.user.id);
   } catch {}
 
+  // Sync to Turso NOW — onboarding_completed=1 must survive the next Railway redeploy
+  setImmediate(async () => {
+    try {
+      const { syncUsersToTurso } = require('../services/tursoSync');
+      await syncUsersToTurso(getDb());
+    } catch {}
+  });
+
   const user = getUserById(req.user.id);
   res.json({ success: true, user: safeUser(user) });
 }));
@@ -384,6 +392,13 @@ router.put('/onboarding', requireAuth, asyncHandler(async (req, res) => {
 router.post('/skip-onboarding', requireAuth, asyncHandler(async (req, res) => {
   const db = getDb();
   db.prepare(`UPDATE users SET onboarding_completed=1, profile_completed=0 WHERE id=?`).run(req.user.id);
+  // Sync immediately so this flag survives Railway redeploys
+  setImmediate(async () => {
+    try {
+      const { syncUsersToTurso } = require('../services/tursoSync');
+      await syncUsersToTurso(getDb());
+    } catch {}
+  });
   const user = getUserById(req.user.id);
   res.json({ success: true, user: safeUser(user) });
 }));
@@ -409,9 +424,23 @@ router.put('/profile', requireAuth, asyncHandler(async (req, res) => {
   try {
     const { rebuildVoiceDNA } = require('../services/voiceDNA');
     const dna = await rebuildVoiceDNA(req.user.id);
+    // Sync profile changes to Turso immediately
+    setImmediate(async () => {
+      try {
+        const { syncUsersToTurso } = require('../services/tursoSync');
+        await syncUsersToTurso(getDb());
+      } catch {}
+    });
     const user = getUserById(req.user.id);
     return res.json({ success: true, user: safeUser(user), voice_dna: dna });
   } catch {}
+
+  setImmediate(async () => {
+    try {
+      const { syncUsersToTurso } = require('../services/tursoSync');
+      await syncUsersToTurso(getDb());
+    } catch {}
+  });
 
   const user = getUserById(req.user.id);
   res.json({ success: true, user: safeUser(user) });
