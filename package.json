@@ -16,5 +16,12 @@
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.17",
+    "archiver": "^8.0.0",
+    "axios": "^1.18.0",
+    "cheerio": "^1.2.0",
+    "fs-extra": "^11.3.5"
   }
 }

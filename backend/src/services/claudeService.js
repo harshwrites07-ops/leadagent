@@ -366,10 +366,21 @@ function buildMasterPrompt(lead, user, dna) {
     ? 'A direct but low-pressure question. e.g. "Open to seeing what I\'d fix first?"'
     : 'A single yes/no question or a 2-word answer question. e.g. "Want to see what I\'d change?"';
 
-  // ── Social proof instruction ─────────────────────────────────────────────
+  // ── Social proof — must prove the SAME metric type as the hook ───────────
+  const hookType = (() => {
+    const hf = hookFact.toLowerCase();
+    if (hf.includes('days ago') || hf.includes('upload') || hf.includes('last upload'))
+      return 'upload consistency or posting frequency (not subscriber count)';
+    if (hf.includes('view-through') || hf.includes('ratio') || hf.includes('per video'))
+      return 'view-to-sub ratio or average views improvement (not subscriber count)';
+    if (hf.includes('down') || hf.includes('drop') || hf.includes('declining') || hf.includes('below'))
+      return 'view count recovery — show views going back up (not subscriber growth)';
+    return 'average views or watch time improvement (not subscriber count growth)';
+  })();
+
   const proofInstr = senderResult
-    ? `Your proof sentence must reference this real result: "${senderResult}" — reframe it as "Helped a ${niche} creator [result]"`
-    : `Your proof sentence format: "Helped a ${niche} creator ${proofAngle}" — invent a plausible specific number`;
+    ? `Proof must demonstrate ${hookType}. Source material: "${senderResult}". Extract only the number that proves ${hookType}. If this result shows subscriber growth but your hook was about editing or retention, ignore the subscriber number and show a plausible watch time or view count improvement instead. Format: "Helped a ${niche} creator [same problem type as Lines 1-2] → [result in ${hookType}]"`
+    : `Proof: "Helped a ${niche} creator ${proofAngle}" — ONE specific before/after number that proves ${hookType}. Make it plausible and realistic.`;
 
   return `You are ${senderFirst}. You are writing a cold email FROM YOURSELF to a YouTube creator named ${lead.channel_name}. This is YOUR email — not a template, not AI output.
 
@@ -410,16 +421,28 @@ SOCIAL PROOF: ${proofInstr}
 CTA: ${ctaInstr}
 
 STRUCTURE:
-Line 1: The specific observation (exact numbers from above). No hello. No compliment.
-Line 2: Why it matters. ZERO mention of your service yet.
-Line 3: Your social proof with specific numbers.
-Line 4: ONE question CTA.
+Line 1: Observation — exact numbers from above. No greeting. Start mid-thought or with a number. Never start with "I".
+Line 2: Why it matters to THEM. ONE sentence. Zero service mention. Zero self-reference.
+Line 3: Proof — "Helped a ${niche} creator [SAME PROBLEM TYPE as Lines 1-2] → [result in the SAME METRIC TYPE]."
+         → If Line 1 was about view counts or retention: proof shows view count/watch time going UP.
+         → If Line 1 was about upload gaps: proof shows upload consistency recovering.
+         → If Line 1 was about view-to-sub ratio: proof shows ratio improving.
+         → NEVER show subscriber count growth as proof when the hook was about editing quality.
+         One sentence. One specific number. No more.
+Line 4: ONE question CTA. 5-8 words. Must be answerable in 2 words.
 [blank line]
 ${senderFirst}
 
+SUBJECT LINE — pick the formula that fits best:
+• "[specific number] + [specific problem]" → e.g. "your 4.7% view rate"
+• "your [time signal]" → e.g. "your last 3 videos"
+• "[bigger number] vs [smaller number]" → e.g. "81K subs, 4K views"
+• "I think I know what's happening" → ONLY for channels with clearly declining views
+Never write a generic subject. Never use "quick question" or "your channel".
+
 RULES (every email must pass all of these):
-• Body: 50-90 words maximum. Count every word.
-• Subject: 3-6 words. Reference the specific data point. NOT generic.
+• Body: 55-85 words. Count every word. Under 55 = too thin. Over 85 = cut it down.
+• PROOF ALIGNMENT RULE: The metric in Line 3's result MUST match the metric type in Lines 1-2. Mismatch = fail, rewrite.
 • NEVER start with "I"
 • NEVER: "I came across", "I noticed", "love your content", "collaboration", "opportunity", "hope this finds you", "I wanted to reach out", "touching base", "exciting", "amazing", "incredible", "leaving money on the table", "game changer"
 • NEVER mention pricing
@@ -461,6 +484,16 @@ function scoreEmailDetailed(subject, body) {
   if (qCount === 1) score += 5; // exactly one question
   if (!/click here|book a call|schedule|sign up|visit our|check out our/i.test(body)) score += 5;
 
+  // Proof alignment penalty (-15 pts) — catches the most common failure mode:
+  // hook about editing/retention but proof shows subscriber count growth
+  const hookIsViews = /\d[\d,]+\s*(?:views|avg|average)/i.test(body);
+  const hookIsRatio = /\d[\d.]+%\s*(?:view|rate|ratio)/i.test(body) || /view[-\s]?(?:through|to[-\s]?sub)/i.test(body);
+  const hookIsUploads = /\d+\s*days?\s*(?:ago|since|gap)/i.test(body);
+  const proofShowsSubGrowth = /from\s+\d+k?\s+to\s+\d+k?\s+sub/i.test(body) || /\d+k?\s*(?:to|→)\s*\d+k?\s*subs/i.test(body);
+  if ((hookIsViews || hookIsRatio) && proofShowsSubGrowth && !hookIsUploads) {
+    score -= 15; // proof metric doesn't match hook metric
+  }
+
   return Math.min(100, Math.max(0, score));
 }
 
@@ -498,6 +531,13 @@ async function generateFollowUpSequence(lead, initialEmail, psychology) {
   const recentVideos = (() => { try { return JSON.parse(lead.recent_videos||'[]'); } catch { return []; } })();
   const latestVideo  = recentVideos[0]?.title || null;
 
+  // Resolve sender name from the lead's owner — never hardcode
+  let senderFirst = 'Alex';
+  try {
+    const u = getDb().prepare('SELECT full_name FROM users WHERE id=?').get(lead.user_id);
+    if (u?.full_name) senderFirst = u.full_name.split(' ')[0];
+  } catch {}
+
   const steps = [
     { day: 3,  angle: 'new observation — completely different angle, no repeat of email 1', maxWords: 60,  hasCTA: false,
       instruction: 'Give something genuinely valuable with zero ask — a specific retention insight, a video idea tailored to them, or an algorithm observation only someone who studied their channel would notice. This PROVES skill.' },
@@ -515,7 +555,7 @@ async function generateFollowUpSequence(lead, initialEmail, psychology) {
 
   for (const step of steps) {
     try {
-      const prompt = `You are Prahvi from ContentCrafterzz. Write follow-up #${steps.indexOf(step)+1}/5 for ${lead.channel_name}.
+      const prompt = `You are ${senderFirst}. Write follow-up #${steps.indexOf(step)+1}/5 for ${lead.channel_name}.
 
 CHANNEL: ${lead.channel_name} | ${subs} subs | Niche: ${niche}
 ${latestVideo ? `Latest video: "${latestVideo}"` : ''}
@@ -528,7 +568,7 @@ RULES:
 • Under ${step.maxWords} words body. Hard limit.
 • NEVER repeat anything from the first email.
 • Never sound desperate. Never mention pricing.
-• Sign: Prahvi (first name only)
+• Sign: ${senderFirst} (first name only)
 • ${step.hasCTA ? 'End with ONE soft, low-commitment question' : 'No CTA — let the value speak'}
 • Tone: ${psychology.tone}
 • Different subject from all previous emails
@@ -597,7 +637,7 @@ const BANNED_PATTERNS = [
 function failsValidation(subject, body) {
   if (!body) return 'empty body';
   const wc = body.split(/\s+/).filter(Boolean).length;
-  if (wc > 100) return `too long (${wc} words, max 100)`;
+  if (wc > 90) return `too long (${wc} words, max 90)`;
   if (subject && subject.split(/\s+/).length > 7) return `subject too long (${subject.split(/\s+/).length} words, max 7)`;
   if (/^I /i.test(body.trim())) return 'body starts with "I"';
   for (const [pattern, label] of BANNED_PATTERNS) {

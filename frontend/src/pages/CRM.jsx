@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import Icon from '../components/ui/Icon';
+import PowerSendOverlay from '../components/ui/PowerSendOverlay';
 import api, { formatNumber, formatDate } from '../utils/api';
 
 const STAGES = [
@@ -23,6 +24,12 @@ const NICHE_COLORS = {
   Business: 'var(--cream)',
 };
 
+function channelUrl(lead) {
+  if (lead.channel_url) return lead.channel_url;
+  if (lead.channel_handle) return `https://youtube.com/${lead.channel_handle}`;
+  return null;
+}
+
 export default function CRM() {
   const navigate = useNavigate();
   const [leads, setLeads] = useState([]);
@@ -33,6 +40,8 @@ export default function CRM() {
   const [newNote, setNewNote] = useState('');
   const [detailTab, setDetailTab] = useState('Timeline');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [checkedLeads, setCheckedLeads] = useState(new Set());
+  const [showPowerSend, setShowPowerSend] = useState(false);
 
   const columns = STAGES.map(s => ({
     ...s,
@@ -69,6 +78,15 @@ export default function CRM() {
     } catch {}
   };
 
+  const toggleCheck = (e, leadId) => {
+    e.stopPropagation();
+    setCheckedLeads(prev => {
+      const next = new Set(prev);
+      next.has(leadId) ? next.delete(leadId) : next.add(leadId);
+      return next;
+    });
+  };
+
   const handleAddNote = async () => {
     if (!newNote.trim() || !selected) return;
     try {
@@ -100,6 +118,7 @@ export default function CRM() {
   };
 
   const totalValue = leads.reduce((sum, l) => sum + (l.deal_value || 0), 0);
+  const selectedLeadIds = [...checkedLeads];
 
   return (
     <div className="page page--bleed" style={{ padding: '24px 24px 0', maxWidth: 'none' }}>
@@ -166,6 +185,8 @@ export default function CRM() {
                     {col.leads.map((lead, i) => {
                       const isHot = lead.temperature === 'hot' || col.id === 'replied' || col.id === 'call_booked';
                       const nicheColor = NICHE_COLORS[lead.niche] || 'var(--text-3)';
+                      const isChecked = checkedLeads.has(lead.id);
+                      const url = channelUrl(lead);
                       return (
                         <motion.div
                           key={lead.id || i}
@@ -176,9 +197,29 @@ export default function CRM() {
                           whileTap={{ scale: 0.98 }}
                           className="kb__card"
                           onClick={() => handleSelectLead(lead)}
-                          style={isHot ? { borderColor: 'var(--coral-border)' } : undefined}
+                          style={isChecked
+                            ? { borderColor: 'var(--lime-border)', background: 'rgba(var(--lime-rgb),0.04)' }
+                            : isHot ? { borderColor: 'var(--coral-border)' } : undefined}
                         >
                           <div className="kb__card-head">
+                            {/* Checkbox */}
+                            <div
+                              onClick={e => toggleCheck(e, lead.id)}
+                              style={{
+                                width: 14, height: 14, borderRadius: 3, flexShrink: 0, marginTop: 3,
+                                border: `1.5px solid ${isChecked ? 'var(--lime)' : 'var(--line-2)'}`,
+                                background: isChecked ? 'var(--lime)' : 'transparent',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                cursor: 'pointer', transition: 'all 0.12s',
+                              }}
+                            >
+                              {isChecked && (
+                                <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke="#0a0a0c" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="m5 12 5 5 9-11"/>
+                                </svg>
+                              )}
+                            </div>
+
                             {lead.thumbnail_url ? (
                               <img src={lead.thumbnail_url} alt="" style={{ width: 26, height: 26, minWidth: 26, borderRadius: '50%', objectFit: 'cover' }} onError={e => { e.target.style.display='none'; e.target.nextSibling.style.display='flex'; }} />
                             ) : null}
@@ -191,7 +232,7 @@ export default function CRM() {
                                 {lead.channel_handle || ''} · {formatNumber(lead.subscriber_count ?? 0)}
                               </div>
                             </div>
-                            {isHot && (
+                            {isHot && !isChecked && (
                               <span className="dot dot--pulse-coral" style={{ background: 'var(--coral)', width: 7, height: 7, marginTop: 4, flexShrink: 0 }} />
                             )}
                           </div>
@@ -199,9 +240,32 @@ export default function CRM() {
                             <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: 'var(--bg-2)', color: nicheColor, border: `1px solid ${nicheColor}22` }}>
                               {lead.niche || 'General'}
                             </span>
-                            {lead.deal_value ? (
-                              <span className="kb__card-value">${(lead.deal_value / 1000).toFixed(1)}k</span>
-                            ) : null}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
+                              {lead.deal_value ? (
+                                <span className="kb__card-value">${(lead.deal_value / 1000).toFixed(1)}k</span>
+                              ) : null}
+                              {url && (
+                                <a
+                                  href={url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={e => e.stopPropagation()}
+                                  title="Open YouTube channel"
+                                  style={{
+                                    display: 'flex', alignItems: 'center', gap: 3,
+                                    fontSize: 10, color: 'var(--text-3)', textDecoration: 'none',
+                                    padding: '2px 6px', borderRadius: 5,
+                                    border: '1px solid var(--line)', background: 'var(--bg-2)',
+                                    transition: 'color 0.12s, border-color 0.12s',
+                                  }}
+                                  onMouseEnter={e => { e.currentTarget.style.color = '#ff0000'; e.currentTarget.style.borderColor = 'rgba(255,0,0,0.3)'; }}
+                                  onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-3)'; e.currentTarget.style.borderColor = 'var(--line)'; }}
+                                >
+                                  <Icon name="youtube" size={10} />
+                                  Channel
+                                </a>
+                              )}
+                            </div>
                           </div>
                         </motion.div>
                       );
@@ -213,6 +277,47 @@ export default function CRM() {
                 </motion.div>
               );
             })}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Floating selection bar */}
+      <AnimatePresence>
+        {checkedLeads.size > 0 && (
+          <motion.div
+            initial={{ y: 80, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 80, opacity: 0 }}
+            transition={{ duration: 0.25, ease: [0.16,1,0.3,1] }}
+            style={{
+              position: 'fixed', bottom: 36, left: '50%', transform: 'translateX(-50%)',
+              background: 'var(--surface-2)', border: '1px solid var(--lime-border)',
+              borderRadius: 12, padding: '10px 16px',
+              display: 'flex', alignItems: 'center', gap: 12,
+              zIndex: 50, boxShadow: '0 8px 32px rgba(0,0,0,0.55), 0 0 0 1px rgba(var(--lime-rgb),0.1)',
+            }}
+          >
+            <span style={{ fontSize: 13, color: 'var(--text)', fontWeight: 600, whiteSpace: 'nowrap' }}>
+              {checkedLeads.size} lead{checkedLeads.size !== 1 ? 's' : ''} selected
+            </span>
+            <button
+              onClick={() => setShowPowerSend(true)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '7px 14px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                background: 'var(--gradient-orange)', color: '#0a0a0c',
+                fontSize: 13, fontWeight: 700,
+                boxShadow: '0 0 16px rgba(var(--lime-rgb),0.3)',
+              }}
+            >
+              <Icon name="zap" size={12} /> Send Emails
+            </button>
+            <button
+              className="btn btn--ghost btn--sm"
+              onClick={() => setCheckedLeads(new Set())}
+            >
+              <Icon name="x" size={11} /> Clear
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
@@ -246,7 +351,7 @@ export default function CRM() {
         )}
       </AnimatePresence>
 
-      {/* Slide-in lead detail — motion.div replaces CSS animation */}
+      {/* Slide-in lead detail */}
       <AnimatePresence>
         {selected && (
           <motion.div
@@ -266,6 +371,19 @@ export default function CRM() {
                 <Icon name="x" size={12} />Close
               </button>
               <div style={{ flex: 1 }} />
+              {channelUrl(selected) && (
+                <a
+                  href={channelUrl(selected)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn--ghost btn--sm"
+                  style={{ textDecoration: 'none', color: 'var(--text-2)' }}
+                  onMouseEnter={e => { e.currentTarget.style.color = '#ff0000'; }}
+                  onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-2)'; }}
+                >
+                  <Icon name="youtube" size={12} />Open Channel
+                </a>
+              )}
               <button className="btn btn--ghost btn--sm" onClick={() => navigate(`/analyzer`)}>
                 <Icon name="eye" size={12} />Open in Analyzer
               </button>
@@ -399,6 +517,14 @@ export default function CRM() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Power send overlay for selected leads */}
+      {showPowerSend && (
+        <PowerSendOverlay
+          leadIds={selectedLeadIds}
+          onClose={() => { setShowPowerSend(false); setCheckedLeads(new Set()); }}
+        />
+      )}
     </div>
   );
 }

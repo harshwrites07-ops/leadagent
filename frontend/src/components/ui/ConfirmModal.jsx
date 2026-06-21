@@ -27,7 +27,7 @@ export default function ConfirmModal({ title, message, confirmLabel = 'Confirm',
           </button>
           <button
             onClick={onConfirm}
-            style={{ padding: '8px 16px', borderRadius: 6, border: 'none', background: danger ? '#FF4444' : 'var(--gradient-orange)', color: '#fff', cursor: 'pointer', fontSize: 13, fontFamily: 'var(--font-body)', fontWeight: 600 }}
+            style={{ padding: '8px 16px', borderRadius: 6, border: 'none', background: danger ? '#FF4444' : 'var(--gradient-orange)', color: danger ? '#fff' : '#0a0a0c', cursor: 'pointer', fontSize: 13, fontFamily: 'var(--font-body)', fontWeight: 600 }}
           >
             {confirmLabel}
           </button>

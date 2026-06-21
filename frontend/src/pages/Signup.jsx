@@ -151,7 +151,7 @@ const styles = {
   inputIcon: { position: 'absolute', left: 11, color: 'var(--text-muted)', pointerEvents: 'none' },
   input: { width: '100%', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '9px 12px 9px 34px', fontSize: 13, color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box', fontFamily: 'var(--font-body)' },
   eyeBtn: { position: 'absolute', right: 10, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 2 },
-  btn: { marginTop: 16, padding: '11px', background: 'var(--gradient-orange)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font-body)' },
+  btn: { marginTop: 16, padding: '11px', background: 'var(--gradient-orange)', border: 'none', borderRadius: 8, color: '#0a0a0c', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font-body)' },
   divider: { display: 'flex', alignItems: 'center', margin: '20px 0', gap: 12 },
   dividerText: { fontSize: 11, color: 'var(--text-muted)', background: 'var(--bg-surface)', padding: '0 8px', whiteSpace: 'nowrap' },
   googleBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px', border: '1px solid var(--border-strong)', borderRadius: 8, background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, textDecoration: 'none', cursor: 'pointer', marginBottom: 20, fontFamily: 'var(--font-body)' },

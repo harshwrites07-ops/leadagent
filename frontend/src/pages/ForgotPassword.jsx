@@ -73,7 +73,7 @@ const styles = {
   card: { width: '100%', maxWidth: 380, background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 16, padding: '36px 32px' },
   logo: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 28 },
   logoIcon: { width: 36, height: 36, borderRadius: 9, background: 'var(--gradient-orange)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 20px rgba(var(--lime-rgb),0.3)', flexShrink: 0 },
-  logoText: { fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 900, color: '#fff', letterSpacing: '-0.03em' },
+  logoText: { fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 900, color: '#0a0a0c', letterSpacing: '-0.03em' },
   logoName: { fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 800, color: 'var(--text-primary)', margin: 0, lineHeight: 1.2 },
   logoSub: { fontFamily: 'var(--font-mono)', fontSize: 8, fontWeight: 600, letterSpacing: '0.14em', color: 'var(--text-muted)', margin: 0 },
   title: { fontFamily: 'var(--font-heading)', fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 4px', letterSpacing: '-0.02em' },
@@ -85,7 +85,7 @@ const styles = {
   inputWrap: { position: 'relative', display: 'flex', alignItems: 'center' },
   inputIcon: { position: 'absolute', left: 11, color: 'var(--text-muted)', pointerEvents: 'none' },
   input: { width: '100%', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '9px 12px 9px 34px', fontSize: 13, color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box', fontFamily: 'var(--font-body)' },
-  btn: { marginTop: 16, padding: '11px', background: 'var(--gradient-orange)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font-body)' },
+  btn: { marginTop: 16, padding: '11px', background: 'var(--gradient-orange)', border: 'none', borderRadius: 8, color: '#0a0a0c', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font-body)' },
   footer: { textAlign: 'center', fontSize: 13, color: 'var(--text-muted)', margin: '20px 0 0' },
   link: { color: 'var(--accent-primary)', textDecoration: 'none', fontWeight: 600 },
 };

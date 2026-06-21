@@ -84,6 +84,14 @@ export default function Onboarding() {
   const goNext = () => { setDirection(1); setStep(s => s + 1); };
   const goBack = () => { setDirection(-1); setStep(s => s - 1); };
 
+  const skipOnboarding = async () => {
+    try {
+      await api.post('/auth/skip-onboarding');
+      await refreshUser();
+      navigate('/dashboard');
+    } catch {}
+  };
+
   const progress = (step / STEPS.length) * 100;
 
   if (done) return (
@@ -377,6 +385,19 @@ export default function Onboarding() {
               {saving ? 'Building your profile...' : 'Finish setup →'}
             </motion.button>
           )}
+        </div>
+
+        {/* Skip link */}
+        <div style={{ textAlign: 'center', marginTop: 16 }}>
+          <button
+            onClick={skipOnboarding}
+            style={{ background: 'none', border: 'none', fontSize: 12, color: 'var(--text-4)', cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 3 }}
+          >
+            Skip voice profile for now
+          </button>
+          <div style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 4 }}>
+            You'll need to complete it before sending emails
+          </div>
         </div>
       </div>
     </div>

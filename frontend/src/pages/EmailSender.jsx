@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import Icon from '../components/ui/Icon';
+import { useAuth } from '../context/AuthContext';
 import PowerSendOverlay from '../components/ui/PowerSendOverlay';
 import SpamMonitorPanel from '../components/ui/SpamMonitorPanel';
 import api, { formatNumber, formatDate } from '../utils/api';
@@ -22,6 +23,13 @@ const STATUS_BADGE = {
 export default function EmailSender() {
   const navigate = useNavigate();
   const { refreshDashboard } = useApp();
+  const { user } = useAuth();
+  const [showProfileGate, setShowProfileGate] = useState(false);
+
+  const requiresProfile = () => {
+    if (!user?.profile_completed) { setShowProfileGate(true); return true; }
+    return false;
+  };
 
   const [tab, setTab] = useState('queue');
   const [stats, setStats] = useState(null);
@@ -159,7 +167,7 @@ export default function EmailSender() {
             whileHover={{ scale: 1.02, y: -1 }}
             whileTap={{ scale: 0.97 }}
             className="btn btn--primary"
-            onClick={() => setShowPowerSendModal(true)}
+            onClick={() => { if (!requiresProfile()) setShowPowerSendModal(true); }}
           >
             <Icon name="bolt" size={13} />Power Send · {queueCount} ready
           </motion.button>
@@ -282,7 +290,7 @@ export default function EmailSender() {
                                   whileTap={{ scale: 0.95 }}
                                   className="btn btn--ghost btn--sm"
                                   title="Send now"
-                                  onClick={() => handleSendNow(item.id)}
+                                  onClick={() => { if (!requiresProfile()) handleSendNow(item.id); }}
                                 >
                                   <Icon name="play" size={11} />
                                 </motion.button>
@@ -462,7 +470,7 @@ export default function EmailSender() {
                     whileTap={{ scale: 0.97 }}
                     className="btn btn--primary"
                     style={{ flex: 2, justifyContent: 'center' }}
-                    onClick={() => { setShowPowerSendModal(false); setShowPowerOverlay(true); }}
+                    onClick={() => { if (!requiresProfile()) { setShowPowerSendModal(false); setShowPowerOverlay(true); } }}
                   >
                     <Icon name="bolt" size={13} />Launch send
                   </motion.button>
@@ -481,6 +489,66 @@ export default function EmailSender() {
       )}
 
       {showSpamMonitor && <SpamMonitorPanel onClose={() => setShowSpamMonitor(false)} />}
+
+      {/* Voice profile gate modal */}
+      <AnimatePresence>
+        {showProfileGate && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="onb"
+            onClick={e => e.target === e.currentTarget && setShowProfileGate(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.25, ease: [0.16,1,0.3,1] }}
+              className="onb__card"
+              style={{ maxWidth: 460 }}
+            >
+              <div style={{ padding: '32px 32px 8px', textAlign: 'center' }}>
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ delay: 0.1, duration: 0.4, ease: [0.16,1,0.3,1] }}
+                  style={{ width: 64, height: 64, borderRadius: 18, background: 'var(--lime-soft)', border: '1px solid var(--lime-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', fontSize: 28 }}
+                >
+                  ⚡
+                </motion.div>
+                <h2 style={{ fontFamily: 'var(--f-heading)', fontSize: 22, fontWeight: 800, marginBottom: 8 }}>
+                  Complete your voice profile first
+                </h2>
+                <p className="muted" style={{ fontSize: 13, lineHeight: 1.7, marginBottom: 0 }}>
+                  Quelro writes emails that sound exactly like <strong style={{ color: 'var(--text)' }}>you</strong>. Without your voice profile, every email will sound generic — and generic emails don't get replies.
+                </p>
+              </div>
+              <div style={{ padding: '20px 32px 28px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ padding: '12px 16px', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 10, fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>
+                  Takes <strong style={{ color: 'var(--lime)' }}>~2 minutes</strong> · 4 short questions · unlocks personalized AI pitches for every creator
+                </div>
+                <motion.button
+                  whileHover={{ scale: 1.02, y: -1 }}
+                  whileTap={{ scale: 0.97 }}
+                  className="btn btn--lime btn--lg"
+                  style={{ justifyContent: 'center' }}
+                  onClick={() => { setShowProfileGate(false); navigate('/onboarding'); }}
+                >
+                  ⚡ Complete voice profile →
+                </motion.button>
+                <button
+                  className="btn btn--ghost"
+                  style={{ justifyContent: 'center' }}
+                  onClick={() => setShowProfileGate(false)}
+                >
+                  Maybe later
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Follow-up modal */}
       <AnimatePresence>

@@ -373,6 +373,16 @@ router.put('/onboarding', requireAuth, asyncHandler(async (req, res) => {
   res.json({ success: true, user: safeUser(user) });
 }));
 
+// ── POST /api/auth/skip-onboarding ─────────────────────────────────────────
+// Marks onboarding as done but leaves profile_completed = 0.
+// Email sending will gate on profile_completed.
+router.post('/skip-onboarding', requireAuth, asyncHandler(async (req, res) => {
+  const db = getDb();
+  db.prepare(`UPDATE users SET onboarding_completed=1, profile_completed=0 WHERE id=?`).run(req.user.id);
+  const user = getUserById(req.user.id);
+  res.json({ success: true, user: safeUser(user) });
+}));
+
 // ── PUT /api/auth/profile — update voice profile from Settings ───────────────
 router.put('/profile', requireAuth, asyncHandler(async (req, res) => {
   const allowed = ['full_name','service_type','one_liner','experience_years','best_result',
