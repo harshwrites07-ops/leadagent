@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import Icon from '../components/ui/Icon';
+import { useApp } from '../context/AppContext';
 import api, { formatNumber } from '../utils/api';
 
 const GEN_STEPS = [
@@ -28,6 +29,7 @@ function normalizePitch(raw) {
 
 export default function PitchGenerator() {
   const navigate = useNavigate();
+  const { setPitchJobRunning, setPitchJobProgress, setPitchJobTotal, setPitchJobResults, setPitchJobLeadId, addBackgroundTask, removeBackgroundTask } = useApp();
 
   // Leads
   const [leads, setLeads] = useState([]);
@@ -171,6 +173,12 @@ export default function PitchGenerator() {
     setBulkResults([]);
     setBulkProgress({ current: 0, total: toProcess.length, done: false, action: andSend ? 'generating & sending' : 'generating' });
     setShowLeadPicker(false);
+    setPitchJobRunning(true);
+    setPitchJobTotal(toProcess.length);
+    setPitchJobProgress(0);
+    setPitchJobResults([]);
+    setPitchJobLeadId(selectedLead?.id ?? null);
+    addBackgroundTask({ id: 'pitch-bulk', label: `Generating ${toProcess.length} pitch${toProcess.length !== 1 ? 'es' : ''}`, page: '/pitch' });
 
     for (let i = 0; i < toProcess.length; i++) {
       const lead = toProcess[i];
@@ -181,9 +189,15 @@ export default function PitchGenerator() {
         if (andSend && p) {
           await api.post('/emails/queue', { lead_id: lead.id, subject: p.email_subject, body: p.cold_email_body });
         }
-        setBulkResults(prev => [...prev, { lead, status: andSend ? 'queued' : 'generated', pitch: p }]);
+        const newResult = { lead, status: andSend ? 'queued' : 'generated', pitch: p };
+        setBulkResults(prev => [...prev, newResult]);
+        setPitchJobProgress(i + 1);
+        setPitchJobResults(prev => [...prev, newResult]);
       } catch (e) {
-        setBulkResults(prev => [...prev, { lead, status: 'error', error: e.message }]);
+        const errResult = { lead, status: 'error', error: e.message };
+        setBulkResults(prev => [...prev, errResult]);
+        setPitchJobProgress(i + 1);
+        setPitchJobResults(prev => [...prev, errResult]);
       }
       if (andSend && i < toProcess.length - 1 && timeGap > 0) {
         await new Promise(r => setTimeout(r, timeGap * 1000));
@@ -192,6 +206,8 @@ export default function PitchGenerator() {
 
     setBulkRunning(false);
     setBulkProgress(p => ({ ...p, done: true }));
+    setPitchJobRunning(false);
+    removeBackgroundTask('pitch-bulk');
     toast.success(`Done! ${toProcess.length} pitches ${andSend ? 'generated & queued' : 'generated'}`);
   };
 

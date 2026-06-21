@@ -10,6 +10,25 @@ export function AppProvider({ children }) {
   const [emailStats, setEmailStats] = useState(null);
   const [loadingDash, setLoadingDash] = useState(true);
 
+  // Lead Finder background state
+  const [powerModeRunning, setPowerModeRunning] = useState(false);
+  const [powerModeNiches, setPowerModeNiches] = useState([]);
+  const [powerModeFeed, setPowerModeFeed] = useState([]);
+  const [powerModeLeadsFound, setPowerModeLeadsFound] = useState(0);
+  const [powerModeJobId, setPowerModeJobId] = useState(null);
+
+  // Pitch Generator background state
+  const [pitchJobRunning, setPitchJobRunning] = useState(false);
+  const [pitchJobProgress, setPitchJobProgress] = useState(0);
+  const [pitchJobTotal, setPitchJobTotal] = useState(0);
+  const [pitchJobResults, setPitchJobResults] = useState([]);
+  const [pitchJobLeadId, setPitchJobLeadId] = useState(null);
+
+  // Global background task notifications
+  const [backgroundTasks, setBackgroundTasks] = useState([]);
+  const addBackgroundTask = (task) => setBackgroundTasks(prev => [...prev.filter(t => t.id !== task.id), task]);
+  const removeBackgroundTask = (taskId) => setBackgroundTasks(prev => prev.filter(t => t.id !== taskId));
+
   const refreshDashboard = useCallback(async () => {
     try {
       const [dashRes, actRes, emailRes] = await Promise.all([
@@ -58,14 +77,19 @@ export function AppProvider({ children }) {
 
   return (
     <AppContext.Provider value={{
-      dashboardStats,
-      activities,
-      settings,
-      emailStats,
-      loadingDash,
-      refreshDashboard,
-      loadSettings,
-      saveSettings,
+      dashboardStats, activities, settings, emailStats, loadingDash,
+      refreshDashboard, loadSettings, saveSettings,
+      powerModeRunning, setPowerModeRunning,
+      powerModeNiches, setPowerModeNiches,
+      powerModeFeed, setPowerModeFeed,
+      powerModeLeadsFound, setPowerModeLeadsFound,
+      powerModeJobId, setPowerModeJobId,
+      pitchJobRunning, setPitchJobRunning,
+      pitchJobProgress, setPitchJobProgress,
+      pitchJobTotal, setPitchJobTotal,
+      pitchJobResults, setPitchJobResults,
+      pitchJobLeadId, setPitchJobLeadId,
+      backgroundTasks, addBackgroundTask, removeBackgroundTask,
     }}>
       {children}
     </AppContext.Provider>

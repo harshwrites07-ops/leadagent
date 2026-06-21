@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
+import { useApp } from '../../context/AppContext';
 import {
   LayoutDashboard, Search, BarChart2, Mail, Users,
   Zap, Star, TrendingUp, Settings, Shield, Bell,
@@ -28,6 +29,7 @@ const ADMIN_ITEMS = [
 
 export default function Layout({ children }) {
   const { user, logout } = useAuth();
+  const { backgroundTasks, powerModeRunning, pitchJobRunning } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -117,6 +119,7 @@ export default function Layout({ children }) {
 
           {NAV_ITEMS.map(({ to, icon: Icon, label, dot }) => {
             const active = isActive(to);
+            const taskRunning = (to === '/leads' && powerModeRunning) || (to === '/pitch' && pitchJobRunning);
             return (
               <NavLink
                 key={to}
@@ -129,7 +132,17 @@ export default function Layout({ children }) {
                   color: active ? 'var(--lime)' : 'inherit',
                 }} />
                 {label}
-                {dot && (
+                {taskRunning && (
+                  <span style={{
+                    marginLeft: 'auto',
+                    width: 6, height: 6,
+                    borderRadius: '50%',
+                    background: 'var(--lime)',
+                    boxShadow: '0 0 6px var(--lime)',
+                    animation: 'pulse-lime 2s infinite',
+                  }} />
+                )}
+                {dot && !taskRunning && (
                   <span style={{
                     marginLeft: 'auto',
                     width: 6, height: 6,
@@ -165,6 +178,36 @@ export default function Layout({ children }) {
             </>
           )}
         </nav>
+
+        {/* Background tasks panel */}
+        <AnimatePresence>
+          {backgroundTasks.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.2, ease: [0.16,1,0.3,1] }}
+              style={{ borderTop: '1px solid var(--line)', flexShrink: 0, overflow: 'hidden' }}
+            >
+              <div style={{ padding: '8px 8px 4px' }}>
+                <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--text-4)', fontFamily: 'var(--f-mono)', padding: '0 4px', marginBottom: 4 }}>RUNNING</div>
+                {backgroundTasks.map(task => (
+                  <motion.div
+                    key={task.id}
+                    initial={{ opacity: 0, x: -6 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -6 }}
+                    onClick={() => task.page && (window.location.href = task.page)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 6, fontSize: 11, color: 'var(--text-2)', cursor: task.page ? 'pointer' : 'default', marginBottom: 4 }}
+                  >
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--lime)', boxShadow: '0 0 5px var(--lime)', animation: 'pulse-lime 2s infinite', flexShrink: 0 }} />
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.label}</span>
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Ask Jack + User */}
         <div style={{ padding: '12px 8px 8px', borderTop: '1px solid var(--line)', flexShrink: 0 }}>

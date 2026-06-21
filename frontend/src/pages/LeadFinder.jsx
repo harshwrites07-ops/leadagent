@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import Icon from '../components/ui/Icon';
 import api, { formatNumber } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
+import { useApp } from '../context/AppContext';
 
 const PLAN_RUN_LIMITS = { trial: 50, free: 100, starter: 500, pro: 2500, growth: 2500, agency: 10000 };
 
@@ -42,6 +43,7 @@ function ScorePill({ score }) {
 export default function LeadFinder() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { powerModeRunning, setPowerModeRunning, addBackgroundTask, removeBackgroundTask } = useApp();
   const [tab, setTab] = useState('youtube');
 
   // PowerMode
@@ -79,6 +81,14 @@ export default function LeadFinder() {
     }
   }, [selectedNiches]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Resume polling if PowerMode was running when user navigated away
+  useEffect(() => {
+    if (powerModeRunning) {
+      setPmRunning(true);
+      setPmPolling(true);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // PowerMode polling
   useEffect(() => {
     if (!pmPolling) return;
@@ -92,6 +102,8 @@ export default function LeadFinder() {
           setPmRunning(false);
           setPmDone(true);
           pmStartTime.current = null;
+          setPowerModeRunning(false);
+          removeBackgroundTask('powermode');
           if (data.targetReached) {
             toast.success(`Got all ${data.targetCount} leads with emails.`);
           } else if (data.quotaExhausted) {
@@ -126,6 +138,8 @@ export default function LeadFinder() {
       setPmDone(false);
       pmStartTime.current = Date.now();
       setPmPolling(true);
+      setPowerModeRunning(true);
+      addBackgroundTask({ id: 'powermode', label: 'PowerMode running', page: '/leads' });
     } catch (e) {
       const msg = e.response?.data?.error || e.message || 'PowerMode failed to start';
       if (e.response?.data?.upgradeRequired) {
@@ -141,6 +155,8 @@ export default function LeadFinder() {
       await api.post('/scraper/powermode/stop');
       setPmPolling(false);
       setPmRunning(false);
+      setPowerModeRunning(false);
+      removeBackgroundTask('powermode');
       toast('PowerMode stopped');
     } catch {}
   };
