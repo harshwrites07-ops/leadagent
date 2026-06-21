@@ -382,7 +382,20 @@ function buildMasterPrompt(lead, user, dna) {
     ? `Proof must demonstrate ${hookType}. Source material: "${senderResult}". Extract only the number that proves ${hookType}. If this result shows subscriber growth but your hook was about editing or retention, ignore the subscriber number and show a plausible watch time or view count improvement instead. Format: "Helped a ${niche} creator [same problem type as Lines 1-2] → [result in ${hookType}]"`
     : `Proof: "Helped a ${niche} creator ${proofAngle}" — ONE specific before/after number that proves ${hookType}. Make it plausible and realistic.`;
 
-  return `You are ${senderFirst}. You are writing a cold email FROM YOURSELF to a YouTube creator named ${lead.channel_name}. This is YOUR email — not a template, not AI output.
+  // Build recent video list so the AI can quote specific titles
+  const recentVideosList = (() => {
+    try {
+      const vids = JSON.parse(lead.recent_videos || '[]');
+      if (!vids.length) return '';
+      return vids.slice(0, 5).map((v, i) =>
+        `${i + 1}. "${v.title}" — ${(v.views || 0).toLocaleString()} views`
+      ).join('\n');
+    } catch { return ''; }
+  })();
+
+  const hasVideoTitle = recentVideosList.length > 0 || hookFact.includes('"');
+
+  return `You are ${senderFirst}. Writing a cold email to a YouTube creator. Every word must feel like you spent 20 minutes studying THIS specific channel — not a template.
 
 YOUR IDENTITY:
 Name: ${senderFull}
@@ -390,69 +403,77 @@ What you sell: ${senderSvc}
 ${oneLiner    ? `One-liner: "${oneLiner}"` : ''}
 ${senderResult? `Best result: "${senderResult}"` : ''}
 ${uniqueAngle ? `What makes you different: "${uniqueAngle}"` : ''}
-How you write: ${voiceInstr}
+Voice: ${voiceInstr}
 
 ---
-GOLD STANDARD EXAMPLES — study every single one of these.
-Every email you write must match or exceed this quality level.
-Notice: opens with specific data, never compliments, diagnoses first,
-one social proof with numbers, one low-commitment question, first name only.
+GOLD STANDARD EXAMPLES — internalize these. Notice: every one names something SPECIFIC (a video title, an exact number, a pattern). Never stat dumps. Never generic.
 
 ${examples}
 
 ---
-NOW WRITE ONE COMPLETELY UNIQUE EMAIL for this creator.
-Match the style, length, and structure of the most relevant example above.
-Do NOT copy any example — make it unique to this creator's specific situation.
-
 CREATOR: ${lead.channel_name}
 Subscribers: ${(lead.subscriber_count || 0).toLocaleString()}
 Niche: ${niche}
-Average views: ${(lead.avg_views || 0).toLocaleString()}
-Description: ${(lead.channel_description || '').slice(0, 200) || 'not available'}
+Avg views: ${(lead.avg_views || 0).toLocaleString()}
+Bio: ${(lead.channel_description || '').slice(0, 180) || 'not available'}
 
-SPECIFIC OBSERVATION TO LEAD WITH:
+RECENT VIDEOS:
+${recentVideosList || '(no video data — work with subscriber/view context)'}
+
+THE ONE OBSERVATION TO BUILD THIS EMAIL AROUND:
 → ${hookFact}
 → Why it matters: ${whyItMatters}
-Use these exact numbers in your first sentence. Do not invent or change the data.
+${hasVideoTitle ? '→ A video title appears above — USE IT in the email. Quoting the actual title is what makes the creator think "they actually watched my stuff".' : ''}
 
 SOCIAL PROOF: ${proofInstr}
 
 CTA: ${ctaInstr}
 
-STRUCTURE:
-Line 1: Observation — exact numbers from above. No greeting. Start mid-thought or with a number. Never start with "I".
-Line 2: Why it matters to THEM. ONE sentence. Zero service mention. Zero self-reference.
-Line 3: Proof — "Helped a ${niche} creator [SAME PROBLEM TYPE as Lines 1-2] → [result in the SAME METRIC TYPE]."
-         → If Line 1 was about view counts or retention: proof shows view count/watch time going UP.
-         → If Line 1 was about upload gaps: proof shows upload consistency recovering.
-         → If Line 1 was about view-to-sub ratio: proof shows ratio improving.
-         → NEVER show subscriber count growth as proof when the hook was about editing quality.
-         One sentence. One specific number. No more.
-Line 4: ONE question CTA. 5-8 words. Must be answerable in 2 words.
+WRITE THE EMAIL — 4 lines, no greeting, no sign-off line except the name:
+
+Line 1 (HOOK): Start with the most striking specific detail from the observation above. If a video title is available, quote it exactly. If not, open with a specific number or pattern. Never start with "I". Never open with a compliment. Make them think "how do they know that?"
+
+Line 2 (DIAGNOSIS): ONE sentence — what this means for their channel. Zero mention of your service. Zero self-reference. Frame it as insight, not pitch.
+
+Line 3 (PROOF): "Helped a ${niche} creator [same problem type as Line 1] → [one before/after result in the SAME metric type as Line 1]."
+PROOF ALIGNMENT LAW:
+• Hook about views/retention → proof shows views or watch time going up
+• Hook about upload gap → proof shows upload frequency recovering
+• Hook about view-to-sub ratio → proof shows ratio or average views improving
+• NEVER show subscriber count growth when the hook was about editing quality
+One sentence. One number. Done.
+
+Line 4 (CTA): ONE question. 5-8 words. Answerable in 2 words. Make it feel natural, not like a CTA.
+
 [blank line]
 ${senderFirst}
 
-SUBJECT LINE — pick the formula that fits best:
-• "[specific number] + [specific problem]" → e.g. "your 4.7% view rate"
-• "your [time signal]" → e.g. "your last 3 videos"
-• "[bigger number] vs [smaller number]" → e.g. "81K subs, 4K views"
-• "I think I know what's happening" → ONLY for channels with clearly declining views
-Never write a generic subject. Never use "quick question" or "your channel".
+SUBJECT LINE — must be a SPECIFIC OBSERVATION about this channel:
+GOOD formulas:
+• Quote a video title or time period: "your October uploads" / "that AI tools video"
+• Name a specific pattern: "your last 4 videos" / "what happened in Q3"
+• Precise metric with context: "your 4.7% watch-through" (only when watch-through is the actual hook)
+• Curiosity diagnosis: "I think I know what's happening" (ONLY for clearly declining channels)
 
-RULES (every email must pass all of these):
-• Body: 55-85 words. Count every word. Under 55 = too thin. Over 85 = cut it down.
-• PROOF ALIGNMENT RULE: The metric in Line 3's result MUST match the metric type in Lines 1-2. Mismatch = fail, rewrite.
-• NEVER start with "I"
-• NEVER: "I came across", "I noticed", "love your content", "collaboration", "opportunity", "hope this finds you", "I wanted to reach out", "touching base", "exciting", "amazing", "incredible", "leaving money on the table", "game changer"
-• NEVER mention pricing
-• NEVER offer free work
-• "${senderSvc}" lowercase always
-• pitch_score must be 80 or above — if your draft would score below 80, rewrite it first
-${isSmall ? '• SMALL CHANNEL: Focus on growth potential, never embarrass them about low numbers.' : ''}
+BANNED subject line formats — delete immediately, start over:
+✗ "[X subs, Y views]" — stat dump with zero insight
+✗ "[X]M subs, [Y]% view rate" — same problem, feels like a scraper
+✗ "quick question about your channel" — overused template signal
+✗ "video editing services" — sounds like spam
+✗ Any subject that lists two numbers without telling a story
 
-OUTPUT: JSON only — no markdown, no backticks:
-{"subject":"3-6 word subject","body":"email body with blank line then first name","pitch_score":85,"word_count":72}`;
+HARD RULES — fail any one = rewrite:
+• Body: 55-85 words. Count them. Under 55 = too thin. Over 85 = cut.
+• Proof metric must match hook metric type (PROOF ALIGNMENT LAW above)
+• If a video title was provided: it MUST appear in the email body or subject
+• Never start body with "I"
+• Banned phrases: "I came across", "I noticed", "love your content", "collaboration", "opportunity", "hope this finds you", "I wanted to reach out", "touching base", "exciting", "amazing", "incredible", "leaving money on the table", "game changer", "most channels your size", "I'm reaching out"
+• No pricing. No free work offers. "${senderSvc}" lowercase.
+• pitch_score 80+ required — if your internal score is under 80, rewrite before returning
+${isSmall ? '• SMALL CHANNEL: Never embarrass them about low numbers. Focus on their potential and what\'s already working.' : ''}
+
+OUTPUT — JSON only, no markdown, no explanation, no backticks:
+{"subject":"3-7 word specific observation","body":"full email body ending with blank line then first name only","pitch_score":85,"word_count":72}`;
 }
 
 // ─── Step 5: Quality scorer ───────────────────────────────────────────────────
@@ -632,13 +653,23 @@ const BANNED_PATTERNS = [
   [/collaboration/i,             '"collaboration"'],
   [/quick question/i,           '"quick question"'],
   [/just wanted to/i,           '"just wanted to"'],
+  [/I'm reaching out/i,         '"I\'m reaching out"'],
+  [/most channels your size/i,  '"most channels your size"'],
 ];
+
+function isStatDumpSubject(subject) {
+  if (!subject) return false;
+  // Pattern: two numbers separated by comma/space — e.g. "623K views, 4.2M subs" or "2.8M subs, 3.7% view rate"
+  const twoNumberPattern = /[\d.,]+[KkMm]?\s+\w+,?\s+[\d.,]+[KkMm%]?\s+\w+/;
+  return twoNumberPattern.test(subject);
+}
 
 function failsValidation(subject, body) {
   if (!body) return 'empty body';
   const wc = body.split(/\s+/).filter(Boolean).length;
   if (wc > 90) return `too long (${wc} words, max 90)`;
-  if (subject && subject.split(/\s+/).length > 7) return `subject too long (${subject.split(/\s+/).length} words, max 7)`;
+  if (subject && subject.split(/\s+/).length > 8) return `subject too long (${subject.split(/\s+/).length} words, max 8)`;
+  if (subject && isStatDumpSubject(subject)) return `subject is a stat dump ("${subject}") — must be an observation, not raw numbers`;
   if (/^I /i.test(body.trim())) return 'body starts with "I"';
   for (const [pattern, label] of BANNED_PATTERNS) {
     if (pattern.test(body)) return `banned phrase ${label}`;

@@ -47,34 +47,80 @@ function getServiceIntelligence(serviceType, lead) {
 
   if (isEditor || (!isThumb && !isScript && !isSEO && !isCoach && !isSponsor && !isSocial)) {
     serviceCategory = 'video editing';
+
+    const latestVideo  = recentVideos[0] || null;
+    const latestTitle  = latestVideo?.title || null;
+    const latestViews  = latestVideo?.views || 0;
+
+    // Best/worst in the recent set
+    const sorted      = [...recentVideos].sort((a, b) => (b.views || 0) - (a.views || 0));
+    const bestVideo   = sorted[0] || null;
+    const worstRecent = sorted[sorted.length - 1] || null;
+
     if (daysSince !== null && daysSince > 14) {
-      hookFact     = `Their last upload was ${daysSince} days ago`;
-      whyItMatters = `Upload gaps compound — every 2 weeks of silence costs around 8-12% of ongoing subscriber engagement`;
+      // Upload gap — strongest angle, reference last video title
+      hookFact = latestTitle
+        ? `"${latestTitle}" was uploaded ${daysSince} days ago — nothing since`
+        : `Last upload was ${daysSince} days ago`;
+      whyItMatters = `Upload gaps compound — every 2 weeks of silence costs around 8-12% of ongoing subscriber engagement. Editing backlog is almost always the real bottleneck`;
+
     } else if (viewTrend === 'declining' && recentAvg > 0 && olderAvg > 0) {
+      // View decline — name the most recent video specifically
       const drop = Math.round((1 - recentAvg / olderAvg) * 100);
-      hookFact     = `Their last 3 videos averaged ${Math.round(recentAvg).toLocaleString()} views — down ${drop}% from their ${Math.round(olderAvg).toLocaleString()} channel average`;
-      whyItMatters = `That kind of drop without a content change usually means the edit pacing is bleeding watch time`;
+      hookFact = latestTitle
+        ? `Last 3 videos averaged ${Math.round(recentAvg).toLocaleString()} views — down ${drop}% from the ${Math.round(olderAvg).toLocaleString()} channel average. Most recent: "${latestTitle}"`
+        : `Last 3 videos averaged ${Math.round(recentAvg).toLocaleString()} views — down ${drop}% from the ${Math.round(olderAvg).toLocaleString()} channel average`;
+      whyItMatters = `That kind of drop without a content change almost always means edit pacing is bleeding watch time in the first 90 seconds`;
+
+    } else if (bestVideo && recentVideos.length >= 3 && (bestVideo.views || 0) > recentAvg * 4 && recentAvg > 0) {
+      // Viral spike they never replicated — most compelling angle for large channels
+      hookFact = `"${bestVideo.title}" hit ${(bestVideo.views || 0).toLocaleString()} views. The most recent ${recentVideos.length - 1} uploads are averaging ${Math.round(recentAvg).toLocaleString()}`;
+      whyItMatters = `There's a specific edit formula in that breakout video they never systematically decoded — which is why every upload after it has underperformed it`;
+
     } else if (viewSubRatioPct !== null && viewSubRatioPct < 6) {
-      hookFact     = `${subs.toLocaleString()} subscribers, ${Math.round(avgViews).toLocaleString()} average views — a ${viewSubRatioPct.toFixed(1)}% view-through rate`;
-      whyItMatters = `Sub-to-view ratios under 6% almost always trace back to a hook or first-30-seconds edit problem`;
+      // Low view-to-sub ratio — frame as an observation, not a stat dump
+      hookFact = latestTitle
+        ? `"${latestTitle}" is the most recent video — ${viewSubRatioPct.toFixed(1)}% of ${subs.toLocaleString()} subscribers watched. That ratio has a specific cause`
+        : `${viewSubRatioPct.toFixed(1)}% of ${subs.toLocaleString()} subscribers are watching each video — a gap that almost always traces to the first 30 seconds of the edit`;
+      whyItMatters = `Sub-to-view ratios under 6% almost always trace to a hook or first-30-seconds pacing problem — the thumbnail gets the click, but the edit loses the watch`;
+
+    } else if (latestTitle && latestViews > 0 && latestViews < avgViews * 0.7) {
+      // Most recent video underperformed vs channel average
+      hookFact = `"${latestTitle}" pulled ${latestViews.toLocaleString()} views — below the ${Math.round(avgViews).toLocaleString()} channel average`;
+      whyItMatters = `When a channel's strongest recent video underperforms its own average, the edit pacing is usually telling the algorithm to push it to fewer people than the content deserves`;
+
+    } else if (bestVideo && worstRecent && (bestVideo.views || 0) > (worstRecent.views || 0) * 5 && recentVideos.length >= 3) {
+      // Massive variance between best and worst recent videos
+      hookFact = `"${bestVideo.title}" hit ${(bestVideo.views || 0).toLocaleString()} views. "${worstRecent.title}" got ${(worstRecent.views || 0).toLocaleString()}`;
+      whyItMatters = `That gap between best and worst isn't random — two completely different edit approaches are fighting each other. One formula is working and they don't know which one`;
+
     } else {
-      hookFact     = `Averaging ${Math.round(avgViews).toLocaleString()} views per video with ${subs.toLocaleString()} subscribers`;
-      whyItMatters = `Good channel, but there's usually 20-30% more views sitting in the edit that most creators never unlock`;
+      // Stable channel — use latest video title to prove we studied them
+      hookFact = latestTitle
+        ? `"${latestTitle}" — latest upload. ${Math.round(avgViews).toLocaleString()} average views on ${subs.toLocaleString()} subscribers`
+        : `${subs.toLocaleString()} subscribers, ${Math.round(avgViews).toLocaleString()} average views per video`;
+      whyItMatters = `Solid channel — most creators at this level have 20-30% more views sitting in the edit they never unlock: tighter pacing, sharper hooks, cuts that push watch time up`;
     }
+
     proofAngle  = 'improved their average views / watch time through better editing';
     ctaQuestion = 'whether a specific edit change would move their numbers';
   }
 
   else if (isThumb) {
     serviceCategory = 'thumbnail design';
+    const latestTitle = recentTitles[0] || null;
     if (viewSubRatioPct !== null && viewSubRatioPct < 8) {
-      hookFact     = `${subs.toLocaleString()} subscribers but ${Math.round(avgViews).toLocaleString()} average views — a ${viewSubRatioPct.toFixed(1)}% view-through rate`;
+      hookFact = latestTitle
+        ? `"${latestTitle}" — ${viewSubRatioPct.toFixed(1)}% of ${subs.toLocaleString()} subscribers watched. Click problem, not content problem`
+        : `${viewSubRatioPct.toFixed(1)}% of ${subs.toLocaleString()} subscribers watch each video — almost always a thumbnail click problem, not a content quality issue`;
       whyItMatters = `View-to-sub ratios under 8% almost always point to a thumbnail click problem, not a content quality problem`;
     } else if (recentTitles.length >= 2) {
-      hookFact     = `Their thumbnails follow the same visual formula across their last ${recentTitles.length} videos`;
-      whyItMatters = `Repeated visual patterns plateau the CTR — the algorithm stops pushing what audiences already swiped past`;
+      hookFact     = `Last ${recentTitles.length} videos — "${recentTitles[0]}", "${recentTitles[1]}" — follow the same thumbnail visual formula`;
+      whyItMatters = `Repeated visual patterns plateau CTR — the algorithm stops pushing what audiences already swiped past`;
     } else {
-      hookFact     = `Their channel is getting ${Math.round(avgViews).toLocaleString()} average views on ${subs.toLocaleString()} subscribers`;
+      hookFact     = latestTitle
+        ? `"${latestTitle}" is the most recent upload — getting ${Math.round(avgViews).toLocaleString()} average views on ${subs.toLocaleString()} subscribers`
+        : `Getting ${Math.round(avgViews).toLocaleString()} average views on ${subs.toLocaleString()} subscribers`;
       whyItMatters = `The gap between good content and its view count is almost always a thumbnail click problem`;
     }
     proofAngle  = 'lifted CTR significantly with redesigned thumbnails';
