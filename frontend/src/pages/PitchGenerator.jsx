@@ -127,6 +127,7 @@ export default function PitchGenerator() {
       setCompletedSteps(new Set(GEN_STEPS.map(s => s.key)));
       setCurrentStep(null);
       setLeads(prev => prev.map(l => l.id === selectedLead.id ? { ...l, pitch_id: data.pitch?.id ?? true } : l));
+      if (data.warning) toast(data.warning, { icon: '⚠️', duration: 6000 });
       toast.success('Pitch generated!');
     } catch (err) {
       animCancelled = true;

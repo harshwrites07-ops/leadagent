@@ -176,9 +176,46 @@ async function checkAiAvailability() {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// HYPER-PERSONALIZED EMAIL GENERATION v2
-// Philosophy: Every email must feel like a human spent hours studying this creator.
+// EMAIL GENERATION v3 — human-first pitches that sound written, not generated
 // ════════════════════════════════════════════════════════════════════════════
+
+function formatSubCount(n) {
+  if (!n || n <= 0) return '0';
+  if (n >= 1_000_000) return `${+(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 1_000) return `${+(n / 1_000).toFixed(1)}K`;
+  return String(n);
+}
+
+const PITCH_SYSTEM_PROMPT = `You are a pitch writer for freelancers targeting YouTube creators.
+Write pitches that sound like a HUMAN wrote them. Not a robot. Not a marketing tool.
+
+RULES:
+- Max 4 sentences in body (55-80 words total)
+- Never use raw numbers like "2,590,000" — format as "2.59M"
+- Start with ONE specific observation about their channel (upload drop, view count, pattern)
+- Show empathy in line 2 (they're probably doing everything themselves and it's getting overwhelming)
+- ONE line of social proof with a specific before/after result
+- ONE soft CTA question (5-8 words, answerable with yes/no)
+- Never use: "view-to-sub ratio", "conversion rate", "metrics", "analytics", "I noticed", "I came across", "hope this finds you", "collaboration", "exciting opportunity", "game changer", "I'm reaching out", "leaving money on the table"
+- Sound like a colleague reaching out, not a salesman pitching
+- Never start body with "I"
+- Sign with sender first name only, on its own line after a blank line
+
+STRUCTURE:
+Line 1: Specific observation (what you noticed — name something real and specific)
+Line 2: What this usually means (empathy — not about your service, about their situation)
+Line 3: Proof ("Helped a [niche] creator in the same spot → [specific before/after result]")
+Line 4: Soft CTA question (not a demand)
+
+[blank line]
+[sender first name]
+
+SUBJECT LINE:
+- Max 8 words
+- Must include ONE specific data point (views, upload frequency, subscriber count, etc.)
+- No clickbait, no "quick question", no generic phrases
+
+TONE: Casual, direct, human, confident. NOT: Formal, robotic, salesy, desperate.`;
 
 const BANNED_PHRASES = [
   'leaving money on the table','i came across your channel','i love your content',
@@ -331,149 +368,40 @@ function daysAgoText(dateStr) {
 }
 
 function buildMasterPrompt(lead, user, dna) {
-  const { getServiceIntelligence, buildVoiceInstruction } = require('./voiceDNA');
-  const { selectExamples } = require('./emailExamples');
-
-  // ── Sender identity ──────────────────────────────────────────────────────
-  const senderFirst  = dna?.name      || (user?.full_name || '').split(' ')[0] || 'Alex';
-  const senderFull   = dna?.fullName  || user?.full_name  || senderFirst;
-  const senderSvc    = (dna?.service  || user?.service_type || 'services').toLowerCase();
+  const senderFirst  = dna?.name || (user?.full_name || '').split(' ')[0] || '';
   const senderResult = dna?.socialProof || user?.best_result || '';
-  const traits       = Array.isArray(dna?.traits) ? dna.traits : [];
-  const outreachGoal = dna?.outreachGoal || user?.outreach_goal || 'get_reply';
-  const uniqueAngle  = dna?.uniqueDifference || user?.unique_difference || '';
-  const oneLiner     = dna?.identity || user?.one_liner || '';
-  const experienceYears = dna?.experienceLevel || user?.experience_years || '';
-  const style        = dna?.communicationStyle || 'natural and genuine';
+  const niche        = lead.niche || 'general';
 
-  // ── Service + channel intelligence ──────────────────────────────────────
-  const intel = getServiceIntelligence(senderSvc, lead);
-  const { hookFact, whyItMatters, proofAngle } = intel;
-
-  const isSmall = (lead.subscriber_count || 0) < 5000;
-  const niche   = lead.niche || 'general';
-
-  // ── Dynamic examples — 4 most relevant from 50-example gold-standard bank ─
-  const examples = selectExamples(lead, 4);
-
-  // ── Voice instruction ────────────────────────────────────────────────────
-  const voiceInstr = buildVoiceInstruction(traits, style);
-
-  // ── CTA instruction ──────────────────────────────────────────────────────
-  const ctaInstr = outreachGoal === 'book_call'
-    ? 'A soft question that plants the seed of a call without asking for one directly. e.g. "Worth a quick breakdown of what changed?"'
-    : outreachGoal === 'close_deal'
-    ? 'A direct but low-pressure question. e.g. "Open to seeing what I\'d fix first?"'
-    : 'A single yes/no question or a 2-word answer question. e.g. "Want to see what I\'d change?"';
-
-  // ── Social proof — must prove the SAME metric type as the hook ───────────
-  const hookType = (() => {
-    const hf = hookFact.toLowerCase();
-    if (hf.includes('days ago') || hf.includes('upload') || hf.includes('last upload'))
-      return 'upload consistency or posting frequency (not subscriber count)';
-    if (hf.includes('view-through') || hf.includes('ratio') || hf.includes('per video'))
-      return 'view-to-sub ratio or average views improvement (not subscriber count)';
-    if (hf.includes('down') || hf.includes('drop') || hf.includes('declining') || hf.includes('below'))
-      return 'view count recovery — show views going back up (not subscriber growth)';
-    return 'average views or watch time improvement (not subscriber count growth)';
-  })();
-
-  const proofInstr = senderResult
-    ? `Proof must demonstrate ${hookType}. Source material: "${senderResult}". Extract only the number that proves ${hookType}. If this result shows subscriber growth but your hook was about editing or retention, ignore the subscriber number and show a plausible watch time or view count improvement instead. Format: "Helped a ${niche} creator [same problem type as Lines 1-2] → [result in ${hookType}]"`
-    : `Proof: "Helped a ${niche} creator ${proofAngle}" — ONE specific before/after number that proves ${hookType}. Make it plausible and realistic.`;
-
-  // Build recent video list so the AI can quote specific titles
   const recentVideosList = (() => {
     try {
       const vids = JSON.parse(lead.recent_videos || '[]');
       if (!vids.length) return '';
       return vids.slice(0, 5).map((v, i) =>
-        `${i + 1}. "${v.title}" — ${(v.views || 0).toLocaleString()} views`
+        `${i + 1}. "${v.title}" — ${formatSubCount(v.views || 0)} views`
       ).join('\n');
     } catch { return ''; }
   })();
 
-  const hasVideoTitle = recentVideosList.length > 0 || hookFact.includes('"');
+  const daysSinceUpload = lead.last_upload_date
+    ? Math.floor((Date.now() - new Date(lead.last_upload_date)) / 86400000) : null;
 
-  return `You are ${senderFirst}. Writing a cold email to a YouTube creator. Every word must feel like you spent 20 minutes studying THIS specific channel — not a template.
+  return `Write a cold pitch email for this YouTube creator. Follow all rules in your system instructions.
 
-YOUR IDENTITY:
-Name: ${senderFull}
-What you sell: ${senderSvc}
-${oneLiner    ? `One-liner: "${oneLiner}"` : ''}
-${senderResult? `Best result: "${senderResult}"` : ''}
-${uniqueAngle ? `What makes you different: "${uniqueAngle}"` : ''}
-Voice: ${voiceInstr}
-
----
-GOLD STANDARD EXAMPLES — internalize these. Notice: every one names something SPECIFIC (a video title, an exact number, a pattern). Never stat dumps. Never generic.
-
-${examples}
-
----
-CREATOR: ${lead.channel_name}
-Subscribers: ${(lead.subscriber_count || 0).toLocaleString()}
+CHANNEL: ${lead.channel_name}
+Subscribers: ${formatSubCount(lead.subscriber_count || 0)}
 Niche: ${niche}
-Avg views: ${(lead.avg_views || 0).toLocaleString()}
-Bio: ${(lead.channel_description || '').slice(0, 180) || 'not available'}
+Avg views per video: ${formatSubCount(lead.avg_views || 0)}
+${daysSinceUpload !== null ? `Days since last upload: ${daysSinceUpload}` : ''}
+Bio: ${(lead.channel_description || '').slice(0, 150) || 'not available'}
 
 RECENT VIDEOS:
-${recentVideosList || '(no video data — work with subscriber/view context)'}
+${recentVideosList || '(no video data — use subscriber/view context only)'}
 
-THE ONE OBSERVATION TO BUILD THIS EMAIL AROUND:
-→ ${hookFact}
-→ Why it matters: ${whyItMatters}
-${hasVideoTitle ? '→ A video title appears above — USE IT in the email. Quoting the actual title is what makes the creator think "they actually watched my stuff".' : ''}
+SENDER NAME (use as signature): ${senderFirst || 'Your Name'}
+SOCIAL PROOF: ${senderResult ? `"${senderResult}"` : `Make up a plausible specific result for a ${niche} creator — one before/after number`}
 
-SOCIAL PROOF: ${proofInstr}
-
-CTA: ${ctaInstr}
-
-WRITE THE EMAIL — 4 lines, no greeting, no sign-off line except the name:
-
-Line 1 (HOOK): Start with the most striking specific detail from the observation above. If a video title is available, quote it exactly. If not, open with a specific number or pattern. Never start with "I". Never open with a compliment. Make them think "how do they know that?"
-
-Line 2 (DIAGNOSIS): ONE sentence — what this means for their channel. Zero mention of your service. Zero self-reference. Frame it as insight, not pitch.
-
-Line 3 (PROOF): "Helped a ${niche} creator [same problem type as Line 1] → [one before/after result in the SAME metric type as Line 1]."
-PROOF ALIGNMENT LAW:
-• Hook about views/retention → proof shows views or watch time going up
-• Hook about upload gap → proof shows upload frequency recovering
-• Hook about view-to-sub ratio → proof shows ratio or average views improving
-• NEVER show subscriber count growth when the hook was about editing quality
-One sentence. One number. Done.
-
-Line 4 (CTA): ONE question. 5-8 words. Answerable in 2 words. Make it feel natural, not like a CTA.
-
-[blank line]
-${senderFirst}
-
-SUBJECT LINE — must be a SPECIFIC OBSERVATION about this channel:
-GOOD formulas:
-• Quote a video title or time period: "your October uploads" / "that AI tools video"
-• Name a specific pattern: "your last 4 videos" / "what happened in Q3"
-• Precise metric with context: "your 4.7% watch-through" (only when watch-through is the actual hook)
-• Curiosity diagnosis: "I think I know what's happening" (ONLY for clearly declining channels)
-
-BANNED subject line formats — delete immediately, start over:
-✗ "[X subs, Y views]" — stat dump with zero insight
-✗ "[X]M subs, [Y]% view rate" — same problem, feels like a scraper
-✗ "quick question about your channel" — overused template signal
-✗ "video editing services" — sounds like spam
-✗ Any subject that lists two numbers without telling a story
-
-HARD RULES — fail any one = rewrite:
-• Body: 55-85 words. Count them. Under 55 = too thin. Over 85 = cut.
-• Proof metric must match hook metric type (PROOF ALIGNMENT LAW above)
-• If a video title was provided: it MUST appear in the email body or subject
-• Never start body with "I"
-• Banned phrases: "I came across", "I noticed", "love your content", "collaboration", "opportunity", "hope this finds you", "I wanted to reach out", "touching base", "exciting", "amazing", "incredible", "leaving money on the table", "game changer", "most channels your size", "I'm reaching out"
-• No pricing. No free work offers. "${senderSvc}" lowercase.
-• pitch_score 80+ required — if your internal score is under 80, rewrite before returning
-${isSmall ? '• SMALL CHANNEL: Never embarrass them about low numbers. Focus on their potential and what\'s already working.' : ''}
-
-OUTPUT — JSON only, no markdown, no explanation, no backticks:
-{"subject":"3-7 word specific observation","body":"full email body ending with blank line then first name only","pitch_score":85,"word_count":72}`;
+Build the email around the MOST striking observation from this channel's data. Output JSON only — no markdown, no explanation:
+{"subject":"subject line max 8 words with one specific data point","body":"4-sentence email body\\n\\n[sender first name]","pitch_score":85}`;
 }
 
 // ─── Step 5: Quality scorer ───────────────────────────────────────────────────
@@ -690,6 +618,9 @@ async function generateFullPitch(lead, userId = null) {
     dna  = await getOrBuildVoiceDNA(userId || lead.user_id);
   } catch {}
 
+  const senderName = dna?.name || (user?.full_name || '').split(' ')[0] || '';
+  const nameWarning = !senderName ? 'Please set your name in Settings → Voice Profile first' : null;
+
   const prompt = buildMasterPrompt(lead, user, dna);
 
   let bestResult = null;
@@ -698,7 +629,7 @@ async function generateFullPitch(lead, userId = null) {
   const PASS_SCORE   = 80; // require 80+ before stopping early
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    const raw = await complete(prompt, '', 900);
+    const raw = await complete(prompt, PITCH_SYSTEM_PROMPT, 900);
     if (!raw) break;
 
     const parsed = parsePitchResponseV2(raw, lead);
@@ -739,6 +670,7 @@ async function generateFullPitch(lead, userId = null) {
     email_subject:    bestResult.email_subject || bestResult.subject,
     email_body:       bestResult.email_body    || bestResult.body,
     subject_variants: bestResult.subject_variants || [],
+    name_warning:     nameWarning,
   };
 }
 

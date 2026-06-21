@@ -77,7 +77,7 @@ router.post('/generate/:leadId', aiLimiter, asyncHandler(async (req, res) => {
   logActivity('pitch_generated', `Pitch generated for ${lead.channel_name}`, lead.id, {}, req.user.id);
 
   const pitch = parsePitch(db.prepare('SELECT * FROM pitches WHERE lead_id = ?').get(lead.id));
-  res.json({ success: true, pitch });
+  res.json({ success: true, pitch, warning: result.name_warning || null });
 }));
 
 // ─── By-lead lookup ───────────────────────────────────────────────────────────

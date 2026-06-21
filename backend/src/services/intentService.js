@@ -273,9 +273,31 @@ const NICHE_TIER_SCORES = {
   crafts: 0.42, art: 0.55, vlogging: 0.42, pets: 0.38,
 };
 
+const EXCLUDED_CHANNEL_KEYWORDS = [
+  'news', 'tv', 'media', 'official', 'network',
+  'broadcast', 'nbc', 'cbs', 'cnn', 'bbc', 'fox',
+  'cnbc', 'times', 'corp', 'inc', 'ltd', 'brand',
+  'government', 'police', 'army', 'ministry',
+];
+
 // Score a master_leads row using proxy signals (niche + subscriber count + views ratio + description keywords)
 // master_leads doesn't have recent_videos, upload_frequency_days, or engagement_rate
 function scoreMasterLead(ml) {
+  // Hard exclude: media companies, brand channels, and mega-channels (>500K subs)
+  const channelNameLower = (ml.channel_name || '').toLowerCase();
+  const isExcluded = EXCLUDED_CHANNEL_KEYWORDS.some(kw => channelNameLower.includes(kw));
+  if (isExcluded || (ml.subscriber_count || 0) > 500000) {
+    return {
+      intent_score: 0.10, confidence: 'Low', temperature: 'cold', excluded: true,
+      base_score: 0.10, signal_boost: 0, is_confirmed: false, signal_source: null,
+      signals: {
+        niche_score: 0, subs_score: 0, views_score: 0, desc_score: 0,
+        upload_frequency: null, view_growth: null, title_keywords: null,
+        description_keywords: 0, engagement_rate: null, upload_consistency: null,
+      },
+    };
+  }
+
   // Signal 1: Niche tier (40% weight) — Tier 1 creators pay most for production
   const niche = (ml.niche || '').toLowerCase();
   let niche_score = 0.35; // default unknown niche
