@@ -427,6 +427,17 @@ router.post('/scrape/youtube/stream', scrapeLimiter, asyncHandler(async (req, re
           send({ type: 'lead', lead, source: 'database' });
         }
         send({ type: 'done', total: userLeads.length, saved, source: 'database', message: `Delivered ${userLeads.length} leads instantly` });
+
+        // Backup to Turso fire-and-forget
+        if (saved > 0) {
+          setImmediate(async () => {
+            try {
+              const { pushUserLeadsToTurso } = require('../services/tursoSync');
+              await pushUserLeadsToTurso(db);
+            } catch {}
+          });
+        }
+
         return res.end();
       }
 
@@ -455,6 +466,14 @@ router.post('/scrape/youtube/stream', scrapeLimiter, asyncHandler(async (req, re
           const ul2 = db.prepare(`SELECT * FROM leads WHERE user_id=? AND channel_id IN (${broadLeads.map(()=>'?').join(',')}) ORDER BY lead_score DESC`).all(uid, ...broadLeads.map(l=>l.channel_id));
           for (const lead of ul2) send({ type: 'lead', lead, source: 'database' });
           send({ type: 'done', total: ul2.length, saved: saved2, source: 'database', message: `Delivered ${ul2.length} leads instantly` });
+          if (saved2 > 0) {
+            setImmediate(async () => {
+              try {
+                const { pushUserLeadsToTurso } = require('../services/tursoSync');
+                await pushUserLeadsToTurso(db);
+              } catch {}
+            });
+          }
           return res.end();
         }
       }

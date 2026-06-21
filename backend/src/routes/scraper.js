@@ -276,6 +276,16 @@ router.post('/powermode/start', asyncHandler(async (req, res) => {
       incrementUsage(userId, 'leads', totalSaved);
       logActivity('leads_imported', `PowerMode served ${totalSaved} leads from master database`, null, {}, userId);
 
+      // Backup user leads to Turso immediately so they survive a redeploy
+      if (totalSaved > 0) {
+        setImmediate(async () => {
+          try {
+            const { pushUserLeadsToTurso } = require('../services/tursoSync');
+            await pushUserLeadsToTurso(db);
+          } catch {}
+        });
+      }
+
       const targetReached = totalSaved >= targetCount;
       Object.assign(ps, {
         running: false, total: masterLeads.length, saved: totalSaved,

@@ -13,7 +13,7 @@ const { scanUpworkJobs } = require('./upworkService');
 const { scanTwitterSignals } = require('./twitterSignalService');
 const { runAdvancedScan } = require('./youtubeAdvancedService');
 const { runConfirmedSignalScan } = require('./confirmedSignalService');
-const { syncUsersToTurso, syncQualityLeadsToTurso } = require('./tursoSync');
+const { syncUsersToTurso, syncQualityLeadsToTurso, pushUserLeadsToTurso } = require('./tursoSync');
 
 const INTERVAL_MS = 2 * 60 * 60 * 1000; // 2 hours
 
@@ -116,6 +116,7 @@ async function runOneCycle() {
       try {
         await syncUsersToTurso(db);
         await syncQualityLeadsToTurso(db);
+        await pushUserLeadsToTurso(db);
         console.log('[Loop] Turso backup complete');
       } catch (e) {
         console.log(`[Loop] Turso backup error: ${e.message}`);
