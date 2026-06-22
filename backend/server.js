@@ -1,4 +1,4 @@
-require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
+require('dotenv').config({ path: require('path').join(__dirname, '../.env'), override: false });
 
 // Global crash guards — must come first
 process.on('uncaughtException', (err) => {
