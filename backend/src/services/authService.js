@@ -234,12 +234,12 @@ async function sendOtpEmail(user, code) {
 // ── Usage limits ──────────────────────────────────────────────────────────────
 
 const PLAN_LIMITS = {
-  trial:   { leads: 300,      emails: 300 },
-  free:    { leads: 300,      emails: 300 },
-  starter: { leads: 5000,     emails: 2000 },      // $49/mo
-  pro:     { leads: 10000,    emails: 10000 },     // $199/mo
-  growth:  { leads: 10000,    emails: 10000 },
-  agency:  { leads: Infinity, emails: Infinity },  // $599/mo
+  trial:   { leads: 300,      emails: 10 },
+  free:    { leads: 300,      emails: 10 },
+  starter: { leads: 5000,     emails: 500 },    // $29/mo
+  pro:     { leads: 10000,    emails: 1500 },   // $49/mo
+  growth:  { leads: 10000,    emails: 1500 },   // legacy alias for pro
+  agency:  { leads: Infinity, emails: 5000 },   // $149/mo
 };
 
 function checkUsageLimit(user, type) {

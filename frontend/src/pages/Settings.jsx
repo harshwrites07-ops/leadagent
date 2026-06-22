@@ -815,11 +815,13 @@ export default function Settings() {
             </div>
             <div style={{ fontSize: 28, fontFamily: 'var(--f-serif)', fontStyle: 'italic', letterSpacing: '-0.02em', lineHeight: 1.1, marginBottom: 16 }}>
               {planName === 'agency'
-                ? 'Unlimited emails, unlimited mailboxes, unlimited CRM.'
+                ? '5,000 emails/month · 10 Gmail accounts · 5 team seats · all features.'
+                : planName === 'pro'
+                ? '1,500 emails/month · 3 Gmail accounts · all features + priority support.'
                 : planName === 'growth'
-                ? 'Up to 5,000 emails / mo, 4 mailboxes, 10k AI credits, unlimited CRM.'
+                ? '1,500 emails/month · 3 Gmail accounts · all features + priority support.'
                 : planName === 'starter'
-                ? 'Up to 500 emails / mo, 2 mailboxes, 2k AI credits.'
+                ? '500 emails/month · 1 Gmail account · all features included.'
                 : 'Free plan — limited access.'}
             </div>
             {billing?.usage && (
@@ -851,9 +853,9 @@ export default function Settings() {
 
           <div className="grid g-3" style={{ gap: 14 }}>
             {[
-              { key: 'starter', n: 'Starter', p: '$49', leads: '500 emails' },
-              { key: 'growth', n: 'Growth', p: '$199', leads: '5,000 emails' },
-              { key: 'agency', n: 'Agency', p: '$599', leads: 'Unlimited' },
+              { key: 'starter', n: 'Starter', p: '$29', leads: '500 emails/month' },
+              { key: 'pro',     n: 'Pro',     p: '$49', leads: '1,500 emails/month' },
+              { key: 'agency',  n: 'Agency',  p: '$149', leads: '5,000 emails/month' },
             ].map((plan, i) => {
               const current = planName === plan.key;
               const isLoading = loadingCheckout === plan.key;

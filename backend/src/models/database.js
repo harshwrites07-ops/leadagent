@@ -759,4 +759,31 @@ function logActivity(type, message, leadId = null, metadata = {}, userId = null)
     .run(type, message, leadId, JSON.stringify(metadata), userId);
 }
 
-module.exports = { getDb, getSetting, setSetting, logActivity, getUserById, getUserByEmail, BetterSQLiteStore };
+const PLAN_LIMITS = {
+  free: {
+    emails_per_month: 10,
+    gmail_accounts: 1,
+    team_seats: 1,
+    ai_pitches: 3,
+  },
+  starter: {
+    emails_per_month: 500,
+    gmail_accounts: 1,
+    team_seats: 1,
+    ai_pitches: -1,
+  },
+  pro: {
+    emails_per_month: 1500,
+    gmail_accounts: 3,
+    team_seats: 1,
+    ai_pitches: -1,
+  },
+  agency: {
+    emails_per_month: 5000,
+    gmail_accounts: 10,
+    team_seats: 5,
+    ai_pitches: -1,
+  },
+};
+
+module.exports = { getDb, getSetting, setSetting, logActivity, getUserById, getUserByEmail, BetterSQLiteStore, PLAN_LIMITS };

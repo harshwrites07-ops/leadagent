@@ -652,15 +652,50 @@ export default function Landing() {
               One client pays for <span className="gradient-text">a year of Quelro</span>
             </h2>
             <p style={{ fontSize: 16, color: 'rgba(243,243,245,0.4)', marginBottom: 48 }}>
-              Average creator client is worth $2,000-5,000/month. Quelro costs $29/month. Do the math.
+              Average creator client is worth $2,000–5,000/month. Quelro starts at $29/month. Do the math.
             </p>
           </div>
 
           <div className="reveal" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
             {[
-              { name: 'Starter', price: '$29', period: '/mo', desc: 'For freelancers starting their creator outreach journey.', features: ['500 creators/month', '50 AI pitches', '1 Gmail account', 'Intent scoring', 'Email tracking', 'Basic analytics'], cta: 'Start Free Trial', featured: false },
-              { name: 'Pro', price: '$49', period: '/mo', desc: 'For serious freelancers closing creator clients every week.', features: ['2,000 creators/month', 'Unlimited AI pitches', '3 Gmail accounts', 'Psychology profiles', 'Reddit signals', 'A/B testing', 'Priority support'], cta: 'Start Free Trial', featured: true },
-              { name: 'Agency', price: '$99', period: '/mo', desc: 'For agencies managing multiple clients and niches.', features: ['Unlimited creators', 'Unlimited AI pitches', '10 Gmail accounts', 'Multi-user access', 'White-label reports', 'Custom integrations', 'Dedicated support'], cta: 'Get Started', featured: false },
+              {
+                name: 'Starter', price: '$29', period: '/mo', featured: false, cta: 'Start Free Trial',
+                desc: 'For freelancers starting their creator outreach journey.',
+                emails: '500 emails/month',
+                features: [
+                  '500 emails/month', 'Unlimited AI pitches', '1 Gmail account',
+                  'Intent scoring (0.75+ HOT leads)', 'Psychology profiles',
+                  'Voice DNA email writing', 'A/B subject line testing',
+                  'Reddit + Upwork signals', 'CRM pipeline',
+                  'Email tracking & analytics', 'Follow-up sequences',
+                ],
+              },
+              {
+                name: 'Pro', price: '$49', period: '/mo', featured: true, cta: 'Start Free Trial',
+                desc: 'For serious freelancers closing creator clients every week.',
+                emails: '1,500 emails/month',
+                features: [
+                  '1,500 emails/month', 'Unlimited AI pitches', '3 Gmail accounts',
+                  'Intent scoring (0.75+ HOT leads)', 'Psychology profiles',
+                  'Voice DNA email writing', 'A/B subject line testing',
+                  'Reddit + Upwork signals', 'CRM pipeline',
+                  'Email tracking & analytics', 'Follow-up sequences',
+                  'Priority support',
+                ],
+              },
+              {
+                name: 'Agency', price: '$149', period: '/mo', featured: false, cta: 'Get Started',
+                desc: 'For agencies managing creator outreach at scale.',
+                emails: '5,000 emails/month',
+                features: [
+                  '5,000 emails/month', 'Unlimited AI pitches', '10 Gmail accounts',
+                  'Intent scoring (0.75+ HOT leads)', 'Psychology profiles',
+                  'Voice DNA email writing', 'A/B subject line testing',
+                  'Reddit + Upwork signals', 'CRM pipeline',
+                  'Email tracking & analytics', 'Follow-up sequences',
+                  '5 team seats', 'White-label reports', 'API access', 'Dedicated support',
+                ],
+              },
             ].map(({ name, price, period, desc, features, cta, featured }) => (
               <div key={name} className={`pricing-card ${featured ? 'featured' : ''}`}>
                 {featured && (
