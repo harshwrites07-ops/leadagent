@@ -399,30 +399,29 @@ function buildVoiceDNA(user) {
 
 async function getOrBuildVoiceDNA(userId) {
   if (!userId) return null;
-  const db   = getDb();
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+  const db = getDb();
+  const user = await db.get('SELECT * FROM users WHERE id = ?', [userId]);
   if (!user) return null;
 
-  // Return cached DNA if profile has data and cache is fresh (< 24h)
   try {
     const cached = JSON.parse(user.voice_dna || '{}');
     if (cached.builtAt && user.service_type) {
       const age = Date.now() - new Date(cached.builtAt).getTime();
-      if (age < 24 * 60 * 60 * 1000) return cached; // < 24h
+      if (age < 24 * 60 * 60 * 1000) return cached;
     }
   } catch {}
 
   const dna = buildVoiceDNA(user);
-  try { db.prepare('UPDATE users SET voice_dna = ? WHERE id = ?').run(JSON.stringify(dna), userId); } catch {}
+  try { await db.run('UPDATE users SET voice_dna = ? WHERE id = ?', [JSON.stringify(dna), userId]); } catch {}
   return dna;
 }
 
 async function rebuildVoiceDNA(userId) {
-  const db   = getDb();
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+  const db = getDb();
+  const user = await db.get('SELECT * FROM users WHERE id = ?', [userId]);
   if (!user) return null;
-  const dna  = buildVoiceDNA(user);
-  db.prepare('UPDATE users SET voice_dna = ? WHERE id = ?').run(JSON.stringify(dna), userId);
+  const dna = buildVoiceDNA(user);
+  await db.run('UPDATE users SET voice_dna = ? WHERE id = ?', [JSON.stringify(dna), userId]);
   return dna;
 }
 

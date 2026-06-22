@@ -3,7 +3,6 @@
  * Runs every 2 hours:
  *   1. Scans Reddit for buying signals
  *   2. Scores any new master_leads (incremental)
- * Niche-tiered weighting: Tier 1 (Finance/Business/Education/Tech) gets highest priority.
  */
 
 const { getDb } = require('../models/database');
@@ -15,9 +14,8 @@ const { runAdvancedScan } = require('./youtubeAdvancedService');
 const { runConfirmedSignalScan } = require('./confirmedSignalService');
 const { syncUsersToTurso, syncQualityLeadsToTurso, pushUserLeadsToTurso } = require('./tursoSync');
 
-const INTERVAL_MS = 2 * 60 * 60 * 1000; // 2 hours
+const INTERVAL_MS = 2 * 60 * 60 * 1000;
 
-// Niche tiers — determines scraping priority and minimum subs threshold
 const NICHE_TIERS = {
   1: { niches: ['finance', 'business', 'education', 'tech'], min_subs: 5000, label: 'Finance/Business/Education/Tech' },
   2: { niches: ['fitness', 'gaming'], min_subs: 10000, label: 'Fitness/Gaming' },
@@ -54,11 +52,12 @@ async function runOneCycle() {
   let logId;
 
   try {
-    logId = db.prepare(
-      `INSERT INTO scraper_logs (run_id, scraper_type, status) VALUES (?, 'quality_loop', 'running')`
-    ).run(runId).lastInsertRowid;
+    const logRow = await db.run(
+      `INSERT INTO scraper_logs (run_id, scraper_type, status) VALUES (?, 'quality_loop', 'running')`,
+      [runId]
+    );
+    logId = logRow.lastID;
 
-    // Step 1: Scan Reddit for buying signals
     console.log('[QualityLoop] Scanning Reddit...');
     let redditResult = { found: 0, saved: 0, errors: [] };
     try {
@@ -70,47 +69,34 @@ async function runOneCycle() {
       status.errors.push({ time: new Date().toISOString(), step: 'reddit', error: e.message });
     }
 
-    // Step 1b: Upwork scan (every cycle)
     console.log('[Loop] Scanning Upwork jobs...');
     try {
       const upworkResult = await scanUpworkJobs();
       console.log(`[Loop] Upwork: ${upworkResult.new_jobs} new hiring signals found`);
-    } catch (e) {
-      console.log(`[Loop] Upwork scan error: ${e.message}`);
-    }
+    } catch (e) { console.log(`[Loop] Upwork scan error: ${e.message}`); }
 
-    // Step 1c: Twitter scan (every other cycle to save quota)
     if (cycleCount % 2 === 0) {
       console.log('[Loop] Scanning Twitter signals...');
       try {
         const twitterResult = await scanTwitterSignals();
         console.log(`[Loop] Twitter: ${twitterResult.new_signals || 0} new signals found`);
-      } catch (e) {
-        console.log(`[Loop] Twitter scan error: ${e.message}`);
-      }
+      } catch (e) { console.log(`[Loop] Twitter scan error: ${e.message}`); }
     }
 
-    // Step 1d: YouTube advanced scan (every 3rd cycle)
     if (cycleCount % 3 === 0) {
       console.log('[Loop] Running YouTube advanced scan...');
       try {
         const ytResult = await runAdvancedScan(30);
         console.log(`[Loop] YT Advanced: ${ytResult.community_signals} community signals found`);
-      } catch (e) {
-        console.log(`[Loop] YT advanced scan error: ${e.message}`);
-      }
+      } catch (e) { console.log(`[Loop] YT advanced scan error: ${e.message}`); }
     }
 
-    // Step 1e: Confirmed signal scan (every cycle)
     console.log('[Loop] Running confirmed signal scan...');
     try {
       const confirmedResult = await runConfirmedSignalScan();
       console.log(`[Loop] Confirmed signals: ${confirmedResult.description_scan?.confirmed || 0} description hits, ${confirmedResult.total_confirmed_signals || 0} total confirmed`);
-    } catch (e) {
-      console.log(`[Loop] Confirmed signal scan error: ${e.message}`);
-    }
+    } catch (e) { console.log(`[Loop] Confirmed signal scan error: ${e.message}`); }
 
-    // Step 1f: Turso backup every 6th cycle (~12 hours)
     if (cycleCount % 6 === 0) {
       console.log('[Loop] Running Turso backup...');
       try {
@@ -118,40 +104,35 @@ async function runOneCycle() {
         await syncQualityLeadsToTurso(db);
         await pushUserLeadsToTurso(db);
         console.log('[Loop] Turso backup complete');
-      } catch (e) {
-        console.log(`[Loop] Turso backup error: ${e.message}`);
-      }
+      } catch (e) { console.log(`[Loop] Turso backup error: ${e.message}`); }
     }
 
-    // Step 2: Score new master_leads (incremental — only unscored)
     console.log('[QualityLoop] Scoring new master_leads...');
-    const scoreResult = scoreNewMasterLeads();
+    const scoreResult = await scoreNewMasterLeads();
     status.hot_added_total += scoreResult.hot;
     console.log(`[QualityLoop] Scored: total=${scoreResult.total} hot=${scoreResult.hot} warm=${scoreResult.warm} cold=${scoreResult.cold}`);
 
-    // Push any newly promoted HOT leads to Turso right after scoring
     if (scoreResult.hot > 0) {
       syncQualityLeadsToTurso(db).catch(e => console.log(`[Loop] Quality leads Turso push error: ${e.message}`));
     }
 
-    // Step 3: Log summary
-    const dist = getDistribution();
+    const dist = await getDistribution();
     console.log(`[QualityLoop] DB state: quality_leads=${dist.hot} (${dist.hot_pct}%) warm=${dist.warm} cold=${dist.cold}`);
 
     if (logId) {
-      db.prepare(`
+      await db.run(`
         UPDATE scraper_logs SET
           status='completed',
           channels_found=?, channels_scored=?,
           hot_added=?, warm_archived=?, cold_discarded=?,
-          errors=?, error_log=?, completed_at=datetime('now')
+          errors=?, error_log=?, completed_at=CURRENT_TIMESTAMP
         WHERE id=?
-      `).run(
+      `, [
         scoreResult.total, scoreResult.total - scoreResult.errors,
         scoreResult.hot, scoreResult.warm, scoreResult.cold,
         redditResult.errors.length, JSON.stringify(redditResult.errors.slice(0, 10)),
         logId,
-      );
+      ]);
     }
 
   } catch (e) {
@@ -161,9 +142,7 @@ async function runOneCycle() {
 
     if (logId) {
       try {
-        db.prepare(
-          `UPDATE scraper_logs SET status='error', completed_at=datetime('now') WHERE id=?`
-        ).run(logId);
+        await db.run(`UPDATE scraper_logs SET status='error', completed_at=CURRENT_TIMESTAMP WHERE id=?`, [logId]);
       } catch {}
     }
   } finally {
@@ -181,14 +160,9 @@ function scheduleNext() {
 }
 
 function startLoop() {
-  if (loopActive) {
-    console.log('[QualityLoop] Already running');
-    return;
-  }
+  if (loopActive) { console.log('[QualityLoop] Already running'); return; }
   loopActive = true;
   status.started_at = new Date().toISOString();
-
-  // First cycle after 60s (let server fully start)
   console.log('[QualityLoop] Starting — first cycle in 60s, then every 2 hours');
   setTimeout(async () => {
     await runOneCycle();
@@ -203,11 +177,7 @@ function stopLoop() {
 }
 
 function getLoopStatus() {
-  return {
-    ...status,
-    loop_active: loopActive,
-    errors: status.errors.slice(-5),
-  };
+  return { ...status, loop_active: loopActive, errors: status.errors.slice(-5) };
 }
 
 module.exports = { startLoop, stopLoop, getLoopStatus, runOneCycle };

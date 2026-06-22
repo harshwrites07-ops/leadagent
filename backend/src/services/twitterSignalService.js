@@ -112,34 +112,19 @@ async function scanTwitterSignals() {
         const confidence = calculateTwitterConfidence(tweet);
 
         try {
-          const result = db.prepare(`
-            INSERT OR IGNORE INTO platform_signals
-            (creator_id, platform, signal_type, signal_text, signal_url, confidence)
-            VALUES (?, 'twitter', 'confirmed_hiring', ?, ?, ?)
-          `).run(
-            `twitter_${tweet.author_id}`,
-            tweet.text.substring(0, 500),
-            tweetUrl,
-            confidence
+          const result = await db.run(
+            `INSERT OR IGNORE INTO platform_signals (creator_id, platform, signal_type, signal_text, signal_url, confidence) VALUES (?, 'twitter', 'confirmed_hiring', ?, ?, ?)`,
+            [`twitter_${tweet.author_id}`, tweet.text.substring(0, 500), tweetUrl, confidence]
           );
-
           if (result.changes > 0) {
             totalNew++;
-
-            db.prepare(`
-              INSERT OR IGNORE INTO buying_signals
-              (source, post_id, subreddit, keywords_matched, intent_classification)
-              VALUES ('twitter', ?, 'twitter', ?, 'CONFIRMED_HIRING')
-            `).run(
-              tweet.id,
-              tweet.text.substring(0, 200)
+            await db.run(
+              `INSERT OR IGNORE INTO buying_signals (source, post_id, subreddit, keywords_matched, intent_classification) VALUES ('twitter', ?, 'twitter', ?, 'CONFIRMED_HIRING')`,
+              [tweet.id, tweet.text.substring(0, 200)]
             );
           }
-
           totalFound++;
-        } catch (e) {
-          // Skip duplicates
-        }
+        } catch {}
       }
 
       // Rate limit protection - X API is strict

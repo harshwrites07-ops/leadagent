@@ -1,30 +1,90 @@
-const Database = require('better-sqlite3');
-const path = require('path');
-const fs = require('fs');
+const USE_PG = !!process.env.DATABASE_URL;
 
-// DB_PATH resolution order:
-//   1. DB_PATH env var (set this in Railway to point at the mounted volume)
-//   2. /app/backend/data (Railway volume default mount path)
-//   3. local: backend/data/outreach.db
-const DB_PATH = process.env.DB_PATH ||
-  (fs.existsSync('/app/backend/data') || process.env.NODE_ENV === 'production'
-    ? '/app/backend/data/outreach.db'
-    : path.join(__dirname, '../../data/outreach.db'));
+let _db = null;
+let _settingsCache = {};
 
-let db;
+// ── Unified async DB interface ────────────────────────────────────────────────
 
-function getDb() {
-  if (!db) {
-    fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-    db = new Database(DB_PATH);
-    db.pragma('journal_mode = WAL');
-    db.pragma('foreign_keys = ON');
-    initSchema();
-  }
-  return db;
+function _wrapSqlite(rawDb) {
+  return {
+    async get(sql, params = []) {
+      const p = Array.isArray(params) ? params : [params];
+      return rawDb.prepare(sql).get(...p) || null;
+    },
+    async run(sql, params = []) {
+      const p = Array.isArray(params) ? params : [params];
+      const r = rawDb.prepare(sql).run(...p);
+      return { lastID: r.lastInsertRowid, changes: r.changes };
+    },
+    async all(sql, params = []) {
+      const p = Array.isArray(params) ? params : [params];
+      return rawDb.prepare(sql).all(...p);
+    },
+    _raw: rawDb,
+  };
 }
 
-function initSchema() {
+function getDb() {
+  return _db;
+}
+
+// ── Initialization ────────────────────────────────────────────────────────────
+
+async function initializeDatabase() {
+  if (USE_PG) {
+    const pg = require('./postgres');
+    await pg.initPostgres();
+    _db = {
+      get: pg.get,
+      run: pg.run,
+      all: pg.all,
+      _pool: pg.pool,
+    };
+  } else {
+    const rawDb = _initSqlite();
+    _db = _wrapSqlite(rawDb);
+  }
+
+  // Load settings into in-memory cache
+  try {
+    const rows = await _db.all('SELECT key, value FROM settings');
+    _settingsCache = Object.fromEntries(rows.map(r => [r.key, r.value]));
+  } catch {}
+
+  // Seed defaults and ensure admin exist
+  await _seedDefaultSettings();
+  await _ensureAdmin();
+
+  // Periodic cleanup
+  setInterval(() => {
+    _db.run(`DELETE FROM password_reset_tokens WHERE expires_at < ${USE_PG ? 'NOW()' : "datetime('now')"}`)
+      .catch(() => {});
+  }, 24 * 60 * 60 * 1000);
+
+  return _db;
+}
+
+// ── SQLite initialization (unchanged from original) ───────────────────────────
+
+function _initSqlite() {
+  const Database = require('better-sqlite3');
+  const path = require('path');
+  const fs = require('fs');
+
+  const DB_PATH = process.env.DB_PATH ||
+    (fs.existsSync('/app/backend/data') || process.env.NODE_ENV === 'production'
+      ? '/app/backend/data/outreach.db'
+      : path.join(__dirname, '../../data/outreach.db'));
+
+  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+  const rawDb = new Database(DB_PATH);
+  rawDb.pragma('journal_mode = WAL');
+  rawDb.pragma('foreign_keys = ON');
+  _initSqliteSchema(rawDb);
+  return rawDb;
+}
+
+function _initSqliteSchema(db) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS leads (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -61,7 +121,6 @@ function initSchema() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
-
     CREATE TABLE IF NOT EXISTS pitches (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       lead_id INTEGER NOT NULL UNIQUE,
@@ -77,7 +136,6 @@ function initSchema() {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE
     );
-
     CREATE TABLE IF NOT EXISTS emails (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       lead_id INTEGER NOT NULL,
@@ -94,7 +152,6 @@ function initSchema() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE
     );
-
     CREATE TABLE IF NOT EXISTS email_queue (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       lead_id INTEGER NOT NULL,
@@ -108,7 +165,6 @@ function initSchema() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE
     );
-
     CREATE TABLE IF NOT EXISTS activities (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       type TEXT NOT NULL,
@@ -117,7 +173,6 @@ function initSchema() {
       metadata TEXT DEFAULT '{}',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
-
     CREATE TABLE IF NOT EXISTS notes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       lead_id INTEGER NOT NULL,
@@ -125,13 +180,11 @@ function initSchema() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE
     );
-
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
-
     CREATE INDEX IF NOT EXISTS idx_leads_platform ON leads(platform);
     CREATE INDEX IF NOT EXISTS idx_leads_crm_stage ON leads(crm_stage);
     CREATE INDEX IF NOT EXISTS idx_leads_temperature ON leads(temperature);
@@ -142,25 +195,21 @@ function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_email_queue_status ON email_queue(status);
   `);
 
-  // Background send jobs table
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS power_send_jobs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER,
-      status TEXT DEFAULT 'running',
-      total INTEGER DEFAULT 0,
-      studied INTEGER DEFAULT 0,
-      generated INTEGER DEFAULT 0,
-      sent INTEGER DEFAULT 0,
-      failed INTEGER DEFAULT 0,
-      settings TEXT DEFAULT '{}',
-      log TEXT DEFAULT '[]',
-      started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      completed_at DATETIME
-    )
-  `);
+  db.exec(`CREATE TABLE IF NOT EXISTS power_send_jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    status TEXT DEFAULT 'running',
+    total INTEGER DEFAULT 0,
+    studied INTEGER DEFAULT 0,
+    generated INTEGER DEFAULT 0,
+    sent INTEGER DEFAULT 0,
+    failed INTEGER DEFAULT 0,
+    settings TEXT DEFAULT '{}',
+    log TEXT DEFAULT '[]',
+    started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    completed_at DATETIME
+  )`);
 
-  // ── Auth tables ────────────────────────────────────────────────────────────
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -191,7 +240,6 @@ function initSchema() {
       daily_email_limit INTEGER DEFAULT 50,
       auto_find_leads INTEGER DEFAULT 0
     );
-
     CREATE TABLE IF NOT EXISTS otp_codes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
@@ -203,14 +251,12 @@ function initSchema() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
-
     CREATE TABLE IF NOT EXISTS sessions (
       session_id TEXT PRIMARY KEY,
       data TEXT NOT NULL,
       expires_at DATETIME NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
-
     CREATE TABLE IF NOT EXISTS password_reset_tokens (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
@@ -222,123 +268,103 @@ function initSchema() {
     );
   `);
 
-  // Gmail OAuth accounts per user
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS gmail_accounts (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      email TEXT NOT NULL,
-      access_token TEXT NOT NULL,
-      refresh_token TEXT,
-      token_expiry INTEGER,
-      status TEXT DEFAULT 'active',
-      emails_sent_today INTEGER DEFAULT 0,
-      last_reset_date TEXT DEFAULT (date('now')),
-      connected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(user_id, email)
-    )
-  `);
+  db.exec(`CREATE TABLE IF NOT EXISTS gmail_accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    email TEXT NOT NULL,
+    access_token TEXT NOT NULL,
+    refresh_token TEXT,
+    token_expiry INTEGER,
+    status TEXT DEFAULT 'active',
+    emails_sent_today INTEGER DEFAULT 0,
+    last_reset_date TEXT DEFAULT (date('now')),
+    connected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, email)
+  )`);
 
-  // Migrations — safe to run on existing DBs
-  try { db.exec(`ALTER TABLE emails ADD COLUMN from_email TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE leads ADD COLUMN follow_up_count INTEGER DEFAULT 0`); } catch {}
-  try { db.exec(`ALTER TABLE leads ADD COLUMN last_contacted_date TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE leads ADD COLUMN next_follow_up_date TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE leads ADD COLUMN follow_up_status TEXT DEFAULT 'active'`); } catch {}
-  try { db.exec(`ALTER TABLE leads ADD COLUMN email_invalid INTEGER DEFAULT 0`); } catch {}
-  try { db.exec(`ALTER TABLE leads ADD COLUMN bounce_reason TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE emails ADD COLUMN reply_body TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE emails ADD COLUMN reply_subject TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE emails ADD COLUMN reply_from TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE emails ADD COLUMN my_reply_body TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE emails ADD COLUMN my_reply_sent_at TEXT`); } catch {}
-  // Mark obviously invalid emails in existing data
-  try {
-    db.exec(`UPDATE leads SET email_invalid=1 WHERE email IS NOT NULL AND (
-      email NOT LIKE '%@%.%' OR
-      LENGTH(TRIM(SUBSTR(email,1,INSTR(email,'@')-1))) < 2 OR
-      INSTR(email,'@') = 0 OR
-      LENGTH(email) < 6
-    ) AND email_invalid = 0`);
-  } catch {}
+  // Migrations
+  const alterTry = (sql) => { try { db.exec(sql); } catch {} };
+  alterTry(`ALTER TABLE emails ADD COLUMN from_email TEXT`);
+  alterTry(`ALTER TABLE leads ADD COLUMN follow_up_count INTEGER DEFAULT 0`);
+  alterTry(`ALTER TABLE leads ADD COLUMN last_contacted_date TEXT`);
+  alterTry(`ALTER TABLE leads ADD COLUMN next_follow_up_date TEXT`);
+  alterTry(`ALTER TABLE leads ADD COLUMN follow_up_status TEXT DEFAULT 'active'`);
+  alterTry(`ALTER TABLE leads ADD COLUMN email_invalid INTEGER DEFAULT 0`);
+  alterTry(`ALTER TABLE leads ADD COLUMN bounce_reason TEXT`);
+  alterTry(`ALTER TABLE emails ADD COLUMN reply_body TEXT`);
+  alterTry(`ALTER TABLE emails ADD COLUMN reply_subject TEXT`);
+  alterTry(`ALTER TABLE emails ADD COLUMN reply_from TEXT`);
+  alterTry(`ALTER TABLE emails ADD COLUMN my_reply_body TEXT`);
+  alterTry(`ALTER TABLE emails ADD COLUMN my_reply_sent_at TEXT`);
+  alterTry(`ALTER TABLE users ADD COLUMN email_tone TEXT DEFAULT 'casual'`);
+  alterTry(`ALTER TABLE users ADD COLUMN outreach_goal TEXT DEFAULT 'get_reply'`);
+  alterTry(`ALTER TABLE users ADD COLUMN min_email_delay INTEGER DEFAULT 45`);
+  alterTry(`ALTER TABLE users ADD COLUMN max_email_delay INTEGER DEFAULT 120`);
+  alterTry(`ALTER TABLE users ADD COLUMN followups_enabled INTEGER DEFAULT 1`);
+  alterTry(`ALTER TABLE users ADD COLUMN max_followups INTEGER DEFAULT 3`);
+  alterTry(`ALTER TABLE users ADD COLUMN followup_delay_days INTEGER DEFAULT 3`);
+  alterTry(`ALTER TABLE users ADD COLUMN best_result TEXT DEFAULT ''`);
+  alterTry(`ALTER TABLE users ADD COLUMN pricing_range TEXT DEFAULT '$500-$2000/month'`);
+  alterTry(`ALTER TABLE leads ADD COLUMN user_id INTEGER REFERENCES users(id)`);
+  alterTry(`ALTER TABLE emails ADD COLUMN user_id INTEGER REFERENCES users(id)`);
+  alterTry(`ALTER TABLE email_queue ADD COLUMN user_id INTEGER REFERENCES users(id)`);
+  alterTry(`ALTER TABLE pitches ADD COLUMN user_id INTEGER REFERENCES users(id)`);
+  alterTry(`ALTER TABLE activities ADD COLUMN user_id INTEGER REFERENCES users(id)`);
+  alterTry(`ALTER TABLE notes ADD COLUMN user_id INTEGER REFERENCES users(id)`);
+  alterTry(`ALTER TABLE power_send_jobs ADD COLUMN user_id INTEGER REFERENCES users(id)`);
+  alterTry(`ALTER TABLE users ADD COLUMN stripe_customer_id TEXT`);
+  alterTry(`ALTER TABLE users ADD COLUMN stripe_subscription_id TEXT`);
+  alterTry(`ALTER TABLE users ADD COLUMN trial_ends_at DATETIME DEFAULT (datetime('now', '+14 days'))`);
+  alterTry(`ALTER TABLE users ADD COLUMN billing_cycle_start DATETIME DEFAULT (datetime('now'))`);
+  alterTry(`ALTER TABLE users ADD COLUMN custom_emails_limit INTEGER`);
+  alterTry(`ALTER TABLE users ADD COLUMN custom_leads_limit INTEGER`);
+  alterTry(`ALTER TABLE users ADD COLUMN service_type TEXT`);
+  alterTry(`ALTER TABLE users ADD COLUMN one_liner TEXT`);
+  alterTry(`ALTER TABLE users ADD COLUMN experience_years TEXT`);
+  alterTry(`ALTER TABLE users ADD COLUMN personality_traits TEXT DEFAULT '[]'`);
+  alterTry(`ALTER TABLE users ADD COLUMN origin_story TEXT`);
+  alterTry(`ALTER TABLE users ADD COLUMN unique_difference TEXT`);
+  alterTry(`ALTER TABLE users ADD COLUMN voice_dna TEXT DEFAULT '{}'`);
+  alterTry(`ALTER TABLE users ADD COLUMN profile_completed INTEGER DEFAULT 0`);
+  alterTry(`ALTER TABLE gmail_accounts ADD COLUMN daily_limit INTEGER DEFAULT 500`);
+  alterTry(`ALTER TABLE leads ADD COLUMN exported_at DATETIME DEFAULT NULL`);
+  alterTry(`ALTER TABLE leads ADD COLUMN scrape_source TEXT DEFAULT 'youtube_api'`);
+  alterTry(`ALTER TABLE leads ADD COLUMN view_trend TEXT`);
+  alterTry(`ALTER TABLE leads ADD COLUMN intent_score REAL DEFAULT NULL`);
+  alterTry(`ALTER TABLE leads ADD COLUMN intent_confidence TEXT DEFAULT NULL`);
+  alterTry(`ALTER TABLE leads ADD COLUMN intent_reason TEXT DEFAULT NULL`);
+  alterTry(`ALTER TABLE leads ADD COLUMN intent_signals TEXT DEFAULT NULL`);
+  alterTry(`ALTER TABLE emails ADD COLUMN angle_type TEXT`);
+  alterTry(`ALTER TABLE emails ADD COLUMN campaign_id INTEGER REFERENCES campaigns(id)`);
+  alterTry(`ALTER TABLE emails ADD COLUMN reply_sentiment TEXT`);
+  alterTry(`ALTER TABLE emails ADD COLUMN call_booked INTEGER DEFAULT 0`);
+  alterTry(`ALTER TABLE emails ADD COLUMN client_closed INTEGER DEFAULT 0`);
+  alterTry(`ALTER TABLE emails ADD COLUMN client_value REAL DEFAULT 0`);
+  alterTry(`ALTER TABLE emails ADD COLUMN ab_variant TEXT`);
+  alterTry(`ALTER TABLE pitches ADD COLUMN signal_type TEXT`);
 
-  // User preference columns (multi-user settings per user)
-  try { db.exec(`ALTER TABLE users ADD COLUMN email_tone TEXT DEFAULT 'casual'`); } catch {}
-  try { db.exec(`ALTER TABLE users ADD COLUMN outreach_goal TEXT DEFAULT 'get_reply'`); } catch {}
-  try { db.exec(`ALTER TABLE users ADD COLUMN min_email_delay INTEGER DEFAULT 45`); } catch {}
-  try { db.exec(`ALTER TABLE users ADD COLUMN max_email_delay INTEGER DEFAULT 120`); } catch {}
-  try { db.exec(`ALTER TABLE users ADD COLUMN followups_enabled INTEGER DEFAULT 1`); } catch {}
-  try { db.exec(`ALTER TABLE users ADD COLUMN max_followups INTEGER DEFAULT 3`); } catch {}
-  try { db.exec(`ALTER TABLE users ADD COLUMN followup_delay_days INTEGER DEFAULT 3`); } catch {}
-  try { db.exec(`ALTER TABLE users ADD COLUMN best_result TEXT DEFAULT ''`); } catch {}
-  try { db.exec(`ALTER TABLE users ADD COLUMN pricing_range TEXT DEFAULT '$500-$2000/month'`); } catch {}
+  // Indexes
+  alterTry(`DROP INDEX IF EXISTS idx_leads_channel_id_uniq`);
+  alterTry(`DROP INDEX IF EXISTS idx_leads_handle_uniq`);
+  alterTry(`CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_channel_id_user_uniq ON leads(channel_id, user_id) WHERE channel_id IS NOT NULL AND channel_id != ''`);
+  alterTry(`CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_handle_user_uniq ON leads(channel_handle, user_id) WHERE channel_handle IS NOT NULL AND channel_handle != ''`);
+  alterTry(`CREATE INDEX IF NOT EXISTS idx_leads_user_id ON leads(user_id)`);
+  alterTry(`CREATE INDEX IF NOT EXISTS idx_emails_user_id ON emails(user_id)`);
+  alterTry(`CREATE INDEX IF NOT EXISTS idx_email_queue_user_id ON email_queue(user_id)`);
+  alterTry(`CREATE INDEX IF NOT EXISTS idx_activities_user_id ON activities(user_id)`);
+  alterTry(`CREATE INDEX IF NOT EXISTS idx_pitches_user_id ON pitches(user_id)`);
+  alterTry(`CREATE INDEX IF NOT EXISTS idx_gmail_accounts_user_id ON gmail_accounts(user_id)`);
+  alterTry(`CREATE INDEX IF NOT EXISTS idx_leads_exported_at ON leads(user_id, exported_at)`);
 
-  // ── user_id migrations — add to all data tables ───────────────────────────
-  try { db.exec(`ALTER TABLE leads ADD COLUMN user_id INTEGER REFERENCES users(id)`); } catch {}
-  try { db.exec(`ALTER TABLE emails ADD COLUMN user_id INTEGER REFERENCES users(id)`); } catch {}
-  try { db.exec(`ALTER TABLE email_queue ADD COLUMN user_id INTEGER REFERENCES users(id)`); } catch {}
-  try { db.exec(`ALTER TABLE pitches ADD COLUMN user_id INTEGER REFERENCES users(id)`); } catch {}
-  try { db.exec(`ALTER TABLE activities ADD COLUMN user_id INTEGER REFERENCES users(id)`); } catch {}
-  try { db.exec(`ALTER TABLE notes ADD COLUMN user_id INTEGER REFERENCES users(id)`); } catch {}
-  try { db.exec(`ALTER TABLE power_send_jobs ADD COLUMN user_id INTEGER REFERENCES users(id)`); } catch {}
+  // Orphan assignment
+  alterTry(`UPDATE leads SET user_id=1 WHERE user_id IS NULL`);
+  alterTry(`UPDATE emails SET user_id=1 WHERE user_id IS NULL`);
+  alterTry(`UPDATE email_queue SET user_id=1 WHERE user_id IS NULL`);
+  alterTry(`UPDATE pitches SET user_id=1 WHERE user_id IS NULL`);
+  alterTry(`UPDATE activities SET user_id=1 WHERE user_id IS NULL`);
+  alterTry(`UPDATE notes SET user_id=1 WHERE user_id IS NULL`);
+  alterTry(`UPDATE power_send_jobs SET user_id=1 WHERE user_id IS NULL`);
 
-  // Bootstrap: create the owner/admin user (id=1) and assign all existing orphaned rows to them
-  const ownerEmail = process.env.ADMIN_EMAIL || process.env.OWNER_EMAIL || 'admin@quelro.com';
-  const existingOwner = db.prepare(`SELECT id FROM users WHERE id=1`).get();
-  if (!existingOwner) {
-    // Create default admin — password is set via /auth/setup on first visit, or ADMIN_PASSWORD env var
-    const bcrypt = require('bcryptjs');
-    const rawPass = process.env.ADMIN_PASSWORD || 'changeme123';
-    const hashed = bcrypt.hashSync(rawPass, 12);
-    db.prepare(`
-      INSERT OR IGNORE INTO users (id, email, password, full_name, email_verified, is_admin, plan, onboarding_completed)
-      VALUES (1, ?, ?, 'Admin', 1, 1, 'agency', 1)
-    `).run(ownerEmail, hashed);
-    console.log(`[DB] Created admin user: ${ownerEmail} (set ADMIN_EMAIL + ADMIN_PASSWORD in .env)`);
-  }
-
-  // Auto-promote any emails listed in ADMIN_EMAILS env var
-  const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim()).filter(Boolean);
-  for (const email of adminEmails) {
-    const result = db.prepare(`UPDATE users SET is_admin=1, plan='agency' WHERE email=?`).run(email);
-    if (result.changes > 0) console.log(`[DB] Auto-promoted ${email} to admin (agency plan)`);
-  }
-
-  // Assign all orphaned rows (user_id IS NULL) to admin user 1
-  try { db.exec(`UPDATE leads SET user_id=1 WHERE user_id IS NULL`); } catch {}
-  try { db.exec(`UPDATE emails SET user_id=1 WHERE user_id IS NULL`); } catch {}
-  try { db.exec(`UPDATE email_queue SET user_id=1 WHERE user_id IS NULL`); } catch {}
-  try { db.exec(`UPDATE pitches SET user_id=1 WHERE user_id IS NULL`); } catch {}
-  try { db.exec(`UPDATE activities SET user_id=1 WHERE user_id IS NULL`); } catch {}
-  try { db.exec(`UPDATE notes SET user_id=1 WHERE user_id IS NULL`); } catch {}
-  try { db.exec(`UPDATE power_send_jobs SET user_id=1 WHERE user_id IS NULL`); } catch {}
-
-  // Drop old global unique indexes (they block multi-user: two users can't have the same channel)
-  try { db.exec(`DROP INDEX IF EXISTS idx_leads_channel_id_uniq`); } catch {}
-  try { db.exec(`DROP INDEX IF EXISTS idx_leads_handle_uniq`); } catch {}
-
-  // Per-user unique indexes — one channel per user, not globally unique
-  try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_channel_id_user_uniq ON leads(channel_id, user_id) WHERE channel_id IS NOT NULL AND channel_id != ''`); } catch {}
-  try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_handle_user_uniq ON leads(channel_handle, user_id) WHERE channel_handle IS NOT NULL AND channel_handle != ''`); } catch {}
-
-  // One-time dedup: keep highest id (most recent) per channel_id+user_id pair
-  try {
-    db.exec(`DELETE FROM leads WHERE id NOT IN (
-      SELECT MAX(id) FROM leads WHERE channel_id IS NOT NULL AND channel_id != '' GROUP BY channel_id, user_id
-    ) AND channel_id IS NOT NULL AND channel_id != ''`);
-  } catch {}
-
-  // Stripe billing columns
-  try { db.exec(`ALTER TABLE users ADD COLUMN stripe_customer_id TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE users ADD COLUMN stripe_subscription_id TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE users ADD COLUMN trial_ends_at DATETIME DEFAULT (datetime('now', '+14 days'))`); } catch {}
-  try { db.exec(`ALTER TABLE users ADD COLUMN billing_cycle_start DATETIME DEFAULT (datetime('now'))`); } catch {}
-
-  // Admin-settable custom limits (override plan limits for individual users)
-  try { db.exec(`ALTER TABLE users ADD COLUMN custom_emails_limit INTEGER`); } catch {}
-  try { db.exec(`ALTER TABLE users ADD COLUMN custom_leads_limit INTEGER`); } catch {}
-
-  // ── Master leads pool — global shared DB filled by background seeder ──────────
   db.exec(`
     CREATE TABLE IF NOT EXISTS master_leads (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -362,81 +388,22 @@ function initSchema() {
       scraped_at DATETIME DEFAULT (datetime('now'))
     )
   `);
-  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_master_niche ON master_leads(niche)`); } catch {}
-  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_master_subs ON master_leads(subscriber_count)`); } catch {}
-  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_master_email ON master_leads(email)`); } catch {}
-  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_master_country ON master_leads(country)`); } catch {}
+  alterTry(`CREATE INDEX IF NOT EXISTS idx_master_niche ON master_leads(niche)`);
+  alterTry(`CREATE INDEX IF NOT EXISTS idx_master_subs ON master_leads(subscriber_count)`);
+  alterTry(`CREATE INDEX IF NOT EXISTS idx_master_email ON master_leads(email)`);
+  alterTry(`CREATE INDEX IF NOT EXISTS idx_master_country ON master_leads(country)`);
+  alterTry(`CREATE UNIQUE INDEX IF NOT EXISTS idx_master_leads_channel_id ON master_leads(channel_id) WHERE channel_id IS NOT NULL`);
+  alterTry(`DELETE FROM master_leads WHERE email IS NULL OR email = ''`);
 
-  // Seeder keyword pagination — tracks nextPageToken per keyword per API key
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS seeder_keyword_tokens (
-      keyword TEXT NOT NULL,
-      api_key_hash TEXT NOT NULL,
-      next_page_token TEXT,
-      pages_done INTEGER DEFAULT 0,
-      last_used DATETIME DEFAULT CURRENT_TIMESTAMP,
-      PRIMARY KEY (keyword, api_key_hash)
-    )
-  `);
+  db.exec(`CREATE TABLE IF NOT EXISTS seeder_keyword_tokens (
+    keyword TEXT NOT NULL,
+    api_key_hash TEXT NOT NULL,
+    next_page_token TEXT,
+    pages_done INTEGER DEFAULT 0,
+    last_used DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (keyword, api_key_hash)
+  )`);
 
-  // gmail_accounts migrations
-  try { db.exec(`ALTER TABLE gmail_accounts ADD COLUMN daily_limit INTEGER DEFAULT 500`); } catch {}
-  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_gmail_accounts_user_id ON gmail_accounts(user_id)`); } catch {}
-  try { db.exec(`ALTER TABLE leads ADD COLUMN exported_at DATETIME DEFAULT NULL`); } catch {}
-  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_leads_exported_at ON leads(user_id, exported_at)`); } catch {}
-  try { db.exec(`ALTER TABLE leads ADD COLUMN scrape_source TEXT DEFAULT 'youtube_api'`); } catch {}
-  try { db.exec(`ALTER TABLE leads ADD COLUMN view_trend TEXT`); } catch {}
-
-  // Enforce email-only in master_leads — delete any rows without email
-  try { db.exec(`DELETE FROM master_leads WHERE email IS NULL OR email = ''`); } catch {}
-  // Unique index on channel_id for master_leads
-  try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_master_leads_channel_id ON master_leads(channel_id) WHERE channel_id IS NOT NULL`); } catch {}
-
-  // Pitch signal type column
-  try { db.exec(`ALTER TABLE pitches ADD COLUMN signal_type TEXT`); } catch {}
-
-  // Voice DNA / user profile columns
-  try { db.exec(`ALTER TABLE users ADD COLUMN service_type TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE users ADD COLUMN one_liner TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE users ADD COLUMN experience_years TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE users ADD COLUMN best_result TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE users ADD COLUMN pricing_range TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE users ADD COLUMN personality_traits TEXT DEFAULT '[]'`); } catch {}
-  try { db.exec(`ALTER TABLE users ADD COLUMN outreach_goal TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE users ADD COLUMN origin_story TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE users ADD COLUMN unique_difference TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE users ADD COLUMN voice_dna TEXT DEFAULT '{}'`); } catch {}
-  try { db.exec(`ALTER TABLE users ADD COLUMN profile_completed INTEGER DEFAULT 0`); } catch {}
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS user_followup_settings (
-      user_id INTEGER PRIMARY KEY,
-      interval_days INTEGER DEFAULT 3,
-      max_count INTEGER DEFAULT 2,
-      enabled INTEGER DEFAULT 0,
-      updated_at DATETIME DEFAULT (datetime('now'))
-    )
-  `);
-
-  // user_id indexes for fast per-user queries
-  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_leads_user_id ON leads(user_id)`); } catch {}
-  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_emails_user_id ON emails(user_id)`); } catch {}
-  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_email_queue_user_id ON email_queue(user_id)`); } catch {}
-  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_activities_user_id ON activities(user_id)`); } catch {}
-  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_pitches_user_id ON pitches(user_id)`); } catch {}
-  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_email_queue_user_status ON email_queue(user_id, status, priority, created_at)`); } catch {}
-
-  // REMOVED: single-user google_merge migration. It ran every Railway redeploy because
-  // settings table is ephemeral (not in Turso), renaming real user emails to
-  // orphan_N@merged.internal on each deploy. Google OAuth now uses email/ADMIN_EMAIL
-  // env var matching in server.js — no destructive merges needed.
-
-  // Periodic cleanup of expired password reset tokens (runs every 24h)
-  setInterval(() => {
-    try { getDb().prepare(`DELETE FROM password_reset_tokens WHERE expires_at < datetime('now')`).run(); } catch {}
-  }, 24 * 60 * 60 * 1000);
-
-  // ── Intent + Campaign system tables ──────────────────────────────────────────
   db.exec(`
     CREATE TABLE IF NOT EXISTS campaigns (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -462,7 +429,6 @@ function initSchema() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
-
     CREATE TABLE IF NOT EXISTS campaign_leads (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
@@ -487,27 +453,10 @@ function initSchema() {
       UNIQUE(campaign_id, lead_id)
     );
   `);
+  alterTry(`CREATE INDEX IF NOT EXISTS idx_campaign_leads_campaign_id ON campaign_leads(campaign_id)`);
+  alterTry(`CREATE INDEX IF NOT EXISTS idx_campaign_leads_lead_id ON campaign_leads(lead_id)`);
+  alterTry(`CREATE INDEX IF NOT EXISTS idx_campaigns_user_id ON campaigns(user_id)`);
 
-  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_campaign_leads_campaign_id ON campaign_leads(campaign_id)`); } catch {}
-  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_campaign_leads_lead_id ON campaign_leads(lead_id)`); } catch {}
-  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_campaigns_user_id ON campaigns(user_id)`); } catch {}
-
-  // Add intent score columns to leads (migrations)
-  try { db.exec(`ALTER TABLE leads ADD COLUMN intent_score REAL DEFAULT NULL`); } catch {}
-  try { db.exec(`ALTER TABLE leads ADD COLUMN intent_confidence TEXT DEFAULT NULL`); } catch {}
-  try { db.exec(`ALTER TABLE leads ADD COLUMN intent_reason TEXT DEFAULT NULL`); } catch {}
-  try { db.exec(`ALTER TABLE leads ADD COLUMN intent_signals TEXT DEFAULT NULL`); } catch {}
-
-  // Add tracking columns to emails
-  try { db.exec(`ALTER TABLE emails ADD COLUMN angle_type TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE emails ADD COLUMN campaign_id INTEGER REFERENCES campaigns(id)`); } catch {}
-  try { db.exec(`ALTER TABLE emails ADD COLUMN reply_sentiment TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE emails ADD COLUMN call_booked INTEGER DEFAULT 0`); } catch {}
-  try { db.exec(`ALTER TABLE emails ADD COLUMN client_closed INTEGER DEFAULT 0`); } catch {}
-  try { db.exec(`ALTER TABLE emails ADD COLUMN client_value REAL DEFAULT 0`); } catch {}
-  try { db.exec(`ALTER TABLE emails ADD COLUMN ab_variant TEXT`); } catch {}
-
-  // ── Quality-first lead system tables ─────────────────────────────────────────
   db.exec(`
     CREATE TABLE IF NOT EXISTS quality_leads (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -540,7 +489,6 @@ function initSchema() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
-
     CREATE TABLE IF NOT EXISTS archived_leads (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       creator_id TEXT UNIQUE NOT NULL,
@@ -553,7 +501,6 @@ function initSchema() {
       archived_reason TEXT DEFAULT 'below_threshold',
       archived_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
-
     CREATE TABLE IF NOT EXISTS scraper_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       run_id TEXT,
@@ -571,7 +518,6 @@ function initSchema() {
       started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       completed_at DATETIME
     );
-
     CREATE TABLE IF NOT EXISTS buying_signals (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       source TEXT NOT NULL DEFAULT 'reddit',
@@ -590,10 +536,6 @@ function initSchema() {
       processed INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
-  `);
-
-  // ── Multi-platform signal tables ─────────────────────────────────────────────
-  db.exec(`
     CREATE TABLE IF NOT EXISTS platform_signals (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       creator_id TEXT NOT NULL,
@@ -606,7 +548,6 @@ function initSchema() {
       found_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(creator_id, platform, signal_url)
     );
-
     CREATE TABLE IF NOT EXISTS creator_profiles (
       creator_id TEXT PRIMARY KEY,
       channel_name TEXT,
@@ -618,7 +559,6 @@ function initSchema() {
       confirmed_hiring INTEGER DEFAULT 0,
       last_updated DATETIME DEFAULT CURRENT_TIMESTAMP
     );
-
     CREATE TABLE IF NOT EXISTS upwork_signals (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       job_id TEXT UNIQUE,
@@ -634,18 +574,39 @@ function initSchema() {
       found_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
+  alterTry(`CREATE INDEX IF NOT EXISTS idx_quality_leads_niche ON quality_leads(niche)`);
+  alterTry(`CREATE INDEX IF NOT EXISTS idx_quality_leads_score ON quality_leads(intent_score DESC)`);
+  alterTry(`CREATE INDEX IF NOT EXISTS idx_quality_leads_subs ON quality_leads(subscriber_count)`);
 
-  // Indexes for quality system
-  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_quality_leads_niche ON quality_leads(niche)`); } catch {}
-  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_quality_leads_score ON quality_leads(intent_score DESC)`); } catch {}
-  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_quality_leads_subs ON quality_leads(subscriber_count)`); } catch {}
-  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_quality_leads_source ON quality_leads(source)`); } catch {}
-  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_archived_leads_tier ON archived_leads(intent_tier)`); } catch {}
-  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_scraper_logs_type ON scraper_logs(scraper_type)`); } catch {}
-  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_buying_signals_source ON buying_signals(source)`); } catch {}
-  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_buying_signals_class ON buying_signals(intent_classification)`); } catch {}
+  db.exec(`CREATE TABLE IF NOT EXISTS user_followup_settings (
+    user_id INTEGER PRIMARY KEY,
+    interval_days INTEGER DEFAULT 3,
+    max_count INTEGER DEFAULT 2,
+    enabled INTEGER DEFAULT 0,
+    updated_at DATETIME DEFAULT (datetime('now'))
+  )`);
 
-  // Seed default settings
+  db.exec(`CREATE TABLE IF NOT EXISTS power_send_jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    status TEXT DEFAULT 'running',
+    total INTEGER DEFAULT 0,
+    studied INTEGER DEFAULT 0,
+    generated INTEGER DEFAULT 0,
+    sent INTEGER DEFAULT 0,
+    failed INTEGER DEFAULT 0,
+    settings TEXT DEFAULT '{}',
+    log TEXT DEFAULT '[]',
+    started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    completed_at DATETIME
+  )`);
+
+  return db;
+}
+
+// ── Default settings seed ──────────────────────────────────────────────────────
+
+async function _seedDefaultSettings() {
   const defaults = {
     daily_send_limit: '150',
     email_delay_min: '45',
@@ -682,36 +643,111 @@ function initSchema() {
     }]) : '[]',
   };
 
-  const insert = db.prepare(`INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)`);
   for (const [key, value] of Object.entries(defaults)) {
-    insert.run(key, value);
+    if (!(_settingsCache[key] != null)) {
+      try {
+        const conflict = USE_PG
+          ? 'ON CONFLICT (key) DO NOTHING'
+          : 'OR IGNORE';
+        const sql = USE_PG
+          ? `INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO NOTHING`
+          : `INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)`;
+        await _db.run(sql, [key, value]);
+        _settingsCache[key] = value;
+      } catch {}
+    }
   }
 }
 
-function getUserById(id) {
-  const db = getDb();
-  return db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+// ── Admin user creation ────────────────────────────────────────────────────────
+
+async function _ensureAdmin() {
+  const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'harshwrites07@gmail.com';
+  const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+
+  try {
+    const existing = await _db.get('SELECT id FROM users WHERE email=?', [ADMIN_EMAIL]);
+    if (!existing) {
+      if (ADMIN_PASSWORD) {
+        const bcrypt = require('bcryptjs');
+        const hashed = bcrypt.hashSync(ADMIN_PASSWORD, 12);
+        const sql = USE_PG
+          ? `INSERT INTO users (email, password, full_name, plan, plan_status, is_admin, email_verified, onboarding_completed) VALUES (?, ?, 'Admin', 'agency', 'active', 1, 1, 1) ON CONFLICT DO NOTHING`
+          : `INSERT OR IGNORE INTO users (email, password, full_name, plan, plan_status, is_admin, email_verified, onboarding_completed) VALUES (?, ?, 'Admin', 'agency', 'active', 1, 1, 1)`;
+        await _db.run(sql, [ADMIN_EMAIL, hashed]);
+        console.log(`[DB] Admin account created: ${ADMIN_EMAIL}`);
+      }
+    } else {
+      await _db.run(
+        `UPDATE users SET is_admin=1, plan='agency', plan_status='active', email_verified=1, onboarding_completed=1 WHERE email=? AND (is_admin IS NULL OR is_admin=0)`,
+        [ADMIN_EMAIL]
+      );
+    }
+
+    // Auto-promote any admin emails from env
+    const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim()).filter(Boolean);
+    for (const email of adminEmails) {
+      const r = await _db.run(`UPDATE users SET is_admin=1, plan='agency' WHERE email=?`, [email]);
+      if (r.changes > 0) console.log(`[DB] Auto-promoted ${email} to admin`);
+    }
+  } catch (e) {
+    console.error('[DB] _ensureAdmin error:', e.message);
+  }
 }
 
-function getUserByEmail(email) {
-  const db = getDb();
-  return db.prepare('SELECT * FROM users WHERE LOWER(email) = LOWER(?)').get(email);
+// ── Exported helper functions ──────────────────────────────────────────────────
+
+async function getUserById(id) {
+  if (!_db) return null;
+  return await _db.get('SELECT * FROM users WHERE id = ?', [id]);
 }
 
-// express-session store backed by the existing better-sqlite3 connection
+async function getUserByEmail(email) {
+  if (!_db) return null;
+  return await _db.get('SELECT * FROM users WHERE LOWER(email) = LOWER(?)', [email]);
+}
+
+function getSetting(key) {
+  return _settingsCache[key] ?? null;
+}
+
+function setSetting(key, value) {
+  const v = typeof value === 'object' ? JSON.stringify(value) : String(value);
+  _settingsCache[key] = v;
+  if (!_db) return;
+  const sql = USE_PG
+    ? `INSERT INTO settings (key, value, updated_at) VALUES (?, ?, NOW()) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW()`
+    : `INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)`;
+  _db.run(sql, [key, v]).catch(e => console.warn('[DB] setSetting error:', e.message));
+}
+
+function logActivity(type, message, leadId = null, metadata = {}, userId = null) {
+  if (!_db) return;
+  _db.run(
+    `INSERT INTO activities (type, message, lead_id, metadata, user_id) VALUES (?, ?, ?, ?, ?)`,
+    [type, message, leadId, JSON.stringify(metadata), userId]
+  ).catch(() => {});
+}
+
+// ── Session store ──────────────────────────────────────────────────────────────
+
 class BetterSQLiteStore {
   constructor(expressSession) {
+    if (USE_PG) {
+      const { PgSessionStore } = require('./postgres');
+      return new PgSessionStore(expressSession);
+    }
     const Store = expressSession.Store;
     class _Store extends Store {
       constructor() {
         super();
         setInterval(() => {
-          try { getDb().prepare("DELETE FROM sessions WHERE expires_at < datetime('now')").run(); } catch {}
+          try { getDb()._raw.prepare("DELETE FROM sessions WHERE expires_at < datetime('now')").run(); } catch {}
         }, 15 * 60 * 1000);
       }
       get(sid, cb) {
         try {
-          const row = getDb().prepare("SELECT data FROM sessions WHERE session_id=? AND expires_at > datetime('now')").get(sid);
+          const row = getDb()._raw.prepare("SELECT data FROM sessions WHERE session_id=? AND expires_at > datetime('now')").get(sid);
           cb(null, row ? JSON.parse(row.data) : null);
         } catch (e) { cb(e); }
       }
@@ -720,19 +756,19 @@ class BetterSQLiteStore {
           const exp = sess.cookie?.expires
             ? new Date(sess.cookie.expires).toISOString()
             : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-          getDb().prepare(`INSERT OR REPLACE INTO sessions (session_id,data,expires_at,created_at) VALUES (?,?,?,CURRENT_TIMESTAMP)`).run(sid, JSON.stringify(sess), exp);
+          getDb()._raw.prepare(`INSERT OR REPLACE INTO sessions (session_id,data,expires_at,created_at) VALUES (?,?,?,CURRENT_TIMESTAMP)`).run(sid, JSON.stringify(sess), exp);
           cb(null);
         } catch (e) { cb(e); }
       }
       destroy(sid, cb) {
-        try { getDb().prepare('DELETE FROM sessions WHERE session_id=?').run(sid); cb(null); } catch (e) { cb(e); }
+        try { getDb()._raw.prepare('DELETE FROM sessions WHERE session_id=?').run(sid); cb(null); } catch (e) { cb(e); }
       }
       touch(sid, sess, cb) {
         try {
           const exp = sess.cookie?.expires
             ? new Date(sess.cookie.expires).toISOString()
             : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-          getDb().prepare('UPDATE sessions SET expires_at=? WHERE session_id=?').run(exp, sid);
+          getDb()._raw.prepare('UPDATE sessions SET expires_at=? WHERE session_id=?').run(exp, sid);
           cb(null);
         } catch (e) { cb(e); }
       }
@@ -741,49 +777,22 @@ class BetterSQLiteStore {
   }
 }
 
-function getSetting(key) {
-  const db = getDb();
-  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
-  return row ? row.value : null;
-}
-
-function setSetting(key, value) {
-  const db = getDb();
-  db.prepare(`INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)`)
-    .run(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
-}
-
-function logActivity(type, message, leadId = null, metadata = {}, userId = null) {
-  const db = getDb();
-  db.prepare(`INSERT INTO activities (type, message, lead_id, metadata, user_id) VALUES (?, ?, ?, ?, ?)`)
-    .run(type, message, leadId, JSON.stringify(metadata), userId);
-}
-
 const PLAN_LIMITS = {
-  free: {
-    emails_per_month: 10,
-    gmail_accounts: 1,
-    team_seats: 1,
-    ai_pitches: 3,
-  },
-  starter: {
-    emails_per_month: 500,
-    gmail_accounts: 1,
-    team_seats: 1,
-    ai_pitches: -1,
-  },
-  pro: {
-    emails_per_month: 1500,
-    gmail_accounts: 3,
-    team_seats: 1,
-    ai_pitches: -1,
-  },
-  agency: {
-    emails_per_month: 5000,
-    gmail_accounts: 10,
-    team_seats: 5,
-    ai_pitches: -1,
-  },
+  free:    { emails_per_month: 10,   gmail_accounts: 1,  team_seats: 1, ai_pitches: 3  },
+  starter: { emails_per_month: 500,  gmail_accounts: 1,  team_seats: 1, ai_pitches: -1 },
+  pro:     { emails_per_month: 1500, gmail_accounts: 3,  team_seats: 1, ai_pitches: -1 },
+  agency:  { emails_per_month: 5000, gmail_accounts: 10, team_seats: 5, ai_pitches: -1 },
 };
 
-module.exports = { getDb, getSetting, setSetting, logActivity, getUserById, getUserByEmail, BetterSQLiteStore, PLAN_LIMITS };
+module.exports = {
+  getDb,
+  initializeDatabase,
+  getSetting,
+  setSetting,
+  logActivity,
+  getUserById,
+  getUserByEmail,
+  BetterSQLiteStore,
+  PLAN_LIMITS,
+  USE_PG,
+};

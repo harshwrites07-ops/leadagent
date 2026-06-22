@@ -428,8 +428,10 @@ function getApiKeys() {
   return keys;
 }
 
+const MASTER_INSERT_SQL = `INSERT OR IGNORE INTO master_leads (channel_id, channel_name, channel_handle, subscriber_count, avg_views, email, website, channel_description, lead_score, temperature, country, niche) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`;
+
 // Process one batch of channels for a given keyword+key
-async function processChannelBatch(db, INSERT, channels, keyword) {
+async function processChannelBatch(db, channels, keyword) {
   const tasks = channels.map(async ch => {
     const subs = parseInt(ch.statistics?.subscriberCount || 0);
     if (subs < MIN_SUBS || subs > MAX_SUBS) return 0;
@@ -438,12 +440,10 @@ async function processChannelBatch(db, INSERT, channels, keyword) {
     const brandDesc = ch.brandingSettings?.channel?.description || '';
     const fullText = desc + ' ' + brandDesc;
 
-    // 1. Try email directly from description (handles obfuscated formats too)
     let email = extractEmail(fullText);
     const urls = extractUrlsFromText(fullText);
     const website = urls[0] || null;
 
-    // 2. Try all non-social URLs from description — including Linktree, Beacons, etc.
     if (!email && urls.length > 0) {
       for (const u of urls) {
         const webEmail = await scrapeEmailFromWebsite(u);
@@ -452,13 +452,6 @@ async function processChannelBatch(db, INSERT, channels, keyword) {
     }
 
     if (!email) return 0;
-
-    // Check channel is still active — YouTube API search type=video gives us
-    // channels that recently uploaded, so most are active. But add a recency
-    // signal if publishedAt is available on the search snippet.
-    const publishedAt = ch.snippet?.publishedAt;
-    const channelAgeDays = publishedAt
-      ? (Date.now() - new Date(publishedAt).getTime()) / 86400000 : 0;
 
     const views = parseInt(ch.statistics?.viewCount || 0);
     const videos = Math.max(1, parseInt(ch.statistics?.videoCount || 1));
@@ -470,17 +463,17 @@ async function processChannelBatch(db, INSERT, channels, keyword) {
     if (subs > 100000) score += 10;
     if (views > 100000) score += 5;
     if (views > 1000000) score += 5;
-    score += 15; // has email
-    if (isPersonalEmail) score -= 15; // personal email = lower priority
+    score += 15;
+    if (isPersonalEmail) score -= 15;
 
-    const r = INSERT.run(
+    const r = await db.run(MASTER_INSERT_SQL, [
       ch.id, ch.snippet?.title || 'Unknown', ch.snippet?.customUrl || null,
       subs, Math.round(views / videos), email, website,
       desc.substring(0, 400) || null, score,
-      subs > 100000 ? 'warm' : (isPersonalEmail ? 'cold' : 'cold'),
+      subs > 100000 ? 'warm' : 'cold',
       ch.snippet?.country || null,
       kwNicheMap[keyword] || keyword.split(' ')[0].toLowerCase()
-    );
+    ]);
     return r.changes > 0 ? 1 : 0;
   });
 
@@ -495,51 +488,40 @@ function keyHash(apiKey) {
   return Math.abs(h).toString(36);
 }
 
-// Run one key's assigned keyword list — uses pagination so each cycle gets fresh channels
-// Keywords processed in parallel (4 at a time) for 4x faster cycle throughput.
+const UPSERT_TOKEN_SQL = `
+  INSERT INTO seeder_keyword_tokens (keyword, api_key_hash, next_page_token, pages_done, last_used)
+  VALUES (?,?,?,?,CURRENT_TIMESTAMP)
+  ON CONFLICT(keyword, api_key_hash) DO UPDATE SET
+    next_page_token=EXCLUDED.next_page_token,
+    pages_done=EXCLUDED.pages_done,
+    last_used=CURRENT_TIMESTAMP
+`;
+
 // Returns { saved, exhausted }
-async function runKeyBatch(apiKey, keywords, db, INSERT) {
+async function runKeyBatch(apiKey, keywords, db) {
   let saved = 0;
   let exhausted = false;
   const kh = keyHash(apiKey);
-
-  const getToken = db.prepare('SELECT next_page_token, pages_done FROM seeder_keyword_tokens WHERE keyword=? AND api_key_hash=?');
-  const upsertToken = db.prepare(`
-    INSERT INTO seeder_keyword_tokens (keyword, api_key_hash, next_page_token, pages_done, last_used)
-    VALUES (?,?,?,?,CURRENT_TIMESTAMP)
-    ON CONFLICT(keyword, api_key_hash) DO UPDATE SET
-      next_page_token=excluded.next_page_token,
-      pages_done=excluded.pages_done,
-      last_used=CURRENT_TIMESTAMP
-  `);
 
   const processKeyword = async (keyword) => {
     if (exhausted) return 0;
     seederStatus.currentKeyword = keyword;
 
-    const stored = getToken.get(keyword, kh);
+    const stored = await db.get('SELECT next_page_token, pages_done FROM seeder_keyword_tokens WHERE keyword=? AND api_key_hash=?', [keyword, kh]);
     const pageToken = stored?.next_page_token || null;
     const pagesDone = stored?.pages_done || 0;
 
     try {
-      // Search by VIDEO (order=date) — returns fresh channels every day as new videos are uploaded.
-      // type=channel returns the SAME 50 channels every time; type=video gives unique channels daily.
       const params = {
         part: 'snippet', q: keyword, type: 'video', order: 'date',
         maxResults: 50, key: apiKey,
       };
       if (pageToken) params.pageToken = pageToken;
 
-      const searchRes = await axios.get('https://www.googleapis.com/youtube/v3/search', {
-        params, timeout: 10000,
-      });
-
-      const channelIds = [...new Set(
-        (searchRes.data.items || []).map(i => i.snippet?.channelId).filter(Boolean)
-      )];
-
+      const searchRes = await axios.get('https://www.googleapis.com/youtube/v3/search', { params, timeout: 10000 });
+      const channelIds = [...new Set((searchRes.data.items || []).map(i => i.snippet?.channelId).filter(Boolean))];
       const nextToken = searchRes.data.nextPageToken || null;
-      upsertToken.run(keyword, kh, nextToken, pagesDone + 1);
+      await db.run(UPSERT_TOKEN_SQL, [keyword, kh, nextToken, pagesDone + 1]);
 
       if (!channelIds.length) return 0;
 
@@ -551,8 +533,7 @@ async function runKeyBatch(apiKey, keywords, db, INSERT) {
       const channels = detailRes.data.items || [];
       let kwSaved = 0;
       for (let i = 0; i < channels.length; i += CONCURRENCY) {
-        const batch = channels.slice(i, i + CONCURRENCY);
-        kwSaved += await processChannelBatch(db, INSERT, batch, keyword);
+        kwSaved += await processChannelBatch(db, channels.slice(i, i + CONCURRENCY), keyword);
       }
       return kwSaved;
     } catch (e) {
@@ -564,36 +545,27 @@ async function runKeyBatch(apiKey, keywords, db, INSERT) {
     }
   };
 
-  // Process 4 keywords in parallel per key — 4x faster cycle throughput
   const PARALLEL = 4;
   for (let i = 0; i < keywords.length; i += PARALLEL) {
     if (exhausted) break;
-    const batch = keywords.slice(i, i + PARALLEL);
-    const results = await Promise.allSettled(batch.map(processKeyword));
+    const results = await Promise.allSettled(keywords.slice(i, i + PARALLEL).map(processKeyword));
     saved += results.reduce((sum, r) => sum + (r.status === 'fulfilled' ? r.value : 0), 0);
   }
 
   return { saved, exhausted };
 }
 
-// InnerTube seeder — no API key needed, runs when YouTube API quota exhausted.
-// Uses fastSeedSearch: searches for VIDEOS (not channels) so different creators
-// are returned every cycle as new videos are uploaded. Skips full profile building
-// (no video tab fetch) so it's 2x faster per channel.
-async function runInnerTubeCycle(db, INSERT, keywords) {
+async function runInnerTubeCycle(db, keywords) {
   const { fastSeedSearch } = require('./innertubeService');
   let totalSaved = 0;
-
-  // Process 3 keywords in parallel — balance speed vs InnerTube rate limits
   const PARALLEL = 3;
+
   for (let i = 0; i < keywords.length; i += PARALLEL) {
     const kwBatch = keywords.slice(i, i + PARALLEL);
     seederStatus.currentKeyword = kwBatch[0];
 
     try {
-      const batchResults = await Promise.allSettled(
-        kwBatch.map(kw => fastSeedSearch(kw, 30))
-      );
+      const batchResults = await Promise.allSettled(kwBatch.map(kw => fastSeedSearch(kw, 30)));
 
       for (let j = 0; j < kwBatch.length; j++) {
         const r = batchResults[j];
@@ -605,16 +577,13 @@ async function runInnerTubeCycle(db, INSERT, keywords) {
           const subs = ch.subscriberCount || 0;
           if (subs > 0 && (subs < MIN_SUBS || subs > MAX_SUBS)) continue;
           try {
-            const res = INSERT.run(
+            const res = await db.run(MASTER_INSERT_SQL, [
               ch.channelId, ch.channelName, ch.handle || null,
-              subs, 0,
-              ch.email, null,
+              subs, 0, ch.email, null,
               (ch.description || '').substring(0, 400),
-              60,
-              subs > 100000 ? 'warm' : 'cold',
-              ch.country || null,
-              niche
-            );
+              60, subs > 100000 ? 'warm' : 'cold',
+              ch.country || null, niche
+            ]);
             if (res.changes > 0) totalSaved++;
           } catch {}
         }
@@ -636,15 +605,7 @@ async function runSeedCycle() {
   seederStatus.keysTotal = API_KEYS.length;
   seederStatus.keysActive = API_KEYS.length;
 
-  const INSERT = db.prepare(`
-    INSERT OR IGNORE INTO master_leads
-      (channel_id, channel_name, channel_handle, subscriber_count, avg_views,
-       email, website, channel_description, lead_score, temperature, country, niche)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-  `);
-
   const shuffled = [...KEYWORD_NICHE_MAP].sort(() => Math.random() - 0.5).map(([kw]) => kw);
-
   let totalSaved = 0;
   let usedInnerTube = false;
 
@@ -653,34 +614,27 @@ async function runSeedCycle() {
     const chunkSize = Math.ceil(shuffled.length / API_KEYS.length);
     const chunks = API_KEYS.map((_, i) => shuffled.slice(i * chunkSize, (i + 1) * chunkSize));
 
-    const results = await Promise.allSettled(
-      API_KEYS.map((key, i) => runKeyBatch(key, chunks[i] || [], db, INSERT))
-    );
-
+    const results = await Promise.allSettled(API_KEYS.map((key, i) => runKeyBatch(key, chunks[i] || [], db)));
     let exhaustedCount = 0;
     for (const r of results) {
-      if (r.status === 'fulfilled') {
-        totalSaved += r.value.saved;
-        if (r.value.exhausted) exhaustedCount++;
-      }
+      if (r.status === 'fulfilled') { totalSaved += r.value.saved; if (r.value.exhausted) exhaustedCount++; }
     }
     seederStatus.keysActive = API_KEYS.length - exhaustedCount;
 
     if (exhaustedCount >= API_KEYS.length) {
-      console.log('[Seeder] All YouTube API keys exhausted — switching to InnerTube fallback (all keywords)');
+      console.log('[Seeder] All YouTube API keys exhausted — switching to InnerTube fallback');
       usedInnerTube = true;
-      totalSaved += await runInnerTubeCycle(db, INSERT, shuffled);
+      totalSaved += await runInnerTubeCycle(db, shuffled);
     }
   } else {
-    // No API keys at all — always use InnerTube for all keywords
     console.log('[Seeder] No YouTube API keys — running on InnerTube (no quota limits)');
     usedInnerTube = true;
-    totalSaved += await runInnerTubeCycle(db, INSERT, shuffled);
+    totalSaved += await runInnerTubeCycle(db, shuffled);
   }
 
-  const total = db.prepare('SELECT COUNT(*) as c FROM master_leads').get().c;
-  const withEmail = db.prepare("SELECT COUNT(*) as c FROM master_leads WHERE email IS NOT NULL AND email != ''").get().c;
-  console.log(`[Seeder] Cycle done — +${totalSaved} new | DB: ${total} total | ${withEmail} with email${usedInnerTube ? ' [InnerTube]' : ''}`);
+  const totalRow = await db.get('SELECT COUNT(*) as c FROM master_leads');
+  const emailRow = await db.get("SELECT COUNT(*) as c FROM master_leads WHERE email IS NOT NULL AND email != ''");
+  console.log(`[Seeder] Cycle done — +${totalSaved} new | DB: ${totalRow.c} total | ${emailRow.c} with email${usedInnerTube ? ' [InnerTube]' : ''}`);
 
   seederStatus.running = false;
   seederStatus.lastCycleAt = new Date().toISOString();
@@ -688,19 +642,15 @@ async function runSeedCycle() {
   seederStatus.totalCycles++;
   seederStatus.currentKeyword = null;
 
-  // Push new leads to Turso cloud for persistence across deploys
   if (totalSaved > 0) {
     try {
       const { pushToTurso } = require('./tursoSync');
-      // Get the leads we just saved (most recent ones)
-      const newLeads = db.prepare(
-        `SELECT * FROM master_leads WHERE email IS NOT NULL ORDER BY id DESC LIMIT ?`
-      ).all(Math.min(totalSaved * 2, 500));
-      pushToTurso(newLeads).catch(() => {}); // fire and forget
+      const newLeads = await db.all(`SELECT * FROM master_leads WHERE email IS NOT NULL ORDER BY id DESC LIMIT ?`, [Math.min(totalSaved * 2, 500)]);
+      pushToTurso(newLeads).catch(() => {});
     } catch {}
   }
 
-  return false; // never signal "all exhausted" — InnerTube always available
+  return false;
 }
 
 async function startBackgroundSeeder() {

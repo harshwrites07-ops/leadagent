@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const path = require('path');
 const { asyncHandler } = require('../middleware/errorHandler');
-const { getDb, getSetting, setSetting, logActivity } = require('../models/database');
+const { getDb, getSetting, setSetting, logActivity, USE_PG } = require('../models/database');
 const { FAST_MODEL, SMART_MODEL, getGeminiKey, getGeminiKeys, makeGeminiModel, checkAiAvailability } = require('../services/claudeService');
 const { getAllKeys: getYtKeys, isQuotaExhausted } = require('../services/youtubeService');
 
@@ -12,7 +12,6 @@ function getGeminiChat(systemPrompt) {
   require('dotenv').config({ path: ENV_PATH, override: true });
   const key = getGeminiKey();
   if (!key) return null;
-  // Jack uses Flash — fast responses, strong tool use
   return makeGeminiModel(key, FAST_MODEL, systemPrompt);
 }
 
@@ -333,18 +332,39 @@ const GEMINI_TOOLS = TOOLS.map(t => ({
 }));
 
 // ── Tool executor ─────────────────────────────────────────────────────────────
-const LEAD_INSERT_SQL = `
-  INSERT OR IGNORE INTO leads
-    (user_id, platform, channel_id, channel_name, channel_handle, subscriber_count, total_videos,
-     avg_views, avg_likes, avg_comments, engagement_rate, upload_frequency_days,
-     last_upload_date, channel_description, channel_tags, recent_videos, most_viewed_video,
-     country, email, website, social_links, thumbnail_url, pain_points, lead_score, temperature, crm_stage)
-  VALUES
-    (@user_id, @platform, @channel_id, @channel_name, @channel_handle, @subscriber_count, @total_videos,
-     @avg_views, @avg_likes, @avg_comments, @engagement_rate, @upload_frequency_days,
-     @last_upload_date, @channel_description, @channel_tags, @recent_videos, @most_viewed_video,
-     @country, @email, @website, @social_links, @thumbnail_url, @pain_points, @lead_score, @temperature, 'new_lead')
-`;
+const LEAD_INSERT_SQL = USE_PG
+  ? `INSERT INTO leads (user_id, platform, channel_id, channel_name, channel_handle, subscriber_count, total_videos, avg_views, avg_likes, avg_comments, engagement_rate, upload_frequency_days, last_upload_date, channel_description, channel_tags, recent_videos, most_viewed_video, country, email, website, social_links, thumbnail_url, pain_points, lead_score, temperature, crm_stage) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'new_lead') ON CONFLICT DO NOTHING`
+  : `INSERT OR IGNORE INTO leads (user_id, platform, channel_id, channel_name, channel_handle, subscriber_count, total_videos, avg_views, avg_likes, avg_comments, engagement_rate, upload_frequency_days, last_upload_date, channel_description, channel_tags, recent_videos, most_viewed_video, country, email, website, social_links, thumbnail_url, pain_points, lead_score, temperature, crm_stage) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'new_lead')`;
+
+function leadInsertParams(lead, userId) {
+  return [
+    userId,
+    lead.platform || null,
+    lead.channel_id || null,
+    lead.channel_name || null,
+    lead.channel_handle || null,
+    lead.subscriber_count || null,
+    lead.total_videos || null,
+    lead.avg_views || null,
+    lead.avg_likes || null,
+    lead.avg_comments || null,
+    lead.engagement_rate || null,
+    lead.upload_frequency_days || null,
+    lead.last_upload_date || null,
+    lead.channel_description || null,
+    lead.channel_tags || null,
+    lead.recent_videos || null,
+    lead.most_viewed_video || null,
+    lead.country || null,
+    lead.email || null,
+    lead.website || null,
+    lead.social_links || null,
+    lead.thumbnail_url || null,
+    lead.pain_points || null,
+    lead.lead_score || null,
+    lead.temperature || null,
+  ];
+}
 
 async function runTool(name, input, userId) {
   const db = getDb();
@@ -352,7 +372,10 @@ async function runTool(name, input, userId) {
   switch (name) {
 
     case 'get_stats': {
-      const row = db.prepare(`
+      const todaySql = USE_PG
+        ? `SELECT COUNT(*) as n FROM leads WHERE user_id=? AND created_at::date = CURRENT_DATE`
+        : `SELECT COUNT(*) as n FROM leads WHERE user_id=? AND date(created_at)=date('now')`;
+      const row = await db.get(`
         SELECT COUNT(*) as total_leads,
           SUM(CASE WHEN temperature='hot' THEN 1 ELSE 0 END) as hot,
           SUM(CASE WHEN temperature='warm' THEN 1 ELSE 0 END) as warm,
@@ -361,10 +384,10 @@ async function runTool(name, input, userId) {
           SUM(CASE WHEN crm_stage='replied' THEN 1 ELSE 0 END) as replied,
           SUM(CASE WHEN crm_stage='emailed' THEN 1 ELSE 0 END) as emailed,
           SUM(CASE WHEN email IS NOT NULL AND email!='' THEN 1 ELSE 0 END) as with_email
-        FROM leads WHERE user_id=?`).get(userId);
-      const sent = db.prepare(`SELECT COUNT(*) as n FROM email_queue WHERE user_id=? AND status='sent'`).get(userId);
-      const today = db.prepare(`SELECT COUNT(*) as n FROM leads WHERE user_id=? AND date(created_at)=date('now')`).get(userId);
-      const pitches = db.prepare(`SELECT COUNT(*) as n FROM pitches WHERE lead_id IN (SELECT id FROM leads WHERE user_id=?)`).get(userId);
+        FROM leads WHERE user_id=?`, [userId]);
+      const sent = await db.get(`SELECT COUNT(*) as n FROM email_queue WHERE user_id=? AND status='sent'`, [userId]);
+      const today = await db.get(todaySql, [userId]);
+      const pitches = await db.get(`SELECT COUNT(*) as n FROM pitches WHERE lead_id IN (SELECT id FROM leads WHERE user_id=?)`, [userId]);
       return { ...row, emails_sent: sent?.n || 0, added_today: today?.n || 0, pitches_generated: pitches?.n || 0 };
     }
 
@@ -376,8 +399,8 @@ async function runTool(name, input, userId) {
       if (input.stage)       { q += ' AND crm_stage=?'; params.push(input.stage); }
       q += ' ORDER BY lead_score DESC LIMIT ?';
       params.push(Math.min(input.limit || 25, 100));
-      const leads = db.prepare(q).all(...params);
-      const total = db.prepare('SELECT COUNT(*) as n FROM leads WHERE user_id=?').get(userId);
+      const leads = await db.all(q, params);
+      const total = await db.get('SELECT COUNT(*) as n FROM leads WHERE user_id=?', [userId]);
       return { leads, shown: leads.length, total_in_db: total.n };
     }
 
@@ -386,17 +409,23 @@ async function runTool(name, input, userId) {
       const params = [userId];
       if (input.temperature) { q += ' AND temperature=?'; params.push(input.temperature); }
       if (input.stage)       { q += ' AND crm_stage=?'; params.push(input.stage); }
-      if (input.has_email === true)  { q += ' AND email IS NOT NULL AND email != ""'; }
-      if (input.has_email === false) { q += ' AND (email IS NULL OR email = "")'; }
+      if (input.has_email === true)  { q += " AND email IS NOT NULL AND email != ''"; }
+      if (input.has_email === false) { q += " AND (email IS NULL OR email = '')"; }
       q += ' ORDER BY lead_score DESC LIMIT ? OFFSET ?';
       params.push(Math.min(input.limit || 200, 500), input.offset || 0);
-      const leads = db.prepare(q).all(...params);
-      const total = db.prepare('SELECT COUNT(*) as n FROM leads WHERE user_id=?').get(userId);
+      const leads = await db.all(q, params);
+      const total = await db.get('SELECT COUNT(*) as n FROM leads WHERE user_id=?', [userId]);
       return { leads, shown: leads.length, total_in_db: total.n, offset: input.offset || 0 };
     }
 
     case 'full_database_report': {
-      const totals = db.prepare(`
+      const addedTodaySql = USE_PG
+        ? `created_at::date = CURRENT_DATE`
+        : `date(created_at)=date('now')`;
+      const addedWeekSql = USE_PG
+        ? `created_at::date >= CURRENT_DATE - INTERVAL '7 days'`
+        : `date(created_at)>=date('now','-7 days')`;
+      const totals = await db.get(`
         SELECT
           COUNT(*) as total,
           SUM(CASE WHEN email IS NOT NULL AND email != '' THEN 1 ELSE 0 END) as with_email,
@@ -410,30 +439,34 @@ async function runTool(name, input, userId) {
           SUM(CASE WHEN crm_stage='replied' THEN 1 ELSE 0 END) as replied,
           SUM(CASE WHEN crm_stage='closed_won' THEN 1 ELSE 0 END) as won,
           SUM(CASE WHEN crm_stage='closed_lost' THEN 1 ELSE 0 END) as lost,
-          SUM(CASE WHEN date(created_at)=date('now') THEN 1 ELSE 0 END) as added_today,
-          SUM(CASE WHEN date(created_at)>=date('now','-7 days') THEN 1 ELSE 0 END) as added_this_week
-        FROM leads WHERE user_id=?`).get(userId);
-      const topLeads = db.prepare(`SELECT id,channel_name,subscriber_count,lead_score,email,temperature FROM leads WHERE user_id=? AND temperature='hot' ORDER BY lead_score DESC LIMIT 10`).all(userId);
-      const pitches = db.prepare('SELECT COUNT(*) as n FROM pitches WHERE lead_id IN (SELECT id FROM leads WHERE user_id=?)').get(userId);
-      const emailsSent = db.prepare("SELECT COUNT(*) as n FROM email_queue WHERE user_id=? AND status='sent'").get(userId);
+          SUM(CASE WHEN ${addedTodaySql} THEN 1 ELSE 0 END) as added_today,
+          SUM(CASE WHEN ${addedWeekSql} THEN 1 ELSE 0 END) as added_this_week
+        FROM leads WHERE user_id=?`, [userId]);
+      const topLeads = await db.all(`SELECT id,channel_name,subscriber_count,lead_score,email,temperature FROM leads WHERE user_id=? AND temperature='hot' ORDER BY lead_score DESC LIMIT 10`, [userId]);
+      const pitches = await db.get('SELECT COUNT(*) as n FROM pitches WHERE lead_id IN (SELECT id FROM leads WHERE user_id=?)', [userId]);
+      const emailsSent = await db.get("SELECT COUNT(*) as n FROM email_queue WHERE user_id=? AND status='sent'", [userId]);
       return { ...totals, pitches_generated: pitches.n, emails_sent: emailsSent.n, top_10_hot_leads: topLeads };
     }
 
     case 'mass_delete_leads': {
+      const inactiveSql = USE_PG
+        ? `EXTRACT(EPOCH FROM (NOW() - updated_at::timestamp)) / 86400 > 90`
+        : `julianday('now')-julianday(updated_at)>90`;
       let countQ, deleteQ, countParams, deleteParams;
       switch (input.filter) {
         case 'no_email':           countQ = `SELECT COUNT(*) as n FROM leads WHERE user_id=? AND (email IS NULL OR email = '')`; deleteQ = `DELETE FROM leads WHERE user_id=? AND (email IS NULL OR email = '')`; countParams = deleteParams = [userId]; break;
         case 'cold_stage_only':    countQ = `SELECT COUNT(*) as n FROM leads WHERE user_id=? AND crm_stage='closed_lost'`; deleteQ = `DELETE FROM leads WHERE user_id=? AND crm_stage='closed_lost'`; countParams = deleteParams = [userId]; break;
-        case 'inactive_90days':    countQ = `SELECT COUNT(*) as n FROM leads WHERE user_id=? AND julianday('now')-julianday(updated_at)>90 AND crm_stage='new_lead'`; deleteQ = `DELETE FROM leads WHERE user_id=? AND julianday('now')-julianday(updated_at)>90 AND crm_stage='new_lead'`; countParams = deleteParams = [userId]; break;
+        case 'inactive_90days':    countQ = `SELECT COUNT(*) as n FROM leads WHERE user_id=? AND ${inactiveSql} AND crm_stage='new_lead'`; deleteQ = `DELETE FROM leads WHERE user_id=? AND ${inactiveSql} AND crm_stage='new_lead'`; countParams = deleteParams = [userId]; break;
         case 'duplicates':         countQ = `SELECT COUNT(*) as n FROM leads WHERE user_id=? AND id NOT IN (SELECT MAX(id) FROM leads WHERE user_id=? GROUP BY channel_id)`; deleteQ = `DELETE FROM leads WHERE user_id=? AND id NOT IN (SELECT MAX(id) FROM leads WHERE user_id=? GROUP BY channel_id)`; countParams = deleteParams = [userId, userId]; break;
         case 'all_cold_temperature': countQ = `SELECT COUNT(*) as n FROM leads WHERE user_id=? AND temperature='cold' AND crm_stage='new_lead'`; deleteQ = `DELETE FROM leads WHERE user_id=? AND temperature='cold' AND crm_stage='new_lead'`; countParams = deleteParams = [userId]; break;
         default: return { error: 'Unknown filter' };
       }
-      const count = db.prepare(countQ).get(...countParams).n;
+      const countRow = await db.get(countQ, countParams);
+      const count = countRow.n;
       if (input.dry_run) return { would_delete: count, filter: input.filter, dry_run: true };
-      db.prepare(deleteQ).run(...deleteParams);
-      const remaining = db.prepare('SELECT COUNT(*) as n FROM leads WHERE user_id=?').get(userId).n;
-      return { deleted: count, filter: input.filter, leads_remaining: remaining };
+      await db.run(deleteQ, deleteParams);
+      const remainingRow = await db.get('SELECT COUNT(*) as n FROM leads WHERE user_id=?', [userId]);
+      return { deleted: count, filter: input.filter, leads_remaining: remainingRow.n };
     }
 
     case 'search_youtube': {
@@ -443,8 +476,9 @@ async function runTool(name, input, userId) {
       let saved = 0;
       try {
         const leads = await searchChannels({ keyword, minSubs, maxSubs, maxResults, emailOnly: true });
-        const ins = db.prepare(LEAD_INSERT_SQL);
-        for (const lead of leads) { try { const r = ins.run({ ...lead, user_id: userId }); if (r.changes > 0) saved++; } catch {} }
+        for (const lead of leads) {
+          try { const r = await db.run(LEAD_INSERT_SQL, leadInsertParams(lead, userId)); if (r.changes > 0) saved++; } catch {}
+        }
         console.log(`[Jack] search_youtube "${keyword}": ${saved} new leads saved`);
       } catch (e) { console.error(`[Jack] search_youtube error:`, e.message); return { error: e.message }; }
       return { status: 'done', keyword, leads_found: saved, message: `Found and saved ${saved} new leads for "${keyword}". Check CRM to see them.` };
@@ -459,8 +493,9 @@ async function runTool(name, input, userId) {
       for (const keyword of keywords) {
         try {
           const leads = await searchChannels({ keyword, minSubs, maxSubs, maxResults: maxPerKw, emailOnly: true });
-          const ins = db.prepare(LEAD_INSERT_SQL);
-          for (const lead of leads) { try { const r = ins.run({ ...lead, user_id: userId }); if (r.changes > 0) totalSaved++; } catch {} }
+          for (const lead of leads) {
+            try { const r = await db.run(LEAD_INSERT_SQL, leadInsertParams(lead, userId)); if (r.changes > 0) totalSaved++; } catch {}
+          }
           console.log(`[Jack] scrape_bulk "${keyword}": ${leads.length} found`);
         } catch (e) { console.error(`[Jack] scrape_bulk "${keyword}" error:`, e.message); }
       }
@@ -485,9 +520,10 @@ async function runTool(name, input, userId) {
       ;(async () => {
         try {
           const leads = await searchChannelsMulti(keywords.slice(0, 3), { minSubs: 5000, maxSubs: 500000, maxResults: Math.min(target, 30), emailOnly: true });
-          const ins = db.prepare(LEAD_INSERT_SQL);
           let saved = 0;
-          for (const lead of leads) { try { ins.run({ ...lead, niche, user_id: userId }); saved++; } catch {} }
+          for (const lead of leads) {
+            try { const r = await db.run(LEAD_INSERT_SQL, leadInsertParams(lead, userId)); if (r.changes > 0) saved++; } catch {}
+          }
           console.log(`[Jack] niche_hunt "${niche}": ${saved} saved`);
         } catch (e) { console.error(`[Jack] niche_hunt error:`, e.message); }
       })();
@@ -505,12 +541,13 @@ async function runTool(name, input, userId) {
       ];
       ;(async () => {
         try {
-          const ins = db.prepare(LEAD_INSERT_SQL);
           let totalSaved = 0;
           for (let i = 0; i < POWERMODE_KEYWORDS.length; i += 3) {
             const batch = POWERMODE_KEYWORDS.slice(i, i + 3);
             const leads = await pmSearch(batch, { minSubs: 5000, maxSubs: 500000, maxResults: 30, emailOnly: false });
-            for (const lead of leads) { try { const r = ins.run({ ...lead, user_id: userId }); if (r.changes > 0) totalSaved++; } catch {} }
+            for (const lead of leads) {
+              try { const r = await db.run(LEAD_INSERT_SQL, leadInsertParams(lead, userId)); if (r.changes > 0) totalSaved++; } catch {}
+            }
           }
           console.log(`[Jack] powermode complete: ${totalSaved} leads saved`);
         } catch (e) { console.error('[Jack] powermode error:', e.message); }
@@ -535,19 +572,19 @@ async function runTool(name, input, userId) {
           coldEmail = bm?.[1]?.trim() || coldEmail;
         }
       } catch (e) { deepStudy = `Analysis error: ${e.message}`; }
-      try { db.prepare(LEAD_INSERT_SQL).run({ ...channelData, user_id: userId }); } catch {}
+      try { await db.run(LEAD_INSERT_SQL, leadInsertParams(channelData, userId)); } catch {}
       return { channel: channelData.channel_name, subscribers: channelData.subscriber_count?.toLocaleString(), email: channelData.email || 'none', temperature: channelData.temperature, deep_study: deepStudy, email_subject: emailSubject, cold_email: coldEmail };
     }
 
     case 'generate_pitch': {
       const claude = require('../services/claudeService');
-      const lead = db.prepare('SELECT * FROM leads WHERE id=? AND user_id=?').get(input.lead_id, userId);
+      const lead = await db.get('SELECT * FROM leads WHERE id=? AND user_id=?', [input.lead_id, userId]);
       if (!lead) throw new Error(`Lead ${input.lead_id} not found`);
-      db.prepare(`UPDATE leads SET crm_stage='studying', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(lead.id);
+      await db.run(`UPDATE leads SET crm_stage='studying', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [lead.id]);
       const result = await claude.generateFullPitch(lead);
-      db.prepare(`INSERT OR REPLACE INTO pitches (lead_id,user_id,deep_study,custom_offer,cold_email,email_subject,subject_variants) VALUES (?,?,?,?,?,?,?)`)
-        .run(lead.id, userId, result.key_insight, result.custom_offer, result.email_body, result.email_subject, JSON.stringify(result.subject_variants || []));
-      db.prepare(`UPDATE leads SET crm_stage='pitch_ready', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(lead.id);
+      await db.run(`INSERT OR REPLACE INTO pitches (lead_id,user_id,deep_study,custom_offer,cold_email,email_subject,subject_variants) VALUES (?,?,?,?,?,?,?)`,
+        [lead.id, userId, result.key_insight, result.custom_offer, result.email_body, result.email_subject, JSON.stringify(result.subject_variants || [])]);
+      await db.run(`UPDATE leads SET crm_stage='pitch_ready', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [lead.id]);
       return { lead: lead.channel_name, subject: result.email_subject, preview: result.email_body.substring(0, 300) + '...' };
     }
 
@@ -559,14 +596,14 @@ async function runTool(name, input, userId) {
         let done = 0;
         for (let i = 0; i < ids.length; i += CONCURRENCY) {
           const batch = ids.slice(i, i + CONCURRENCY);
-          const results = await Promise.allSettled(batch.map(async id => {
-            const lead = db.prepare('SELECT * FROM leads WHERE id=? AND user_id=?').get(id, userId);
+          await Promise.allSettled(batch.map(async id => {
+            const lead = await db.get('SELECT * FROM leads WHERE id=? AND user_id=?', [id, userId]);
             if (!lead) return;
-            db.prepare(`UPDATE leads SET crm_stage='studying', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(id);
+            await db.run(`UPDATE leads SET crm_stage='studying', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [id]);
             const result = await claude.generateFullPitch(lead);
-            db.prepare(`INSERT OR REPLACE INTO pitches (lead_id,user_id,deep_study,custom_offer,cold_email,email_subject,subject_variants) VALUES (?,?,?,?,?,?,?)`)
-              .run(id, userId, result.key_insight, result.custom_offer, result.email_body, result.email_subject, JSON.stringify(result.subject_variants || []));
-            db.prepare(`UPDATE leads SET crm_stage='pitch_ready', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(id);
+            await db.run(`INSERT OR REPLACE INTO pitches (lead_id,user_id,deep_study,custom_offer,cold_email,email_subject,subject_variants) VALUES (?,?,?,?,?,?,?)`,
+              [id, userId, result.key_insight, result.custom_offer, result.email_body, result.email_subject, JSON.stringify(result.subject_variants || [])]);
+            await db.run(`UPDATE leads SET crm_stage='pitch_ready', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [id]);
             done++;
           }));
         }
@@ -583,14 +620,13 @@ async function runTool(name, input, userId) {
       const maxPerKw = Math.min(input.maxResultsPerKeyword || 8, 12);
       const CONCURRENCY = 5;
       ;(async () => {
-        const insert = db.prepare(LEAD_INSERT_SQL);
         let allIds = [];
         for (const keyword of keywords) {
           try {
             const leads = await searchChannels({ keyword, minSubs, maxSubs, maxResults: maxPerKw, emailOnly: true });
             for (const lead of leads) {
-              try { insert.run({ ...lead, user_id: userId }); } catch {}
-              const saved = db.prepare('SELECT id FROM leads WHERE channel_id=? AND user_id=?').get(lead.channel_id, userId);
+              try { await db.run(LEAD_INSERT_SQL, leadInsertParams(lead, userId)); } catch {}
+              const saved = await db.get('SELECT id FROM leads WHERE channel_id=? AND user_id=?', [lead.channel_id, userId]);
               if (saved) allIds.push(saved.id);
             }
           } catch (e) { console.error(`[Jack] find_and_pitch scrape "${keyword}":`, e.message); }
@@ -600,12 +636,12 @@ async function runTool(name, input, userId) {
           const batch = allIds.slice(i, i + CONCURRENCY);
           await Promise.allSettled(batch.map(async id => {
             try {
-              const fullLead = db.prepare('SELECT * FROM leads WHERE id=? AND user_id=?').get(id, userId);
+              const fullLead = await db.get('SELECT * FROM leads WHERE id=? AND user_id=?', [id, userId]);
               if (!fullLead) return;
               const result = await claude.generateFullPitch(fullLead);
-              db.prepare(`INSERT OR REPLACE INTO pitches (lead_id,user_id,cold_email,email_subject,subject_variants) VALUES (?,?,?,?,?)`)
-                .run(fullLead.id, userId, result.email_body, result.email_subject, JSON.stringify(result.subject_variants || []));
-              db.prepare(`UPDATE leads SET crm_stage='pitch_ready', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(fullLead.id);
+              await db.run(`INSERT OR REPLACE INTO pitches (lead_id,user_id,cold_email,email_subject,subject_variants) VALUES (?,?,?,?,?)`,
+                [fullLead.id, userId, result.email_body, result.email_subject, JSON.stringify(result.subject_variants || [])]);
+              await db.run(`UPDATE leads SET crm_stage='pitch_ready', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [fullLead.id]);
               pitched++;
             } catch {}
           }));
@@ -619,11 +655,9 @@ async function runTool(name, input, userId) {
       const claude = require('../services/claudeService');
       const { sendEmail, getInboxes } = require('../services/emailService');
 
-      // Pre-flight: verify SMTP is configured
       const inboxes = getInboxes();
       if (!inboxes.length) return { sent: 0, error: 'SMTP not configured. Go to Settings → Email Inboxes and add your Gmail + App Password.' };
 
-      // Pre-flight: verify AI is available
       const aiStatus = await checkAiAvailability();
       if (!aiStatus.ok) return { sent: 0, error: `AI unavailable: ${aiStatus.error}` };
 
@@ -637,26 +671,32 @@ async function runTool(name, input, userId) {
       else { q += ` AND crm_stage IN ('new_lead','pitch_ready')`; }
       q += ' ORDER BY lead_score DESC LIMIT ?';
       params.push(limit);
-      const leads = db.prepare(q).all(...params);
+      const leads = await db.all(q, params);
 
       if (!leads.length) return { sent: 0, message: `No leads found (temperature: ${temp || 'any'}, stage: new_lead/pitch_ready).` };
+
+      const qInsertSql = USE_PG
+        ? `INSERT INTO email_queue (user_id,lead_id,subject,body,status) VALUES (?,?,?,?,'pending') RETURNING id`
+        : `INSERT INTO email_queue (user_id,lead_id,subject,body,status) VALUES (?,?,?,?,'pending')`;
+      const lcSql = USE_PG
+        ? `UPDATE leads SET crm_stage='emailed', last_contacted_date=CURRENT_DATE, follow_up_count=0, follow_up_status='active', updated_at=CURRENT_TIMESTAMP WHERE id=?`
+        : `UPDATE leads SET crm_stage='emailed', last_contacted_date=date('now'), follow_up_count=0, follow_up_status='active', updated_at=CURRENT_TIMESTAMP WHERE id=?`;
 
       const CONCURRENCY = 3;
       let sent = 0, failed = 0, failReasons = [];
 
-      // Run synchronously so Levi can report REAL results
       for (let i = 0; i < leads.length; i += CONCURRENCY) {
         const batch = leads.slice(i, i + CONCURRENCY);
         const results = await Promise.allSettled(batch.map(async lead => {
-          db.prepare(`UPDATE leads SET crm_stage='studying', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(lead.id);
+          await db.run(`UPDATE leads SET crm_stage='studying', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [lead.id]);
           const result = await claude.generateFullPitch(lead);
-          db.prepare(`INSERT OR REPLACE INTO pitches (lead_id,user_id,deep_study,custom_offer,cold_email,email_subject,subject_variants) VALUES (?,?,?,?,?,?,?)`)
-            .run(lead.id, userId, result.key_insight, result.custom_offer, result.email_body, result.email_subject, JSON.stringify(result.subject_variants || []));
-          const qr = db.prepare(`INSERT INTO email_queue (user_id,lead_id,subject,body,status) VALUES (?,?,?,?,'pending')`).run(userId, lead.id, result.email_subject, result.email_body);
-          db.prepare(`UPDATE email_queue SET status='sending' WHERE id=?`).run(qr.lastInsertRowid);
+          await db.run(`INSERT OR REPLACE INTO pitches (lead_id,user_id,deep_study,custom_offer,cold_email,email_subject,subject_variants) VALUES (?,?,?,?,?,?,?)`,
+            [lead.id, userId, result.key_insight, result.custom_offer, result.email_body, result.email_subject, JSON.stringify(result.subject_variants || [])]);
+          const qr = await db.run(qInsertSql, [userId, lead.id, result.email_subject, result.email_body]);
+          await db.run(`UPDATE email_queue SET status='sending' WHERE id=?`, [qr.lastID]);
           const sentResult = await sendEmail({ to: lead.email, subject: result.email_subject, body: result.email_body, leadId: lead.id });
-          db.prepare(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP,email_id=? WHERE id=?`).run(sentResult.emailId || null, qr.lastInsertRowid);
-          db.prepare(`UPDATE leads SET crm_stage='emailed', last_contacted_date=date('now'), follow_up_count=0, follow_up_status='active', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(lead.id);
+          await db.run(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP,email_id=? WHERE id=?`, [sentResult.emailId || null, qr.lastID]);
+          await db.run(lcSql, [lead.id]);
           logActivity('email_sent', `[Jack] Email sent to ${lead.channel_name}`, lead.id, {}, userId);
           return lead.channel_name;
         }));
@@ -668,7 +708,7 @@ async function runTool(name, input, userId) {
             const errMsg = r.reason?.message || 'unknown error';
             failReasons.push(errMsg.substring(0, 80));
             const batchLead = batch[results.indexOf(r)];
-            try { db.prepare(`UPDATE leads SET crm_stage='pitch_ready', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(batchLead?.id); } catch {}
+            try { await db.run(`UPDATE leads SET crm_stage='pitch_ready', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [batchLead?.id]); } catch {}
           }
         }
       }
@@ -690,17 +730,25 @@ async function runTool(name, input, userId) {
       const limit = Math.min(input.limit || 15, 30);
       const followUpNum = input.followup_number || 1;
 
-      const leads = db.prepare(`
+      const daysSql = USE_PG
+        ? `EXTRACT(EPOCH FROM (NOW() - l.updated_at::timestamp)) / 86400 >= ?`
+        : `julianday('now') - julianday(l.updated_at) >= ?`;
+
+      const leads = await db.all(`
         SELECT l.*, p.cold_email as original_email FROM leads l
         LEFT JOIN pitches p ON p.lead_id = l.id
         WHERE l.user_id = ?
           AND l.crm_stage = 'emailed'
           AND l.email IS NOT NULL AND l.email != ''
-          AND julianday('now') - julianday(l.updated_at) >= ?
+          AND ${daysSql}
         ORDER BY l.lead_score DESC LIMIT ?
-      `).all(userId, daysSince, limit);
+      `, [userId, daysSince, limit]);
 
       if (!leads.length) return { sent: 0, message: `No emailed leads found that are ${daysSince}+ days silent.` };
+
+      const qInsertSql = USE_PG
+        ? `INSERT INTO email_queue (user_id,lead_id,subject,body,status) VALUES (?,?,?,?,'pending') RETURNING id`
+        : `INSERT INTO email_queue (user_id,lead_id,subject,body,status) VALUES (?,?,?,?,'pending')`;
 
       const CONCURRENCY = 3;
       ;(async () => {
@@ -714,10 +762,10 @@ async function runTool(name, input, userId) {
               const bm = followUpRaw.match(/---\s*([\s\S]+)/);
               const subject = sm?.[1]?.trim() || `Following up — ${lead.channel_name}`;
               const body = bm?.[1]?.trim() || followUpRaw;
-              const qr = db.prepare(`INSERT INTO email_queue (user_id,lead_id,subject,body,status) VALUES (?,?,?,?,'pending')`).run(userId, lead.id, subject, body);
-              db.prepare(`UPDATE email_queue SET status='sending' WHERE id=?`).run(qr.lastInsertRowid);
+              const qr = await db.run(qInsertSql, [userId, lead.id, subject, body]);
+              await db.run(`UPDATE email_queue SET status='sending' WHERE id=?`, [qr.lastID]);
               const sentResult = await sendEmail({ to: lead.email, subject, body, leadId: lead.id });
-              db.prepare(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP,email_id=? WHERE id=?`).run(sentResult.emailId || null, qr.lastInsertRowid);
+              await db.run(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP,email_id=? WHERE id=?`, [sentResult.emailId || null, qr.lastID]);
               logActivity('follow_up_sent', `[Jack] Follow-up #${followUpNum} sent to ${lead.channel_name}`, lead.id, {}, userId);
               sent++;
             } catch (e) { console.error(`[Jack] followup lead ${lead.id}:`, e.message); }
@@ -730,16 +778,19 @@ async function runTool(name, input, userId) {
     }
 
     case 'get_email_queue': {
-      const pending = db.prepare(`SELECT COUNT(*) as n FROM email_queue WHERE user_id=? AND status='pending'`).get(userId);
-      const sentToday = db.prepare(`SELECT COUNT(*) as n FROM email_queue WHERE user_id=? AND status='sent' AND date(sent_at)=date('now')`).get(userId);
-      const failed = db.prepare(`SELECT COUNT(*) as n FROM email_queue WHERE user_id=? AND status='failed'`).get(userId);
+      const sentTodaySql = USE_PG
+        ? `SELECT COUNT(*) as n FROM email_queue WHERE user_id=? AND status='sent' AND sent_at::date = CURRENT_DATE`
+        : `SELECT COUNT(*) as n FROM email_queue WHERE user_id=? AND status='sent' AND date(sent_at)=date('now')`;
+      const pending = await db.get(`SELECT COUNT(*) as n FROM email_queue WHERE user_id=? AND status='pending'`, [userId]);
+      const sentToday = await db.get(sentTodaySql, [userId]);
+      const failed = await db.get(`SELECT COUNT(*) as n FROM email_queue WHERE user_id=? AND status='failed'`, [userId]);
       const dailyLimit = parseInt(getSetting('daily_send_limit') || '150');
       const paused = getSetting('queue_paused') === '1';
-      const recentSent = db.prepare(`
+      const recentSent = await db.all(`
         SELECT eq.subject, l.channel_name, eq.sent_at
         FROM email_queue eq JOIN leads l ON l.id=eq.lead_id
         WHERE eq.user_id=? AND eq.status='sent' ORDER BY eq.sent_at DESC LIMIT 5
-      `).all(userId);
+      `, [userId]);
       return { pending: pending.n, sent_today: sentToday.n, daily_limit: dailyLimit, daily_remaining: Math.max(0, dailyLimit - sentToday.n), failed: failed.n, paused, recent_sent: recentSent };
     }
 
@@ -755,23 +806,26 @@ async function runTool(name, input, userId) {
     }
 
     case 'move_lead': {
-      const lead = db.prepare('SELECT channel_name,crm_stage FROM leads WHERE id=? AND user_id=?').get(input.lead_id, userId);
+      const lead = await db.get('SELECT channel_name,crm_stage FROM leads WHERE id=? AND user_id=?', [input.lead_id, userId]);
       if (!lead) throw new Error(`Lead ${input.lead_id} not found`);
-      db.prepare('UPDATE leads SET crm_stage=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=?').run(input.stage, input.lead_id, userId);
+      await db.run('UPDATE leads SET crm_stage=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=?', [input.stage, input.lead_id, userId]);
       return { success: true, lead: lead.channel_name, from: lead.crm_stage, to: input.stage };
     }
 
     case 'delete_lead': {
-      const lead = db.prepare('SELECT channel_name FROM leads WHERE id=? AND user_id=?').get(input.lead_id, userId);
+      const lead = await db.get('SELECT channel_name FROM leads WHERE id=? AND user_id=?', [input.lead_id, userId]);
       if (!lead) throw new Error(`Lead ${input.lead_id} not found`);
-      db.prepare('DELETE FROM leads WHERE id=? AND user_id=?').run(input.lead_id, userId);
+      await db.run('DELETE FROM leads WHERE id=? AND user_id=?', [input.lead_id, userId]);
       return { success: true, deleted: lead.channel_name };
     }
 
     case 'get_automation_status': {
+      const todaySql = USE_PG
+        ? `SELECT COUNT(*) as n FROM leads WHERE user_id=? AND created_at::date = CURRENT_DATE`
+        : `SELECT COUNT(*) as n FROM leads WHERE user_id=? AND date(created_at)=date('now')`;
       const autoScrape = getSetting('auto_scrape');
-      const today = db.prepare(`SELECT COUNT(*) as n FROM leads WHERE user_id=? AND date(created_at)=date('now')`).get(userId);
-      const lastRun = db.prepare(`SELECT message,created_at FROM activities WHERE (user_id = ? OR user_id IS NULL) AND message LIKE '%Auto-scrape%' ORDER BY created_at DESC LIMIT 1`).get(userId);
+      const today = await db.get(todaySql, [userId]);
+      const lastRun = await db.get(`SELECT message,created_at FROM activities WHERE (user_id = ? OR user_id IS NULL) AND message LIKE '%Auto-scrape%' ORDER BY created_at DESC LIMIT 1`, [userId]);
       const keyPool = require('../services/youtubeService').getKeyPoolStatus?.() || [];
       return { auto_scrape_enabled: autoScrape === 'true', leads_found_today: today?.n || 0, last_run: lastRun?.created_at || 'never', last_run_result: lastRun?.message || 'none', api_keys_active: keyPool.filter(k => !k.exhausted).length, api_keys_total: keyPool.length, schedule: 'Every 30 minutes, 45+ keywords, 15 niches' };
     }
@@ -782,18 +836,22 @@ async function runTool(name, input, userId) {
     }
 
     case 'daily_briefing': {
-      const stats = db.prepare(`
+      const todaySql = USE_PG ? `created_at::date = CURRENT_DATE` : `date(created_at)=date('now')`;
+      const sentTodaySql = USE_PG
+        ? `SELECT COUNT(*) as n FROM email_queue WHERE user_id=? AND status='sent' AND sent_at::date = CURRENT_DATE`
+        : `SELECT COUNT(*) as n FROM email_queue WHERE user_id=? AND status='sent' AND date(sent_at)=date('now')`;
+      const stats = await db.get(`
         SELECT COUNT(*) as total,
           SUM(CASE WHEN temperature='hot' THEN 1 ELSE 0 END) as hot,
           SUM(CASE WHEN temperature='warm' THEN 1 ELSE 0 END) as warm,
-          SUM(CASE WHEN date(created_at)=date('now') THEN 1 ELSE 0 END) as today,
+          SUM(CASE WHEN ${todaySql} THEN 1 ELSE 0 END) as today,
           SUM(CASE WHEN crm_stage='pitch_ready' THEN 1 ELSE 0 END) as pitch_ready,
           SUM(CASE WHEN crm_stage='emailed' THEN 1 ELSE 0 END) as emailed,
           SUM(CASE WHEN crm_stage='replied' THEN 1 ELSE 0 END) as replied,
           SUM(CASE WHEN crm_stage='closed_won' THEN 1 ELSE 0 END) as won
-        FROM leads WHERE user_id=?`).get(userId);
-      const sentToday = db.prepare(`SELECT COUNT(*) as n FROM email_queue WHERE user_id=? AND status='sent' AND date(sent_at)=date('now')`).get(userId);
-      const topLeads = db.prepare(`SELECT id,channel_name,subscriber_count,lead_score,email,temperature FROM leads WHERE user_id=? AND temperature='hot' AND crm_stage='new_lead' ORDER BY lead_score DESC LIMIT 5`).all(userId);
+        FROM leads WHERE user_id=?`, [userId]);
+      const sentToday = await db.get(sentTodaySql, [userId]);
+      const topLeads = await db.all(`SELECT id,channel_name,subscriber_count,lead_score,email,temperature FROM leads WHERE user_id=? AND temperature='hot' AND crm_stage='new_lead' ORDER BY lead_score DESC LIMIT 5`, [userId]);
       const autoScrape = getSetting('auto_scrape');
       const dailyLimit = parseInt(getSetting('daily_send_limit') || '150');
       return { date: new Date().toLocaleDateString(), leads_found_today: stats.today, total_leads: stats.total, hot: stats.hot, warm: stats.warm, pitch_ready: stats.pitch_ready, emailed: stats.emailed, replied: stats.replied, closed_won: stats.won, emails_sent_today: sentToday?.n || 0, daily_limit: dailyLimit, top_hot_leads_to_contact: topLeads, automation_running: autoScrape === 'true' };
@@ -803,10 +861,10 @@ async function runTool(name, input, userId) {
       const action = input.action || 'archive';
       let count = 0;
       if (action === 'archive') {
-        const r = db.prepare(`UPDATE leads SET crm_stage='closed_lost',updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND (email IS NULL OR email='') AND crm_stage='new_lead'`).run(userId);
+        const r = await db.run(`UPDATE leads SET crm_stage='closed_lost',updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND (email IS NULL OR email='') AND crm_stage='new_lead'`, [userId]);
         count = r.changes;
       } else {
-        const r = db.prepare(`DELETE FROM leads WHERE user_id=? AND (email IS NULL OR email='') AND crm_stage='new_lead'`).run(userId);
+        const r = await db.run(`DELETE FROM leads WHERE user_id=? AND (email IS NULL OR email='') AND crm_stage='new_lead'`, [userId]);
         count = r.changes;
       }
       return { action, affected: count, message: `${count} leads without emails ${action === 'delete' ? 'deleted' : 'archived to closed_lost'}` };
@@ -817,25 +875,26 @@ async function runTool(name, input, userId) {
       const params = [userId];
       if (input.temperature) { q += ' AND temperature=?'; params.push(input.temperature); }
       if (input.stage)       { q += ' AND crm_stage=?'; params.push(input.stage); }
-      if (input.has_email === true)  { q += ' AND email IS NOT NULL AND email != ""'; }
-      if (input.has_email === false) { q += ' AND (email IS NULL OR email = "")'; }
+      if (input.has_email === true)  { q += " AND email IS NOT NULL AND email != ''"; }
+      if (input.has_email === false) { q += " AND (email IS NULL OR email = '')"; }
       q += ' ORDER BY lead_score DESC LIMIT ?';
       params.push(Math.min(input.limit || 500, 1000));
-      const rows = db.prepare(q).all(...params);
+      const rows = await db.all(q, params);
       const headers = ['id','channel_name','channel_handle','subscriber_count','avg_views','engagement_rate','email','website','temperature','crm_stage','niche','lead_score','created_at'];
       const csv = [headers.join(','), ...rows.map(r => headers.map(h => JSON.stringify(r[h] ?? '')).join(','))].join('\n');
       return { rows: rows.length, csv_preview: csv.substring(0, 500) + (csv.length > 500 ? '\n...truncated...' : ''), message: `${rows.length} leads exported. CSV data included above — copy and paste into a spreadsheet.` };
     }
 
     case 'archive_cold_leads': {
-      const count = db.prepare(`SELECT COUNT(*) as n FROM leads WHERE user_id=? AND temperature='cold' AND crm_stage='new_lead'`).get(userId).n;
+      const countRow = await db.get(`SELECT COUNT(*) as n FROM leads WHERE user_id=? AND temperature='cold' AND crm_stage='new_lead'`, [userId]);
+      const count = countRow.n;
       if (input.dry_run) return { would_archive: count, dry_run: true };
-      db.prepare(`UPDATE leads SET crm_stage='closed_lost',updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND temperature='cold' AND crm_stage='new_lead'`).run(userId);
+      await db.run(`UPDATE leads SET crm_stage='closed_lost',updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND temperature='cold' AND crm_stage='new_lead'`, [userId]);
       return { archived: count, message: `${count} cold new_leads moved to closed_lost. CRM is cleaner now.` };
     }
 
     case 'backup_database': {
-      const summary = db.prepare(`
+      const summary = await db.get(`
         SELECT
           COUNT(*) as total_leads,
           SUM(CASE WHEN email IS NOT NULL AND email!='' THEN 1 ELSE 0 END) as with_email,
@@ -846,24 +905,25 @@ async function runTool(name, input, userId) {
           SUM(CASE WHEN crm_stage='replied' THEN 1 ELSE 0 END) as replied,
           SUM(CASE WHEN crm_stage='closed_won' THEN 1 ELSE 0 END) as won,
           SUM(CASE WHEN crm_stage='no_response' THEN 1 ELSE 0 END) as no_response
-        FROM leads WHERE user_id=?`).get(userId);
-      const pitches = db.prepare('SELECT COUNT(*) as n FROM pitches WHERE lead_id IN (SELECT id FROM leads WHERE user_id=?)').get(userId);
-      const sentTotal = db.prepare(`SELECT COUNT(*) as n FROM email_queue WHERE user_id=? AND status='sent'`).get(userId);
-      const failed = db.prepare(`SELECT COUNT(*) as n FROM email_queue WHERE user_id=? AND status='failed'`).get(userId);
-      const activities = db.prepare('SELECT COUNT(*) as n FROM activities WHERE user_id=?').get(userId);
-      return { ...summary, pitches: pitches.n, emails_sent_total: sentTotal.n, emails_failed: failed.n, activity_log_entries: activities.n, database: 'SQLite (backend/data/outreach.db)', timestamp: new Date().toISOString() };
+        FROM leads WHERE user_id=?`, [userId]);
+      const pitches = await db.get('SELECT COUNT(*) as n FROM pitches WHERE lead_id IN (SELECT id FROM leads WHERE user_id=?)', [userId]);
+      const sentTotal = await db.get(`SELECT COUNT(*) as n FROM email_queue WHERE user_id=? AND status='sent'`, [userId]);
+      const failed = await db.get(`SELECT COUNT(*) as n FROM email_queue WHERE user_id=? AND status='failed'`, [userId]);
+      const activities = await db.get('SELECT COUNT(*) as n FROM activities WHERE user_id=?', [userId]);
+      return { ...summary, pitches: pitches.n, emails_sent_total: sentTotal.n, emails_failed: failed.n, activity_log_entries: activities.n, database: USE_PG ? 'PostgreSQL (Railway)' : 'SQLite', timestamp: new Date().toISOString() };
     }
 
     case 'clear_failed_emails': {
-      const count = db.prepare(`SELECT COUNT(*) as n FROM email_queue WHERE user_id=? AND status='failed'`).get(userId).n;
+      const countRow = await db.get(`SELECT COUNT(*) as n FROM email_queue WHERE user_id=? AND status='failed'`, [userId]);
+      const count = countRow.n;
       if (input.dry_run) return { would_delete: count, dry_run: true };
-      db.prepare(`DELETE FROM email_queue WHERE user_id=? AND status='failed'`).run(userId);
+      await db.run(`DELETE FROM email_queue WHERE user_id=? AND status='failed'`, [userId]);
       return { deleted: count, message: `${count} failed emails cleared from queue.` };
     }
 
     case 'show_best_subjects': {
       const limit = Math.min(input.limit || 10, 25);
-      const best = db.prepare(`
+      const best = await db.all(`
         SELECT eq.subject, COUNT(*) as sent,
           SUM(CASE WHEN e.opened_at IS NOT NULL THEN 1 ELSE 0 END) as opened,
           SUM(CASE WHEN e.replied_at IS NOT NULL THEN 1 ELSE 0 END) as replied
@@ -871,10 +931,10 @@ async function runTool(name, input, userId) {
         LEFT JOIN emails e ON e.id = eq.email_id
         WHERE eq.user_id = ? AND eq.status = 'sent' AND eq.subject IS NOT NULL
         GROUP BY eq.subject
-        HAVING sent >= 2
-        ORDER BY (CAST(opened AS REAL)/sent) DESC
+        HAVING COUNT(*) >= 2
+        ORDER BY (CAST(SUM(CASE WHEN e.opened_at IS NOT NULL THEN 1 ELSE 0 END) AS REAL)/COUNT(*)) DESC
         LIMIT ?
-      `).all(userId, limit);
+      `, [userId, limit]);
       return { subjects: best.map(r => ({ subject: r.subject, sent: r.sent, opened: r.opened, replied: r.replied, open_rate: r.sent > 0 ? `${Math.round(r.opened/r.sent*100)}%` : '0%' })), count: best.length };
     }
 
@@ -883,7 +943,10 @@ async function runTool(name, input, userId) {
       const { sendEmail, getInboxes } = require('../services/emailService');
       if (!getInboxes().length) return { sent: 0, error: 'SMTP not configured.' };
       const limit = Math.min(input.limit || 30, 50);
-      const leads = db.prepare(`
+      const daysSql = USE_PG
+        ? `EXTRACT(EPOCH FROM (NOW() - l.last_contacted_date::timestamp)) / 86400 >= 3`
+        : `julianday('now') - julianday(l.last_contacted_date) >= 3`;
+      const leads = await db.all(`
         SELECT l.*, p.cold_email as original_email
         FROM leads l LEFT JOIN pitches p ON p.lead_id = l.id
         WHERE l.user_id = ?
@@ -892,10 +955,18 @@ async function runTool(name, input, userId) {
           AND l.follow_up_count < 5
           AND l.last_contacted_date IS NOT NULL
           AND l.email IS NOT NULL AND l.email != ''
-          AND julianday('now') - julianday(l.last_contacted_date) >= 3
+          AND ${daysSql}
         ORDER BY l.lead_score DESC LIMIT ?
-      `).all(userId, limit);
+      `, [userId, limit]);
       if (!leads.length) return { sent: 0, message: 'No follow-ups due right now (need 3+ days since last contact).' };
+
+      const qInsertSql = USE_PG
+        ? `INSERT INTO email_queue (user_id,lead_id,subject,body,status,priority) VALUES (?,?,?,?,'pending',?) RETURNING id`
+        : `INSERT INTO email_queue (user_id,lead_id,subject,body,status,priority) VALUES (?,?,?,?,'pending',?)`;
+      const lcSql = USE_PG
+        ? `UPDATE leads SET follow_up_count=?,last_contacted_date=CURRENT_DATE,updated_at=CURRENT_TIMESTAMP WHERE id=?`
+        : `UPDATE leads SET follow_up_count=?,last_contacted_date=date('now'),updated_at=CURRENT_TIMESTAMP WHERE id=?`;
+
       const CONCURRENCY = 3;
       ;(async () => {
         let sent = 0;
@@ -909,12 +980,12 @@ async function runTool(name, input, userId) {
               const bm = raw.match(/---\s*([\s\S]+)/);
               const subject = sm?.[1]?.trim() || `Following up — ${lead.channel_name}`;
               const body = bm?.[1]?.trim() || raw;
-              const qr = db.prepare(`INSERT INTO email_queue (user_id,lead_id,subject,body,status,priority) VALUES (?,?,?,?,'pending',?)`).run(userId, lead.id, subject, body, step);
-              db.prepare(`UPDATE email_queue SET status='sending' WHERE id=?`).run(qr.lastInsertRowid);
+              const qr = await db.run(qInsertSql, [userId, lead.id, subject, body, step]);
+              await db.run(`UPDATE email_queue SET status='sending' WHERE id=?`, [qr.lastID]);
               await sendEmail({ to: lead.email, subject, body, leadId: lead.id });
-              db.prepare(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP WHERE id=?`).run(qr.lastInsertRowid);
-              db.prepare(`UPDATE leads SET follow_up_count=?,last_contacted_date=date('now'),updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(step, lead.id);
-              if (step >= 5) db.prepare(`UPDATE leads SET follow_up_status='complete',crm_stage='no_response',updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(lead.id);
+              await db.run(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP WHERE id=?`, [qr.lastID]);
+              await db.run(lcSql, [step, lead.id]);
+              if (step >= 5) await db.run(`UPDATE leads SET follow_up_status='complete',crm_stage='no_response',updated_at=CURRENT_TIMESTAMP WHERE id=?`, [lead.id]);
               logActivity('followup_sent', `[Jack] FU#${step}/5 sent to ${lead.channel_name}`, lead.id, {}, userId);
               sent++;
             } catch (e) { console.error(`[Jack] FU lead ${lead.id}:`, e.message); }
@@ -926,20 +997,23 @@ async function runTool(name, input, userId) {
     }
 
     case 'show_follow_up_status': {
-      const breakdown = db.prepare(`
+      const daysSql = USE_PG
+        ? `EXTRACT(EPOCH FROM (NOW() - last_contacted_date::timestamp)) / 86400 >= 3`
+        : `julianday('now') - julianday(last_contacted_date) >= 3`;
+      const breakdown = await db.all(`
         SELECT follow_up_count, follow_up_status, COUNT(*) as n
         FROM leads WHERE user_id=? AND crm_stage IN ('emailed','no_response')
         GROUP BY follow_up_count, follow_up_status
         ORDER BY follow_up_count
-      `).all(userId);
-      const overdue = db.prepare(`
+      `, [userId]);
+      const overdue = await db.get(`
         SELECT COUNT(*) as n FROM leads
         WHERE user_id=? AND crm_stage='emailed' AND follow_up_status='active' AND follow_up_count < 5
           AND last_contacted_date IS NOT NULL
-          AND julianday('now') - julianday(last_contacted_date) >= 3
-      `).get(userId);
-      const completed = db.prepare(`SELECT COUNT(*) as n FROM leads WHERE user_id=? AND follow_up_status='complete'`).get(userId);
-      const noResponse = db.prepare(`SELECT COUNT(*) as n FROM leads WHERE user_id=? AND crm_stage='no_response'`).get(userId);
+          AND ${daysSql}
+      `, [userId]);
+      const completed = await db.get(`SELECT COUNT(*) as n FROM leads WHERE user_id=? AND follow_up_status='complete'`, [userId]);
+      const noResponse = await db.get(`SELECT COUNT(*) as n FROM leads WHERE user_id=? AND crm_stage='no_response'`, [userId]);
       return { overdue_now: overdue.n, completed_sequences: completed.n, moved_to_no_response: noResponse.n, breakdown, message: `${overdue.n} leads ready for follow-up right now. ${completed.n} completed all 5 steps.` };
     }
 
@@ -1011,7 +1085,10 @@ router.get('/status', asyncHandler(async (req, res) => {
   const { getInboxes } = require('../services/emailService');
   const inboxes = getInboxes();
   const db = getDb();
-  const sentToday = db.prepare(`SELECT COUNT(*) as n FROM email_queue WHERE status='sent' AND date(sent_at)=date('now')`).get();
+  const sentTodaySql = USE_PG
+    ? `SELECT COUNT(*) as n FROM email_queue WHERE status='sent' AND sent_at::date = CURRENT_DATE`
+    : `SELECT COUNT(*) as n FROM email_queue WHERE status='sent' AND date(sent_at)=date('now')`;
+  const sentToday = await db.get(sentTodaySql, []);
   const dailyLimit = parseInt(getSetting('daily_send_limit') || '150');
 
   const geminiKey = getGeminiKey();
@@ -1034,13 +1111,11 @@ async function runJackWithClaude(messages, userId) {
 
   const axios = require('axios');
 
-  // Build Claude-format message history (must start with user, alternate roles)
   let claudeMsgs = messages.map(m => ({
     role: m.role === 'assistant' ? 'assistant' : 'user',
     content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
   }));
   while (claudeMsgs.length && claudeMsgs[0].role !== 'user') claudeMsgs.shift();
-  // Merge consecutive same-role messages (Claude requires strict alternation)
   const merged = [];
   for (const m of claudeMsgs) {
     if (merged.length && merged[merged.length - 1].role === m.role) {
@@ -1100,7 +1175,6 @@ async function runJackWithClaude(messages, userId) {
       continue;
     }
 
-    // Unexpected stop reason — return any text present
     const textBlock = data.content?.find(b => b.type === 'text');
     return textBlock?.text || 'Done.';
   }
@@ -1126,7 +1200,6 @@ router.post('/chat', asyncHandler(async (req, res) => {
     } catch (err) {
       const msg = err.response?.data?.error?.message || err.message || '';
       console.warn('[Jack] Claude error, falling back to Gemini:', msg.substring(0, 120));
-      // Fall through to Gemini
     }
   }
 

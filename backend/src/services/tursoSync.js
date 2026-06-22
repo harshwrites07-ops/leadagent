@@ -7,6 +7,20 @@
  */
 
 const axios = require('axios');
+const { USE_PG } = require('../models/database');
+
+// In PostgreSQL mode, Turso is not used — PG is the persistent store
+const _noop = async () => 0;
+if (USE_PG) {
+  module.exports = {
+    pullFromTurso: _noop, pushToTurso: _noop, getCfg: () => null,
+    pushUserLeadsToTurso: _noop, pullUserLeadsFromTurso: _noop,
+    syncUsersToTurso: _noop, pullUsersFromTurso: _noop,
+    syncQualityLeadsToTurso: _noop, pullQualityLeadsFromTurso: _noop,
+    syncAllOnBoot: _noop,
+  };
+  return; // stop processing this module
+}
 
 function getCfg() {
   const url = (process.env.TURSO_DATABASE_URL || '').trim();

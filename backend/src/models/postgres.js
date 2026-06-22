@@ -1,0 +1,710 @@
+const { Pool } = require('pg');
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL?.includes('railway.internal')
+    ? false
+    : { rejectUnauthorized: false },
+  max: 10,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000,
+});
+
+pool.on('error', (err) => {
+  console.error('[PG] Pool error:', err.message);
+});
+
+async function query(text, params) {
+  const client = await pool.connect();
+  try {
+    return await client.query(text, params);
+  } finally {
+    client.release();
+  }
+}
+
+// Convert SQLite-style SQL to PostgreSQL-compatible SQL
+function normalizeSql(sql) {
+  const hasIgnore  = /INSERT\s+OR\s+IGNORE\s+INTO/i.test(sql);
+  const hasReplace = /INSERT\s+OR\s+REPLACE\s+INTO/i.test(sql);
+
+  let out = sql
+    .replace(/INSERT\s+OR\s+IGNORE\s+INTO/gi,  'INSERT INTO')
+    .replace(/INSERT\s+OR\s+REPLACE\s+INTO/gi, 'INSERT INTO')
+    // datetime('now', '+X unit') / datetime('now', '-X unit')
+    .replace(/datetime\s*\(\s*'now'\s*,\s*'([^']+)'\s*\)/gi, (_, offset) =>
+      `NOW() + INTERVAL '${offset.replace(/^\+/, '')}'`)
+    .replace(/datetime\s*\(\s*'now'\s*\)/gi, 'NOW()')
+    // DATE('now', ...) / date('now')
+    .replace(/[Dd][Aa][Tt][Ee]\s*\(\s*'now'\s*,\s*'([^']+)'\s*\)/g, (_, offset) =>
+      `CURRENT_DATE + INTERVAL '${offset.replace(/^\+/, '')}'`)
+    .replace(/[Dd][Aa][Tt][Ee]\s*\(\s*'now'\s*\)/g, 'CURRENT_DATE')
+    // DATE(column) → column::date
+    .replace(/DATE\s*\(\s*([\w.]+)\s*\)/g, '$1::date')
+    // strftime('%Y-%m', 'now') → TO_CHAR(NOW(), 'YYYY-MM')
+    .replace(/strftime\s*\(\s*'%Y-%m'\s*,\s*'now'\s*\)/gi, "TO_CHAR(NOW(), 'YYYY-MM')")
+    // strftime('%Y-%m', col) → TO_CHAR(col, 'YYYY-MM')
+    .replace(/strftime\s*\(\s*'%Y-%m'\s*,\s*([\w.]+)\s*\)/gi, "TO_CHAR($1, 'YYYY-MM')")
+    // strftime('%H', col) → EXTRACT(HOUR FROM col)::text
+    .replace(/strftime\s*\(\s*'%H'\s*,\s*([\w.]+)\s*\)/gi, 'EXTRACT(HOUR FROM $1)::text')
+    // julianday('now') - julianday(col) → epoch
+    .replace(/julianday\s*\(\s*'now'\s*\)\s*-\s*julianday\s*\(\s*([\w.]+)\s*\)/gi,
+      'EXTRACT(EPOCH FROM (NOW() - $1::timestamp)) / 86400')
+    // julianday arithmetic → epoch-based
+    .replace(/julianday\s*\(\s*([\w.]+)\s*\)\s*-\s*julianday\s*\(\s*([\w.]+)\s*\)/gi,
+      'EXTRACT(EPOCH FROM ($1::timestamp - $2::timestamp)) / 86400')
+    // SQLite CAST to FLOAT → ::float
+    .replace(/CAST\s*\(\s*(.*?)\s+AS\s+FLOAT\s*\)/gi, '($1)::float')
+    // ROUND with 2 args needs ::numeric in PG
+    .replace(/ROUND\s*\(\s*(.*?)\s*,\s*(\d+)\s*\)/gi, 'ROUND(($1)::numeric, $2)')
+    // AUTOINCREMENT → nothing (handled in schema)
+    .replace(/\s+AUTOINCREMENT/gi, '')
+    // SQLite CURRENT_TIMESTAMP is fine in PG too; leave as-is
+  ;
+
+  if (hasIgnore)  out = out.trimEnd() + ' ON CONFLICT DO NOTHING';
+  if (hasReplace) {
+    if (/\bsessions\b/i.test(sql)) {
+      out = out.trimEnd() + ' ON CONFLICT (session_id) DO UPDATE SET data=EXCLUDED.data, expires_at=EXCLUDED.expires_at';
+    } else if (/\bsettings\b/i.test(sql)) {
+      out = out.trimEnd() + ' ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=EXCLUDED.updated_at';
+    } else if (/\bquality_leads\b/i.test(sql)) {
+      out = out.trimEnd() + ' ON CONFLICT (creator_id) DO UPDATE SET channel_name=EXCLUDED.channel_name, intent_score=EXCLUDED.intent_score, intent_tier=EXCLUDED.intent_tier, updated_at=EXCLUDED.updated_at';
+    } else if (/\barchived_leads\b/i.test(sql)) {
+      out = out.trimEnd() + ' ON CONFLICT (creator_id) DO UPDATE SET intent_score=EXCLUDED.intent_score, archived_at=EXCLUDED.archived_at';
+    } else if (/\buser_followup_settings\b/i.test(sql)) {
+      out = out.trimEnd() + ' ON CONFLICT (user_id) DO UPDATE SET interval_days=EXCLUDED.interval_days, max_count=EXCLUDED.max_count, enabled=EXCLUDED.enabled, updated_at=EXCLUDED.updated_at';
+    } else {
+      out = out.trimEnd() + ' ON CONFLICT DO NOTHING';
+    }
+  }
+
+  return out;
+}
+
+function convertQuery(sql, params = []) {
+  let i = 0;
+  const pgSql = normalizeSql(sql).replace(/\?/g, () => `$${++i}`);
+  return { sql: pgSql, params };
+}
+
+async function run(sql, params = []) {
+  const { sql: pgSql, params: pgParams } = convertQuery(sql, Array.isArray(params) ? params : [params]);
+  const result = await query(pgSql, pgParams);
+  return { lastID: result.rows[0]?.id, changes: result.rowCount };
+}
+
+async function get(sql, params = []) {
+  const { sql: pgSql, params: pgParams } = convertQuery(sql, Array.isArray(params) ? params : [params]);
+  const result = await query(pgSql, pgParams);
+  return result.rows[0] || null;
+}
+
+async function all(sql, params = []) {
+  const { sql: pgSql, params: pgParams } = convertQuery(sql, Array.isArray(params) ? params : [params]);
+  const result = await query(pgSql, pgParams);
+  return result.rows;
+}
+
+// PG session store (drop-in for BetterSQLiteStore)
+class PgSessionStore {
+  constructor(expressSession) {
+    const Store = expressSession.Store;
+    class _Store extends Store {
+      constructor() {
+        super();
+        setInterval(async () => {
+          try { await query("DELETE FROM sessions WHERE expires_at < NOW()"); } catch {}
+        }, 15 * 60 * 1000);
+      }
+      async get(sid, cb) {
+        try {
+          const result = await query("SELECT data FROM sessions WHERE session_id=$1 AND expires_at > NOW()", [sid]);
+          cb(null, result.rows[0] ? JSON.parse(result.rows[0].data) : null);
+        } catch (e) { cb(e); }
+      }
+      async set(sid, sess, cb) {
+        try {
+          const exp = sess.cookie?.expires
+            ? new Date(sess.cookie.expires).toISOString()
+            : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+          await query(
+            `INSERT INTO sessions (session_id, data, expires_at) VALUES ($1,$2,$3)
+             ON CONFLICT (session_id) DO UPDATE SET data=EXCLUDED.data, expires_at=EXCLUDED.expires_at`,
+            [sid, JSON.stringify(sess), exp]
+          );
+          cb(null);
+        } catch (e) { cb(e); }
+      }
+      async destroy(sid, cb) {
+        try { await query("DELETE FROM sessions WHERE session_id=$1", [sid]); cb(null); }
+        catch (e) { cb(e); }
+      }
+      async touch(sid, sess, cb) {
+        try {
+          const exp = sess.cookie?.expires
+            ? new Date(sess.cookie.expires).toISOString()
+            : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+          await query("UPDATE sessions SET expires_at=$1 WHERE session_id=$2", [exp, sid]);
+          cb(null);
+        } catch (e) { cb(e); }
+      }
+    }
+    return new _Store();
+  }
+}
+
+async function initPostgres() {
+  console.log('[PG] Initializing PostgreSQL...');
+  try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        email TEXT UNIQUE NOT NULL,
+        password TEXT,
+        phone_number TEXT UNIQUE,
+        phone_verified INTEGER DEFAULT 0,
+        email_verified INTEGER DEFAULT 0,
+        google_id TEXT UNIQUE,
+        full_name TEXT NOT NULL DEFAULT '',
+        agency_name TEXT DEFAULT '',
+        role TEXT DEFAULT 'Video Editor',
+        plan TEXT DEFAULT 'free',
+        plan_status TEXT DEFAULT 'active',
+        leads_used_this_month INTEGER DEFAULT 0,
+        emails_used_this_month INTEGER DEFAULT 0,
+        usage_reset_date TEXT DEFAULT (DATE_TRUNC('month', NOW()) + INTERVAL '1 month')::date::text,
+        created_at TIMESTAMP DEFAULT NOW(),
+        last_login TIMESTAMP,
+        profile_picture TEXT,
+        onboarding_completed INTEGER DEFAULT 0,
+        is_admin INTEGER DEFAULT 0,
+        login_attempts INTEGER DEFAULT 0,
+        lockout_until TIMESTAMP,
+        target_niches TEXT DEFAULT '[]',
+        target_platforms TEXT DEFAULT '[]',
+        portfolio_url TEXT DEFAULT '',
+        daily_email_limit INTEGER DEFAULT 50,
+        auto_find_leads INTEGER DEFAULT 0,
+        email_tone TEXT DEFAULT 'casual',
+        outreach_goal TEXT DEFAULT 'get_reply',
+        min_email_delay INTEGER DEFAULT 45,
+        max_email_delay INTEGER DEFAULT 120,
+        followups_enabled INTEGER DEFAULT 1,
+        max_followups INTEGER DEFAULT 3,
+        followup_delay_days INTEGER DEFAULT 3,
+        best_result TEXT DEFAULT '',
+        pricing_range TEXT DEFAULT '$500-$2000/month',
+        service_type TEXT,
+        one_liner TEXT,
+        experience_years TEXT,
+        personality_traits TEXT DEFAULT '[]',
+        origin_story TEXT,
+        unique_difference TEXT,
+        voice_dna TEXT DEFAULT '{}',
+        profile_completed INTEGER DEFAULT 0,
+        stripe_customer_id TEXT,
+        stripe_subscription_id TEXT,
+        trial_ends_at TIMESTAMP DEFAULT (NOW() + INTERVAL '14 days'),
+        billing_cycle_start TIMESTAMP DEFAULT NOW(),
+        custom_emails_limit INTEGER,
+        custom_leads_limit INTEGER
+      )
+    `);
+    console.log('[PG] ✅ users');
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS sessions (
+        session_id TEXT PRIMARY KEY,
+        data TEXT NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('[PG] ✅ sessions');
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS leads (
+        id SERIAL PRIMARY KEY,
+        platform TEXT NOT NULL DEFAULT 'youtube',
+        channel_id TEXT,
+        channel_name TEXT NOT NULL,
+        channel_handle TEXT,
+        subscriber_count INTEGER DEFAULT 0,
+        total_videos INTEGER DEFAULT 0,
+        avg_views REAL DEFAULT 0,
+        avg_likes REAL DEFAULT 0,
+        avg_comments REAL DEFAULT 0,
+        engagement_rate REAL DEFAULT 0,
+        upload_frequency_days REAL DEFAULT 0,
+        last_upload_date TEXT,
+        channel_description TEXT,
+        channel_tags TEXT DEFAULT '[]',
+        recent_videos TEXT DEFAULT '[]',
+        most_viewed_video TEXT DEFAULT '{}',
+        country TEXT,
+        email TEXT,
+        website TEXT,
+        social_links TEXT DEFAULT '{}',
+        pain_points TEXT DEFAULT '[]',
+        lead_score INTEGER DEFAULT 0,
+        temperature TEXT DEFAULT 'cold',
+        crm_stage TEXT DEFAULT 'new_lead',
+        niche TEXT,
+        reddit_username TEXT,
+        reddit_post_title TEXT,
+        reddit_post_content TEXT,
+        reddit_subreddit TEXT,
+        thumbnail_url TEXT,
+        follow_up_count INTEGER DEFAULT 0,
+        last_contacted_date TEXT,
+        next_follow_up_date TEXT,
+        follow_up_status TEXT DEFAULT 'active',
+        email_invalid INTEGER DEFAULT 0,
+        bounce_reason TEXT,
+        exported_at TIMESTAMP,
+        scrape_source TEXT DEFAULT 'youtube_api',
+        view_trend TEXT,
+        intent_score REAL,
+        intent_confidence TEXT,
+        intent_reason TEXT,
+        intent_signals TEXT,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('[PG] ✅ leads');
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS pitches (
+        id SERIAL PRIMARY KEY,
+        lead_id INTEGER NOT NULL UNIQUE REFERENCES leads(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        deep_study TEXT,
+        custom_offer TEXT,
+        cold_email TEXT,
+        email_subject TEXT,
+        reddit_dm TEXT,
+        subject_variants TEXT DEFAULT '[]',
+        pitch_score INTEGER,
+        pitch_feedback TEXT,
+        signal_type TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('[PG] ✅ pitches');
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS emails (
+        id SERIAL PRIMARY KEY,
+        lead_id INTEGER NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        subject TEXT,
+        body TEXT,
+        status TEXT DEFAULT 'queued',
+        sent_at TIMESTAMP,
+        opened_at TIMESTAMP,
+        clicked_at TIMESTAMP,
+        replied_at TIMESTAMP,
+        follow_up_number INTEGER DEFAULT 0,
+        tracking_id TEXT UNIQUE,
+        bounce_reason TEXT,
+        from_email TEXT,
+        reply_body TEXT,
+        reply_subject TEXT,
+        reply_from TEXT,
+        my_reply_body TEXT,
+        my_reply_sent_at TEXT,
+        angle_type TEXT,
+        campaign_id INTEGER,
+        reply_sentiment TEXT,
+        call_booked INTEGER DEFAULT 0,
+        client_closed INTEGER DEFAULT 0,
+        client_value REAL DEFAULT 0,
+        ab_variant TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('[PG] ✅ emails');
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS email_queue (
+        id SERIAL PRIMARY KEY,
+        lead_id INTEGER NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        email_id INTEGER,
+        subject TEXT,
+        body TEXT,
+        status TEXT DEFAULT 'pending',
+        scheduled_at TIMESTAMP,
+        sent_at TIMESTAMP,
+        priority INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('[PG] ✅ email_queue');
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS activities (
+        id SERIAL PRIMARY KEY,
+        type TEXT NOT NULL,
+        message TEXT NOT NULL,
+        lead_id INTEGER,
+        metadata TEXT DEFAULT '{}',
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('[PG] ✅ activities');
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS notes (
+        id SERIAL PRIMARY KEY,
+        lead_id INTEGER NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        content TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('[PG] ✅ notes');
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT,
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('[PG] ✅ settings');
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS otp_codes (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        code TEXT NOT NULL,
+        type TEXT NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        used INTEGER DEFAULT 0,
+        attempts INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('[PG] ✅ otp_codes');
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token TEXT UNIQUE NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        used INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('[PG] ✅ password_reset_tokens');
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS gmail_accounts (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        email TEXT NOT NULL,
+        access_token TEXT NOT NULL,
+        refresh_token TEXT,
+        token_expiry INTEGER,
+        status TEXT DEFAULT 'active',
+        emails_sent_today INTEGER DEFAULT 0,
+        last_reset_date TEXT DEFAULT CURRENT_DATE::text,
+        daily_limit INTEGER DEFAULT 500,
+        connected_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(user_id, email)
+      )
+    `);
+    console.log('[PG] ✅ gmail_accounts');
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS campaigns (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        niche TEXT,
+        service_type TEXT,
+        credentials TEXT,
+        status TEXT DEFAULT 'draft',
+        ab_test_enabled INTEGER DEFAULT 0,
+        ab_variant_a TEXT DEFAULT 'Problem Angle',
+        ab_variant_b TEXT DEFAULT 'Story Angle',
+        total_leads INTEGER DEFAULT 0,
+        hot_leads INTEGER DEFAULT 0,
+        warm_leads INTEGER DEFAULT 0,
+        cold_leads INTEGER DEFAULT 0,
+        emails_sent INTEGER DEFAULT 0,
+        emails_opened INTEGER DEFAULT 0,
+        emails_replied INTEGER DEFAULT 0,
+        calls_booked INTEGER DEFAULT 0,
+        clients_closed INTEGER DEFAULT 0,
+        avg_intent_score REAL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('[PG] ✅ campaigns');
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS campaign_leads (
+        id SERIAL PRIMARY KEY,
+        campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+        lead_id INTEGER NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+        intent_score REAL DEFAULT 0,
+        intent_signals TEXT DEFAULT '{}',
+        intent_rank INTEGER,
+        intent_reason TEXT,
+        intent_confidence TEXT DEFAULT 'Low',
+        temperature TEXT DEFAULT 'cold',
+        psychology_profile TEXT DEFAULT '{}',
+        angles TEXT DEFAULT '[]',
+        selected_angle TEXT,
+        email_subject TEXT,
+        email_body TEXT,
+        email_subject_edited TEXT,
+        email_body_edited TEXT,
+        email_quality_score INTEGER DEFAULT 0,
+        ab_variant TEXT,
+        email_id INTEGER,
+        created_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(campaign_id, lead_id)
+      )
+    `);
+    console.log('[PG] ✅ campaign_leads');
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS master_leads (
+        id SERIAL PRIMARY KEY,
+        channel_id TEXT UNIQUE NOT NULL,
+        channel_name TEXT NOT NULL,
+        channel_handle TEXT,
+        subscriber_count INTEGER DEFAULT 0,
+        avg_views REAL DEFAULT 0,
+        engagement_rate REAL DEFAULT 0,
+        upload_frequency_days REAL DEFAULT 0,
+        last_upload_date TEXT,
+        country TEXT,
+        email TEXT,
+        website TEXT,
+        niche TEXT,
+        channel_description TEXT,
+        cpm REAL DEFAULT 0,
+        days_since_upload INTEGER,
+        lead_score INTEGER DEFAULT 0,
+        temperature TEXT DEFAULT 'warm',
+        scraped_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('[PG] ✅ master_leads');
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS quality_leads (
+        id SERIAL PRIMARY KEY,
+        creator_id TEXT UNIQUE NOT NULL,
+        channel_url TEXT,
+        channel_name TEXT NOT NULL,
+        channel_handle TEXT,
+        subscriber_count INTEGER DEFAULT 0,
+        niche TEXT,
+        email TEXT,
+        thumbnail_url TEXT,
+        intent_score REAL NOT NULL DEFAULT 0,
+        intent_tier TEXT NOT NULL DEFAULT 'HOT',
+        sig_upload_frequency REAL DEFAULT 0,
+        sig_view_growth REAL DEFAULT 0,
+        sig_title_keywords REAL DEFAULT 0,
+        sig_description_keywords REAL DEFAULT 0,
+        sig_engagement REAL DEFAULT 0,
+        sig_consistency REAL DEFAULT 0,
+        psychology_profile TEXT DEFAULT '{}',
+        personality_type TEXT,
+        primary_pain_point TEXT,
+        communication_style TEXT,
+        source TEXT DEFAULT 'master_pool',
+        buying_signal_text TEXT,
+        outreached INTEGER DEFAULT 0,
+        outreached_at TIMESTAMP,
+        reply_received INTEGER DEFAULT 0,
+        call_booked INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('[PG] ✅ quality_leads');
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS archived_leads (
+        id SERIAL PRIMARY KEY,
+        creator_id TEXT UNIQUE NOT NULL,
+        channel_name TEXT,
+        subscriber_count INTEGER DEFAULT 0,
+        niche TEXT,
+        email TEXT,
+        intent_score REAL DEFAULT 0,
+        intent_tier TEXT DEFAULT 'COLD',
+        archived_reason TEXT DEFAULT 'below_threshold',
+        archived_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('[PG] ✅ archived_leads');
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS scraper_logs (
+        id SERIAL PRIMARY KEY,
+        run_id TEXT,
+        scraper_type TEXT NOT NULL,
+        tier INTEGER,
+        niche TEXT,
+        status TEXT DEFAULT 'running',
+        channels_found INTEGER DEFAULT 0,
+        channels_scored INTEGER DEFAULT 0,
+        hot_added INTEGER DEFAULT 0,
+        warm_archived INTEGER DEFAULT 0,
+        cold_discarded INTEGER DEFAULT 0,
+        errors INTEGER DEFAULT 0,
+        error_log TEXT DEFAULT '[]',
+        started_at TIMESTAMP DEFAULT NOW(),
+        completed_at TIMESTAMP
+      )
+    `);
+    console.log('[PG] ✅ scraper_logs');
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS buying_signals (
+        id SERIAL PRIMARY KEY,
+        source TEXT NOT NULL DEFAULT 'reddit',
+        post_id TEXT UNIQUE,
+        subreddit TEXT,
+        post_title TEXT,
+        post_body TEXT,
+        post_url TEXT,
+        creator_handle TEXT,
+        channel_url TEXT,
+        subscriber_count INTEGER,
+        budget_mentioned TEXT,
+        intent_classification TEXT DEFAULT 'CURIOUS',
+        keywords_matched TEXT DEFAULT '[]',
+        quality_lead_id INTEGER,
+        processed INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('[PG] ✅ buying_signals');
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS platform_signals (
+        id SERIAL PRIMARY KEY,
+        creator_id TEXT NOT NULL,
+        platform TEXT NOT NULL,
+        signal_type TEXT NOT NULL,
+        signal_text TEXT,
+        signal_url TEXT,
+        confidence REAL DEFAULT 0.5,
+        budget_mentioned INTEGER DEFAULT 0,
+        found_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(creator_id, platform, signal_url)
+      )
+    `);
+    console.log('[PG] ✅ platform_signals');
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS creator_profiles (
+        creator_id TEXT PRIMARY KEY,
+        channel_name TEXT,
+        youtube_score REAL DEFAULT 0,
+        platform_score REAL DEFAULT 0,
+        combined_score REAL DEFAULT 0,
+        tier TEXT DEFAULT 'COLD',
+        signals_found INTEGER DEFAULT 0,
+        confirmed_hiring INTEGER DEFAULT 0,
+        last_updated TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('[PG] ✅ creator_profiles');
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS upwork_signals (
+        id SERIAL PRIMARY KEY,
+        job_id TEXT UNIQUE,
+        title TEXT,
+        description TEXT,
+        budget TEXT,
+        posted_at TEXT,
+        job_url TEXT,
+        creator_name TEXT,
+        email TEXT,
+        matched_channel_id TEXT,
+        processed INTEGER DEFAULT 0,
+        found_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('[PG] ✅ upwork_signals');
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS power_send_jobs (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        status TEXT DEFAULT 'running',
+        total INTEGER DEFAULT 0,
+        studied INTEGER DEFAULT 0,
+        generated INTEGER DEFAULT 0,
+        sent INTEGER DEFAULT 0,
+        failed INTEGER DEFAULT 0,
+        settings TEXT DEFAULT '{}',
+        log TEXT DEFAULT '[]',
+        started_at TIMESTAMP DEFAULT NOW(),
+        completed_at TIMESTAMP
+      )
+    `);
+    console.log('[PG] ✅ power_send_jobs');
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS seeder_keyword_tokens (
+        keyword TEXT NOT NULL,
+        api_key_hash TEXT NOT NULL,
+        next_page_token TEXT,
+        pages_done INTEGER DEFAULT 0,
+        last_used TIMESTAMP DEFAULT NOW(),
+        PRIMARY KEY (keyword, api_key_hash)
+      )
+    `);
+    console.log('[PG] ✅ seeder_keyword_tokens');
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS user_followup_settings (
+        user_id INTEGER PRIMARY KEY,
+        interval_days INTEGER DEFAULT 3,
+        max_count INTEGER DEFAULT 2,
+        enabled INTEGER DEFAULT 0,
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('[PG] ✅ user_followup_settings');
+
+    // Per-user unique indexes
+    try { await query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_channel_id_user ON leads(channel_id, user_id) WHERE channel_id IS NOT NULL AND channel_id != ''`); } catch {}
+    try { await query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_handle_user ON leads(channel_handle, user_id) WHERE channel_handle IS NOT NULL AND channel_handle != ''`); } catch {}
+    try { await query(`CREATE INDEX IF NOT EXISTS idx_leads_user_id ON leads(user_id)`); } catch {}
+    try { await query(`CREATE INDEX IF NOT EXISTS idx_emails_user_id ON emails(user_id)`); } catch {}
+    try { await query(`CREATE INDEX IF NOT EXISTS idx_activities_user_id ON activities(user_id)`); } catch {}
+    try { await query(`CREATE INDEX IF NOT EXISTS idx_pitches_user_id ON pitches(user_id)`); } catch {}
+    try { await query(`CREATE INDEX IF NOT EXISTS idx_master_niche ON master_leads(niche)`); } catch {}
+    try { await query(`CREATE INDEX IF NOT EXISTS idx_master_email ON master_leads(email)`); } catch {}
+    try { await query(`CREATE INDEX IF NOT EXISTS idx_quality_leads_score ON quality_leads(intent_score DESC)`); } catch {}
+    try { await query(`CREATE INDEX IF NOT EXISTS idx_quality_leads_niche ON quality_leads(niche)`); } catch {}
+
+    console.log('[PG] ✅ ALL TABLES READY');
+    return true;
+  } catch (err) {
+    console.error('[PG] ❌ Init failed:', err.message);
+    throw err;
+  }
+}
+
+module.exports = { pool, query, run, get, all, initPostgres, convertQuery, normalizeSql, PgSessionStore };

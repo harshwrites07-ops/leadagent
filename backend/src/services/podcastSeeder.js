@@ -148,66 +148,48 @@ async function searchItunesPodcasts(keyword, limit = 200) {
   } catch { return []; }
 }
 
+const PODCAST_INSERT_SQL = `INSERT OR IGNORE INTO master_leads (channel_id, channel_name, channel_handle, subscriber_count, avg_views, email, website, channel_description, lead_score, temperature, country, niche) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`;
+
 async function runPodcastCycle() {
   const db = getDb();
-  const INSERT = db.prepare(`
-    INSERT OR IGNORE INTO master_leads
-      (channel_id, channel_name, channel_handle, subscriber_count, avg_views,
-       email, website, channel_description, lead_score, temperature, country, niche)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-  `);
-
   const shuffled = [...PODCAST_KEYWORDS].sort(() => Math.random() - 0.5);
   let totalSaved = 0;
   podcastSeederStatus.running = true;
 
   for (const keyword of shuffled) {
     podcastSeederStatus.currentKeyword = keyword;
-
     const podcasts = await searchItunesPodcasts(keyword, 200);
     if (!podcasts.length) continue;
 
-    // Process 8 podcasts at a time — fetch RSS feeds in parallel
     const CONCURRENCY = 8;
     for (let i = 0; i < podcasts.length; i += CONCURRENCY) {
       const batch = podcasts.slice(i, i + CONCURRENCY);
-      const results = await Promise.allSettled(
-        batch.map(p => getEmailFromFeed(p.feedUrl))
-      );
+      const results = await Promise.allSettled(batch.map(p => getEmailFromFeed(p.feedUrl)));
 
       for (let j = 0; j < batch.length; j++) {
         const r = results[j];
-        if (r.status !== 'fulfilled' || !r.result?.email) {
-          // also handle fulfilled with no email
-          const val = r.status === 'fulfilled' ? r.value : null;
-          if (!val?.email) continue;
-        }
-        const { email, website } = r.value || {};
-        if (!email) continue;
-
+        const val = r.status === 'fulfilled' ? r.value : null;
+        if (!val?.email) continue;
+        const { email, website } = val;
         const p = batch[j];
         const niche = guessNiche(keyword);
         const isPersonal = PERSONAL_DOMAINS.has(email.split('@')[1]);
         try {
-          const res = INSERT.run(
+          const res = await db.run(PODCAST_INSERT_SQL, [
             `podcast:${p.collectionId}`,
             p.collectionName || p.trackName || 'Unknown Podcast',
             p.artistName || null,
-            0, 0,
-            email,
+            0, 0, email,
             website || p.collectionViewUrl || null,
             (p.description || p.shortDescription || '').substring(0, 400),
-            isPersonal ? 50 : 65,
-            'cold',
-            p.country || null,
-            niche
-          );
+            isPersonal ? 50 : 65, 'cold',
+            p.country || null, niche
+          ]);
           if (res.changes > 0) totalSaved++;
         } catch {}
       }
     }
 
-    // Short pause between keywords — iTunes rate limit is generous but be polite
     await new Promise(r => setTimeout(r, 300));
   }
 
@@ -216,15 +198,13 @@ async function runPodcastCycle() {
   podcastSeederStatus.lastCycleSaved = totalSaved;
   podcastSeederStatus.totalCycles++;
 
-  const total = db.prepare('SELECT COUNT(*) as c FROM master_leads').get().c;
-  console.log(`[PodcastSeeder] Cycle done — +${totalSaved} new leads | DB total: ${total}`);
+  const totalRow = await db.get('SELECT COUNT(*) as c FROM master_leads');
+  console.log(`[PodcastSeeder] Cycle done — +${totalSaved} new leads | DB total: ${totalRow.c}`);
 
   if (totalSaved > 0) {
     try {
       const { pushToTurso } = require('./tursoSync');
-      const newLeads = db.prepare(
-        `SELECT * FROM master_leads WHERE channel_id LIKE 'podcast:%' ORDER BY id DESC LIMIT ?`
-      ).all(Math.min(totalSaved * 2, 500));
+      const newLeads = await db.all(`SELECT * FROM master_leads WHERE channel_id LIKE 'podcast:%' ORDER BY id DESC LIMIT ?`, [Math.min(totalSaved * 2, 500)]);
       pushToTurso(newLeads).catch(() => {});
     } catch {}
   }

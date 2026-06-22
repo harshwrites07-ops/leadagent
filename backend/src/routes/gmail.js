@@ -9,17 +9,17 @@ const { getDb } = require('../models/database');
 router.get('/ping', (req, res) => res.json({ ok: true, routes: 'gmail' }));
 
 // GET /api/gmail/auth-url — returns the OAuth URL for connecting Gmail
-router.get('/auth-url', requireAuth, (req, res) => {
+router.get('/auth-url', requireAuth, asyncHandler(async (req, res) => {
   if (!process.env.GMAIL_CLIENT_ID && !process.env.GOOGLE_CLIENT_ID) {
     return res.status(501).json({ success: false, error: 'Gmail OAuth not configured on this server' });
   }
   const limit = getGmailLimit(req.user.plan);
-  const accounts = getAccountsForUser(req.user.id);
+  const accounts = await getAccountsForUser(req.user.id);
   if (accounts.length >= limit) {
     return res.status(403).json({ success: false, error: `Your plan allows ${limit} Gmail account(s). Upgrade to connect more.` });
   }
   res.json({ success: true, url: getAuthUrl(req.user.id) });
-});
+}));
 
 // GET /api/gmail/callback — OAuth callback from Google
 router.get('/callback', asyncHandler(async (req, res) => {
@@ -35,15 +35,15 @@ router.get('/callback', asyncHandler(async (req, res) => {
     const tokens = await exchangeCodeForTokens(code);
     const db = getDb();
 
-    db.prepare(`
+    await db.run(`
       INSERT INTO gmail_accounts (user_id, email, access_token, refresh_token, token_expiry, status)
       VALUES (?, ?, ?, ?, ?, 'active')
       ON CONFLICT(user_id, email) DO UPDATE SET
-        access_token=excluded.access_token,
-        refresh_token=COALESCE(excluded.refresh_token, gmail_accounts.refresh_token),
-        token_expiry=excluded.token_expiry,
+        access_token=EXCLUDED.access_token,
+        refresh_token=COALESCE(EXCLUDED.refresh_token, gmail_accounts.refresh_token),
+        token_expiry=EXCLUDED.token_expiry,
         status='active'
-    `).run(userId, tokens.email, tokens.access_token, tokens.refresh_token || null, tokens.token_expiry || null);
+    `, [userId, tokens.email, tokens.access_token, tokens.refresh_token || null, tokens.token_expiry || null]);
 
     res.redirect('/settings?gmail_connected=1');
   } catch (e) {
@@ -53,8 +53,9 @@ router.get('/callback', asyncHandler(async (req, res) => {
 }));
 
 // GET /api/gmail/accounts — list connected accounts for current user
-router.get('/accounts', requireAuth, (req, res) => {
-  const accounts = getAccountsForUser(req.user.id).map(a => ({
+router.get('/accounts', requireAuth, asyncHandler(async (req, res) => {
+  const rawAccounts = await getAccountsForUser(req.user.id);
+  const accounts = rawAccounts.map(a => ({
     id: a.id,
     email: a.email,
     status: a.status,
@@ -64,16 +65,14 @@ router.get('/accounts', requireAuth, (req, res) => {
   }));
   const limit = getGmailLimit(req.user.plan);
   res.json({ success: true, accounts, limit });
-});
+}));
 
 // DELETE /api/gmail/accounts/:id — disconnect an account
-router.delete('/accounts/:id', requireAuth, (req, res) => {
-  const result = getDb()
-    .prepare('DELETE FROM gmail_accounts WHERE id=? AND user_id=?')
-    .run(req.params.id, req.user.id);
+router.delete('/accounts/:id', requireAuth, asyncHandler(async (req, res) => {
+  const result = await getDb().run('DELETE FROM gmail_accounts WHERE id=? AND user_id=?', [req.params.id, req.user.id]);
   if (result.changes === 0) return res.status(404).json({ success: false, error: 'Account not found' });
   res.json({ success: true });
-});
+}));
 
 // POST /api/gmail/accounts/:id/reconnect — re-trigger OAuth for a specific account
 router.post('/accounts/:id/reconnect', requireAuth, (req, res) => {

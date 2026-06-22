@@ -1,30 +1,19 @@
 const express = require('express');
 const router = express.Router();
-const { getDb, logActivity } = require('../models/database');
+const { getDb, logActivity, USE_PG } = require('../models/database');
 const { asyncHandler } = require('../middleware/errorHandler');
-const { scrapeLimiter, aiLimiter } = require('../middleware/rateLimiter');
+const { scrapeLimiter } = require('../middleware/rateLimiter');
 const { detectViralChannels, searchChannels, searchChannelsMulti, getKeyPoolStatus, isQuotaExhausted } = require('../services/youtubeService');
-const { getKeywordsForNiches, getRandomKeywords, totalKeywordCount } = require('../services/masterKeywords');
-const { checkUsageLimit, incrementUsage, PLAN_LIMITS } = require('../services/authService');
+const { checkUsageLimit, incrementUsage } = require('../services/authService');
 
-const PLAN_RUN_LIMITS = {
-  trial:   50,
-  free:    100,
-  starter: 500,
-  pro:     2500,
-  growth:  2500,
-  agency:  10000,
-};
+const PLAN_RUN_LIMITS = { trial: 50, free: 100, starter: 500, pro: 2500, growth: 2500, agency: 10000 };
 
 function getRunLimit(user) {
   if (user.plan === 'agency' && user.plan_status === 'active') return 10000;
-  const effectivePlan = (user.plan_status === 'cancelled' || user.plan_status === 'past_due')
-    ? 'trial'
-    : (user.plan || 'free');
+  const effectivePlan = (user.plan_status === 'cancelled' || user.plan_status === 'past_due') ? 'trial' : (user.plan || 'free');
   return PLAN_RUN_LIMITS[effectivePlan] || PLAN_RUN_LIMITS.free;
 }
 
-// ─── Niche keyword maps ────────────────────────────────────────────────────────
 const NICHE_KEYWORDS = {
   'Business': ['business coach YouTube','entrepreneur channel','startup founder vlog','agency owner YouTube','consultant YouTube','online business tips','CEO vlog','business automation'],
   'Finance': ['stock trader YouTube','investing channel','crypto educator','personal finance channel','financial advisor YouTube','trading tips','wealth building YouTube','passive income ideas'],
@@ -37,94 +26,63 @@ const NICHE_KEYWORDS = {
   'Podcasters': ['podcast video channel','video podcast YouTube','podcaster YouTube','interview show channel','talk show YouTube'],
 };
 
-// Per-user hunt and powermode state (keyed by userId)
 const huntStates = new Map();
 const powermodeStates = new Map();
 
-// Purge completed entries older than 10 minutes, cap maps at 100 entries
 setInterval(() => {
   const cutoff = Date.now() - 10 * 60 * 1000;
-  for (const [k, v] of huntStates) {
-    if (!v.running && v.completedAt && v.completedAt < cutoff) huntStates.delete(k);
-  }
-  for (const [k, v] of powermodeStates) {
-    if (!v.running && v.completedAt && v.completedAt < cutoff) powermodeStates.delete(k);
-  }
-  if (huntStates.size > 100) {
-    const oldest = [...huntStates.keys()].slice(0, huntStates.size - 100);
-    oldest.forEach(k => huntStates.delete(k));
-  }
-  if (powermodeStates.size > 100) {
-    const oldest = [...powermodeStates.keys()].slice(0, powermodeStates.size - 100);
-    oldest.forEach(k => powermodeStates.delete(k));
-  }
+  for (const [k, v] of huntStates)     { if (!v.running && v.completedAt && v.completedAt < cutoff) huntStates.delete(k); }
+  for (const [k, v] of powermodeStates) { if (!v.running && v.completedAt && v.completedAt < cutoff) powermodeStates.delete(k); }
+  if (huntStates.size > 100)     { [...huntStates.keys()].slice(0, huntStates.size - 100).forEach(k => huntStates.delete(k)); }
+  if (powermodeStates.size > 100) { [...powermodeStates.keys()].slice(0, powermodeStates.size - 100).forEach(k => powermodeStates.delete(k)); }
 }, 30 * 60 * 1000);
 
 function getHuntState(userId) {
-  if (!huntStates.has(userId)) {
-    huntStates.set(userId, { running: false, niche: null, found: 0, saved: 0, startedAt: null, keywords: [], error: null });
-  }
+  if (!huntStates.has(userId)) huntStates.set(userId, { running: false, niche: null, found: 0, saved: 0, startedAt: null, keywords: [], error: null });
   return huntStates.get(userId);
 }
 
 function getPowermodeState(userId) {
-  if (!powermodeStates.has(userId)) {
-    powermodeStates.set(userId, {
-      running: false, startedAt: null, total: 0, saved: 0,
-      keywordsTotal: 0, keywordsDone: 0, currentKeywords: [],
-      recentLeads: [], stats: { hot: 0, warm: 0, cold: 0, withEmail: 0 },
-      stopped: false, error: null, quotaExhausted: false,
-      targetCount: null, targetReached: false,
-    });
-  }
+  if (!powermodeStates.has(userId)) powermodeStates.set(userId, { running: false, startedAt: null, total: 0, saved: 0, keywordsTotal: 0, keywordsDone: 0, currentKeywords: [], recentLeads: [], stats: { hot: 0, warm: 0, cold: 0, withEmail: 0 }, stopped: false, error: null, quotaExhausted: false, targetCount: null, targetReached: false });
   return powermodeStates.get(userId);
 }
 
-// Fallback keyword pool (used when no niches specified)
-const POWERMODE_DEFAULT_NICHES = ['business', 'finance', 'fitness', 'education', 'tech', 'health', 'motivation', 'marketing'];
-const KEYWORDS_PER_NICHE = 10;
+const POWERMODE_DEFAULT_NICHES = ['business','finance','fitness','education','tech','health','motivation','marketing'];
 
-const LEAD_INSERT_SQL = `
-  INSERT OR IGNORE INTO leads
-    (user_id, platform, channel_id, channel_name, channel_handle, subscriber_count, total_videos,
-     avg_views, avg_likes, avg_comments, engagement_rate, upload_frequency_days,
-     last_upload_date, channel_description, channel_tags, recent_videos, most_viewed_video,
-     country, email, website, social_links, thumbnail_url, pain_points, lead_score, temperature, niche, crm_stage)
-  VALUES
-    (@user_id, @platform, @channel_id, @channel_name, @channel_handle, @subscriber_count, @total_videos,
-     @avg_views, @avg_likes, @avg_comments, @engagement_rate, @upload_frequency_days,
-     @last_upload_date, @channel_description, @channel_tags, @recent_videos, @most_viewed_video,
-     @country, @email, @website, @social_links, @thumbnail_url, @pain_points, @lead_score, @temperature, @niche, 'new_lead')
-`;
+const LEAD_INSERT_SQL = USE_PG
+  ? `INSERT INTO leads (user_id,platform,channel_id,channel_name,channel_handle,subscriber_count,total_videos,avg_views,avg_likes,avg_comments,engagement_rate,upload_frequency_days,last_upload_date,channel_description,channel_tags,recent_videos,most_viewed_video,country,email,website,social_links,thumbnail_url,pain_points,lead_score,temperature,niche,crm_stage) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'new_lead') ON CONFLICT DO NOTHING`
+  : `INSERT OR IGNORE INTO leads (user_id,platform,channel_id,channel_name,channel_handle,subscriber_count,total_videos,avg_views,avg_likes,avg_comments,engagement_rate,upload_frequency_days,last_upload_date,channel_description,channel_tags,recent_videos,most_viewed_video,country,email,website,social_links,thumbnail_url,pain_points,lead_score,temperature,niche,crm_stage) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'new_lead')`;
 
-// POST /api/scraper/hunt — fire-and-forget niche hunt (runs in background)
+function leadParams(lead, userId) {
+  return [
+    userId, lead.platform || 'youtube', lead.channel_id || null, lead.channel_name, lead.channel_handle || null,
+    lead.subscriber_count || 0, lead.total_videos || 0, lead.avg_views || 0, lead.avg_likes || 0,
+    lead.avg_comments || 0, lead.engagement_rate || 0, lead.upload_frequency_days || 0,
+    lead.last_upload_date || null, lead.channel_description || null,
+    lead.channel_tags || '[]', lead.recent_videos || '[]', lead.most_viewed_video || '{}',
+    lead.country || null, lead.email || null, lead.website || null, lead.social_links || '{}',
+    lead.thumbnail_url || null, lead.pain_points || '[]', lead.lead_score || 50,
+    lead.temperature || 'warm', lead.niche || null,
+  ];
+}
+
 router.post('/hunt', asyncHandler(async (req, res) => {
   const { niche, target = 100 } = req.body;
   const userId = req.user.id;
   if (!niche) return res.status(400).json({ error: 'niche required' });
   const hs = getHuntState(userId);
   if (hs.running) return res.json({ status: 'already_running', ...hs });
-
   const keywords = NICHE_KEYWORDS[niche];
   if (!keywords) return res.status(400).json({ error: `Unknown niche. Valid: ${Object.keys(NICHE_KEYWORDS).join(', ')}` });
 
-  hs.running = true;
-  hs.niche = niche;
-  hs.found = 0;
-  hs.saved = 0;
-  hs.startedAt = new Date().toISOString();
-  hs.keywords = keywords;
-  hs.error = null;
+  hs.running = true; hs.niche = niche; hs.found = 0; hs.saved = 0;
+  hs.startedAt = new Date().toISOString(); hs.keywords = keywords; hs.error = null;
 
-  res.json({ status: 'started', niche, target, message: `Hunting ${niche} leads in background. Check /scraper/hunt/status for progress.` });
+  res.json({ status: 'started', niche, target, message: `Hunting ${niche} leads in background.` });
 
-  // Background execution
   ;(async () => {
     const db = getDb();
-    const insert = db.prepare(LEAD_INSERT_SQL);
-    let remaining = target;
-    let kwIdx = 0;
-
+    let remaining = target, kwIdx = 0;
     while (remaining > 0 && kwIdx < keywords.length) {
       const batch = keywords.slice(kwIdx, kwIdx + 3);
       kwIdx += 3;
@@ -133,7 +91,7 @@ router.post('/hunt', asyncHandler(async (req, res) => {
         hs.found += leads.length;
         for (const lead of leads) {
           try {
-            const r = insert.run({ ...lead, niche, user_id: userId });
+            const r = await db.run(LEAD_INSERT_SQL, leadParams({ ...lead, niche }, userId));
             if (r.changes > 0) { hs.saved++; remaining--; }
           } catch {}
         }
@@ -143,293 +101,157 @@ router.post('/hunt', asyncHandler(async (req, res) => {
         if (e.message.includes('quota')) break;
       }
     }
-    hs.running = false;
-    hs.completedAt = Date.now();
+    hs.running = false; hs.completedAt = Date.now();
     console.log(`[Hunt] ${niche} done: ${hs.saved} saved`);
   })();
 }));
 
-// GET /api/scraper/hunt/status
-router.get('/hunt/status', asyncHandler(async (req, res) => {
-  res.json(getHuntState(req.user.id));
-}));
+router.get('/hunt/status', asyncHandler(async (req, res) => { res.json(getHuntState(req.user.id)); }));
 
-// Rotate through countries so each PowerMode run finds fresh channels
-const POWERMODE_COUNTRIES = ['US', 'GB', 'CA', 'AU', 'IN', 'SG', 'AE', 'ZA', null];
+const POWERMODE_COUNTRIES = ['US','GB','CA','AU','IN','SG','AE','ZA',null];
 let pmCountryIdx = 0;
 
-// POST /api/scraper/powermode/start
 router.post('/powermode/start', asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const ps = getPowermodeState(userId);
   if (ps.running) return res.json({ status: 'already_running', ...ps });
 
-  // Plan limit check
   const runLimit = getRunLimit(req.user);
   const usageCheck = checkUsageLimit(req.user, 'leads');
   const remaining = usageCheck.allowed ? (usageCheck.limit - usageCheck.used) : 0;
 
-  // Target count: user-requested, capped at plan run limit and remaining monthly budget
   let targetCount = parseInt(req.body?.targetCount) || 100;
-  if (targetCount > runLimit) {
-    return res.status(400).json({
-      success: false,
-      error: `Your ${req.user.plan || 'free'} plan allows up to ${runLimit} leads per run. Upgrade to get more.`,
-      runLimit,
-      upgradeRequired: targetCount > runLimit,
-    });
-  }
-  if (remaining === 0) {
-    return res.status(429).json({
-      success: false,
-      error: `Monthly lead limit reached (${usageCheck.used}/${usageCheck.limit}). Upgrade your plan.`,
-      upgradeRequired: true,
-    });
-  }
-  // Cap at remaining monthly budget
+  if (targetCount > runLimit) return res.status(400).json({ success: false, error: `Your ${req.user.plan || 'free'} plan allows up to ${runLimit} leads per run. Upgrade to get more.`, runLimit, upgradeRequired: targetCount > runLimit });
+  if (remaining === 0) return res.status(429).json({ success: false, error: `Monthly lead limit reached (${usageCheck.used}/${usageCheck.limit}). Upgrade your plan.`, upgradeRequired: true });
   targetCount = Math.min(targetCount, remaining);
 
-  // Pick next country in rotation
-  const country = POWERMODE_COUNTRIES[pmCountryIdx % POWERMODE_COUNTRIES.length];
   pmCountryIdx++;
-
-  const requestedNiches = Array.isArray(req.body?.niches) && req.body.niches.length > 0
-    ? req.body.niches : POWERMODE_DEFAULT_NICHES;
-
-  // Optional filters from request body
+  const requestedNiches = Array.isArray(req.body?.niches) && req.body.niches.length > 0 ? req.body.niches : POWERMODE_DEFAULT_NICHES;
   const pmMinSubs = parseInt(req.body?.minSubs) || 0;
   const pmMaxSubs = parseInt(req.body?.maxSubs) || 0;
   const pmCountry = (req.body?.country || '').trim().toUpperCase();
 
-  // ── Always serve from master_leads — no live scraping for users ─────────────
-  {
-    const db = getDb();
-    const nicheConditions = requestedNiches.map(() => "niche LIKE ?").join(' OR ');
-    const nicheParams = requestedNiches.map(n => `%${n}%`);
-    let baseWhere = nicheConditions
-      ? `(${nicheConditions}) AND email IS NOT NULL AND email != ''`
-      : `email IS NOT NULL AND email != ''`;
-    const baseParams = [...nicheParams];
+  const db = getDb();
+  const nicheConditions = requestedNiches.map(() => 'niche LIKE ?').join(' OR ');
+  const nicheParams = requestedNiches.map(n => `%${n}%`);
+  let baseWhere = nicheConditions ? `(${nicheConditions}) AND email IS NOT NULL AND email != ''` : `email IS NOT NULL AND email != ''`;
+  const baseParams = [...nicheParams];
 
-    // Apply optional filters
-    if (pmMinSubs > 0) { baseWhere += ' AND subscriber_count >= ?'; baseParams.push(pmMinSubs); }
-    if (pmMaxSubs > 0) { baseWhere += ' AND subscriber_count <= ?'; baseParams.push(pmMaxSubs); }
-    if (pmCountry)     { baseWhere += ' AND country = ?';            baseParams.push(pmCountry); }
+  if (pmMinSubs > 0) { baseWhere += ' AND subscriber_count >= ?'; baseParams.push(pmMinSubs); }
+  if (pmMaxSubs > 0) { baseWhere += ' AND subscriber_count <= ?'; baseParams.push(pmMaxSubs); }
+  if (pmCountry)     { baseWhere += ' AND country = ?';           baseParams.push(pmCountry); }
 
-    // Exclude channels user already has
-    const userChannelIds = db.prepare(`SELECT channel_id FROM leads WHERE user_id=? AND channel_id IS NOT NULL`).all(userId).map(r => r.channel_id);
-    let fullWhere = baseWhere;
-    const fullParams = [...baseParams];
-    if (userChannelIds.length > 0) {
-      fullWhere += ` AND channel_id NOT IN (${userChannelIds.map(() => '?').join(',')})`;
-      fullParams.push(...userChannelIds);
-    }
-
-    let available = db.prepare(`SELECT COUNT(*) as c FROM master_leads WHERE ${fullWhere}`).get(...fullParams).c;
-
-    // Cross-niche fallback: if selected niches return nothing, serve any matching email-verified leads
-    let fallbackNiche = false;
-    let activewhere = fullWhere;
-    let activeParams = fullParams;
-    if (available === 0) {
-      let fbWhere = `email IS NOT NULL AND email != ''`;
-      const fbParams = [];
-      if (pmMinSubs > 0) { fbWhere += ' AND subscriber_count >= ?'; fbParams.push(pmMinSubs); }
-      if (pmMaxSubs > 0) { fbWhere += ' AND subscriber_count <= ?'; fbParams.push(pmMaxSubs); }
-      if (pmCountry)     { fbWhere += ' AND country = ?';            fbParams.push(pmCountry); }
-      if (userChannelIds.length > 0) {
-        fbWhere += ` AND channel_id NOT IN (${userChannelIds.map(() => '?').join(',')})`;
-        fbParams.push(...userChannelIds);
-      }
-      available = db.prepare(`SELECT COUNT(*) as c FROM master_leads WHERE ${fbWhere}`).get(...fbParams).c;
-      if (available > 0) { fallbackNiche = true; activewhere = fbWhere; activeParams = fbParams; }
-    }
-
-    if (available > 0) {
-      const serveCount = Math.min(targetCount, available);
-      console.log(`[PowerMode] master_leads: ${available} available → serving ${serveCount} to user ${userId}${fallbackNiche ? ' (cross-niche fallback)' : ''}`);
-      const masterLeads = db.prepare(
-        `SELECT * FROM master_leads WHERE ${activewhere} ORDER BY lead_score DESC, subscriber_count DESC LIMIT ?`
-      ).all(...activeParams, serveCount);
-
-      const insert = db.prepare(LEAD_INSERT_SQL);
-      const saveMany = db.transaction(leads => {
-        let count = 0;
-        for (const l of leads) {
-          const r = insert.run({
-            user_id: userId, platform: 'youtube',
-            channel_id: l.channel_id || null, channel_name: l.channel_name,
-            channel_handle: l.channel_handle || null, subscriber_count: l.subscriber_count || 0,
-            total_videos: 0, avg_views: l.avg_views || 0, avg_likes: 0, avg_comments: 0,
-            engagement_rate: 0, upload_frequency_days: 0, last_upload_date: null,
-            channel_description: l.channel_description || null,
-            channel_tags: '[]', recent_videos: '[]', most_viewed_video: '{}',
-            country: l.country || null, email: l.email, website: l.website || null,
-            social_links: '{}', thumbnail_url: null, pain_points: '[]',
-            lead_score: l.lead_score || 50, temperature: l.temperature || 'warm', niche: l.niche || null,
-          });
-          if (r.changes > 0) count++;
-        }
-        return count;
-      });
-      const totalSaved = saveMany(masterLeads);
-      incrementUsage(userId, 'leads', totalSaved);
-      logActivity('leads_imported', `PowerMode served ${totalSaved} leads from master database`, null, {}, userId);
-
-      // Backup user leads to Turso immediately so they survive a redeploy
-      if (totalSaved > 0) {
-        setImmediate(async () => {
-          try {
-            const { pushUserLeadsToTurso } = require('../services/tursoSync');
-            await pushUserLeadsToTurso(db);
-          } catch {}
-        });
-      }
-
-      const targetReached = totalSaved >= targetCount;
-      Object.assign(ps, {
-        running: false, total: masterLeads.length, saved: totalSaved,
-        keywordsTotal: 0, keywordsDone: 0, currentKeywords: [],
-        recentLeads: masterLeads.slice(0, 10).map(l => ({ channel_name: l.channel_name, subscriber_count: l.subscriber_count, hasEmail: true, email: l.email })),
-        stats: { hot: 0, warm: totalSaved, cold: 0, withEmail: totalSaved },
-        stopped: false, error: null, quotaExhausted: false,
-        niches: requestedNiches, targetCount, targetReached, fallbackNiche,
-      });
-      return res.json({ status: 'instant', source: 'master_leads', saved: totalSaved, targetCount, niches: requestedNiches, keywordsTotal: 0, targetReached, fallbackNiche });
-    }
-
-    // master_leads is completely empty — tell user
-    Object.assign(ps, {
-      running: false, total: 0, saved: 0, keywordsTotal: 0, keywordsDone: 0,
-      stats: { hot: 0, warm: 0, cold: 0, withEmail: 0 },
-      stopped: false, error: 'No leads in the database yet. The admin is seeding it — check back soon.', quotaExhausted: false,
-      niches: requestedNiches, targetCount, targetReached: false,
-    });
-    return res.json({ status: 'empty', source: 'master_leads', saved: 0, targetCount, message: 'No leads in the database yet — check back soon.' });
+  const userChannelRows = await db.all(`SELECT channel_id FROM leads WHERE user_id=? AND channel_id IS NOT NULL`, [userId]);
+  const userChannelIds = userChannelRows.map(r => r.channel_id);
+  let fullWhere = baseWhere;
+  const fullParams = [...baseParams];
+  if (userChannelIds.length > 0) {
+    fullWhere += ` AND channel_id NOT IN (${userChannelIds.map(() => '?').join(',')})`;
+    fullParams.push(...userChannelIds);
   }
+
+  let availRow = await db.get(`SELECT COUNT(*) as c FROM master_leads WHERE ${fullWhere}`, fullParams);
+  let available = availRow.c;
+
+  let fallbackNiche = false, activewhere = fullWhere, activeParams = fullParams;
+  if (available === 0) {
+    let fbWhere = `email IS NOT NULL AND email != ''`;
+    const fbParams = [];
+    if (pmMinSubs > 0) { fbWhere += ' AND subscriber_count >= ?'; fbParams.push(pmMinSubs); }
+    if (pmMaxSubs > 0) { fbWhere += ' AND subscriber_count <= ?'; fbParams.push(pmMaxSubs); }
+    if (pmCountry)     { fbWhere += ' AND country = ?';           fbParams.push(pmCountry); }
+    if (userChannelIds.length > 0) { fbWhere += ` AND channel_id NOT IN (${userChannelIds.map(() => '?').join(',')})`; fbParams.push(...userChannelIds); }
+    const fbRow = await db.get(`SELECT COUNT(*) as c FROM master_leads WHERE ${fbWhere}`, fbParams);
+    if (fbRow.c > 0) { fallbackNiche = true; activewhere = fbWhere; activeParams = fbParams; available = fbRow.c; }
+  }
+
+  if (available > 0) {
+    const serveCount = Math.min(targetCount, available);
+    console.log(`[PowerMode] master_leads: ${available} available → serving ${serveCount} to user ${userId}${fallbackNiche ? ' (cross-niche fallback)' : ''}`);
+    const masterLeads = await db.all(`SELECT * FROM master_leads WHERE ${activewhere} ORDER BY lead_score DESC, subscriber_count DESC LIMIT ?`, [...activeParams, serveCount]);
+
+    let totalSaved = 0;
+    for (const l of masterLeads) {
+      try {
+        const r = await db.run(LEAD_INSERT_SQL, leadParams({ ...l, platform: 'youtube', channel_tags: '[]', recent_videos: '[]', most_viewed_video: '{}', social_links: '{}', total_videos: 0, avg_likes: 0, avg_comments: 0, engagement_rate: 0, upload_frequency_days: 0, last_upload_date: null, thumbnail_url: null, pain_points: '[]', temperature: l.temperature || 'warm' }, userId));
+        if (r.changes > 0) totalSaved++;
+      } catch {}
+    }
+    incrementUsage(userId, 'leads', totalSaved);
+    logActivity('leads_imported', `PowerMode served ${totalSaved} leads from master database`, null, {}, userId);
+
+    if (totalSaved > 0) {
+      setImmediate(async () => { try { const { pushUserLeadsToTurso } = require('../services/tursoSync'); await pushUserLeadsToTurso(db); } catch {} });
+    }
+
+    const targetReached = totalSaved >= targetCount;
+    Object.assign(ps, { running: false, total: masterLeads.length, saved: totalSaved, keywordsTotal: 0, keywordsDone: 0, currentKeywords: [], recentLeads: masterLeads.slice(0, 10).map(l => ({ channel_name: l.channel_name, subscriber_count: l.subscriber_count, hasEmail: true, email: l.email })), stats: { hot: 0, warm: totalSaved, cold: 0, withEmail: totalSaved }, stopped: false, error: null, quotaExhausted: false, niches: requestedNiches, targetCount, targetReached, fallbackNiche });
+    return res.json({ status: 'instant', source: 'master_leads', saved: totalSaved, targetCount, niches: requestedNiches, keywordsTotal: 0, targetReached, fallbackNiche });
+  }
+
+  Object.assign(ps, { running: false, total: 0, saved: 0, keywordsTotal: 0, keywordsDone: 0, stats: { hot: 0, warm: 0, cold: 0, withEmail: 0 }, stopped: false, error: 'No leads in the database yet. The admin is seeding it — check back soon.', quotaExhausted: false, niches: requestedNiches, targetCount, targetReached: false });
+  return res.json({ status: 'empty', source: 'master_leads', saved: 0, targetCount, message: 'No leads in the database yet — check back soon.' });
 }));
 
-// POST /api/scraper/powermode/stop
 router.post('/powermode/stop', asyncHandler(async (req, res) => {
   const ps = getPowermodeState(req.user.id);
-  ps.stopped = true;
-  ps.running = false;
+  ps.stopped = true; ps.running = false;
   res.json({ status: 'stopped', saved: ps.saved });
 }));
 
-// GET /api/scraper/powermode/status
-router.get('/powermode/status', asyncHandler(async (req, res) => {
-  res.json(getPowermodeState(req.user.id));
-}));
+router.get('/powermode/status', asyncHandler(async (req, res) => { res.json(getPowermodeState(req.user.id)); }));
 
-// POST /api/scraper/viral-detector
 router.post('/viral-detector', scrapeLimiter, asyncHandler(async (req, res) => {
   const { keyword = 'youtube', niche } = req.body;
   const userId = req.user.id;
   const db = getDb();
-
   const viralChannels = await detectViralChannels(niche || keyword);
-
   const results = [];
   for (const ch of viralChannels) {
-    const existing = db.prepare('SELECT id FROM leads WHERE channel_id = ? AND user_id = ?').get(ch.channel_id, userId);
+    const existing = await db.get('SELECT id FROM leads WHERE channel_id = ? AND user_id = ?', [ch.channel_id, userId]);
     if (existing) { results.push({ ...ch, id: existing.id, status: 'existing' }); continue; }
-
-    const r = db.prepare(`
-      INSERT INTO leads (
-        user_id, platform, channel_id, channel_name, channel_handle, subscriber_count, avg_views,
-        engagement_rate, upload_frequency_days, recent_videos, pain_points, lead_score,
-        temperature, niche, thumbnail_url, channel_description, crm_stage
-      ) VALUES (
-        @user_id, 'youtube', @channel_id, @channel_name, @channel_handle, @subscriber_count, @avg_views,
-        @engagement_rate, @upload_frequency_days, @recent_videos, @pain_points, @lead_score,
-        'hot', @niche, @thumbnail_url, @channel_description, 'new_lead'
-      )
-    `).run({
-      user_id: userId,
-      channel_id: ch.channel_id,
-      channel_name: ch.channel_name,
-      channel_handle: ch.channel_handle || null,
-      subscriber_count: ch.subscriber_count || 0,
-      avg_views: ch.avg_views || 0,
-      engagement_rate: ch.engagement_rate || 0,
-      upload_frequency_days: ch.upload_frequency_days || 0,
-      recent_videos: ch.recent_videos || '[]',
-      pain_points: JSON.stringify([{ id: 'viral_opportunity', label: `Viral video (${ch.viral_multiplier}x avg views)`, severity: 'critical' }]),
-      lead_score: 85,
-      niche: niche || keyword,
-      thumbnail_url: ch.thumbnail_url || null,
-      channel_description: ch.channel_description || null,
-    });
-
-    logActivity('viral_detected', `VIRAL: ${ch.channel_name} got ${ch.viral_multiplier}x normal views`, r.lastInsertRowid, {}, userId);
-    results.push({ ...ch, id: r.lastInsertRowid, status: 'new' });
+    const viralInsertSql = USE_PG
+      ? `INSERT INTO leads (user_id,platform,channel_id,channel_name,channel_handle,subscriber_count,avg_views,engagement_rate,upload_frequency_days,recent_videos,pain_points,lead_score,temperature,niche,thumbnail_url,channel_description,crm_stage) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'new_lead') RETURNING id`
+      : `INSERT INTO leads (user_id,platform,channel_id,channel_name,channel_handle,subscriber_count,avg_views,engagement_rate,upload_frequency_days,recent_videos,pain_points,lead_score,temperature,niche,thumbnail_url,channel_description,crm_stage) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'new_lead')`;
+    const r = await db.run(viralInsertSql, [userId,'youtube',ch.channel_id,ch.channel_name,ch.channel_handle||null,ch.subscriber_count||0,ch.avg_views||0,ch.engagement_rate||0,ch.upload_frequency_days||0,ch.recent_videos||'[]',JSON.stringify([{id:'viral_opportunity',label:`Viral video (${ch.viral_multiplier}x avg views)`,severity:'critical'}]),85,'hot',niche||keyword,ch.thumbnail_url||null,ch.channel_description||null]);
+    logActivity('viral_detected', `VIRAL: ${ch.channel_name} got ${ch.viral_multiplier}x normal views`, r.lastID, {}, userId);
+    results.push({ ...ch, id: r.lastID, status: 'new' });
   }
-
   res.json({ success: true, viral_leads: results, count: results.length });
 }));
 
-// POST /api/scraper/competitor-spy
 router.post('/competitor-spy', scrapeLimiter, asyncHandler(async (req, res) => {
   const { competitor_name, competitor_keywords } = req.body;
   if (!competitor_name) return res.status(400).json({ success: false, error: 'competitor_name required' });
-
   const userId = req.user.id;
   const db = getDb();
-
-  // Search for channels related to the competitor
-  const searchTerms = competitor_keywords
-    ? competitor_keywords.split(',').map(k => k.trim())
-    : [`edited by ${competitor_name}`, `${competitor_name} editing`, competitor_name];
-
+  const searchTerms = competitor_keywords ? competitor_keywords.split(',').map(k => k.trim()) : [`edited by ${competitor_name}`, `${competitor_name} editing`, competitor_name];
   const allLeads = [];
   for (const term of searchTerms.slice(0, 2)) {
-    try {
-      const channels = await searchChannels({ keyword: term, maxResults: 20 });
-      allLeads.push(...channels);
-    } catch (e) {
-      console.warn('Competitor spy search error:', e.message);
-    }
+    try { const channels = await searchChannels({ keyword: term, maxResults: 20 }); allLeads.push(...channels); }
+    catch (e) { console.warn('Competitor spy search error:', e.message); }
   }
-
   let added = 0;
   const results = [];
   for (const ch of allLeads) {
     if (!ch.channel_id) continue;
-    const existing = db.prepare('SELECT id FROM leads WHERE channel_id = ? AND user_id = ?').get(ch.channel_id, userId);
+    const existing = await db.get('SELECT id FROM leads WHERE channel_id = ? AND user_id = ?', [ch.channel_id, userId]);
     if (existing) continue;
-
-    const r = db.prepare(`
-      INSERT INTO leads (
-        user_id, platform, channel_id, channel_name, channel_handle, subscriber_count, avg_views,
-        avg_likes, avg_comments, engagement_rate, upload_frequency_days, last_upload_date,
-        channel_description, channel_tags, recent_videos, most_viewed_video,
-        country, email, website, pain_points, lead_score, temperature,
-        niche, thumbnail_url
-      ) VALUES (
-        @user_id, @platform, @channel_id, @channel_name, @channel_handle, @subscriber_count, @avg_views,
-        @avg_likes, @avg_comments, @engagement_rate, @upload_frequency_days, @last_upload_date,
-        @channel_description, @channel_tags, @recent_videos, @most_viewed_video,
-        @country, @email, @website, @pain_points, @lead_score, @temperature,
-        @niche, @thumbnail_url
-      )
-    `).run({ ...ch, user_id: userId, niche: `competitor:${competitor_name}` });
-
-    ch.id = r.lastInsertRowid;
-    results.push(ch);
-    added++;
-    logActivity('competitor_spy', `Found competitor lead: ${ch.channel_name}`, r.lastInsertRowid, { competitor: competitor_name }, userId);
+    const r = await db.run(LEAD_INSERT_SQL, leadParams({ ...ch, niche: `competitor:${competitor_name}` }, userId));
+    if (r.changes > 0) {
+      ch.id = r.lastID;
+      results.push(ch);
+      added++;
+      logActivity('competitor_spy', `Found competitor lead: ${ch.channel_name}`, r.lastID, { competitor: competitor_name }, userId);
+    }
   }
-
   res.json({ success: true, added, leads: results });
 }));
 
-// GET /api/scraper/quota-status
 router.get('/quota-status', asyncHandler(async (req, res) => {
   const keys = getKeyPoolStatus();
   const exhausted = isQuotaExhausted();
   const active = keys.filter(k => !k.exhausted).length;
-  // Hours until midnight PT (roughly UTC-8)
   const now = new Date();
   const ptHour = (now.getUTCHours() - 8 + 24) % 24;
   const ptMin = now.getUTCMinutes();
@@ -437,20 +259,10 @@ router.get('/quota-status', asyncHandler(async (req, res) => {
   res.json({ success: true, exhausted, active, total: keys.length, hoursToReset, keys });
 }));
 
-// GET /api/scraper/activities - recent activity feed
 router.get('/activities', asyncHandler(async (req, res) => {
   const db = getDb();
   const limit = parseInt(req.query.limit || '30');
-
-  const activities = db.prepare(`
-    SELECT a.*, l.channel_name, l.thumbnail_url, l.temperature, l.subscriber_count
-    FROM activities a
-    LEFT JOIN leads l ON l.id = a.lead_id
-    WHERE a.lead_id IS NULL OR l.user_id = ?
-    ORDER BY a.created_at DESC
-    LIMIT ?
-  `).all(req.user.id, limit);
-
+  const activities = await db.all(`SELECT a.*, l.channel_name, l.thumbnail_url, l.temperature, l.subscriber_count FROM activities a LEFT JOIN leads l ON l.id = a.lead_id WHERE a.lead_id IS NULL OR l.user_id = ? ORDER BY a.created_at DESC LIMIT ?`, [req.user.id, limit]);
   res.json({ success: true, activities });
 }));
 

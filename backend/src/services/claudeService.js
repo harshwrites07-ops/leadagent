@@ -876,7 +876,7 @@ async function generateFullPitch(lead, userId = null) {
   let voiceDNA = {};
   let nameWarning = null;
   try {
-    const user = db.prepare('SELECT voice_dna, full_name FROM users WHERE id = ?').get(userId);
+    const user = await db.get('SELECT voice_dna, full_name FROM users WHERE id = ?', [userId]);
     voiceDNA = user?.voice_dna ? JSON.parse(user.voice_dna) : {};
     if (!voiceDNA.name && user?.full_name) {
       voiceDNA.name = user.full_name.split(' ')[0];
@@ -977,18 +977,9 @@ Respond with ONLY JSON:
 
   // Save to database
   try {
-    db.prepare(`
-      INSERT OR REPLACE INTO pitches
-      (lead_id, user_id, email_subject, cold_email, subject_variants, pitch_score, signal_type, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    `).run(
-      lead.id,
-      userId,
-      result.subject,
-      result.body,
-      JSON.stringify(result.alt_subjects || []),
-      result.pitch_score,
-      result.signal_used,
+    await db.run(
+      `INSERT OR REPLACE INTO pitches (lead_id, user_id, email_subject, cold_email, subject_variants, pitch_score, signal_type, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+      [lead.id, userId, result.subject, result.body, JSON.stringify(result.alt_subjects || []), result.pitch_score, result.signal_used]
     );
   } catch (e) {
     console.error('[Pitch] Error saving pitch:', e.message);

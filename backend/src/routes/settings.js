@@ -13,56 +13,33 @@ function writeToEnv(key, value) {
   let content = '';
   try { content = fs.readFileSync(ENV_PATH, 'utf8'); } catch { content = ''; }
   const regex = new RegExp(`^${key}=.*$`, 'm');
-  content = regex.test(content)
-    ? content.replace(regex, `${key}=${sanitized}`)
-    : content + `\n${key}=${sanitized}\n`;
+  content = regex.test(content) ? content.replace(regex, `${key}=${sanitized}`) : content + `\n${key}=${sanitized}\n`;
   fs.writeFileSync(ENV_PATH, content, 'utf8');
   process.env[key] = sanitized;
 }
 
-// ── USER SETTINGS ─────────────────────────────────────────────────────────────
-
-// GET /api/settings/me — user profile + preferences
 router.get('/me', requireAuth, (req, res) => {
   const u = req.user;
   res.json({
     success: true,
     profile: {
-      full_name: u.full_name || '',
-      agency_name: u.agency_name || '',
-      role: u.role || 'Video Editor',
+      full_name: u.full_name || '', agency_name: u.agency_name || '', role: u.role || 'Video Editor',
       target_niches: (() => { try { return JSON.parse(u.target_niches || '[]'); } catch { return []; } })(),
-      portfolio_url: u.portfolio_url || '',
-      best_result: u.best_result || '',
-      pricing_range: u.pricing_range || '$500-$2000/month',
+      portfolio_url: u.portfolio_url || '', best_result: u.best_result || '', pricing_range: u.pricing_range || '$500-$2000/month',
     },
     preferences: {
-      email_tone: u.email_tone || 'casual',
-      outreach_goal: u.outreach_goal || 'get_reply',
-      daily_email_limit: u.daily_email_limit || 150,
-      min_email_delay: u.min_email_delay || 45,
-      max_email_delay: u.max_email_delay || 120,
-      followups_enabled: u.followups_enabled !== 0,
-      max_followups: u.max_followups || 3,
-      followup_delay_days: u.followup_delay_days || 3,
+      email_tone: u.email_tone || 'casual', outreach_goal: u.outreach_goal || 'get_reply',
+      daily_email_limit: u.daily_email_limit || 150, min_email_delay: u.min_email_delay || 45, max_email_delay: u.max_email_delay || 120,
+      followups_enabled: u.followups_enabled !== 0, max_followups: u.max_followups || 3, followup_delay_days: u.followup_delay_days || 3,
     },
-    plan: {
-      name: u.plan || 'free',
-      status: u.plan_status || 'active',
-      leads_used: u.leads_used_this_month || 0,
-      emails_used: u.emails_used_this_month || 0,
-      usage_reset_date: u.usage_reset_date,
-    },
+    plan: { name: u.plan || 'free', status: u.plan_status || 'active', leads_used: u.leads_used_this_month || 0, emails_used: u.emails_used_this_month || 0, usage_reset_date: u.usage_reset_date },
   });
 });
 
-// PUT /api/settings/me — save profile + preferences
 router.put('/me', requireAuth, asyncHandler(async (req, res) => {
   const db = getDb();
   const { profile, preferences } = req.body;
-  const userId = req.user.id;
   const fields = {};
-
   if (profile) {
     if (profile.full_name !== undefined)     fields.full_name = profile.full_name;
     if (profile.agency_name !== undefined)   fields.agency_name = profile.agency_name;
@@ -72,27 +49,21 @@ router.put('/me', requireAuth, asyncHandler(async (req, res) => {
     if (profile.best_result !== undefined)   fields.best_result = String(profile.best_result).substring(0, 200);
     if (profile.pricing_range !== undefined) fields.pricing_range = profile.pricing_range;
   }
-
   if (preferences) {
-    if (preferences.email_tone !== undefined)        fields.email_tone = preferences.email_tone;
-    if (preferences.outreach_goal !== undefined)     fields.outreach_goal = preferences.outreach_goal;
-    if (preferences.daily_email_limit !== undefined) fields.daily_email_limit = parseInt(preferences.daily_email_limit) || 150;
-    if (preferences.min_email_delay !== undefined)   fields.min_email_delay = parseInt(preferences.min_email_delay) || 45;
-    if (preferences.max_email_delay !== undefined)   fields.max_email_delay = parseInt(preferences.max_email_delay) || 120;
-    if (preferences.followups_enabled !== undefined) fields.followups_enabled = preferences.followups_enabled ? 1 : 0;
-    if (preferences.max_followups !== undefined)     fields.max_followups = parseInt(preferences.max_followups) || 3;
+    if (preferences.email_tone !== undefined)          fields.email_tone = preferences.email_tone;
+    if (preferences.outreach_goal !== undefined)       fields.outreach_goal = preferences.outreach_goal;
+    if (preferences.daily_email_limit !== undefined)   fields.daily_email_limit = parseInt(preferences.daily_email_limit) || 150;
+    if (preferences.min_email_delay !== undefined)     fields.min_email_delay = parseInt(preferences.min_email_delay) || 45;
+    if (preferences.max_email_delay !== undefined)     fields.max_email_delay = parseInt(preferences.max_email_delay) || 120;
+    if (preferences.followups_enabled !== undefined)   fields.followups_enabled = preferences.followups_enabled ? 1 : 0;
+    if (preferences.max_followups !== undefined)       fields.max_followups = parseInt(preferences.max_followups) || 3;
     if (preferences.followup_delay_days !== undefined) fields.followup_delay_days = parseInt(preferences.followup_delay_days) || 3;
   }
-
   if (Object.keys(fields).length === 0) return res.json({ success: true, message: 'Nothing to update' });
-
   const setClauses = Object.keys(fields).map(k => `${k}=?`).join(', ');
-  db.prepare(`UPDATE users SET ${setClauses} WHERE id=?`).run(...Object.values(fields), userId);
-
+  await db.run(`UPDATE users SET ${setClauses} WHERE id=?`, [...Object.values(fields), req.user.id]);
   res.json({ success: true, message: 'Settings saved' });
 }));
-
-// ── ADMIN-ONLY SETTINGS ───────────────────────────────────────────────────────
 
 const ADMIN_SETTING_KEYS = [
   'daily_send_limit', 'email_delay_min', 'email_delay_max', 'followup_delay_days', 'max_followups',
@@ -106,15 +77,13 @@ const ADMIN_SETTING_KEYS = [
   'queue_paused',
 ];
 
-// GET /api/settings (admin only)
 router.get('/', requireAdmin, asyncHandler(async (req, res) => {
   const db = getDb();
-  const rows = db.prepare('SELECT key, value FROM settings').all();
+  const rows = await db.all('SELECT key, value FROM settings');
   const settings = {};
   for (const row of rows) {
     try {
-      settings[row.key] = (row.value && (row.value.startsWith('[') || row.value.startsWith('{')))
-        ? JSON.parse(row.value) : row.value;
+      settings[row.key] = (row.value && (row.value.startsWith('[') || row.value.startsWith('{'))) ? JSON.parse(row.value) : row.value;
     } catch { settings[row.key] = row.value; }
   }
   delete settings.smtp_pass;
@@ -122,7 +91,6 @@ router.get('/', requireAdmin, asyncHandler(async (req, res) => {
   res.json({ success: true, settings });
 }));
 
-// PUT /api/settings (admin only)
 router.put('/', requireAdmin, asyncHandler(async (req, res) => {
   const updates = req.body;
   for (const [key, value] of Object.entries(updates)) {
@@ -148,20 +116,16 @@ router.put('/', requireAdmin, asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Settings saved.' });
 }));
 
-// GET /api/settings/gemini-status — any authenticated user can check AI status
 router.get('/gemini-status', requireAuth, asyncHandler(async (req, res) => {
   const { getGeminiKeys } = require('../services/claudeService');
   const keys = getGeminiKeys();
-  const fromEnv = keys.some((k, i) => {
-    for (let n = 1; n <= 20; n++) {
-      if (process.env[`GEMINI_API_KEY_${n}`] === k) return true;
-    }
+  const fromEnv = keys.some(k => {
+    for (let n = 1; n <= 20; n++) { if (process.env[`GEMINI_API_KEY_${n}`] === k) return true; }
     return process.env.GEMINI_API_KEY === k;
   });
   res.json({ configured: keys.length > 0, count: keys.length, source: fromEnv ? 'env' : 'db' });
 }));
 
-// POST /api/settings/gemini-key — any authenticated user can save a Gemini key
 router.post('/gemini-key', requireAuth, asyncHandler(async (req, res) => {
   const { key } = req.body;
   if (!key || !key.trim()) return res.status(400).json({ error: 'key required' });
@@ -171,7 +135,6 @@ router.post('/gemini-key', requireAuth, asyncHandler(async (req, res) => {
   res.json({ success: true });
 }));
 
-// POST /api/settings/test/youtube (admin only)
 router.post('/test/youtube', requireAdmin, asyncHandler(async (req, res) => {
   const { testApiKey } = require('../services/youtubeService');
   const key = req.body.key || process.env.YOUTUBE_API_KEY;
@@ -180,7 +143,6 @@ router.post('/test/youtube', requireAdmin, asyncHandler(async (req, res) => {
   res.json(await testApiKey(key));
 }));
 
-// POST /api/settings/test/reddit (admin only)
 router.post('/test/reddit', requireAdmin, asyncHandler(async (req, res) => {
   const { testCredentials } = require('../services/redditService');
   if (req.body.client_id) process.env.REDDIT_CLIENT_ID = req.body.client_id;
@@ -188,7 +150,6 @@ router.post('/test/reddit', requireAdmin, asyncHandler(async (req, res) => {
   res.json(await testCredentials());
 }));
 
-// POST /api/settings/test/smtp (admin only)
 router.post('/test/smtp', requireAdmin, asyncHandler(async (req, res) => {
   const { testSmtp } = require('../services/emailService');
   const config = {
@@ -200,17 +161,14 @@ router.post('/test/smtp', requireAdmin, asyncHandler(async (req, res) => {
   res.json(await testSmtp(config));
 }));
 
-// GET /api/settings/inboxes (admin only)
 router.get('/inboxes', requireAdmin, asyncHandler(async (req, res) => {
   const { getInboxes } = require('../services/emailService');
   const inboxes = getInboxes().map((inbox, i) => ({
-    index: i + 1, email: inbox.email, from_name: inbox.from_name,
-    host: inbox.host, port: inbox.port, configured: true,
+    index: i + 1, email: inbox.email, from_name: inbox.from_name, host: inbox.host, port: inbox.port, configured: true,
   }));
   res.json({ success: true, inboxes, total: inboxes.length, capacity: inboxes.length * 150 });
 }));
 
-// POST /api/settings/inboxes (admin only)
 router.post('/inboxes', requireAdmin, asyncHandler(async (req, res) => {
   const { testSmtp, resetTransporter } = require('../services/emailService');
   const { email, from_name, host = 'smtp.gmail.com', port = 587, pass } = req.body;
@@ -232,7 +190,6 @@ router.post('/inboxes', requireAdmin, asyncHandler(async (req, res) => {
   res.json({ success: true, message: `Inbox ${email} saved (${inboxes.length} total).` });
 }));
 
-// DELETE /api/settings/inboxes/:email (admin only)
 router.delete('/inboxes/:email', requireAdmin, asyncHandler(async (req, res) => {
   const { resetTransporter } = require('../services/emailService');
   let inboxes = [];

@@ -104,29 +104,24 @@ async function scanSubreddits() {
 
         results.found++;
 
-        // Skip already-processed posts
-        const existing = db.prepare('SELECT id FROM buying_signals WHERE post_id=?').get(post.id);
+        const existing = await db.get('SELECT id FROM buying_signals WHERE post_id=?', [post.id]);
         if (existing) continue;
 
         const channelUrl = extractChannelUrl(fullText);
         const budget = extractBudget(fullText);
 
-        db.prepare(`
+        await db.run(`
           INSERT OR IGNORE INTO buying_signals
             (source, post_id, subreddit, post_title, post_body, post_url,
              channel_url, budget_mentioned, intent_classification, keywords_matched)
           VALUES ('reddit', ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(
-          post.id,
-          subreddit,
+        `, [
+          post.id, subreddit,
           post.title?.slice(0, 300) || '',
           (post.selftext || '').slice(0, 2000),
           `https://reddit.com${post.permalink}`,
-          channelUrl,
-          budget,
-          intent.classification,
-          JSON.stringify(intent.matched),
-        );
+          channelUrl, budget, intent.classification, JSON.stringify(intent.matched),
+        ]);
 
         results.saved++;
       }

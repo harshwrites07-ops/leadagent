@@ -54,21 +54,12 @@ async function scanCommunityPosts(channelIds) {
 
         if (hasHiringKeyword) {
           try {
-            const result = db.prepare(`
-              INSERT OR IGNORE INTO platform_signals
-              (creator_id, platform, signal_type, signal_text, signal_url, confidence)
-              VALUES (?, 'youtube_community', 'confirmed_hiring', ?, ?, 0.85)
-            `).run(
-              channelId,
-              text.substring(0, 500),
-              `https://youtube.com/channel/${channelId}/community`
+            const result = await db.run(
+              `INSERT OR IGNORE INTO platform_signals (creator_id, platform, signal_type, signal_text, signal_url, confidence) VALUES (?, 'youtube_community', 'confirmed_hiring', ?, ?, 0.85)`,
+              [channelId, text.substring(0, 500), `https://youtube.com/channel/${channelId}/community`]
             );
-
-            if (result.changes > 0) {
-              signalsFound++;
-              console.log(`[YT Community] Hiring signal found for ${channelId}`);
-            }
-          } catch (e) {}
+            if (result.changes > 0) { signalsFound++; console.log(`[YT Community] Hiring signal found for ${channelId}`); }
+          } catch {}
         }
       }
 
@@ -107,18 +98,12 @@ async function scanComments(channelId, videoIds) {
 
       if (negativeSignals >= 3) {
         try {
-          db.prepare(`
-            INSERT OR IGNORE INTO platform_signals
-            (creator_id, platform, signal_type, signal_text, signal_url, confidence)
-            VALUES (?, 'youtube_comments', 'behavioral', ?, ?, 0.65)
-          `).run(
-            channelId,
-            `${negativeSignals} comments mentioning quality issues`,
-            `https://youtube.com/watch?v=${videoId}`
+          await db.run(
+            `INSERT OR IGNORE INTO platform_signals (creator_id, platform, signal_type, signal_text, signal_url, confidence) VALUES (?, 'youtube_comments', 'behavioral', ?, ?, 0.65)`,
+            [channelId, `${negativeSignals} comments mentioning quality issues`, `https://youtube.com/watch?v=${videoId}`]
           );
-
           signalsFound++;
-        } catch (e) {}
+        } catch {}
       }
 
       await new Promise(r => setTimeout(r, 300));
@@ -132,13 +117,7 @@ async function scanComments(channelId, videoIds) {
 async function runAdvancedScan(limit = 50) {
   const db = getDb();
 
-  const leads = db.prepare(`
-    SELECT creator_id, channel_name
-    FROM quality_leads
-    WHERE intent_tier = 'HOT'
-    ORDER BY intent_score DESC
-    LIMIT ?
-  `).all(limit);
+  const leads = await db.all(`SELECT creator_id, channel_name FROM quality_leads WHERE intent_tier = 'HOT' ORDER BY intent_score DESC LIMIT ?`, [limit]);
 
   if (leads.length === 0) {
     console.log('[YT Advanced] No HOT leads to scan');

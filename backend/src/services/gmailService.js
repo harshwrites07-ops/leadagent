@@ -85,17 +85,14 @@ async function getRefreshedAuth(account) {
     expiry_date: account.token_expiry,
   });
 
-  // Refresh if expiring within 5 minutes
   if (account.token_expiry && Date.now() > account.token_expiry - 5 * 60 * 1000) {
     try {
       const { credentials } = await oauth2Client.refreshAccessToken();
-      getDb()
-        .prepare(`UPDATE gmail_accounts SET access_token=?, token_expiry=? WHERE id=?`)
-        .run(credentials.access_token, credentials.expiry_date, account.id);
+      await getDb().run(`UPDATE gmail_accounts SET access_token=?, token_expiry=? WHERE id=?`,
+        [credentials.access_token, credentials.expiry_date, account.id]);
       oauth2Client.setCredentials(credentials);
     } catch (e) {
-      // Mark as revoked if refresh fails
-      getDb().prepare(`UPDATE gmail_accounts SET status='revoked' WHERE id=?`).run(account.id);
+      await getDb().run(`UPDATE gmail_accounts SET status='revoked' WHERE id=?`, [account.id]);
       throw new Error(`Gmail token revoked for ${account.email} — user must reconnect`);
     }
   }
@@ -108,9 +105,7 @@ async function sendViaGmail(account, { to, subject, htmlBody, fromName }) {
   // Reset daily counter if needed
   const today = new Date().toISOString().split('T')[0];
   if (account.last_reset_date !== today) {
-    getDb()
-      .prepare(`UPDATE gmail_accounts SET emails_sent_today=0, last_reset_date=? WHERE id=?`)
-      .run(today, account.id);
+    await getDb().run(`UPDATE gmail_accounts SET emails_sent_today=0, last_reset_date=? WHERE id=?`, [today, account.id]);
     account.emails_sent_today = 0;
   }
 
@@ -151,30 +146,20 @@ async function sendViaGmail(account, { to, subject, htmlBody, fromName }) {
     throw apiErr;
   }
 
-  getDb()
-    .prepare(`UPDATE gmail_accounts SET emails_sent_today=emails_sent_today+1 WHERE id=?`)
-    .run(account.id);
+  await getDb().run(`UPDATE gmail_accounts SET emails_sent_today=emails_sent_today+1 WHERE id=?`, [account.id]);
 
   console.log(`[Gmail] Send success: ${account.email} → ${to}`);
   return { ok: true, sentFrom: account.email };
 }
 
-function getAccountsForUser(userId) {
-  return getDb()
-    .prepare('SELECT * FROM gmail_accounts WHERE user_id=? ORDER BY connected_at ASC')
-    .all(userId);
+async function getAccountsForUser(userId) {
+  return getDb().all('SELECT * FROM gmail_accounts WHERE user_id=? ORDER BY connected_at ASC', [userId]);
 }
 
-function pickAccountForUser(userId) {
+async function pickAccountForUser(userId) {
   const today = new Date().toISOString().split('T')[0];
-  // Reset stale daily counters first
-  getDb()
-    .prepare(`UPDATE gmail_accounts SET emails_sent_today=0, last_reset_date=? WHERE user_id=? AND (last_reset_date IS NULL OR last_reset_date != ?)`)
-    .run(today, userId, today);
-
-  return getDb()
-    .prepare(`SELECT * FROM gmail_accounts WHERE user_id=? AND status='active' AND emails_sent_today < ? ORDER BY emails_sent_today ASC LIMIT 1`)
-    .get(userId, GMAIL_DAILY_LIMIT);
+  await getDb().run(`UPDATE gmail_accounts SET emails_sent_today=0, last_reset_date=? WHERE user_id=? AND (last_reset_date IS NULL OR last_reset_date != ?)`, [today, userId, today]);
+  return getDb().get(`SELECT * FROM gmail_accounts WHERE user_id=? AND status='active' AND emails_sent_today < ? ORDER BY emails_sent_today ASC LIMIT 1`, [userId, GMAIL_DAILY_LIMIT]);
 }
 
 function getGmailLimit(plan) {

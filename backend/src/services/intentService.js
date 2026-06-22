@@ -348,12 +348,10 @@ function scoreMasterLead(ml) {
   let signal_source = null;
   try {
     const db = getDb();
-    const confirmedSignal = db.prepare(`
-      SELECT platform FROM platform_signals
-      WHERE creator_id = ? AND signal_type = 'confirmed_hiring'
-      ORDER BY confidence DESC LIMIT 1
-    `).get(ml.channel_id);
-    if (confirmedSignal) { is_confirmed = true; signal_source = confirmedSignal.platform; }
+    if (typeof db.prepare === 'function') {
+      const confirmedSignal = db.prepare(`SELECT platform FROM platform_signals WHERE creator_id = ? AND signal_type = 'confirmed_hiring' ORDER BY confidence DESC LIMIT 1`).get(ml.channel_id);
+      if (confirmedSignal) { is_confirmed = true; signal_source = confirmedSignal.platform; }
+    }
   } catch (e) {}
 
   return {
@@ -374,6 +372,8 @@ function scoreMasterLead(ml) {
  */
 function scoreWithPlatformSignals(creatorId, baseScore) {
   const db = getDb();
+
+  if (typeof db.prepare !== 'function') return baseScore;
 
   const signals = db.prepare(`
     SELECT platform, signal_type, confidence, budget_mentioned
