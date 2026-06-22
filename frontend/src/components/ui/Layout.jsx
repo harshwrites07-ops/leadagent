@@ -3,6 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
+import AssistantChat from './AssistantChat';
 import {
   LayoutDashboard, Search, BarChart2, Mail, Users,
   Zap, Star, TrendingUp, Settings, Shield, Bell,
@@ -170,13 +171,16 @@ export default function Layout({ children }) {
 
       {/* Ask Jack + user row */}
       <div style={{ padding: '12px 8px 8px', borderTop: '1px solid var(--line)', flexShrink: 0 }}>
-        <button style={{
-          width: '100%', display: 'flex', alignItems: 'center', gap: 8,
-          padding: '8px 12px', borderRadius: 8,
-          background: 'linear-gradient(135deg,rgba(200,246,84,0.1) 0%,rgba(200,246,84,0.05) 100%)',
-          border: '1px solid rgba(200,246,84,0.2)', color: 'var(--lime)',
-          fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 150ms', marginBottom: 8,
-        }}>
+        <button
+          onClick={() => window.dispatchEvent(new CustomEvent('jack:open'))}
+          style={{
+            width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+            padding: '8px 12px', borderRadius: 8,
+            background: 'linear-gradient(135deg,rgba(200,246,84,0.1) 0%,rgba(200,246,84,0.05) 100%)',
+            border: '1px solid rgba(200,246,84,0.2)', color: 'var(--lime)',
+            fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 150ms', marginBottom: 8,
+          }}
+        >
           <Sparkles size={13} />
           Ask Jack
           <span style={{ marginLeft: 'auto', fontFamily: 'var(--f-mono)', fontSize: 9, color: 'var(--text-4)', background: 'var(--surface-3)', padding: '2px 5px', borderRadius: 3 }}>⌘K</span>
@@ -381,6 +385,9 @@ export default function Layout({ children }) {
       </main>
 
       {/* ══ MOBILE BOTTOM NAV ════════════════════════════════════ */}
+      {/* ══ JACK AI CHAT ════════════════════════════════════════ */}
+      <AssistantChat />
+
       {isMobile && (
         <nav style={{
           position: 'fixed', bottom: 0, left: 0, right: 0,

@@ -130,6 +130,13 @@ export default function AssistantChat() {
     } catch {}
   }, [messages]);
 
+  // Listen for sidebar button click
+  useEffect(() => {
+    const handler = () => { setOpen(true); setMinimized(false); };
+    window.addEventListener('jack:open', handler);
+    return () => window.removeEventListener('jack:open', handler);
+  }, []);
+
   // ── Speech Recognition setup ─────────────────────────────────────────────────
   useEffect(() => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
