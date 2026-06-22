@@ -11,14 +11,25 @@ const axios = require('axios');
 function getCfg() {
   const url = (process.env.TURSO_DATABASE_URL || '').trim();
   const token = (process.env.TURSO_AUTH_TOKEN || '').trim();
-  console.log('[Turso] getCfg check:', {
+
+  console.log('[Turso] Environment check:', {
     hasUrl: !!url,
     hasToken: !!token,
-    urlPreview: url.substring(0, 30),
+    urlPreview: url ? url.substring(0, 40) : 'EMPTY',
+    tokenPreview: token ? token.substring(0, 10) : 'EMPTY',
+    nodeEnv: process.env.NODE_ENV,
+    allEnvKeys: Object.keys(process.env).filter(k => k.includes('TURSO')),
   });
-  if (!url || !token) return null;
-  // Convert libsql:// → https:// for HTTP API
-  return { base: url.replace(/^libsql:\/\//, 'https://'), token };
+
+  if (!url || !token) {
+    console.error('[Turso] MISSING CREDENTIALS - data will not persist!');
+    return null;
+  }
+
+  return {
+    base: url.replace(/^libsql:\/\//, 'https://'),
+    token,
+  };
 }
 
 function toArg(v) {
@@ -629,12 +640,44 @@ async function pullQualityLeadsFromTurso() {
 // ─────────────────────────────────────────────────────────────────
 
 async function syncAllOnBoot() {
-  console.log('[Turso] Starting boot sync...');
-  await pullUsersFromTurso();        // Auth works immediately
-  await pullFromTurso();             // master_leads restored
-  await pullQualityLeadsFromTurso(); // HOT quality leads restored
-  await pullUserLeadsFromTurso();    // Per-user leads restored
-  console.log('[Turso] Boot sync complete');
+  console.log('[Turso] ========= BOOT SYNC START =========');
+  console.log('[Turso] Checking credentials...');
+
+  const cfg = getCfg();
+
+  if (!cfg) {
+    console.error('[Turso] ❌ NO CREDENTIALS - SKIPPING ALL SYNC');
+    console.error('[Turso] Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN in Railway');
+    return;
+  }
+
+  console.log('[Turso] ✅ Credentials found - starting sync');
+
+  try {
+    console.log('[Turso] Pulling users...');
+    const users = await pullUsersFromTurso();
+    console.log(`[Turso] ✅ Users pulled: ${users}`);
+  } catch (e) {
+    console.error('[Turso] ❌ Users pull failed:', e.message);
+  }
+
+  try {
+    console.log('[Turso] Pulling master_leads...');
+    const leads = await pullFromTurso();
+    console.log(`[Turso] ✅ Master leads pulled: ${leads}`);
+  } catch (e) {
+    console.error('[Turso] ❌ Master leads pull failed:', e.message);
+  }
+
+  try {
+    console.log('[Turso] Pulling quality_leads...');
+    const quality = await pullQualityLeadsFromTurso();
+    console.log(`[Turso] ✅ Quality leads pulled: ${quality}`);
+  } catch (e) {
+    console.error('[Turso] ❌ Quality leads pull failed:', e.message);
+  }
+
+  console.log('[Turso] ========= BOOT SYNC COMPLETE =========');
 }
 
 module.exports = {
