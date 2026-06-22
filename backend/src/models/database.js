@@ -392,6 +392,9 @@ function initSchema() {
   // Unique index on channel_id for master_leads
   try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_master_leads_channel_id ON master_leads(channel_id) WHERE channel_id IS NOT NULL`); } catch {}
 
+  // Pitch signal type column
+  try { db.exec(`ALTER TABLE pitches ADD COLUMN signal_type TEXT`); } catch {}
+
   // Voice DNA / user profile columns
   try { db.exec(`ALTER TABLE users ADD COLUMN service_type TEXT`); } catch {}
   try { db.exec(`ALTER TABLE users ADD COLUMN one_liner TEXT`); } catch {}

@@ -186,6 +186,13 @@ function formatSubCount(n) {
   return String(n);
 }
 
+function formatNumber(n) {
+  if (!n) return '0';
+  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
+  if (n >= 1000) return `${(n / 1000).toFixed(0)}K`;
+  return n.toString();
+}
+
 const PITCH_SYSTEM_PROMPT = `You are a pitch writer for freelancers targeting YouTube creators.
 Write pitches that sound like a HUMAN wrote them. Not a robot. Not a marketing tool.
 
@@ -355,7 +362,7 @@ async function analyzeCrossPlatform(lead) {
   return result;
 }
 
-// ─── Step 4: Email prompt engine ─────────────────────────────────────────────
+// ─── Step 4: Signal detection + prompt engine ────────────────────────────────
 
 function daysAgoText(dateStr) {
   if (!dateStr) return 'recently';
@@ -367,41 +374,297 @@ function daysAgoText(dateStr) {
   return 'recently';
 }
 
-function buildMasterPrompt(lead, user, dna) {
-  const senderFirst  = dna?.name || (user?.full_name || '').split(' ')[0] || '';
-  const senderResult = dna?.socialProof || user?.best_result || '';
-  const niche        = lead.niche || 'general';
+function getServiceIntelligence(lead, voiceDNA) {
+  const {
+    channel_name,
+    subscriber_count = 0,
+    avg_views = 0,
+    recent_videos = [],
+    upload_frequency_days = 7,
+    last_upload_date,
+    niche,
+    channel_description = '',
+  } = lead;
 
-  const recentVideosList = (() => {
-    try {
-      const vids = JSON.parse(lead.recent_videos || '[]');
-      if (!vids.length) return '';
-      return vids.slice(0, 5).map((v, i) =>
-        `${i + 1}. "${v.title}" — ${formatSubCount(v.views || 0)} views`
-      ).join('\n');
-    } catch { return ''; }
-  })();
+  const service = (voiceDNA?.service || 'video editing').toLowerCase();
+  const isEditor = service.includes('edit');
+  const isThumbnail = service.includes('thumbnail');
+  const isWriter = service.includes('script') || service.includes('writ');
 
-  const daysSinceUpload = lead.last_upload_date
-    ? Math.floor((Date.now() - new Date(lead.last_upload_date)) / 86400000) : null;
+  let videos = [];
+  try {
+    videos = typeof recent_videos === 'string'
+      ? JSON.parse(recent_videos)
+      : (recent_videos || []);
+  } catch { videos = []; }
 
-  return `Write a cold pitch email for this YouTube creator. Follow all rules in your system instructions.
+  const signals = [];
 
-CHANNEL: ${lead.channel_name}
-Subscribers: ${formatSubCount(lead.subscriber_count || 0)}
-Niche: ${niche}
-Avg views per video: ${formatSubCount(lead.avg_views || 0)}
-${daysSinceUpload !== null ? `Days since last upload: ${daysSinceUpload}` : ''}
-Bio: ${(lead.channel_description || '').slice(0, 150) || 'not available'}
+  // SIGNAL 1: Upload gap
+  const daysSinceUpload = last_upload_date
+    ? Math.floor((Date.now() - new Date(last_upload_date)) / 86400000)
+    : null;
 
-RECENT VIDEOS:
-${recentVideosList || '(no video data — use subscriber/view context only)'}
+  if (daysSinceUpload !== null && daysSinceUpload > 21) {
+    signals.push({
+      priority: 10,
+      type: 'upload_gap',
+      hook: `${channel_name} hasn't uploaded in ${daysSinceUpload} days`,
+      angle: daysSinceUpload > 60
+        ? `A ${Math.round(daysSinceUpload / 30)}-month gap usually means one thing — the workload caught up with them. Everything else in their life is fine. Just the channel got too heavy to carry alone.`
+        : `3-week gaps are almost always the same story — they're editing their own content and it's eating their entire week.`,
+      openingLine: daysSinceUpload > 60
+        ? `${daysSinceUpload} days without a video.`
+        : `Last upload was ${daysSinceUpload} days ago.`,
+    });
+  }
 
-SENDER NAME (use as signature): ${senderFirst || 'Your Name'}
-SOCIAL PROOF: ${senderResult ? `"${senderResult}"` : `Make up a plausible specific result for a ${niche} creator — one before/after number`}
+  // SIGNAL 2: Specific video performance drop
+  if (videos.length >= 4) {
+    const sorted = [...videos].sort((a, b) => (b.views || 0) - (a.views || 0));
+    const best = sorted[0];
+    const recent3 = videos.slice(-3);
+    const recentAvg = recent3.reduce((s, v) => s + (v.views || 0), 0) / recent3.length;
+    const dropPct = best.views > 0
+      ? Math.round(((best.views - recentAvg) / best.views) * 100)
+      : 0;
 
-Build the email around the MOST striking observation from this channel's data. Output JSON only — no markdown, no explanation:
-{"subject":"subject line max 8 words with one specific data point","body":"4-sentence email body\\n\\n[sender first name]","pitch_score":85}`;
+    if (dropPct > 30 && best.title) {
+      signals.push({
+        priority: 9,
+        type: 'video_drop',
+        hook: `"${best.title.substring(0, 50)}" got ${formatNumber(best.views)} views. Last 3 averaged ${formatNumber(Math.round(recentAvg))}.`,
+        angle: `That ${dropPct}% drop between their best video and recent ones isn't about topics or the algorithm. It's almost always pacing and hook structure in the edit.`,
+        openingLine: `"${best.title.substring(0, 45)}" hit ${formatNumber(best.views)}.`,
+      });
+    }
+  }
+
+  // SIGNAL 3: Subscriber-to-view gap
+  const viewToSubRatio = subscriber_count > 0
+    ? ((avg_views / subscriber_count) * 100).toFixed(1)
+    : 0;
+
+  if (viewToSubRatio > 0 && viewToSubRatio < 8 && subscriber_count > 30000) {
+    const bestVideo = videos.length > 0
+      ? videos.reduce((best, v) => (v.views || 0) > (best.views || 0) ? v : best, videos[0])
+      : null;
+    const bestTitle = bestVideo?.title?.substring(0, 40) || null;
+
+    signals.push({
+      priority: 8,
+      type: 'ratio_gap',
+      hook: bestTitle
+        ? `${formatNumber(subscriber_count)} subscribers but "${bestTitle}..." only got ${formatNumber(bestVideo.views)} views.`
+        : `${formatNumber(subscriber_count)} subscribers, ${formatNumber(Math.round(avg_views))} average views — ${viewToSubRatio}% view rate.`,
+      angle: `That ${viewToSubRatio}% ratio tells me their subscribers want to watch, but something in the first 30 seconds of each video is losing them. Hook structure is almost always the fix.`,
+      openingLine: bestTitle
+        ? `"${bestTitle}..." underperformed for ${formatNumber(subscriber_count)} subscribers.`
+        : `${viewToSubRatio}% of ${formatNumber(subscriber_count)} subscribers are watching.`,
+    });
+  }
+
+  // SIGNAL 4: Viral gap
+  if (videos.length >= 2) {
+    const highPotentialKeywords = [
+      'million', 'quit', 'fired', 'broke', 'failed', 'honest',
+      'truth', 'secret', 'never', 'worst', 'best', 'how i',
+      'why i', 'story', 'exposed', 'viral',
+    ];
+    const viralVideo = videos.find(v =>
+      highPotentialKeywords.some(kw => (v.title || '').toLowerCase().includes(kw))
+      && (v.views || 0) > avg_views * 1.5
+    );
+    const normalVideos = videos.filter(v => v !== viralVideo && (v.views || 0) < avg_views);
+    if (viralVideo && normalVideos.length >= 2) {
+      const normalAvg = normalVideos.reduce((s, v) => s + (v.views || 0), 0) / normalVideos.length;
+      signals.push({
+        priority: 7,
+        type: 'viral_gap',
+        hook: `"${viralVideo.title?.substring(0, 45)}" got ${formatNumber(viralVideo.views)}. Regular videos average ${formatNumber(Math.round(normalAvg))}.`,
+        angle: `The viral video proves the audience exists and wants their content. The gap between that and regular videos is almost always in how the first 90 seconds is structured.`,
+        openingLine: `"${viralVideo.title?.substring(0, 40)}" proved the audience is there.`,
+      });
+    }
+  }
+
+  // SIGNAL 5: Upload frequency slowdown
+  if (upload_frequency_days > 14 && upload_frequency_days < 60) {
+    signals.push({
+      priority: 6,
+      type: 'frequency_slow',
+      hook: `${channel_name} is averaging 1 video every ${Math.round(upload_frequency_days)} days`,
+      angle: `Most creators at this posting frequency aren't choosing to post less. They're editing their own content and it takes their entire week. There's no time left to film.`,
+      openingLine: `One video every ${Math.round(upload_frequency_days)} days.`,
+    });
+  }
+
+  // SIGNAL 6: Hiring keyword in description (HIGHEST PRIORITY)
+  const descLower = (channel_description || '').toLowerCase();
+  const hiringKeywords = ['looking for', 'hiring', 'need a', 'editor wanted', 'join my team', 'collab'];
+  const hiringMatch = hiringKeywords.find(kw => descLower.includes(kw));
+  if (hiringMatch) {
+    signals.push({
+      priority: 11,
+      type: 'confirmed_hiring',
+      hook: `${channel_name}'s channel description says "${hiringMatch}"`,
+      angle: `They're already looking. They just haven't found the right person yet.`,
+      openingLine: `Saw that you're looking for help with your channel.`,
+    });
+  }
+
+  signals.sort((a, b) => b.priority - a.priority);
+  const bestSignal = signals[0] || {
+    type: 'growth_opportunity',
+    hook: `${channel_name} is averaging ${formatNumber(Math.round(avg_views))} views with ${formatNumber(subscriber_count)} subscribers`,
+    angle: `There's almost always 20-30% more views sitting in the edit that never get unlocked.`,
+    openingLine: `Noticed ${channel_name}'s channel.`,
+  };
+
+  return {
+    signal: bestSignal,
+    videos: videos.slice(0, 5),
+    daysSinceUpload,
+    viewToSubRatio,
+    service,
+    isEditor, isThumbnail, isWriter,
+  };
+}
+
+function buildMasterPrompt(lead, voiceDNA, intelligence) {
+  const { signal, videos, daysSinceUpload, service } = intelligence;
+  const voice = voiceDNA || {};
+
+  const videoContext = videos.length > 0
+    ? videos.map((v, i) =>
+        `${i + 1}. "${v.title || 'Untitled'}" — ${formatNumber(v.views || 0)} views`
+      ).join('\n')
+    : 'No recent video data available';
+
+  const senderName = voice.name || voice.fullName?.split(' ')[0] || 'Alex';
+  const senderService = voice.service || 'video editing';
+  const senderProof = voice.socialProof || voice.best_result || null;
+  const senderStyle = voice.communicationStyle || 'direct and conversational';
+  const senderGoal = voice.outreachGoal || 'book_call';
+
+  const ctaOptions = {
+    book_call: [
+      'Worth a 15-minute call to see if it makes sense?',
+      'Want to see what the fix looks like for your channel specifically?',
+      'Open to a quick call this week?',
+      'Worth exploring?',
+    ],
+    send_portfolio: [
+      'Want me to send over some examples?',
+      'Happy to share what this looked like for similar channels.',
+      'Want to see the before/after?',
+    ],
+    get_reply: ['Thoughts?', 'Does this sound familiar?', 'Know what I mean?'],
+  };
+
+  const ctaList = ctaOptions[senderGoal] || ctaOptions.book_call;
+  const cta = ctaList[Math.floor(Math.random() * ctaList.length)];
+
+  return `You are ${senderName}, a ${senderService} specialist writing a cold email to a YouTube creator.
+
+YOUR WRITING IDENTITY:
+- Name: ${senderName}
+- Service: ${senderService}
+- Communication style: ${senderStyle}
+${senderProof ? `- Your best result: "${senderProof}"` : ''}
+- Goal of this email: ${senderGoal === 'book_call' ? 'Get them to agree to a 15-minute call' : 'Get a reply'}
+
+CREATOR YOU ARE WRITING TO:
+- Channel: ${lead.channel_name}
+- Subscribers: ${formatNumber(lead.subscriber_count)}
+- Average views: ${formatNumber(Math.round(lead.avg_views || 0))}
+- Niche: ${lead.niche || 'general'}
+${daysSinceUpload ? `- Days since last upload: ${daysSinceUpload}` : ''}
+${lead.channel_description ? `- Channel description: "${(lead.channel_description || '').substring(0, 300)}"` : ''}
+
+THEIR RECENT VIDEOS (use these titles - this is gold):
+${videoContext}
+
+THE SPECIFIC SIGNAL YOU FOUND:
+${signal.hook}
+Why this matters: ${signal.angle}
+Start with this opening: "${signal.openingLine}"
+
+PERFECT EMAIL EXAMPLES TO LEARN FROM:
+These are real emails that got replies. Study the TONE not the template:
+
+Example 1 (upload gap signal):
+Subject: 34 days
+Body: Last upload was 34 days ago.
+That usually means one thing — you're editing your own content and it's eating every hour you have.
+Helped a finance creator cut edit time from 12 hours to 2. They went from 1 upload/month to 5.
+Worth a 15-minute call to see if something similar makes sense for you?
+[Name]
+
+Example 2 (view drop signal):
+Subject: "How I Made $0" got 847K. Last 3 averaged 41K.
+Body: "How I Made $0 Dropshipping" hit 847K views.
+Your last 3 videos averaged 41K.
+The difference is almost always in the first 60 seconds — hook structure and pacing.
+Fixed this for a business creator. Next video did 312K.
+Want to see what changed?
+[Name]
+
+Example 3 (subscriber ratio signal):
+Subject: 2.1M subs, 67K average views
+Body: 2.1M subscribers watching 67K videos means 96% of your audience is choosing not to click.
+That's not a topic problem. It's a thumbnail and hook problem.
+Redesigned thumbnails for a creator your size — CTR went from 2.1% to 6.8% in 30 days.
+Worth exploring?
+[Name]
+
+Example 4 (confirmed hiring signal):
+Subject: Saw you're looking for an editor
+Body: Noticed you're looking for help with your channel.
+I work with ${lead.niche || 'content'} creators specifically — helped one go from 80K to 240K views per video by fixing the edit structure.
+Happy to share some examples if you want to see if the style matches what you're looking for.
+[Name]
+
+Example 5 (viral gap signal):
+Subject: One video proved the audience is there
+Body: "Why I Left Google" hit 2.3M views.
+Your last 5 averaged 44K.
+The viral video proved people want your content. The gap is in how the regular videos are structured in the first 90 seconds.
+Worked on this exact problem with a tech creator. Their "normal" videos now average 340K.
+Want to see what the fix looked like?
+[Name]
+
+STRICT RULES:
+1. Maximum 4 sentences in the body (NOT including sign-off)
+2. Total word count: 50-80 words in body
+3. Never write numbers like "2,590,000" — write "2.59M"
+4. Never use these words: "metrics", "analytics", "ratio", "conversion", "leverage", "synergy", "reach out", "touch base", "circle back", "hope this finds you", "I wanted to", "My name is"
+5. Subject line: MAX 8 words, must be specific, no clickbait
+6. First sentence must be the specific observation — no intro, no "Hi I'm..."
+7. Second sentence: what this usually means (show you understand their situation)
+8. Third sentence: one specific proof point with a real number
+9. Fourth sentence: ONE soft CTA question
+10. Sign with just: ${senderName}
+11. Never explain what you do in the first sentence
+12. Make it feel like you spent 30 minutes studying their specific channel
+13. If you have video titles — USE THEM. A specific title in the subject line gets 3x more opens.
+
+WHAT MAKES A REPLY-WORTHY EMAIL:
+- Specific (mentions their actual video title or exact number)
+- Empathetic (shows you understand their struggle, not just their stats)
+- Proof (one specific result you got for someone similar)
+- Short (creator reads in 15 seconds)
+- Curious (makes them wonder "how do they know this?")
+
+OUTPUT FORMAT — respond with ONLY valid JSON, nothing else:
+{
+  "subject": "subject line here (max 8 words)",
+  "body": "full email body here",
+  "pitch_score": 85,
+  "word_count": 72,
+  "signal_used": "${signal.type}",
+  "opening_hook": "${signal.openingLine}"
+}`;
 }
 
 // ─── Step 5: Quality scorer ───────────────────────────────────────────────────
@@ -605,73 +868,207 @@ function failsValidation(subject, body) {
   return null; // passes
 }
 
-// ─── MAIN: generateFullPitch v2 ───────────────────────────────────────────────
+// ─── MAIN: generateFullPitch v3 — Sonnet + signal detection engine ────────────
 async function generateFullPitch(lead, userId = null) {
-  const ctx   = buildRichCreatorContext(lead);
-  const psych = buildPsychologyProfile(lead, ctx);
+  const db = getDb();
 
-  // Load user + DNA for new prompt
-  let user = null, dna = null;
+  // Get user's voice DNA
+  let voiceDNA = {};
+  let nameWarning = null;
   try {
-    const { getOrBuildVoiceDNA } = require('./voiceDNA');
-    user = getDb().prepare('SELECT * FROM users WHERE id=?').get(userId || lead.user_id);
-    dna  = await getOrBuildVoiceDNA(userId || lead.user_id);
-  } catch {}
-
-  const senderName = dna?.name || (user?.full_name || '').split(' ')[0] || '';
-  const nameWarning = !senderName ? 'Please set your name in Settings → Voice Profile first' : null;
-
-  const prompt = buildMasterPrompt(lead, user, dna);
-
-  let bestResult = null;
-  let bestScore  = 0;
-  const MAX_ATTEMPTS = 3;
-  const PASS_SCORE   = 80; // require 80+ before stopping early
-
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    const raw = await complete(prompt, PITCH_SYSTEM_PROMPT, 900);
-    if (!raw) break;
-
-    const parsed = parsePitchResponseV2(raw, lead);
-    if (!parsed) { console.log(`[PitchV2] Attempt ${attempt+1} — parse failed`); continue; }
-
-    // Validation gate — regenerate on bad patterns
-    const fail = failsValidation(parsed.email_subject, parsed.email_body);
-    if (fail) {
-      console.log(`[PitchV2] Attempt ${attempt+1} failed: ${fail}`);
-      if (attempt < MAX_ATTEMPTS - 1) continue;
+    const user = db.prepare('SELECT voice_dna, full_name FROM users WHERE id = ?').get(userId);
+    voiceDNA = user?.voice_dna ? JSON.parse(user.voice_dna) : {};
+    if (!voiceDNA.name && user?.full_name) {
+      voiceDNA.name = user.full_name.split(' ')[0];
     }
-
-    const detailedScore = scoreEmailDetailed(parsed.email_subject, parsed.email_body);
-    // Trust Gemini's self-score more now that we demand 80+ in the prompt
-    const geminiScore   = parsed.pitch_score || parsed.quality_score || 50;
-    const finalScore    = Math.round((detailedScore * 0.4) + (geminiScore * 0.6));
-    console.log(`[PitchV2] Attempt ${attempt+1}/${MAX_ATTEMPTS} — score ${finalScore}/100 for ${lead.channel_name}`);
-
-    if (finalScore > bestScore) {
-      bestScore  = finalScore;
-      bestResult = { ...parsed, pitch_score: finalScore };
-    }
-    if (finalScore >= PASS_SCORE) break; // good enough — ship it
+  } catch (e) {
+    console.error('[Pitch] Error loading voice DNA:', e.message);
   }
 
-  if (!bestResult) {
-    console.warn('[PitchV2] All AI attempts failed — using fallback for', lead.channel_name);
+  if (!voiceDNA.name || !voiceDNA.service) {
+    console.warn(`[Pitch] User ${userId} has incomplete voice DNA — pitch quality will be lower`);
+    if (!voiceDNA.name) nameWarning = 'Please set your name in Settings → Voice Profile first';
+  }
+
+  // Signal detection + prompt build
+  const intelligence = getServiceIntelligence(lead, voiceDNA);
+  const prompt = buildMasterPrompt(lead, voiceDNA, intelligence);
+
+  console.log(`[Pitch] Signal: ${intelligence.signal.type} for ${lead.channel_name}`);
+
+  // Generate with Sonnet (with Gemini fallback)
+  let result = null;
+  const MAX_ATTEMPTS = 3;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      let raw = null;
+      if (process.env.ANTHROPIC_API_KEY) {
+        raw = await completeWithClaude(prompt, '', 1000, 'claude-sonnet-4-6');
+      }
+      if (!raw) raw = await completeSmart(prompt, '', 1000);
+      if (!raw) throw new Error('No AI response');
+
+      const cleaned = raw.replace(/```json/g, '').replace(/```/g, '').trim();
+      const parsed = JSON.parse(cleaned);
+      if (parsed.subject && parsed.body) {
+        result = parsed;
+        break;
+      }
+    } catch (e) {
+      console.error(`[Pitch] Attempt ${attempt} failed:`, e.message);
+      if (attempt === MAX_ATTEMPTS) {
+        try {
+          let raw = null;
+          const fallbackPrompt = prompt + '\n\nIMPORTANT: Respond with ONLY the JSON object. No other text.';
+          if (process.env.ANTHROPIC_API_KEY) {
+            raw = await completeWithClaude(fallbackPrompt, '', 800, 'claude-sonnet-4-6');
+          }
+          if (!raw) raw = await completeSmart(fallbackPrompt, '', 800);
+          if (raw) {
+            const match = raw.match(/\{[\s\S]*\}/);
+            if (match) result = JSON.parse(match[0]);
+          }
+        } catch {}
+      }
+    }
+  }
+
+  if (!result) {
+    console.warn('[Pitch] All attempts failed — using fallback for', lead.channel_name);
     return buildFallback(lead, userId);
   }
 
-  // Generate follow-up sequence (non-blocking)
-  generateFollowUpSequence(lead, bestResult, psych)
-    .then(followUps => { bestResult.follow_ups = followUps; })
-    .catch(() => {});
+  // Generate 2 alternative subject lines (A/B testing)
+  const altSubjectPrompt = `Generate 2 alternative subject lines for this email.
+Channel: ${lead.channel_name}
+Current subject: "${result.subject}"
+Signal: ${intelligence.signal.hook}
+
+Rules:
+- Max 8 words each
+- Must be specific (include a number or video title)
+- Different angle than current subject
+- No clickbait
+
+Respond with ONLY JSON:
+{"alt1": "subject here", "alt2": "subject here"}`;
+
+  try {
+    let altRaw = null;
+    if (process.env.ANTHROPIC_API_KEY) {
+      altRaw = await completeWithClaude(altSubjectPrompt, '', 200, 'claude-sonnet-4-6');
+    }
+    if (!altRaw) altRaw = await complete(altSubjectPrompt, '', 200);
+    if (altRaw) {
+      const alts = JSON.parse(altRaw.replace(/```json|```/g, '').trim());
+      result.alt_subjects = [alts.alt1, alts.alt2].filter(Boolean);
+    }
+  } catch {
+    result.alt_subjects = [];
+  }
+
+  // Score quality
+  const qualityScore = scorePitchQuality(result, lead, intelligence);
+  result.pitch_score = qualityScore;
+  result.signal_used = intelligence.signal.type;
+
+  console.log(`[Pitch] Score ${qualityScore}/100 | Signal: ${result.signal_used} | ${lead.channel_name}`);
+
+  // Save to database
+  try {
+    db.prepare(`
+      INSERT OR REPLACE INTO pitches
+      (lead_id, user_id, email_subject, cold_email, subject_variants, pitch_score, signal_type, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `).run(
+      lead.id,
+      userId,
+      result.subject,
+      result.body,
+      JSON.stringify(result.alt_subjects || []),
+      result.pitch_score,
+      result.signal_used,
+    );
+  } catch (e) {
+    console.error('[Pitch] Error saving pitch:', e.message);
+  }
 
   return {
-    ...bestResult,
-    email_subject:    bestResult.email_subject || bestResult.subject,
-    email_body:       bestResult.email_body    || bestResult.body,
-    subject_variants: bestResult.subject_variants || [],
-    name_warning:     nameWarning,
+    subject: result.subject,
+    body: result.body,
+    pitch_score: result.pitch_score,
+    signal_used: result.signal_used,
+    alt_subjects: result.alt_subjects || [],
+    word_count: result.word_count,
+    // Backward compat fields for PitchGenerator.jsx normalizePitch
+    email_subject: result.subject,
+    cold_email_body: result.body,
+    cold_email: result.body,
+    subject_variants: result.alt_subjects || [],
+    name_warning: nameWarning,
+    follow_ups: [],
   };
+}
+
+// ─── Pitch quality scorer ──────────────────────────────────────────────────────
+function scorePitchQuality(pitch, lead, intelligence) {
+  let score = 50;
+
+  const { subject, body } = pitch;
+  const bodyWords = body?.split(' ').length || 0;
+  const subjectWords = subject?.split(' ').length || 0;
+
+  if (body?.includes(lead.channel_name)) score += 5;
+
+  const videos = intelligence.videos || [];
+  const titleMentioned = videos.some(v =>
+    v.title && body?.toLowerCase().includes(v.title.toLowerCase().substring(0, 20))
+  );
+  if (titleMentioned) score += 15;
+
+  const hasNumbers = /\d+K|\d+M|\d+%|\d+ days/.test(body || '');
+  if (hasNumbers) score += 10;
+
+  if (bodyWords >= 45 && bodyWords <= 90) score += 10;
+  else if (bodyWords > 90) score -= 10;
+  else if (bodyWords < 40) score -= 15;
+
+  if (subjectWords >= 3 && subjectWords <= 8) score += 5;
+  else score -= 5;
+
+  const badPhrases = [
+    'hope this finds you', 'my name is', 'i wanted to reach out',
+    'touch base', 'circle back', 'leverage', 'synergy', 'analytics', 'metrics',
+  ];
+  const badCount = badPhrases.filter(p => body?.toLowerCase().includes(p)).length;
+  score -= badCount * 8;
+
+  if (intelligence.signal.type === 'confirmed_hiring') score += 20;
+  if (intelligence.signal.type === 'video_drop') score += 10;
+  if (intelligence.signal.type === 'viral_gap') score += 10;
+  if (intelligence.signal.type === 'upload_gap') score += 8;
+  if (intelligence.signal.type === 'growth_opportunity') score -= 10;
+
+  if (body?.trim().endsWith('?')) score += 8;
+
+  const hasProof = /\d+[KM]?\s*(views|subs|subscribers|upload|video)/i.test(body || '');
+  if (hasProof) score += 8;
+
+  return Math.min(Math.max(score, 0), 100);
+}
+
+// ─── Bulk pitch quality filter ────────────────────────────────────────────────
+async function generateAndValidatePitch(lead, userId, minScore = 60) {
+  let pitch = await generateFullPitch(lead, userId);
+
+  if (pitch.pitch_score < minScore) {
+    console.log(`[Pitch] Score ${pitch.pitch_score} below ${minScore} threshold, regenerating...`);
+    const retry = await generateFullPitch(lead, userId);
+    if (retry.pitch_score > pitch.pitch_score) pitch = retry;
+  }
+
+  return pitch;
 }
 
 // ─── ContentCrafterzz Agency Context (preserved for other functions) ──────────
@@ -1234,6 +1631,8 @@ module.exports = {
   completeSmart,
   checkAiAvailability,
   generateFullPitch,
+  generateAndValidatePitch,
+  scorePitchQuality,
   deepStudyLead,
   generateOffer,
   generateColdEmail,

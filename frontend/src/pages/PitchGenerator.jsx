@@ -51,12 +51,30 @@ export default function PitchGenerator() {
   const [currentStep, setCurrentStep] = useState(null);
   const [completedSteps, setCompletedSteps] = useState(new Set());
 
+  // Voice profile check
+  const [userHasVoiceProfile, setUserHasVoiceProfile] = useState(true);
+
   // Editing
   const [emailSubject, setEmailSubject] = useState('');
   const [emailBody, setEmailBody] = useState('');
   const [selectedVariant, setSelectedVariant] = useState(0);
   const [selectedSubj, setSelectedSubj] = useState(0);
   const [rescoring, setRescoring] = useState(false);
+
+  // Copy to clipboard helper
+  const copyToClipboard = text => {
+    navigator.clipboard.writeText(text).then(() => toast.success('Copied!')).catch(() => {});
+  };
+
+  // Check voice profile completeness
+  useEffect(() => {
+    api.get('/user/profile')
+      .then(res => {
+        const dna = res.data?.voice_dna || {};
+        setUserHasVoiceProfile(!!(dna.name && dna.service));
+      })
+      .catch(() => setUserHasVoiceProfile(false));
+  }, []);
 
   // Load leads
   useEffect(() => {
@@ -540,9 +558,30 @@ export default function PitchGenerator() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.35, ease: [0.16,1,0.3,1] }}
-                className="grid"
-                style={{ gridTemplateColumns: '1fr 1.4fr', gap: 20 }}
               >
+              {!userHasVoiceProfile && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  style={{
+                    padding: '12px 16px',
+                    background: 'rgba(255,209,102,0.08)',
+                    border: '1px solid rgba(255,209,102,0.25)',
+                    borderRadius: 10, marginBottom: 16,
+                    display: 'flex', alignItems: 'center', gap: 10,
+                  }}
+                >
+                  <span style={{ fontSize: 16 }}>⚠️</span>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--warn)' }}>Voice profile incomplete</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-3)' }}>
+                      Pitches won't have your name or style.{' '}
+                      <a href="/settings" style={{ color: 'var(--lime)' }}>Set up Voice Profile →</a>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+              <div className="grid" style={{ gridTemplateColumns: '1fr 1.4fr', gap: 20 }}>
                 {/* LEFT: brief + variants */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                   {/* Brief card */}
@@ -657,6 +696,46 @@ export default function PitchGenerator() {
                       </div>
                     </div>
                     <div className="card__body">
+                      {/* Signal type badge */}
+                      {pitch.signal_used && (
+                        <div style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 6,
+                          background: 'var(--lime-soft)',
+                          border: '1px solid var(--lime-border)',
+                          borderRadius: 6, padding: '4px 10px',
+                          fontSize: 10, fontWeight: 700,
+                          color: 'var(--lime)',
+                          fontFamily: 'var(--f-mono)',
+                          letterSpacing: '0.5px',
+                          marginBottom: 12,
+                        }}>
+                          {pitch.signal_used === 'confirmed_hiring' && '🎯 CONFIRMED HIRING SIGNAL'}
+                          {pitch.signal_used === 'video_drop' && '📉 VIDEO DROP DETECTED'}
+                          {pitch.signal_used === 'upload_gap' && '⏰ UPLOAD GAP DETECTED'}
+                          {pitch.signal_used === 'viral_gap' && '🚀 VIRAL GAP DETECTED'}
+                          {pitch.signal_used === 'ratio_gap' && '📊 VIEW RATIO SIGNAL'}
+                          {pitch.signal_used === 'frequency_slow' && '🐢 FREQUENCY SIGNAL'}
+                          {pitch.signal_used === 'growth_opportunity' && '⚠️ GENERIC (improve lead data)'}
+                        </div>
+                      )}
+
+                      {/* Quality score */}
+                      {pitch.pitch_score != null && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                          <span style={{ fontSize: 11, color: 'var(--text-3)' }}>Quality Score</span>
+                          <span style={{
+                            fontSize: 20, fontWeight: 900,
+                            fontFamily: 'var(--f-mono)',
+                            color: pitch.pitch_score >= 80 ? 'var(--ok)' :
+                                   pitch.pitch_score >= 60 ? 'var(--lime)' :
+                                   pitch.pitch_score >= 40 ? 'var(--warn)' : 'var(--bad)',
+                          }}>
+                            {pitch.pitch_score}
+                          </span>
+                          <span style={{ fontSize: 10, color: 'var(--text-4)' }}>/100</span>
+                        </div>
+                      )}
+
                       <div className="muted" style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>
                         Subject {subjects.length > 1 ? `(${subjects.length} A/B variants)` : ''}
                       </div>
@@ -705,6 +784,38 @@ export default function PitchGenerator() {
                           style={{ resize: 'vertical', fontFamily: 'var(--f-mono)', fontSize: 11, lineHeight: 1.7, width: '100%', boxSizing: 'border-box' }}
                         />
                       </div>
+
+                      {/* Alternative subject lines (A/B testing) */}
+                      {pitch.alt_subjects?.length > 0 && (
+                        <div style={{ marginTop: 16 }}>
+                          <div style={{
+                            fontSize: 10, fontWeight: 700,
+                            color: 'var(--text-4)', fontFamily: 'var(--f-mono)',
+                            letterSpacing: '0.5px', marginBottom: 8,
+                            textTransform: 'uppercase',
+                          }}>
+                            Alternative Subject Lines
+                          </div>
+                          {pitch.alt_subjects.map((s, i) => (
+                            <div key={i}
+                              style={{
+                                padding: '8px 12px',
+                                background: 'var(--surface-2)',
+                                border: '1px solid var(--line)',
+                                borderRadius: 6, marginBottom: 6,
+                                fontSize: 12, color: 'var(--text-2)',
+                                cursor: 'pointer',
+                                transition: 'all 150ms',
+                              }}
+                              onClick={() => copyToClipboard(s)}
+                              onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--lime-border)'}
+                              onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--line)'}
+                            >
+                              {s} <span style={{ fontSize: 10, color: 'var(--text-4)' }}>(click to copy)</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
 
                       {pitch.pitch_feedback && (
                         <motion.div
@@ -785,6 +896,7 @@ export default function PitchGenerator() {
                     </motion.button>
                   </div>
                 </div>
+              </div>
               </motion.div>
             )}
           </AnimatePresence>
