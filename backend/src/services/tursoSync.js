@@ -11,6 +11,11 @@ const axios = require('axios');
 function getCfg() {
   const url = (process.env.TURSO_DATABASE_URL || '').trim();
   const token = (process.env.TURSO_AUTH_TOKEN || '').trim();
+  console.log('[Turso] getCfg check:', {
+    hasUrl: !!url,
+    hasToken: !!token,
+    urlPreview: url.substring(0, 30),
+  });
   if (!url || !token) return null;
   // Convert libsql:// → https:// for HTTP API
   return { base: url.replace(/^libsql:\/\//, 'https://'), token };
