@@ -163,6 +163,9 @@ app.get('/api/track/open/:trackingId', (req, res, next) => {
   emailsRouter(req, res, next);
 });
 
+// Debug route (public — no auth needed, remove after diagnosis)
+app.use('/api', require('./src/routes/debug'));
+
 // Public auth routes (no requireAuth)
 app.use('/api/auth', require('./src/routes/auth'));
 
