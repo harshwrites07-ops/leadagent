@@ -282,8 +282,14 @@ function _initSqliteSchema(db) {
     UNIQUE(user_id, email)
   )`);
 
-  // Migrations
-  const alterTry = (sql) => { try { db.exec(sql); } catch {} };
+  // Migrations — silently skip "column already exists" errors, log anything else
+  const alterTry = (sql) => {
+    try { db.exec(sql); } catch (e) {
+      const msg = e.message || '';
+      const expected = msg.includes('already exists') || msg.includes('duplicate column') || msg.includes('no such table') || msg.includes('already an index');
+      if (!expected) console.warn('[DB Migration] Unexpected error:', msg, '| SQL:', sql.slice(0, 80));
+    }
+  };
   alterTry(`ALTER TABLE emails ADD COLUMN from_email TEXT`);
   alterTry(`ALTER TABLE leads ADD COLUMN follow_up_count INTEGER DEFAULT 0`);
   alterTry(`ALTER TABLE leads ADD COLUMN last_contacted_date TEXT`);
