@@ -170,7 +170,7 @@ export default function Settings() {
 
   const loadBilling = async () => {
     try {
-      const res = await api.get('/stripe/subscription');
+      const res = await api.get('/razorpay/subscription');
       setBilling(res.data);
     } catch {}
   };
@@ -227,13 +227,15 @@ export default function Settings() {
     } catch (e) { toast.error(e.message); }
   };
 
-  const openPortal = async () => {
+  const cancelSubscription = async () => {
     setLoadingPortal(true);
     try {
-      const res = await api.post('/stripe/create-portal');
-      window.location.href = res.data.url;
+      await api.post('/razorpay/cancel-subscription');
+      toast.success('Subscription will cancel at end of billing cycle');
+      loadBilling();
     } catch (e) {
-      toast.error(e.response?.data?.error || 'Failed to open billing portal');
+      toast.error(e.response?.data?.error || 'Failed to cancel subscription');
+    } finally {
       setLoadingPortal(false);
     }
   };
@@ -241,8 +243,49 @@ export default function Settings() {
   const startCheckout = async (planKey) => {
     setLoadingCheckout(planKey);
     try {
-      const res = await api.post('/stripe/create-checkout', { plan: planKey });
-      window.location.href = res.data.url;
+      const res = await api.post('/razorpay/create-subscription', { plan: planKey });
+      const { subscription_id, key, plan_name, user_name, user_email, user_contact } = res.data;
+
+      // Load Razorpay checkout script if not already loaded
+      if (!window.Razorpay) {
+        await new Promise((resolve, reject) => {
+          const s = document.createElement('script');
+          s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+          s.onload = resolve;
+          s.onerror = reject;
+          document.head.appendChild(s);
+        });
+      }
+
+      const rzp = new window.Razorpay({
+        key,
+        subscription_id,
+        name: 'LeadAgent',
+        description: plan_name,
+        prefill: { name: user_name, email: user_email, contact: user_contact },
+        theme: { color: '#c8f04c' },
+        handler: async (response) => {
+          try {
+            await api.post('/razorpay/verify-payment', {
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_subscription_id: response.razorpay_subscription_id,
+              razorpay_signature: response.razorpay_signature,
+              plan: planKey,
+            });
+            toast.success(`Upgraded to ${planKey} plan!`);
+            loadBilling();
+          } catch (e) {
+            toast.error(e.response?.data?.error || 'Payment verification failed');
+          } finally {
+            setLoadingCheckout(null);
+          }
+        },
+        modal: {
+          ondismiss: () => setLoadingCheckout(null),
+        },
+      });
+
+      rzp.open();
     } catch (e) {
       toast.error(e.response?.data?.error || 'Failed to start checkout');
       setLoadingCheckout(null);
@@ -844,18 +887,18 @@ export default function Settings() {
                 })}
               </div>
             )}
-            {billing?.has_billing && (
-              <button className="btn btn--ghost btn--sm" style={{ marginTop: 16 }} onClick={openPortal} disabled={loadingPortal}>
-                <Icon name="link" size={11} />{loadingPortal ? 'Opening…' : 'Manage billing'}
+            {billing?.has_billing && billing?.plan !== 'free' && billing?.plan_status !== 'cancelled' && (
+              <button className="btn btn--ghost btn--sm" style={{ marginTop: 16 }} onClick={cancelSubscription} disabled={loadingPortal}>
+                <Icon name="x" size={11} />{loadingPortal ? 'Cancelling…' : 'Cancel subscription'}
               </button>
             )}
           </div>
 
           <div className="grid g-3" style={{ gap: 14 }}>
             {[
-              { key: 'starter', n: 'Starter', p: '$29', leads: '500 emails/month' },
-              { key: 'pro',     n: 'Pro',     p: '$49', leads: '1,500 emails/month' },
-              { key: 'agency',  n: 'Agency',  p: '$149', leads: '5,000 emails/month' },
+              { key: 'starter', n: 'Starter', p: '₹2,499', leads: '500 emails/month' },
+              { key: 'pro',     n: 'Pro',     p: '₹3,999', leads: '1,500 emails/month' },
+              { key: 'agency',  n: 'Agency',  p: '₹12,499', leads: '5,000 emails/month' },
             ].map((plan, i) => {
               const current = planName === plan.key;
               const isLoading = loadingCheckout === plan.key;
