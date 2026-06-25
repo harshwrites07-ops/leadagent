@@ -314,6 +314,8 @@ function _initSqliteSchema(db) {
   alterTry(`ALTER TABLE power_send_jobs ADD COLUMN user_id INTEGER REFERENCES users(id)`);
   alterTry(`ALTER TABLE users ADD COLUMN stripe_customer_id TEXT`);
   alterTry(`ALTER TABLE users ADD COLUMN stripe_subscription_id TEXT`);
+  alterTry(`ALTER TABLE users ADD COLUMN razorpay_customer_id TEXT`);
+  alterTry(`ALTER TABLE users ADD COLUMN razorpay_subscription_id TEXT`);
   alterTry(`ALTER TABLE users ADD COLUMN trial_ends_at DATETIME DEFAULT (datetime('now', '+14 days'))`);
   alterTry(`ALTER TABLE users ADD COLUMN billing_cycle_start DATETIME DEFAULT (datetime('now'))`);
   alterTry(`ALTER TABLE users ADD COLUMN custom_emails_limit INTEGER`);

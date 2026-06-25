@@ -36,6 +36,9 @@ const isProd = process.env.NODE_ENV === 'production' || require('fs').existsSync
 const { router: stripeRouter, webhookRouter: stripeWebhookRouter } = require('./src/routes/stripe');
 app.use('/api/stripe/webhook', stripeWebhookRouter);
 
+const { router: razorpayRouter, webhookRouter: razorpayWebhookRouter } = require('./src/routes/razorpay');
+app.use('/api/razorpay/webhook', razorpayWebhookRouter);
+
 app.use(compression({
   filter: (req, res) => {
     if (req.headers.accept === 'text/event-stream') return false;
@@ -206,6 +209,7 @@ const isHttps = !!(
   app.use('/api/campaigns', requireAuth, requireActiveSubscription, require('./src/routes/campaigns'));
   app.use('/api/quality',   requireAuth, require('./src/routes/qualityLeads'));
   app.use('/api/stripe',    requireAuth, stripeRouter);
+  app.use('/api/razorpay',  requireAuth, razorpayRouter);
 
   const { createProxyMiddleware } = require('http-proxy-middleware');
   const QUELRO_SITE_DIR = path.join(__dirname, '../quelro-website');
