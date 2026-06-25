@@ -699,6 +699,56 @@ async function initPostgres() {
     try { await query(`CREATE INDEX IF NOT EXISTS idx_quality_leads_score ON quality_leads(intent_score DESC)`); } catch {}
     try { await query(`CREATE INDEX IF NOT EXISTS idx_quality_leads_niche ON quality_leads(niche)`); } catch {}
 
+    // Column migrations — safe: errors mean column already exists
+    const pgAlter = async (sql) => { try { await query(sql); } catch {} };
+    await pgAlter(`ALTER TABLE users ADD COLUMN razorpay_customer_id TEXT`);
+    await pgAlter(`ALTER TABLE users ADD COLUMN razorpay_subscription_id TEXT`);
+    await pgAlter(`ALTER TABLE users ADD COLUMN stripe_customer_id TEXT`);
+    await pgAlter(`ALTER TABLE users ADD COLUMN stripe_subscription_id TEXT`);
+    await pgAlter(`ALTER TABLE users ADD COLUMN trial_ends_at TIMESTAMP DEFAULT (NOW() + INTERVAL '14 days')`);
+    await pgAlter(`ALTER TABLE users ADD COLUMN billing_cycle_start TIMESTAMP DEFAULT NOW()`);
+    await pgAlter(`ALTER TABLE users ADD COLUMN custom_emails_limit INTEGER`);
+    await pgAlter(`ALTER TABLE users ADD COLUMN custom_leads_limit INTEGER`);
+    await pgAlter(`ALTER TABLE users ADD COLUMN onboarding_completed INTEGER DEFAULT 0`);
+    await pgAlter(`ALTER TABLE users ADD COLUMN service_type TEXT`);
+    await pgAlter(`ALTER TABLE users ADD COLUMN one_liner TEXT`);
+    await pgAlter(`ALTER TABLE users ADD COLUMN experience_years TEXT`);
+    await pgAlter(`ALTER TABLE users ADD COLUMN personality_traits TEXT DEFAULT '[]'`);
+    await pgAlter(`ALTER TABLE users ADD COLUMN origin_story TEXT`);
+    await pgAlter(`ALTER TABLE users ADD COLUMN unique_difference TEXT`);
+    await pgAlter(`ALTER TABLE users ADD COLUMN voice_dna TEXT DEFAULT '{}'`);
+    await pgAlter(`ALTER TABLE users ADD COLUMN profile_completed INTEGER DEFAULT 0`);
+    await pgAlter(`ALTER TABLE leads ADD COLUMN user_id INTEGER REFERENCES users(id)`);
+    await pgAlter(`ALTER TABLE leads ADD COLUMN follow_up_count INTEGER DEFAULT 0`);
+    await pgAlter(`ALTER TABLE leads ADD COLUMN last_contacted_date TEXT`);
+    await pgAlter(`ALTER TABLE leads ADD COLUMN next_follow_up_date TEXT`);
+    await pgAlter(`ALTER TABLE leads ADD COLUMN follow_up_status TEXT DEFAULT 'active'`);
+    await pgAlter(`ALTER TABLE leads ADD COLUMN email_invalid INTEGER DEFAULT 0`);
+    await pgAlter(`ALTER TABLE leads ADD COLUMN bounce_reason TEXT`);
+    await pgAlter(`ALTER TABLE leads ADD COLUMN exported_at TIMESTAMP`);
+    await pgAlter(`ALTER TABLE leads ADD COLUMN scrape_source TEXT DEFAULT 'youtube_api'`);
+    await pgAlter(`ALTER TABLE leads ADD COLUMN view_trend TEXT`);
+    await pgAlter(`ALTER TABLE leads ADD COLUMN intent_score REAL`);
+    await pgAlter(`ALTER TABLE leads ADD COLUMN intent_confidence TEXT`);
+    await pgAlter(`ALTER TABLE leads ADD COLUMN intent_reason TEXT`);
+    await pgAlter(`ALTER TABLE leads ADD COLUMN intent_signals TEXT`);
+    await pgAlter(`ALTER TABLE emails ADD COLUMN from_email TEXT`);
+    await pgAlter(`ALTER TABLE emails ADD COLUMN reply_body TEXT`);
+    await pgAlter(`ALTER TABLE emails ADD COLUMN reply_subject TEXT`);
+    await pgAlter(`ALTER TABLE emails ADD COLUMN reply_from TEXT`);
+    await pgAlter(`ALTER TABLE emails ADD COLUMN my_reply_body TEXT`);
+    await pgAlter(`ALTER TABLE emails ADD COLUMN my_reply_sent_at TEXT`);
+    await pgAlter(`ALTER TABLE emails ADD COLUMN angle_type TEXT`);
+    await pgAlter(`ALTER TABLE emails ADD COLUMN reply_sentiment TEXT`);
+    await pgAlter(`ALTER TABLE emails ADD COLUMN call_booked INTEGER DEFAULT 0`);
+    await pgAlter(`ALTER TABLE emails ADD COLUMN client_closed INTEGER DEFAULT 0`);
+    await pgAlter(`ALTER TABLE emails ADD COLUMN client_value REAL DEFAULT 0`);
+    await pgAlter(`ALTER TABLE emails ADD COLUMN ab_variant TEXT`);
+    await pgAlter(`ALTER TABLE emails ADD COLUMN user_id INTEGER REFERENCES users(id)`);
+    await pgAlter(`ALTER TABLE pitches ADD COLUMN signal_type TEXT`);
+    await pgAlter(`ALTER TABLE pitches ADD COLUMN user_id INTEGER REFERENCES users(id)`);
+    console.log('[PG] ✅ migrations applied');
+
     console.log('[PG] ✅ ALL TABLES READY');
     return true;
   } catch (err) {

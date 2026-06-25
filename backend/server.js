@@ -1,5 +1,23 @@
 require('dotenv').config({ path: require('path').join(__dirname, '../.env'), override: false });
 
+// ── Production database guard ─────────────────────────────────────────────────
+// Prevent silent SQLite fallback on Railway (ephemeral disk = data wipe on redeploy)
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+if (IS_PRODUCTION && !process.env.DATABASE_URL) {
+  console.error('');
+  console.error('╔══════════════════════════════════════════════════════════════╗');
+  console.error('║  FATAL: DATABASE_URL is not set in production environment.   ║');
+  console.error('║  Running SQLite on Railway will WIPE ALL DATA on redeploy.   ║');
+  console.error('║                                                                ║');
+  console.error('║  Fix: In Railway → web service → Variables, add:             ║');
+  console.error('║    DATABASE_URL = ${{Postgres.DATABASE_URL}}                 ║');
+  console.error('╚══════════════════════════════════════════════════════════════╝');
+  console.error('');
+  process.exit(1);
+}
+
+console.log(`[DB] Mode: ${process.env.DATABASE_URL ? 'PostgreSQL ✓' : 'SQLite (dev)'}`);
+
 process.on('uncaughtException', (err) => {
   console.error('[FATAL] Uncaught exception:', err.message, err.stack);
   process.exit(1);
