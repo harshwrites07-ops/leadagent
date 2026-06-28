@@ -189,19 +189,20 @@ async function sendOtpEmail(user, code) {
 // ── Usage limits ──────────────────────────────────────────────────────────────
 
 const PLAN_LIMITS = {
-  trial:   { leads: 300,      emails: 10   },
-  free:    { leads: 300,      emails: 10   },
-  starter: { leads: 5000,     emails: 500  },
-  pro:     { leads: 10000,    emails: 1500 },
-  growth:  { leads: 10000,    emails: 1500 },
-  agency:  { leads: Infinity, emails: 5000 },
+  trial:   { leads: 300,   emails: 10   },
+  free:    { leads: 300,   emails: 10   },
+  starter: { leads: 5000,  emails: 500  },
+  pro:     { leads: 10000, emails: 1500 },
+  growth:  { leads: 10000, emails: 1500 },
+  agency:  { leads: -1,    emails: -1   },
 };
 
 async function checkUsageLimit(user, type) {
-  const db = getDb();
-  if (user.plan === 'agency' && user.plan_status === 'active')
-    return { allowed: true, limit: Infinity, used: 0 };
+  // Admins and agency plan always get unlimited — no counting
+  if (user.is_admin || user.plan === 'agency')
+    return { allowed: true, limit: -1, used: 0 };
 
+  const db = getDb();
   const effectivePlan = (user.plan_status === 'cancelled' || user.plan_status === 'past_due')
     ? 'trial' : (user.plan || 'free');
 
@@ -219,8 +220,10 @@ async function checkUsageLimit(user, type) {
     leads:  user.custom_leads_limit  != null ? user.custom_leads_limit  : baseLimits.leads,
     emails: user.custom_emails_limit != null ? user.custom_emails_limit : baseLimits.emails,
   };
-  if (type === 'leads')  return { allowed: user.leads_used_this_month  < limits.leads,  limit: limits.leads,  used: user.leads_used_this_month  };
-  if (type === 'emails') return { allowed: user.emails_used_this_month < limits.emails, limit: limits.emails, used: user.emails_used_this_month };
+  const leadsAllowed  = limits.leads  === -1 || user.leads_used_this_month  < limits.leads;
+  const emailsAllowed = limits.emails === -1 || user.emails_used_this_month < limits.emails;
+  if (type === 'leads')  return { allowed: leadsAllowed,  limit: limits.leads,  used: user.leads_used_this_month  };
+  if (type === 'emails') return { allowed: emailsAllowed, limit: limits.emails, used: user.emails_used_this_month };
   return { allowed: true };
 }
 

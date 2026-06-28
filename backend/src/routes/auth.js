@@ -40,7 +40,10 @@ const safeUser = (u) => u ? {
 } : null;
 
 router.get('/me', requireAuth, (req, res) => {
-  const limits = PLAN_LIMITS[req.user.plan] || PLAN_LIMITS.free;
+  const isUnlimited = req.user.is_admin || req.user.plan === 'agency';
+  const limits = isUnlimited
+    ? { leads: -1, emails: -1, gmail_accounts: -1, ai_pitches: -1, team_seats: -1 }
+    : (PLAN_LIMITS[req.user.plan] || PLAN_LIMITS.free);
   const trialExpired = isTrialExpired(req.user);
   const trialDaysLeft = req.user.trial_ends_at
     ? Math.max(0, Math.ceil((new Date(req.user.trial_ends_at) - Date.now()) / (1000 * 60 * 60 * 24)))
@@ -371,7 +374,10 @@ router.put('/profile', requireAuth, asyncHandler(async (req, res) => {
 }));
 
 router.get('/usage', requireAuth, (req, res) => {
-  const limits = PLAN_LIMITS[req.user.plan] || PLAN_LIMITS.free;
+  const isUnlimited = req.user.is_admin || req.user.plan === 'agency';
+  const limits = isUnlimited
+    ? { leads: -1, emails: -1 }
+    : (PLAN_LIMITS[req.user.plan] || PLAN_LIMITS.free);
   res.json({ success: true, usage: {
     leads:  { used: req.user.leads_used_this_month,  limit: limits.leads  },
     emails: { used: req.user.emails_used_this_month, limit: limits.emails },
