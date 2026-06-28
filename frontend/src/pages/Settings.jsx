@@ -19,7 +19,7 @@ export default function Settings() {
 
   // Voice profile state
   const [voice, setVoice] = useState({
-    service_type: '', one_liner: '', experience_years: '', best_result: '',
+    service_type: '', one_liner: '', experience_years: '', best_result: '', case_study: '',
     target_niches: [], pricing_range: '', personality_traits: [],
     outreach_goal: '', origin_story: '', unique_difference: '',
   });
@@ -108,6 +108,7 @@ export default function Settings() {
         one_liner: u.one_liner || '',
         experience_years: u.experience_years || '',
         best_result: u.best_result || '',
+        case_study: u.case_study || '',
         target_niches: (() => { try { return JSON.parse(u.target_niches || '[]'); } catch { return []; } })(),
         pricing_range: u.pricing_range || '',
         personality_traits: (() => { try { return JSON.parse(u.personality_traits || '[]'); } catch { return []; } })(),
@@ -451,6 +452,13 @@ export default function Settings() {
                 <textarea className="input" rows={3} maxLength={300} style={{ resize: 'none' }}
                   value={voice.best_result} onChange={e => setV('best_result', e.target.value)}
                   placeholder="Be specific with numbers. e.g. Helped a fitness channel increase watch time by 60% in 30 days" />
+              </div>
+              <div className="field" style={{ marginTop: 14 }}>
+                <div className="field__label">Named case study <span className="muted" style={{ fontWeight: 400 }}>— used verbatim in emails {voice.case_study.length > 0 ? <span style={{ color: 'var(--lime)' }}>✓ active</span> : '(optional but recommended)'}</span></div>
+                <textarea className="input" rows={2} maxLength={200} style={{ resize: 'none' }}
+                  value={voice.case_study} onChange={e => setV('case_study', e.target.value)}
+                  placeholder='e.g. Helped a gaming channel grow from 50K to 200K subs in 3 months with faster-paced edits' />
+                <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>The more specific, the higher your email quality scores. Marcus will quote this result directly when pitching.</div>
               </div>
               <div className="field" style={{ marginTop: 14 }}>
                 <div className="field__label">Typical pricing <span className="muted" style={{ fontWeight: 400 }}>(never shown to creators)</span></div>

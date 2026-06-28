@@ -114,11 +114,22 @@ router.post('/queue', asyncHandler(async (req, res) => {
   const lead = await db.get('SELECT * FROM leads WHERE id = ? AND user_id = ?', [lead_id, req.user.id]);
   if (!lead) return res.status(404).json({ success: false, error: 'Lead not found' });
   let finalSubject = subject, finalBody = body;
+  const pitch = await db.get('SELECT * FROM pitches WHERE lead_id = ?', [lead.id]);
   if (!finalSubject || !finalBody) {
-    const pitch = await db.get('SELECT * FROM pitches WHERE lead_id = ?', [lead.id]);
     if (!pitch) return res.status(400).json({ success: false, error: 'No pitch found. Generate a pitch first.' });
     finalSubject = finalSubject || pitch.email_subject;
     finalBody = finalBody || pitch.cold_email;
+  }
+  // Hard block: refuse to queue if quality score < 70
+  if (pitch && pitch.quality_score !== null && pitch.quality_score < 70) {
+    return res.status(403).json({
+      success: false,
+      error: 'QUALITY_BLOCK',
+      message: `This pitch scored ${pitch.quality_score}/100 and cannot be sent until it passes quality review.`,
+      score: pitch.quality_score,
+      feedback: (() => { try { return pitch.quality_breakdown ? JSON.parse(pitch.quality_breakdown) : null; } catch { return null; } })(),
+      action: 'Click "Rewrite" to regenerate this pitch and improve its score above 70.',
+    });
   }
   const result = await db.run(`INSERT INTO email_queue (user_id, lead_id, subject, body, status, scheduled_at, priority) VALUES (?, ?, ?, ?, 'pending', ?, ?) ${USE_PG ? 'RETURNING id' : ''}`, [req.user.id, lead.id, finalSubject, finalBody, scheduled_at || null, priority]);
   await incrementUsage(req.user.id, 'emails', 1);

@@ -303,6 +303,26 @@ function _initSqliteSchema(db) {
   alterTry(`ALTER TABLE emails ADD COLUMN my_reply_body TEXT`);
   alterTry(`ALTER TABLE emails ADD COLUMN my_reply_sent_at TEXT`);
   alterTry(`ALTER TABLE users ADD COLUMN email_tone TEXT DEFAULT 'casual'`);
+  alterTry(`ALTER TABLE pitches ADD COLUMN quality_score INTEGER`);
+  alterTry(`ALTER TABLE pitches ADD COLUMN quality_breakdown TEXT`);
+  alterTry(`ALTER TABLE pitches ADD COLUMN quality_regenerated INTEGER DEFAULT 0`);
+  alterTry(`ALTER TABLE pitches ADD COLUMN quality_warning INTEGER DEFAULT 0`);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS quality_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      channel_id TEXT,
+      score INTEGER,
+      passed INTEGER DEFAULT 0,
+      regenerated INTEGER DEFAULT 0,
+      breakdown TEXT DEFAULT '{}',
+      attempt_number INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  alterTry(`ALTER TABLE quality_log ADD COLUMN attempt_number INTEGER DEFAULT 1`);
+  alterTry(`CREATE INDEX IF NOT EXISTS idx_quality_log_user_id ON quality_log(user_id)`);
   alterTry(`ALTER TABLE users ADD COLUMN outreach_goal TEXT DEFAULT 'get_reply'`);
   alterTry(`ALTER TABLE users ADD COLUMN min_email_delay INTEGER DEFAULT 45`);
   alterTry(`ALTER TABLE users ADD COLUMN max_email_delay INTEGER DEFAULT 120`);
@@ -586,6 +606,10 @@ function _initSqliteSchema(db) {
   alterTry(`CREATE INDEX IF NOT EXISTS idx_quality_leads_score ON quality_leads(intent_score DESC)`);
   alterTry(`CREATE INDEX IF NOT EXISTS idx_quality_leads_subs ON quality_leads(subscriber_count)`);
 
+  // Quality upgrade: recent video title column + case study in voice profile
+  alterTry(`ALTER TABLE leads ADD COLUMN recent_video_title TEXT`);
+  alterTry(`ALTER TABLE users ADD COLUMN case_study TEXT`);
+
   db.exec(`CREATE TABLE IF NOT EXISTS user_followup_settings (
     user_id INTEGER PRIMARY KEY,
     interval_days INTEGER DEFAULT 3,
@@ -787,6 +811,7 @@ class BetterSQLiteStore {
 
 const PLAN_LIMITS = {
   free:    { emails_per_month: 10,   gmail_accounts: 1,  team_seats: 1, ai_pitches: 3  },
+  trial:   { emails_per_month: 300,  gmail_accounts: 1,  team_seats: 1, ai_pitches: -1 },
   starter: { emails_per_month: 500,  gmail_accounts: 1,  team_seats: 1, ai_pitches: -1 },
   pro:     { emails_per_month: 1500, gmail_accounts: 3,  team_seats: 1, ai_pitches: -1 },
   agency:  { emails_per_month: 5000, gmail_accounts: 10, team_seats: 5, ai_pitches: -1 },

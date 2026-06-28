@@ -376,6 +376,7 @@ function buildVoiceDNA(user) {
     communicationStyle,
     emailTone,
     socialProof,
+    caseStudy:          user.case_study        || null,
     traits,
     targetNiches:       niches,
     outreachGoal:       user.outreach_goal    || 'get_reply',

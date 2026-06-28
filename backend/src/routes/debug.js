@@ -1,8 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const fs = require('fs');
+const { requireAdmin } = require('../middleware/requireAuth');
 
-router.get('/debug/system', async (req, res) => {
+router.get('/debug/system', requireAdmin, async (req, res) => {
   const dbPath = '/app/backend/data/outreach.db';
   const dataDir = '/app/backend/data';
 
@@ -36,7 +37,6 @@ router.get('/debug/system', async (req, res) => {
     turso: {
       url_set: !!process.env.TURSO_DATABASE_URL,
       token_set: !!process.env.TURSO_AUTH_TOKEN,
-      url_preview: (process.env.TURSO_DATABASE_URL || '').substring(0, 40),
     },
     volume: {
       mounted: dirExists && dirContents.length > 0,

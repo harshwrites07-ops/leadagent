@@ -32,7 +32,7 @@ const safeUser = (u) => u ? {
   target_niches: u.target_niches, target_platforms: u.target_platforms,
   portfolio_url: u.portfolio_url, daily_email_limit: u.daily_email_limit,
   service_type: u.service_type, one_liner: u.one_liner,
-  experience_years: u.experience_years, best_result: u.best_result,
+  experience_years: u.experience_years, best_result: u.best_result, case_study: u.case_study,
   pricing_range: u.pricing_range, personality_traits: u.personality_traits,
   outreach_goal: u.outreach_goal, origin_story: u.origin_story,
   unique_difference: u.unique_difference, profile_completed: u.profile_completed,
@@ -275,7 +275,7 @@ router.put('/onboarding', requireAuth, asyncHandler(async (req, res) => {
   const {
     full_name, agency_name, role, target_niches, target_platforms, portfolio_url,
     daily_email_limit, auto_find_leads,
-    service_type, one_liner, experience_years, best_result, pricing_range,
+    service_type, one_liner, experience_years, best_result, case_study, pricing_range,
     personality_traits, outreach_goal, origin_story, unique_difference, profile_completed,
   } = req.body;
   const db = getDb();
@@ -294,13 +294,13 @@ router.put('/onboarding', requireAuth, asyncHandler(async (req, res) => {
       one_liner=COALESCE(?,one_liner),
       experience_years=COALESCE(?,experience_years),
       best_result=COALESCE(?,best_result),
+      case_study=COALESCE(?,case_study),
       pricing_range=COALESCE(?,pricing_range),
       personality_traits=COALESCE(?,personality_traits),
       outreach_goal=COALESCE(?,outreach_goal),
       origin_story=COALESCE(?,origin_story),
       unique_difference=COALESCE(?,unique_difference),
       profile_completed=COALESCE(?,profile_completed),
-      voice_dna='{}',
       onboarding_completed=1
     WHERE id=?
   `, [
@@ -310,7 +310,7 @@ router.put('/onboarding', requireAuth, asyncHandler(async (req, res) => {
     portfolio_url || null, daily_email_limit || null,
     auto_find_leads != null ? (auto_find_leads ? 1 : 0) : null,
     service_type || null, one_liner || null, experience_years || null,
-    best_result || null, pricing_range || null,
+    best_result || null, case_study || null, pricing_range || null,
     personality_traits ? JSON.stringify(personality_traits) : null,
     outreach_goal || null, origin_story || null, unique_difference || null,
     profile_completed != null ? profile_completed : null,
@@ -341,7 +341,7 @@ router.post('/skip-onboarding', requireAuth, asyncHandler(async (req, res) => {
 }));
 
 router.put('/profile', requireAuth, asyncHandler(async (req, res) => {
-  const allowed = ['full_name','service_type','one_liner','experience_years','best_result',
+  const allowed = ['full_name','service_type','one_liner','experience_years','best_result','case_study',
     'target_niches','pricing_range','personality_traits','outreach_goal','origin_story','unique_difference'];
   const db = getDb();
   const sets = [], vals = [];
@@ -353,7 +353,6 @@ router.put('/profile', requireAuth, asyncHandler(async (req, res) => {
     }
   }
   if (!sets.length) return res.json({ success: true });
-  sets.push('voice_dna=?'); vals.push('{}');
   vals.push(req.user.id);
   await db.run(`UPDATE users SET ${sets.join(',')} WHERE id=?`, vals);
 

@@ -687,6 +687,32 @@ async function initPostgres() {
     `);
     console.log('[PG] ✅ user_followup_settings');
 
+    await query(`
+      CREATE TABLE IF NOT EXISTS quality_log (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER,
+        channel_id TEXT,
+        score INTEGER,
+        passed INTEGER DEFAULT 0,
+        regenerated INTEGER DEFAULT 0,
+        breakdown JSONB DEFAULT '{}',
+        attempt_number INTEGER DEFAULT 1,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    try { await query(`ALTER TABLE quality_log ADD COLUMN IF NOT EXISTS attempt_number INTEGER DEFAULT 1`); } catch {}
+    console.log('[PG] ✅ quality_log');
+
+    // Quality gate columns on pitches (safe migrations)
+    try { await query(`ALTER TABLE pitches ADD COLUMN IF NOT EXISTS quality_score INTEGER`); } catch {}
+    try { await query(`ALTER TABLE pitches ADD COLUMN IF NOT EXISTS quality_breakdown TEXT`); } catch {}
+    try { await query(`ALTER TABLE pitches ADD COLUMN IF NOT EXISTS quality_regenerated INTEGER DEFAULT 0`); } catch {}
+    try { await query(`ALTER TABLE pitches ADD COLUMN IF NOT EXISTS quality_warning INTEGER DEFAULT 0`); } catch {}
+
+    // Quality upgrade: recent video title + named case study
+    try { await query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS recent_video_title TEXT`); } catch {}
+    try { await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS case_study TEXT`); } catch {}
+
     // Per-user unique indexes
     try { await query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_channel_id_user ON leads(channel_id, user_id) WHERE channel_id IS NOT NULL AND channel_id != ''`); } catch {}
     try { await query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_handle_user ON leads(channel_handle, user_id) WHERE channel_handle IS NOT NULL AND channel_handle != ''`); } catch {}
@@ -698,6 +724,7 @@ async function initPostgres() {
     try { await query(`CREATE INDEX IF NOT EXISTS idx_master_email ON master_leads(email)`); } catch {}
     try { await query(`CREATE INDEX IF NOT EXISTS idx_quality_leads_score ON quality_leads(intent_score DESC)`); } catch {}
     try { await query(`CREATE INDEX IF NOT EXISTS idx_quality_leads_niche ON quality_leads(niche)`); } catch {}
+    try { await query(`CREATE INDEX IF NOT EXISTS idx_quality_log_user_id ON quality_log(user_id)`); } catch {}
 
     // Column migrations — safe: errors mean column already exists
     const pgAlter = async (sql) => { try { await query(sql); } catch {} };

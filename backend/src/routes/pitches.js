@@ -4,34 +4,63 @@ const { getDb, logActivity, USE_PG } = require('../models/database');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { aiLimiter } = require('../middleware/rateLimiter');
 const claude = require('../services/claudeService');
+const { runQualityGate, generateInitialDraft, buildCreatorData } = require('../qualityGate');
 
 function parsePitch(pitch) {
   if (!pitch) return null;
   return {
     ...pitch,
     subject_variants: (() => { try { return JSON.parse(pitch.subject_variants || '[]'); } catch { return []; } })(),
+    quality_breakdown: (() => { try { return pitch.quality_breakdown ? JSON.parse(pitch.quality_breakdown) : null; } catch { return null; } })(),
+    quality_regenerated: !!pitch.quality_regenerated,
+    quality_warning: !!pitch.quality_warning,
   };
 }
 
-async function savePitch(db, leadId, userId, { email_subject, email_body, deep_study, custom_offer, subject_variants, pitch_score, pitch_feedback, reddit_dm }) {
+async function savePitch(db, leadId, userId, { email_subject, email_body, deep_study, custom_offer, subject_variants, pitch_score, pitch_feedback, reddit_dm, quality_score, quality_breakdown, quality_regenerated, quality_warning }) {
   const existing = await db.get('SELECT id FROM pitches WHERE lead_id = ?', [leadId]);
   if (existing) {
     await db.run(`
       UPDATE pitches SET deep_study=COALESCE(?,deep_study), custom_offer=COALESCE(?,custom_offer),
         cold_email=?, email_subject=?, reddit_dm=COALESCE(?,reddit_dm),
         subject_variants=?, pitch_score=COALESCE(?,pitch_score), pitch_feedback=COALESCE(?,pitch_feedback),
+        quality_score=COALESCE(?,quality_score), quality_breakdown=COALESCE(?,quality_breakdown),
+        quality_regenerated=COALESCE(?,quality_regenerated), quality_warning=COALESCE(?,quality_warning),
         updated_at=CURRENT_TIMESTAMP
       WHERE lead_id=?
     `, [deep_study || null, custom_offer || null, email_body, email_subject,
         reddit_dm || null, JSON.stringify(subject_variants || []),
-        pitch_score || null, pitch_feedback || null, leadId]);
+        pitch_score || null, pitch_feedback || null,
+        quality_score != null ? quality_score : null,
+        quality_breakdown ? JSON.stringify(quality_breakdown) : null,
+        quality_regenerated != null ? (quality_regenerated ? 1 : 0) : null,
+        quality_warning != null ? (quality_warning ? 1 : 0) : null,
+        leadId]);
   } else {
     await db.run(`
-      INSERT INTO pitches (lead_id,user_id,deep_study,custom_offer,cold_email,email_subject,reddit_dm,subject_variants,pitch_score,pitch_feedback)
-      VALUES (?,?,?,?,?,?,?,?,?,?)
+      INSERT INTO pitches (lead_id,user_id,deep_study,custom_offer,cold_email,email_subject,reddit_dm,subject_variants,pitch_score,pitch_feedback,quality_score,quality_breakdown,quality_regenerated,quality_warning)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `, [leadId, userId, deep_study || null, custom_offer || null, email_body, email_subject,
         reddit_dm || null, JSON.stringify(subject_variants || []),
-        pitch_score || null, pitch_feedback || null]);
+        pitch_score || null, pitch_feedback || null,
+        quality_score != null ? quality_score : null,
+        quality_breakdown ? JSON.stringify(quality_breakdown) : null,
+        quality_regenerated ? 1 : 0,
+        quality_warning ? 1 : 0]);
+  }
+}
+
+async function logQualityAttempt(db, userId, lead, attemptNum, email, result) {
+  try {
+    await db.run(
+      `INSERT INTO quality_log (user_id, channel_id, score, passed, regenerated, breakdown, attempt_number, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+      [userId, lead.channel_id || String(lead.id), result.score,
+       result.passed ? 1 : 0, attemptNum > 1 ? 1 : 0,
+       JSON.stringify(result.breakdown || {}), attemptNum]
+    );
+  } catch (err) {
+    console.error('[QualityGate] Failed to log attempt:', err.message);
   }
 }
 
@@ -56,17 +85,60 @@ router.post('/generate/:leadId', aiLimiter, asyncHandler(async (req, res) => {
     try { redditDm = await claude.generateRedditDM(lead, result.key_insight); } catch {}
   }
 
+  // ── Quality Gate (MARCUS initial draft + 3-attempt loop) ────────────────────
+  let gateResult = null;
+  let finalEmailBody = result.email_body;
+  try {
+    const userRow = await db.get('SELECT voice_dna FROM users WHERE id = ?', [req.user.id]);
+    const voiceDNA = userRow?.voice_dna ? JSON.parse(userRow.voice_dna) : {};
+    const creatorData = buildCreatorData(lead);
+
+    // Generate initial body with MARCUS prompt (replaces raw claudeService body)
+    let initialBody = result.email_body;
+    try {
+      initialBody = await generateInitialDraft(creatorData, voiceDNA);
+    } catch (err) {
+      console.error('[Marcus] Initial draft failed, using fallback:', err.message);
+    }
+
+    // 3-attempt quality gate with per-attempt logging
+    gateResult = await runQualityGate(initialBody, creatorData, voiceDNA, async (attemptNum, _email, evalResult) => {
+      await logQualityAttempt(db, req.user.id, lead, attemptNum, _email, evalResult);
+    });
+    finalEmailBody = gateResult.email;
+  } catch (err) {
+    console.error('[QualityGate] Gate failed, using original email:', err.message);
+  }
+  // ────────────────────────────────────────────────────────────────────────────
+
   await savePitch(db, lead.id, req.user.id, {
-    email_subject: result.email_subject, email_body: result.email_body,
-    deep_study: result.key_insight, custom_offer: result.custom_offer,
-    subject_variants: result.subject_variants, reddit_dm: redditDm,
+    email_subject: result.email_subject,
+    email_body: finalEmailBody,
+    deep_study: result.key_insight,
+    custom_offer: result.custom_offer,
+    subject_variants: result.subject_variants,
+    reddit_dm: redditDm,
+    quality_score: gateResult?.quality?.score ?? null,
+    quality_breakdown: gateResult?.quality?.breakdown ?? null,
+    quality_regenerated: gateResult?.regenerated ?? false,
+    quality_warning: gateResult?.warning ?? false,
   });
 
   await db.run(`UPDATE leads SET crm_stage='pitch_ready', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [lead.id]);
   logActivity('pitch_generated', `Pitch generated for ${lead.channel_name}`, lead.id, {}, req.user.id);
 
   const pitch = parsePitch(await db.get('SELECT * FROM pitches WHERE lead_id = ?', [lead.id]));
-  res.json({ success: true, pitch, warning: result.name_warning || null });
+  res.json({
+    success: true,
+    pitch,
+    warning: result.name_warning || null,
+    qualityScore: gateResult?.quality?.score ?? null,
+    qualityPassed: gateResult?.quality?.passed ?? null,
+    qualityFeedback: gateResult?.quality?.overall_feedback ?? null,
+    qualityBreakdown: gateResult?.quality?.breakdown ?? null,
+    qualityRegenerated: gateResult?.regenerated ?? false,
+    qualityWarning: gateResult?.warning ?? false,
+  });
 }));
 
 router.get('/by-lead/:leadId', asyncHandler(async (req, res) => {
@@ -92,9 +164,32 @@ router.post('/bulk-generate', aiLimiter, asyncHandler(async (req, res) => {
         if (!lead) return { id, success: false, error: 'Not found' };
         await db.run(`UPDATE leads SET crm_stage='studying', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [id]);
         const result = await claude.generateFullPitch(lead);
-        await savePitch(db, id, req.user.id, { email_subject: result.email_subject, email_body: result.email_body, deep_study: result.key_insight, custom_offer: result.custom_offer, subject_variants: result.subject_variants });
+
+        let finalEmailBody = result.email_body;
+        let gateResult = null;
+        try {
+          const userRow = await db.get('SELECT voice_dna FROM users WHERE id = ?', [req.user.id]);
+          const voiceDNA = userRow?.voice_dna ? JSON.parse(userRow.voice_dna) : {};
+          const creatorData = buildCreatorData(lead);
+          let initialBody = result.email_body;
+          try { initialBody = await generateInitialDraft(creatorData, voiceDNA); } catch {}
+          gateResult = await runQualityGate(initialBody, creatorData, voiceDNA, async (attemptNum, _email, evalResult) => {
+            await logQualityAttempt(db, req.user.id, lead, attemptNum, _email, evalResult);
+          });
+          finalEmailBody = gateResult.email;
+        } catch {}
+
+        await savePitch(db, id, req.user.id, {
+          email_subject: result.email_subject, email_body: finalEmailBody,
+          deep_study: result.key_insight, custom_offer: result.custom_offer,
+          subject_variants: result.subject_variants,
+          quality_score: gateResult?.quality?.score ?? null,
+          quality_breakdown: gateResult?.quality?.breakdown ?? null,
+          quality_regenerated: gateResult?.regenerated ?? false,
+          quality_warning: gateResult?.warning ?? false,
+        });
         await db.run(`UPDATE leads SET crm_stage='pitch_ready', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [id]);
-        return { id, success: true };
+        return { id, success: true, qualityScore: gateResult?.quality?.score ?? null };
       })
     );
     for (const r of batchResults) {
@@ -124,12 +219,42 @@ router.post('/generate-and-send', aiLimiter, asyncHandler(async (req, res) => {
 
         await db.run(`UPDATE leads SET crm_stage='studying', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [id]);
         const result = await claude.generateFullPitch(lead);
-        await savePitch(db, id, req.user.id, { email_subject: result.email_subject, email_body: result.email_body, deep_study: result.key_insight, custom_offer: result.custom_offer, subject_variants: result.subject_variants });
 
-        const qr = await db.run(`INSERT INTO email_queue (user_id,lead_id,subject,body,status) VALUES (?,?,?,?,'pending') ${USE_PG ? 'RETURNING id' : ''}`, [req.user.id, id, result.email_subject, result.email_body]);
+        // MARCUS initial draft + quality gate
+        const userRow = await db.get('SELECT voice_dna FROM users WHERE id = ?', [req.user.id]);
+        const voiceDNA = userRow?.voice_dna ? JSON.parse(userRow.voice_dna) : {};
+        const creatorData = buildCreatorData(lead);
+        let emailBody = result.email_body;
+        let gateScore = null;
+        try {
+          const initBody = await generateInitialDraft(creatorData, voiceDNA);
+          const gate = await runQualityGate(initBody, creatorData, voiceDNA, async (n, _e, r) => {
+            await logQualityAttempt(db, req.user.id, lead, n, _e, r);
+          });
+          emailBody = gate.email;
+          gateScore = gate.quality?.score ?? null;
+          await savePitch(db, id, req.user.id, {
+            email_subject: result.email_subject, email_body: emailBody,
+            deep_study: result.key_insight, custom_offer: result.custom_offer,
+            subject_variants: result.subject_variants,
+            quality_score: gateScore, quality_breakdown: gate.quality?.breakdown ?? null,
+            quality_regenerated: gate.regenerated ?? false, quality_warning: gate.warning ?? false,
+          });
+        } catch (err) {
+          console.error('[QualityGate] generate-and-send gate failed:', err.message);
+          await savePitch(db, id, req.user.id, { email_subject: result.email_subject, email_body: emailBody, deep_study: result.key_insight, custom_offer: result.custom_offer, subject_variants: result.subject_variants });
+        }
+
+        // Hard block: refuse to send if quality < 70
+        if (gateScore !== null && gateScore < 70) {
+          await db.run(`UPDATE leads SET crm_stage='pitch_ready', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [id]);
+          return { id, success: false, quality_blocked: true, score: gateScore, channel_name: lead.channel_name, error: `Quality score ${gateScore}/100 below threshold` };
+        }
+
+        const qr = await db.run(`INSERT INTO email_queue (user_id,lead_id,subject,body,status) VALUES (?,?,?,?,'pending') ${USE_PG ? 'RETURNING id' : ''}`, [req.user.id, id, result.email_subject, emailBody]);
         await db.run(`UPDATE email_queue SET status='sending' WHERE id=?`, [qr.lastID]);
 
-        const sent = await sendEmail({ to: lead.email, subject: result.email_subject, body: result.email_body, leadId: id, userId: req.user.id });
+        const sent = await sendEmail({ to: lead.email, subject: result.email_subject, body: emailBody, leadId: id, userId: req.user.id });
         await db.run(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP,email_id=? WHERE id=?`, [sent.emailId || null, qr.lastID]);
         await db.run(`UPDATE leads SET crm_stage='emailed', last_contacted_date=CURRENT_DATE, follow_up_count=0, follow_up_status='active', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [id]);
         await incrementUsage(req.user.id, 'emails', 1);
@@ -260,9 +385,44 @@ async function runPowerSendJob(jobId, { lead_ids, max_leads = 100, per_account_l
           const result = await withRetry(() => withTimeout(claude.generateFullPitch(lead), 90000, lead.channel_name), lead.channel_name);
           stats.studied++; stats.generated++;
           await jobUpdate(db, jobId, { studied: stats.studied, generated: stats.generated });
-          await jobLog(db, jobId, 'generated', `Pitch ready for ${lead.channel_name}`);
-          await savePitch(db, lead.id, _userId, { email_subject: result.email_subject, email_body: result.email_body, deep_study: result.key_insight, custom_offer: result.custom_offer, subject_variants: result.subject_variants });
-          const sentResult = await withRetry(() => sendEmail({ to: lead.email, subject: result.email_subject, body: result.email_body, leadId: lead.id, skipInboxes: getSkipInboxes(), userId: _userId }), lead.channel_name);
+
+          // MARCUS draft + quality gate
+          const userRow = await db.get('SELECT voice_dna FROM users WHERE id = ?', [_userId]);
+          const voiceDNA = userRow?.voice_dna ? JSON.parse(userRow.voice_dna) : {};
+          const creatorData = buildCreatorData(lead);
+          let emailBody = result.email_body;
+          let gateScore = null;
+          try {
+            const initBody = await generateInitialDraft(creatorData, voiceDNA);
+            const gate = await runQualityGate(initBody, creatorData, voiceDNA, async (n, _e, r) => {
+              await logQualityAttempt(db, _userId, lead, n, _e, r);
+            });
+            emailBody = gate.email;
+            gateScore = gate.quality?.score ?? null;
+            await savePitch(db, lead.id, _userId, {
+              email_subject: result.email_subject, email_body: emailBody,
+              deep_study: result.key_insight, custom_offer: result.custom_offer,
+              subject_variants: result.subject_variants,
+              quality_score: gateScore, quality_breakdown: gate.quality?.breakdown ?? null,
+              quality_regenerated: gate.regenerated ?? false, quality_warning: gate.warning ?? false,
+            });
+          } catch (err) {
+            console.error('[QualityGate] power-send gate failed:', err.message);
+            await savePitch(db, lead.id, _userId, { email_subject: result.email_subject, email_body: emailBody, deep_study: result.key_insight, custom_offer: result.custom_offer, subject_variants: result.subject_variants });
+          }
+
+          await jobLog(db, jobId, 'generated', `Pitch ready for ${lead.channel_name}${gateScore ? ` (quality: ${gateScore}/100)` : ''}`);
+
+          // Hard block: skip send if quality < 70
+          if (gateScore !== null && gateScore < 70) {
+            stats.failed++;
+            await jobUpdate(db, jobId, { failed: stats.failed });
+            await jobLog(db, jobId, 'blocked', `Blocked ${lead.channel_name} — quality score ${gateScore}/100 below 70 threshold`);
+            try { await db.run(`UPDATE leads SET crm_stage='pitch_ready', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [lead.id]); } catch {}
+            return;
+          }
+
+          const sentResult = await withRetry(() => sendEmail({ to: lead.email, subject: result.email_subject, body: emailBody, leadId: lead.id, skipInboxes: getSkipInboxes(), userId: _userId }), lead.channel_name);
           if (sentResult.fromEmail) runCounts[sentResult.fromEmail] = (runCounts[sentResult.fromEmail] || 0) + 1;
           await db.run(`UPDATE leads SET crm_stage='emailed', last_contacted_date=CURRENT_DATE, follow_up_count=0, follow_up_status='active', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [lead.id]);
           logActivity('email_sent', `Email sent to ${lead.channel_name}`, lead.id, {}, _userId);
