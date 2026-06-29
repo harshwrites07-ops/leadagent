@@ -119,14 +119,18 @@ function buildCreatorData(lead) {
 
 // ── Evaluator ─────────────────────────────────────────────────────────────────
 
-async function evaluateEmailQuality(emailText) {
+async function evaluateEmailQuality(emailText, model = 'claude-sonnet-4-6', _usageRef = null) {
   try {
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
+      model,
       max_tokens: 1000,
       system: QUALITY_GATE_PROMPT,
       messages: [{ role: 'user', content: `Evaluate this cold pitch:\n\n${emailText}` }],
     });
+    if (_usageRef) {
+      _usageRef.inputTokens += response.usage?.input_tokens || 0;
+      _usageRef.outputTokens += response.usage?.output_tokens || 0;
+    }
     const text = response.content[0].text;
     const cleaned = text.replace(/```json|```/g, '').trim();
     return JSON.parse(cleaned);
@@ -199,18 +203,22 @@ ABSOLUTE RULES:
 
 Write ONLY the email body. Nothing else.`;
 
-async function generateInitialDraft(creatorData, voiceDNA) {
+async function generateInitialDraft(creatorData, voiceDNA, model = 'claude-sonnet-4-6', _usageRef = null) {
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
+    model,
     max_tokens: 500,
     messages: [{ role: 'user', content: MARCUS_GENERATION_PROMPT(creatorData, voiceDNA) }],
   });
+  if (_usageRef) {
+    _usageRef.inputTokens += response.usage?.input_tokens || 0;
+    _usageRef.outputTokens += response.usage?.output_tokens || 0;
+  }
   return response.content[0].text.trim();
 }
 
 // ── Regeneration with dimension-specific fixes ────────────────────────────────
 
-async function regenerateWithFeedback(originalEmail, qualityResult, creatorData, voiceDNA, attempt) {
+async function regenerateWithFeedback(originalEmail, qualityResult, creatorData, voiceDNA, attempt, model = 'claude-sonnet-4-6', _usageRef = null) {
   const breakdown = qualityResult.breakdown || {};
   const fixes = [];
 
@@ -289,16 +297,20 @@ RULES FOR THIS EMAIL:
 Write ONLY the email body. No subject line. No preamble. No explanation.`;
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
+    model,
     max_tokens: 500,
     messages: [{ role: 'user', content: regenPrompt }],
   });
+  if (_usageRef) {
+    _usageRef.inputTokens += response.usage?.input_tokens || 0;
+    _usageRef.outputTokens += response.usage?.output_tokens || 0;
+  }
   return response.content[0].text.trim();
 }
 
 // ── Quality gate loop (3 attempts, target 85+) ────────────────────────────────
 
-async function runQualityGate(emailText, creatorData, voiceDNA, onAttempt) {
+async function runQualityGate(emailText, creatorData, voiceDNA, onAttempt, model = 'claude-sonnet-4-6', _usageRef = null) {
   const MAX_ATTEMPTS = 3;
   const TARGET_SCORE = 85;
   const HARD_BLOCK_SCORE = 70;
@@ -310,7 +322,7 @@ async function runQualityGate(emailText, creatorData, voiceDNA, onAttempt) {
   let regenerated = false;
 
   for (let i = 1; i <= MAX_ATTEMPTS; i++) {
-    const result = await evaluateEmailQuality(currentEmail);
+    const result = await evaluateEmailQuality(currentEmail, model, _usageRef);
     console.log(`[QualityGate] Attempt ${i}: ${result.score}/100`);
 
     if (onAttempt) {
@@ -330,7 +342,7 @@ async function runQualityGate(emailText, creatorData, voiceDNA, onAttempt) {
     if (i < MAX_ATTEMPTS) {
       regenerated = true;
       try {
-        currentEmail = await regenerateWithFeedback(currentEmail, result, creatorData, voiceDNA, i + 1);
+        currentEmail = await regenerateWithFeedback(currentEmail, result, creatorData, voiceDNA, i + 1, model, _usageRef);
       } catch (err) {
         console.error(`[QualityGate] Regeneration attempt ${i + 1} failed:`, err.message);
         break;
