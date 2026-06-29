@@ -1,5 +1,5 @@
 // Load env from project root (.env lives one level above /backend)
-require('dotenv').config({ path: require('path').join(__dirname, '../../.env'), override: false });
+require('dotenv').config({ path: require('path').join(__dirname, '../../.env'), override: true });
 
 const { initializeDatabase, getDb } = require('../src/models/database');
 const { runQualityGate, generateInitialDraft, buildCreatorData } = require('../src/qualityGate');
