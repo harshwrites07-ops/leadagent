@@ -117,7 +117,7 @@ router.post('/powermode/start', asyncHandler(async (req, res) => {
   if (ps.running) return res.json({ status: 'already_running', ...ps });
 
   const runLimit = getRunLimit(req.user);
-  const usageCheck = checkUsageLimit(req.user, 'leads');
+  const usageCheck = await checkUsageLimit(req.user, 'leads');
   const remaining = usageCheck.allowed ? (usageCheck.limit - usageCheck.used) : 0;
 
   let targetCount = parseInt(req.body?.targetCount) || 100;

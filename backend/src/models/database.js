@@ -307,6 +307,12 @@ function _initSqliteSchema(db) {
   alterTry(`ALTER TABLE pitches ADD COLUMN quality_breakdown TEXT`);
   alterTry(`ALTER TABLE pitches ADD COLUMN quality_regenerated INTEGER DEFAULT 0`);
   alterTry(`ALTER TABLE pitches ADD COLUMN quality_warning INTEGER DEFAULT 0`);
+  alterTry(`ALTER TABLE users ADD COLUMN voice_sample_1 TEXT`);
+  alterTry(`ALTER TABLE users ADD COLUMN voice_sample_2 TEXT`);
+  alterTry(`ALTER TABLE users ADD COLUMN voice_sample_3 TEXT`);
+  alterTry(`ALTER TABLE users ADD COLUMN voice_confidence_register TEXT`);
+  alterTry(`ALTER TABLE users ADD COLUMN voice_sentence_style TEXT`);
+  alterTry(`ALTER TABLE users ADD COLUMN voice_dna_version INTEGER DEFAULT 1`);
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS quality_log (

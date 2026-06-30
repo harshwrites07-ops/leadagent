@@ -1,4 +1,5 @@
 const { getDb } = require('../models/database');
+const { completeSmart } = require('./claudeService');
 
 // ─── Service → Channel Pain Point Intelligence ────────────────────────────────
 // Maps what the user sells → which channel problems to look for → how to frame it
@@ -426,8 +427,151 @@ async function rebuildVoiceDNA(userId) {
   return dna;
 }
 
+// ─── Section A.3 — AI-powered Voice DNA builder from email samples ─────────────
+// Requires voice_sample_1/2/3 to be set on the user record.
+// Falls back to profile-based buildVoiceDNA if samples are missing.
+
+const VOICE_DNA_BUILDER_PROMPT = (sample1, sample2, sample3, casualDesc, pridePoint) => `
+You are a writing style analyst. Your job is to study a person's real emails
+and extract their exact writing fingerprint so an AI can replicate their voice perfectly.
+
+USER'S REAL EMAILS:
+---
+Sample 1: ${sample1 || '(not provided)'}
+---
+Sample 2: ${sample2 || '(not provided)'}
+---
+Sample 3: ${sample3 || '(not provided)'}
+---
+
+USER'S SELF-DESCRIPTION:
+"${casualDesc || '(not provided)'}"
+
+USER'S PRIDE POINT:
+"${pridePoint || '(not provided)'}"
+
+Analyze these and extract the following. Be extremely specific — vague descriptions are useless.
+Quote actual phrases from their samples as evidence.
+
+Return ONLY a JSON object with this exact structure:
+
+{
+  "confidence_register": "<authoritative|collaborative|direct|humble>",
+  "register_evidence": "<quote from their writing that proves this>",
+  "sentence_style": "<punchy|balanced|flowing>",
+  "avg_sentence_length": "<short: under 10 words | medium: 10-20 | long: over 20>",
+  "contraction_rate": "<always|often|sometimes|rarely|never>",
+  "uses_em_dash": <true|false>,
+  "uses_ellipsis": <true|false>,
+  "uses_fragments": <true|false>,
+  "signature_phrases": ["<phrase they use>", "<phrase they use>"],
+  "vocabulary_level": "<casual|conversational|professional|formal>",
+  "humor_present": <true|false>,
+  "directness_score": "<1-10, where 10 = extremely direct>",
+  "how_they_handle_ask": "<direct demand | soft question | offer framing | other>",
+  "emotional_register": "<warm|neutral|professional|intense>",
+  "opening_pattern": "<how they typically start — quote example>",
+  "closing_pattern": "<how they typically end — quote example>",
+  "things_to_replicate": [
+    "<specific thing to copy from their writing>",
+    "<specific thing to copy from their writing>"
+  ],
+  "things_to_avoid": [
+    "<something NOT in their writing that AI tends to add>"
+  ],
+  "voice_summary": "<2-3 sentence description of their voice that would let someone write exactly like them>"
+}
+
+Output ONLY the JSON. No explanation. No preamble. No markdown fences.
+`.trim();
+
+async function buildVoiceDNAFromSamples(userId) {
+  if (!userId) return null;
+  const db = getDb();
+  const user = await db.get('SELECT * FROM users WHERE id = ?', [userId]);
+  if (!user) return null;
+
+  // If no samples provided, fall back to profile-based DNA
+  const hasSamples = user.voice_sample_1 || user.voice_sample_2 || user.voice_sample_3;
+  if (!hasSamples) {
+    return buildVoiceDNA(user);
+  }
+
+  try {
+    const prompt = VOICE_DNA_BUILDER_PROMPT(
+      user.voice_sample_1,
+      user.voice_sample_2,
+      user.voice_sample_3,
+      user.one_liner,
+      user.best_result,
+    );
+
+    const raw  = await completeSmart(prompt, '', 1200);
+    const json = JSON.parse(raw.replace(/```json|```/g, '').trim());
+
+    // Merge AI-derived fields with the profile-based DNA
+    const profileDNA = buildVoiceDNA(user);
+    const merged = {
+      ...profileDNA,
+      // Override with AI-analyzed fields when samples exist
+      confidence_register:  json.confidence_register  || profileDNA.communicationStyle,
+      sentence_style:       json.sentence_style        || 'balanced',
+      contraction_rate:     json.contraction_rate      || 'often',
+      vocabulary_level:     json.vocabulary_level      || 'conversational',
+      directness_score:     json.directness_score,
+      opening_pattern:      json.opening_pattern,
+      closing_pattern:      json.closing_pattern,
+      signature_phrases:    json.signature_phrases     || [],
+      things_to_replicate:  json.things_to_replicate   || [],
+      things_to_avoid:      json.things_to_avoid       || [],
+      voice_summary:        json.voice_summary,
+      uses_em_dash:         json.uses_em_dash,
+      uses_fragments:       json.uses_fragments,
+      humor_present:        json.humor_present,
+      emotional_register:   json.emotional_register,
+      how_they_handle_ask:  json.how_they_handle_ask,
+      from_samples: true,
+      builtAt: new Date().toISOString(),
+    };
+
+    await db.run('UPDATE users SET voice_dna = ? WHERE id = ?', [JSON.stringify(merged), userId]);
+    return merged;
+
+  } catch (err) {
+    console.error('[VoiceDNA] AI builder failed, using profile fallback:', err.message);
+    return buildVoiceDNA(user);
+  }
+}
+
+// Update getOrBuildVoiceDNA to use sample-based DNA when available
+async function getOrBuildVoiceDNA(userId) {
+  if (!userId) return null;
+  const db = getDb();
+  const user = await db.get('SELECT * FROM users WHERE id = ?', [userId]);
+  if (!user) return null;
+
+  try {
+    const cached = JSON.parse(user.voice_dna || '{}');
+    if (cached.builtAt && user.service_type) {
+      const age = Date.now() - new Date(cached.builtAt).getTime();
+      if (age < 24 * 60 * 60 * 1000) return cached;
+    }
+  } catch {}
+
+  // If user has samples, use AI builder; otherwise profile-based
+  const hasSamples = user.voice_sample_1 || user.voice_sample_2 || user.voice_sample_3;
+  if (hasSamples) {
+    return buildVoiceDNAFromSamples(userId);
+  }
+
+  const dna = buildVoiceDNA(user);
+  try { await db.run('UPDATE users SET voice_dna = ? WHERE id = ?', [JSON.stringify(dna), userId]); } catch {}
+  return dna;
+}
+
 module.exports = {
   buildVoiceDNA,
+  buildVoiceDNAFromSamples,
   getOrBuildVoiceDNA,
   rebuildVoiceDNA,
   getServiceIntelligence,

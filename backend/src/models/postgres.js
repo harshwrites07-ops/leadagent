@@ -745,6 +745,12 @@ async function initPostgres() {
     await pgAlter(`ALTER TABLE users ADD COLUMN unique_difference TEXT`);
     await pgAlter(`ALTER TABLE users ADD COLUMN voice_dna TEXT DEFAULT '{}'`);
     await pgAlter(`ALTER TABLE users ADD COLUMN profile_completed INTEGER DEFAULT 0`);
+    await pgAlter(`ALTER TABLE users ADD COLUMN voice_sample_1 TEXT`);
+    await pgAlter(`ALTER TABLE users ADD COLUMN voice_sample_2 TEXT`);
+    await pgAlter(`ALTER TABLE users ADD COLUMN voice_sample_3 TEXT`);
+    await pgAlter(`ALTER TABLE users ADD COLUMN voice_confidence_register TEXT`);
+    await pgAlter(`ALTER TABLE users ADD COLUMN voice_sentence_style TEXT`);
+    await pgAlter(`ALTER TABLE users ADD COLUMN voice_dna_version INTEGER DEFAULT 1`);
     await pgAlter(`ALTER TABLE leads ADD COLUMN user_id INTEGER REFERENCES users(id)`);
     await pgAlter(`ALTER TABLE leads ADD COLUMN follow_up_count INTEGER DEFAULT 0`);
     await pgAlter(`ALTER TABLE leads ADD COLUMN last_contacted_date TEXT`);

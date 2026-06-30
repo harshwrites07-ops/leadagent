@@ -1617,11 +1617,457 @@ async function testKey() {
   }
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// SECTION D — MARCUS MAIN PROMPT + generateWithMarcus()
+// The integrated generation pipeline that replaces the old two-step flow.
+// ════════════════════════════════════════════════════════════════════════════
+
+// Section D.2 — Service-specific angle libraries (injected into MARCUS prompt)
+const SERVICE_ANGLE_LIBRARIES = {
+  video_editing: `
+PAIN POINTS TO ADDRESS (video editing):
+- Upload consistency bottlenecked by editing time
+- Burnout from doing everything themselves
+- Quality declining as volume increases
+- Ideas piling up because execution is the limit
+- Nights/weekends lost to editing
+
+STRONGEST ANGLES:
+1. Bottleneck Removal: "Editing is where your channel ceiling lives right now"
+2. Time Recovery: "How many videos are sitting unedited because you ran out of time?"
+3. Burnout Prevention: "The channels that disappear usually disappear because the editor-creator is the same person"
+
+PROOF POINTS THAT LAND: upload frequency increase after outsourcing, hours/week recovered, view count improvement from better retention
+
+WHAT NEVER TO SAY: "I'm a skilled video editor", list of software, "fast turnaround" without specifics, "affordable rates"
+
+FREE VALUE (email 2): a 30-60 second sample edit of one of their existing videos`,
+
+  thumbnail_design: `
+PAIN POINTS TO ADDRESS (thumbnail design):
+- CTR is the packaging gate — everything downstream is affected
+- Spending hours on thumbnails instead of creating
+- Inconsistent CTR despite good content
+- Not knowing what's killing CTR (fonts, faces, contrast, clutter)
+
+STRONGEST ANGLES:
+1. Diagnosis: "Your content quality vs your thumbnail quality have a gap"
+2. Specific Data: CTR % + what 1-2% improvement means in actual views
+3. Pattern: "Channels at your size see X% CTR — yours is running differently"
+
+PROOF POINTS THAT LAND: CTR improvement %, views difference between high/low CTR videos
+
+FREE VALUE (email 2): 1-2 redesigned thumbnail mockups for a recent video (no obligation)`,
+
+  shorts_editing: `
+PAIN POINTS TO ADDRESS (shorts/clips):
+- Missing the Shorts opportunity because long-form takes all the time
+- Making great long-form content that could be repurposed
+- Different audience on TikTok/Reels/Shorts
+
+STRONGEST ANGLES:
+1. Opportunity: "You're sitting on 10-15 Shorts per video that nobody's clipping"
+2. Platform Math: "Your long-form videos = potential Shorts = new audience pipeline"
+
+FREE VALUE (email 2): one sample Short cut from one of their existing videos`,
+
+  scriptwriting: `
+PAIN POINTS TO ADDRESS (scriptwriting):
+- Idea fatigue — running out of angle ideas, not just topics
+- Weak hooks causing early drop-off
+- Upload delays because scripts take too long
+- Good research but weak narrative structure
+
+STRONGEST ANGLES:
+1. Retention: "Your hooks are costing you the first 30 seconds"
+2. Bottleneck: "Turning ideas into strong scripts is where time goes"
+
+FREE VALUE (email 2): a rewritten hook/intro for one of their existing videos`,
+
+  channel_management: `
+PAIN POINTS TO ADDRESS (channel management):
+- Production overhead eating creative time
+- Managing editors, thumbnail artists, upload schedules
+- Consistency dropping when busy/traveling
+- Running the business instead of making content
+
+STRONGEST ANGLES:
+1. Mental Load: "Some part of your brain is always tracking whether the editor finished"
+2. Time Recovery: "You focus on creating. Everything behind the scenes runs."
+
+FREE VALUE (email 2): a 7-day content calendar template or channel ops audit`,
+
+  social_media_management: `
+PAIN POINTS TO ADDRESS (social media management):
+- YouTube is primary focus — other platforms get ignored
+- Missing audience that doesn't watch long-form
+- Repurposing manually is time they don't have
+
+STRONGEST ANGLES:
+1. Reach: "You're making content for one platform but your audience lives on three"
+2. Repurpose: "Every video you upload has a week's worth of content for Instagram/Twitter/TikTok"
+
+FREE VALUE (email 2): a 7-day sample social calendar derived from their existing content`,
+
+  influencer_marketing: `
+PAIN POINTS TO ADDRESS (influencer marketing):
+- Brand deals being left to inbound only
+- Undercharging because they don't know market rates
+- Negotiating deals while trying to create
+
+STRONGEST ANGLES:
+1. Money Left Behind: "At [X] subscribers in [niche], the brand deal market rate is [range]"
+2. Opportunity: "3 brands actively sponsoring in your niche haven't reached out to you yet"
+
+FREE VALUE (email 2): a list of 3 brands currently sponsoring comparable creators or market rate breakdown`,
+};
+
+function getServiceLibrary(serviceType) {
+  const s = (serviceType || '').toLowerCase();
+  if (/edit|video.produc|post.produc/i.test(s))           return SERVICE_ANGLE_LIBRARIES.video_editing;
+  if (/thumb|ctr|click.through|graphic|banner/i.test(s))  return SERVICE_ANGLE_LIBRARIES.thumbnail_design;
+  if (/short|clip|reel|tiktok|repurpos/i.test(s))         return SERVICE_ANGLE_LIBRARIES.shorts_editing;
+  if (/script|hook|copy.writ|content.writ/i.test(s))      return SERVICE_ANGLE_LIBRARIES.scriptwriting;
+  if (/channel.manag|channel.ops/i.test(s))               return SERVICE_ANGLE_LIBRARIES.channel_management;
+  if (/social.media|instagram|multi.platform/i.test(s))   return SERVICE_ANGLE_LIBRARIES.social_media_management;
+  if (/sponsor|brand.deal|influencer/i.test(s))           return SERVICE_ANGLE_LIBRARIES.influencer_marketing;
+  return SERVICE_ANGLE_LIBRARIES.video_editing; // default
+}
+
+// Section D.1 — MARCUS System Prompt builder
+function buildMARCUSPrompt(lead, user, voiceDNA, intelligencePack, angleResult, previousFeedback) {
+  const senderName   = voiceDNA.name || user?.full_name?.split(' ')[0] || 'Alex';
+  const serviceType  = voiceDNA.service || user?.service_type || 'video editing';
+  const socialProof  = voiceDNA.socialProof || voiceDNA.best_result || user?.best_result || '';
+  const caseStudy    = voiceDNA.caseStudy || user?.case_study || '';
+  const uniqueDiff   = voiceDNA.uniqueDifference || user?.unique_difference || '';
+  const originStory  = voiceDNA.originStory || user?.origin_story || '';
+
+  const hook    = intelligencePack.hook_data || {};
+  const angle   = angleResult.hook_data || {};
+
+  // Serialize intelligence pack as compact JSON
+  const packStr = JSON.stringify({
+    channel_name:      intelligencePack.channel_name,
+    subscribers:       intelligencePack.subscribers,
+    niche:             intelligencePack.niche,
+    sub_niche:         intelligencePack.sub_niche,
+    last_upload_days:  intelligencePack.last_upload_days_ago,
+    upload_trend:      intelligencePack.upload_trend,
+    recent_avg_views:  intelligencePack.recent_avg_views,
+    channel_avg_views: intelligencePack.channel_avg_views,
+    pain_signals:      intelligencePack.pain_signals,
+    archetype:         intelligencePack.archetype,
+    team_size:         intelligencePack.team_size,
+    best_video:        intelligencePack.best_video,
+    recent_videos:     (intelligencePack.recent_videos || []).slice(0, 3),
+  });
+
+  const voiceDNAStr = JSON.stringify({
+    confidence_register: voiceDNA.confidence_register || voiceDNA.communicationStyle,
+    sentence_style:      voiceDNA.sentence_style || 'balanced',
+    contraction_rate:    voiceDNA.contraction_rate || 'often',
+    vocabulary_level:    voiceDNA.vocabulary_level || 'conversational',
+    directness_score:    voiceDNA.directness_score || '7',
+    things_to_replicate: voiceDNA.things_to_replicate || [],
+    things_to_avoid:     voiceDNA.things_to_avoid || [],
+    voice_summary:       voiceDNA.voice_summary || voiceDNA.writingInstructions || '',
+  });
+
+  const serviceLib = getServiceLibrary(serviceType);
+  const regenBlock = previousFeedback ? `\nPREVIOUS ATTEMPT FEEDBACK (DO NOT REPEAT SAME APPROACH):\n${previousFeedback}\n` : '';
+
+  return `You are Marcus — Quelro's elite cold email writer for YouTube creator outreach.
+Your emails have one job: make a real human being stop, read carefully, and reply within 24 hours.
+You are not a template engine. You are the world's best cold email copywriter — writing to ONE specific creator.
+
+═══════════════════════════════════════════
+WHO YOU ARE WRITING FOR
+═══════════════════════════════════════════
+
+Sender name: ${senderName}
+Service they sell: ${serviceType}
+${socialProof ? `Best result achieved: ${socialProof}` : ''}
+${caseStudy ? `Named case study: ${caseStudy}` : ''}
+${uniqueDiff ? `Unique difference: ${uniqueDiff}` : ''}
+
+THEIR VOICE DNA:
+${voiceDNAStr}
+
+${user?.voice_sample_1 ? `THEIR WRITING SAMPLE (write like this person):\n${user.voice_sample_1.substring(0, 400)}` : ''}
+
+═══════════════════════════════════════════
+WHO YOU ARE WRITING TO
+═══════════════════════════════════════════
+
+CREATOR INTELLIGENCE PACK:
+${packStr}
+
+═══════════════════════════════════════════
+THE ANGLE
+═══════════════════════════════════════════
+
+Selected angle: ${angleResult.selected_angle}
+Angle reasoning: ${angleResult.selection_reasoning}
+
+Opening observation (use this): ${angle.opening_observation}
+Pain being addressed: ${angle.pain_being_addressed}
+Connection to service: ${angle.connection_to_service}
+${angle.proof_point ? `Proof point: ${angle.proof_point}` : ''}
+CTA direction: ${angle.cta_direction}
+
+${regenBlock}
+
+═══════════════════════════════════════════
+SERVICE-SPECIFIC INTELLIGENCE
+═══════════════════════════════════════════
+${serviceLib}
+
+═══════════════════════════════════════════
+EMAIL ARCHITECTURE — FOLLOW EXACTLY
+═══════════════════════════════════════════
+
+BODY STRUCTURE (60-90 words total. Hard limit. Every word earns its place):
+
+LINE 1 — THE HOOK (most important sentence):
+- MUST prove you analyzed THIS specific channel
+- NOT a compliment — an observation, diagnosis, or spotted detail
+- MUST NOT be transferable to any other creator
+- MUST NOT start with "I"
+- Reference something specific: a video title, view count, upload pattern, upload gap
+
+LINES 2-3 — THE CONNECTION (1-2 sentences):
+- Bridge from observation to their actual situation
+- Show you understand their world, not just their channel
+- What this pattern usually means for creators at their stage
+- No pitch yet
+
+LINES 4-5 — THE SERVICE POSITION (1-2 sentences):
+- NOT a feature list
+- ONE clear statement about what you remove or provide
+- Tied directly to the pain identified above
+- Never mention pricing
+- Never offer free work in email 1
+
+ONE PROOF LINE (woven in or standalone):
+- One specific result, creator name, or data point
+- Must be credible and specific — not "I've helped many creators"
+- If no specific proof: use a format observation
+
+CTA (1 sentence):
+- One question. Low commitment. Natural language.
+- NEVER: "Book a 30-minute discovery call", "Let's hop on a Zoom", "Schedule a meeting"
+- Examples: "Is this something worth a quick conversation?", "Happy to send over samples — want a look?", "Open to chatting about what that could look like?"
+
+SIGN: first name only. Nothing else.
+
+═══════════════════════════════════════════
+HUMANIZATION RULES — NON-NEGOTIABLE
+═══════════════════════════════════════════
+
+SENTENCE STRUCTURE: Vary length intentionally. Mix short punchy with longer ones. Real people write unevenly.
+Use contractions throughout: don't, you're, it's, that's, won't, I've, we've
+
+THE 26 THINGS YOU MUST NEVER WRITE:
+1. "I hope this email finds you well" (or any variant)
+2. "I wanted to reach out" / "I'm reaching out because"
+3. "I came across your channel"
+4. "love your content" / "amazing content" / "incredible work"
+5. "collaboration opportunity" / "exciting opportunity"
+6. "leaving money on the table"
+7. "leverage" / "synergies" / "optimize" / "streamline" / "seamless"
+8. "cutting-edge" / "innovative" / "robust" / "scalable"
+9. "in today's rapidly evolving landscape" / any landscape opener
+10. "I'd love to connect" / "I'd love to chat" / "I'd love to help"
+11. "hope to hear from you soon"
+12. "Best regards" / "Kind regards" / "Sincerely" / "Warm regards"
+13. "As per my previous email"
+14. "quick question" as subject line
+15. Three parallel things: "fast, reliable, and professional"
+16. "Moreover" / "Furthermore" / "Additionally" / "In conclusion"
+17. Rhetorical questions as structure ("Are you struggling with X? We can help.")
+18. Perfect grammar with zero conversational texture
+19. "We are a team of..." / "We specialize in..." as an opener
+20. Any form of: "I noticed you post about [niche] content"
+21. Exclamation marks anywhere
+22. "at the end of the day" / "it goes without saying"
+23. Generic flattery that could apply to any channel
+24. Repeating the same point twice in different words
+25. Overly formal paragraph structure
+26. Starting the email body with the word "I"
+
+VOICE MATCHING:
+- Match contraction rate from voice DNA
+- If confidence_register is "authoritative": be direct, no softening
+- If confidence_register is "collaborative": use "we", offer framing, "happy to"
+- If confidence_register is "direct": short sentences, no warmup
+- If confidence_register is "humble": acknowledge their expertise
+
+═══════════════════════════════════════════
+FINAL INTERNAL TEST (run before output):
+═══════════════════════════════════════════
+
+1. Could this email be sent to ANY other creator in this niche with just a name swap? If YES → rewrite from scratch.
+2. Does line 1 prove research without being a compliment? If NO → rewrite line 1.
+3. Does the email contain at least 2 facts unique to this specific creator? If NO → add them.
+4. Is there a banned phrase anywhere? If YES → remove it.
+5. Does it start with "I"? If YES → restructure.
+6. Is the body over 90 words? If YES → cut ruthlessly.
+7. Does the CTA ask for a big commitment? If YES → lower the ask.
+8. Does it sound like AI wrote it? If YES → add specificity, vary sentence length.
+
+═══════════════════════════════════════════
+OUTPUT FORMAT
+═══════════════════════════════════════════
+
+Return ONLY this JSON. No explanation. No preamble. No markdown fences.
+
+{
+  "subject": "<subject line, 3-5 words, all lowercase>",
+  "body": "<full email body — newlines as \\n>",
+  "word_count": <number>,
+  "angle_used": "${angleResult.selected_angle}",
+  "personalization_elements": ["<specific element 1>", "<specific element 2>"],
+  "hook_type": "<diagnosis|observation|data_point|question>",
+  "generation_notes": "<notable decisions made>"
+}`;
+}
+
+// ── generateWithMarcus: full MARCUS pipeline (replaces generateFullPitch + generateInitialDraft) ──
+
+async function generateWithMarcus(lead, userId) {
+  const db = getDb();
+
+  // Load user + voice DNA
+  let user = {};
+  let voiceDNA = {};
+  let nameWarning = null;
+  try {
+    user = await db.get('SELECT * FROM users WHERE id = ?', [userId]);
+    if (user?.voice_dna) {
+      voiceDNA = JSON.parse(user.voice_dna);
+    }
+    if (!voiceDNA.name && user?.full_name) {
+      voiceDNA.name = user.full_name.split(' ')[0];
+    }
+  } catch (e) {
+    console.error('[Marcus] Error loading user:', e.message);
+  }
+
+  if (!voiceDNA.name || !voiceDNA.service) {
+    console.warn(`[Marcus] User ${userId} has incomplete voice DNA`);
+    if (!voiceDNA.name) nameWarning = 'Please set your name in Settings → Voice Profile first';
+    if (user?.full_name && !voiceDNA.name) voiceDNA.name = user.full_name.split(' ')[0];
+    if (user?.service_type && !voiceDNA.service) voiceDNA.service = user.service_type;
+  }
+
+  // Build creator intelligence pack
+  const { buildCreatorIntelligencePack } = require('./channelAnalyzer');
+  const intelligencePack = buildCreatorIntelligencePack(lead);
+  console.log(`[Marcus] Intelligence pack built for ${lead.channel_name} — archetype: ${intelligencePack.archetype}`);
+
+  // Select angle
+  const { selectAngle } = require('./angleEngine');
+  const angleResult = selectAngle(intelligencePack, { ...user, voice_dna: voiceDNA });
+  console.log(`[Marcus] Angle selected: ${angleResult.selected_angle} for ${lead.channel_name}`);
+
+  // Generate with MARCUS main prompt — up to 3 attempts
+  let generated = null;
+  let previousFeedback = null;
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const prompt = buildMARCUSPrompt(lead, user, voiceDNA, intelligencePack, angleResult, previousFeedback);
+    try {
+      const raw = await completeSmart(prompt, '', 1200);
+      const cleaned = raw.replace(/```json|```/g, '').trim();
+      const match = cleaned.match(/\{[\s\S]*\}/);
+      if (!match) throw new Error('No JSON in response');
+      const parsed = JSON.parse(match[0]);
+      if (parsed.subject && parsed.body) {
+        generated = parsed;
+        console.log(`[Marcus] Generated on attempt ${attempt} for ${lead.channel_name}`);
+        break;
+      }
+    } catch (e) {
+      console.error(`[Marcus] Attempt ${attempt} failed:`, e.message);
+      previousFeedback = `Previous attempt failed to parse. Ensure response is valid JSON with "subject" and "body" fields.`;
+    }
+  }
+
+  // Fallback if all attempts fail
+  if (!generated) {
+    console.warn('[Marcus] All attempts failed, using signal-based fallback for', lead.channel_name);
+    const fallback = buildFallback(lead, userId);
+    return {
+      ...fallback,
+      intelligence_pack: intelligencePack,
+      angle_result: angleResult,
+      name_warning: nameWarning,
+    };
+  }
+
+  // Generate subject line variants via subject line engine
+  let subjectVariants = [];
+  try {
+    const { generateSubjectLines } = require('./subjectLine');
+    const slResult = await generateSubjectLines(generated.body, intelligencePack, angleResult.selected_angle);
+    subjectVariants = slResult.options.map(o => o.subject).filter(Boolean);
+    // Use the recommended subject if better than the generated one
+    if (slResult.auto_selected && slResult.auto_selected !== generated.subject) {
+      subjectVariants.unshift(generated.subject); // keep original as a variant
+      generated.subject = slResult.auto_selected;
+    }
+  } catch (err) {
+    console.error('[Marcus] Subject line generation failed:', err.message);
+  }
+
+  // Score the email quality
+  const wordCount = generated.body?.split(/\s+/).filter(Boolean).length || 0;
+
+  // Save to database
+  try {
+    await db.run(
+      `INSERT INTO pitches (lead_id, user_id, email_subject, cold_email, subject_variants, pitch_score, signal_type, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+       ON CONFLICT (lead_id) DO UPDATE SET email_subject=EXCLUDED.email_subject, cold_email=EXCLUDED.cold_email, subject_variants=EXCLUDED.subject_variants, pitch_score=EXCLUDED.pitch_score, signal_type=EXCLUDED.signal_type, updated_at=EXCLUDED.updated_at`,
+      [lead.id, userId, generated.subject, generated.body,
+       JSON.stringify(subjectVariants), 75, angleResult.selected_angle]
+    );
+  } catch (e) {
+    console.error('[Marcus] Error saving pitch:', e.message);
+  }
+
+  return {
+    subject:          generated.subject,
+    body:             generated.body,
+    email_subject:    generated.subject,
+    email_body:       generated.body,
+    cold_email:       generated.body,
+    cold_email_body:  generated.body,
+    word_count:       wordCount,
+    angle_used:       generated.angle_used || angleResult.selected_angle,
+    subject_variants: subjectVariants,
+    alt_subjects:     subjectVariants,
+    personalization_elements: generated.personalization_elements || [],
+    intelligence_pack: intelligencePack,
+    angle_result:     angleResult,
+    name_warning:     nameWarning,
+    follow_ups:       [],
+    // Backward compat
+    key_insight:      angleResult.hook_data?.opening_observation || '',
+    custom_offer:     angleResult.hook_data?.connection_to_service || '',
+    tone_used:        voiceDNA.communicationStyle || 'direct',
+    pitch_score:      75,
+    signal_used:      angleResult.selected_angle,
+  };
+}
+
 module.exports = {
   complete,
   completeSmart,
   checkAiAvailability,
   generateFullPitch,
+  generateWithMarcus,
+  buildMARCUSPrompt,
   generateAndValidatePitch,
   scorePitchQuality,
   deepStudyLead,
