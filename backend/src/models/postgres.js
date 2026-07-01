@@ -412,7 +412,7 @@ async function initPostgres() {
         email TEXT NOT NULL,
         access_token TEXT NOT NULL,
         refresh_token TEXT,
-        token_expiry INTEGER,
+        token_expiry BIGINT,
         status TEXT DEFAULT 'active',
         emails_sent_today INTEGER DEFAULT 0,
         last_reset_date TEXT DEFAULT CURRENT_DATE::text,
@@ -780,6 +780,8 @@ async function initPostgres() {
     await pgAlter(`ALTER TABLE emails ADD COLUMN user_id INTEGER REFERENCES users(id)`);
     await pgAlter(`ALTER TABLE pitches ADD COLUMN signal_type TEXT`);
     await pgAlter(`ALTER TABLE pitches ADD COLUMN user_id INTEGER REFERENCES users(id)`);
+    // token_expiry is ms-epoch from Google — exceeds INTEGER max, must be BIGINT
+    try { await query(`ALTER TABLE gmail_accounts ALTER COLUMN token_expiry TYPE BIGINT`); } catch {}
     console.log('[PG] ✅ migrations applied');
 
     console.log('[PG] ✅ ALL TABLES READY');
