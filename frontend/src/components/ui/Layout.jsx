@@ -8,7 +8,7 @@ import {
   LayoutDashboard, Search, BarChart2, Mail, Users,
   Zap, Star, TrendingUp, Settings, Shield, Bell,
   HelpCircle, LogOut, Youtube, Cpu,
-  Sparkles, Menu, X,
+  Sparkles, Menu, X, MoreHorizontal,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -32,6 +32,13 @@ const BOTTOM_NAV = [
   { to: '/crm',       icon: Users,           label: 'CRM' },
 ];
 
+const MORE_NAV = [
+  { to: '/analytics', icon: BarChart2,  label: 'Analytics' },
+  { to: '/campaigns', icon: TrendingUp, label: 'Campaigns' },
+  { to: '/quality',   icon: Star,       label: 'Quality Leads' },
+  { to: '/settings',  icon: Settings,   label: 'Settings' },
+];
+
 const ADMIN_ITEMS = [
   { to: '/admin', icon: Shield, label: 'Admin' },
 ];
@@ -53,9 +60,10 @@ export default function Layout({ children }) {
   const location = useLocation();
   const isMobile = useMobile();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
 
-  // Close drawer whenever route changes
-  useEffect(() => { setDrawerOpen(false); }, [location.pathname]);
+  // Close drawer + more sheet whenever route changes
+  useEffect(() => { setDrawerOpen(false); setMoreOpen(false); }, [location.pathname]);
 
   const handleLogout = async () => {
     await logout();
@@ -390,68 +398,145 @@ export default function Layout({ children }) {
       <AssistantChat />
 
       {isMobile && (
-        <nav style={{
-          position: 'fixed', bottom: 0, left: 0, right: 0,
-          height: 60,
-          background: 'rgba(11,11,15,0.96)',
-          backdropFilter: 'blur(20px)',
-          WebkitBackdropFilter: 'blur(20px)',
-          borderTop: '1px solid var(--line)',
-          display: 'flex', alignItems: 'stretch',
-          zIndex: 40,
-          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-        }}>
-          {BOTTOM_NAV.map(({ to, icon: Icon, label, dot }) => {
-            const active = isActive(to);
-            const taskDot = (to === '/leads' && powerModeRunning) || (to === '/pitch' && pitchJobRunning);
-            return (
-              <NavLink
-                key={to}
-                to={to}
+        <>
+          {/* More sheet backdrop */}
+          <AnimatePresence>
+            {moreOpen && (
+              <motion.div
+                key="more-backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                onClick={() => setMoreOpen(false)}
+                style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', zIndex: 48 }}
+              />
+            )}
+          </AnimatePresence>
+
+          {/* More sheet */}
+          <AnimatePresence>
+            {moreOpen && (
+              <motion.div
+                key="more-sheet"
+                initial={{ y: '100%' }}
+                animate={{ y: 0 }}
+                exit={{ y: '100%' }}
+                transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
                 style={{
-                  flex: 1,
-                  display: 'flex', flexDirection: 'column',
-                  alignItems: 'center', justifyContent: 'center',
-                  gap: 3, fontSize: 9.5,
-                  color: active ? 'var(--lime)' : 'var(--text-4)',
-                  fontWeight: active ? 600 : 400,
-                  transition: 'color 150ms',
-                  position: 'relative',
-                  textDecoration: 'none',
-                  paddingBottom: 2,
+                  position: 'fixed', bottom: 0, left: 0, right: 0,
+                  background: 'var(--bg-2)',
+                  borderTop: '1px solid var(--line)',
+                  borderRadius: '16px 16px 0 0',
+                  zIndex: 49,
+                  paddingBottom: 'calc(60px + env(safe-area-inset-bottom, 0px))',
+                  paddingTop: 12,
                 }}
               >
-                <div style={{ position: 'relative' }}>
-                  <Icon size={18} />
-                  {taskDot && (
-                    <span style={{
-                      position: 'absolute', top: -3, right: -3,
-                      width: 6, height: 6, borderRadius: '50%',
-                      background: 'var(--lime)',
-                      animation: 'pulse-lime 2s infinite',
-                    }} />
-                  )}
-                  {dot && !taskDot && (
-                    <span style={{
-                      position: 'absolute', top: -3, right: -3,
-                      width: 6, height: 6, borderRadius: '50%',
-                      background: 'var(--coral)',
-                    }} />
-                  )}
+                {/* Drag handle */}
+                <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--line)', margin: '0 auto 16px' }} />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, padding: '0 8px 8px' }}>
+                  {MORE_NAV.map(({ to, icon: Icon, label }) => {
+                    const active = isActive(to);
+                    return (
+                      <NavLink
+                        key={to}
+                        to={to}
+                        style={{
+                          display: 'flex', flexDirection: 'column',
+                          alignItems: 'center', justifyContent: 'center',
+                          gap: 6, padding: '18px 12px',
+                          borderRadius: 12, textDecoration: 'none',
+                          background: active ? 'rgba(200,246,84,0.08)' : 'transparent',
+                          border: `1px solid ${active ? 'var(--lime-border)' : 'var(--line)'}`,
+                          color: active ? 'var(--lime)' : 'var(--text-2)',
+                        }}
+                      >
+                        <Icon size={20} />
+                        <span style={{ fontSize: 11, fontWeight: active ? 600 : 400 }}>{label}</span>
+                      </NavLink>
+                    );
+                  })}
                 </div>
-                {label}
-                {active && (
-                  <span style={{
-                    position: 'absolute', top: 0, left: '50%',
-                    transform: 'translateX(-50%)',
-                    width: 20, height: 2, borderRadius: 2,
-                    background: 'var(--lime)',
-                  }} />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Bottom nav bar */}
+          <nav style={{
+            position: 'fixed', bottom: 0, left: 0, right: 0,
+            height: 60,
+            background: 'rgba(11,11,15,0.96)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            borderTop: '1px solid var(--line)',
+            display: 'flex', alignItems: 'stretch',
+            zIndex: 50,
+            paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+          }}>
+            {BOTTOM_NAV.map(({ to, icon: Icon, label, dot }) => {
+              const active = isActive(to);
+              const taskDot = (to === '/leads' && powerModeRunning) || (to === '/pitch' && pitchJobRunning);
+              return (
+                <NavLink
+                  key={to}
+                  to={to}
+                  style={{
+                    flex: 1,
+                    display: 'flex', flexDirection: 'column',
+                    alignItems: 'center', justifyContent: 'center',
+                    gap: 3, fontSize: 9.5,
+                    color: active ? 'var(--lime)' : 'var(--text-4)',
+                    fontWeight: active ? 600 : 400,
+                    transition: 'color 150ms',
+                    position: 'relative',
+                    textDecoration: 'none',
+                    paddingBottom: 2,
+                  }}
+                >
+                  <div style={{ position: 'relative' }}>
+                    <Icon size={18} />
+                    {taskDot && (
+                      <span style={{ position: 'absolute', top: -3, right: -3, width: 6, height: 6, borderRadius: '50%', background: 'var(--lime)', animation: 'pulse-lime 2s infinite' }} />
+                    )}
+                    {dot && !taskDot && (
+                      <span style={{ position: 'absolute', top: -3, right: -3, width: 6, height: 6, borderRadius: '50%', background: 'var(--coral)' }} />
+                    )}
+                  </div>
+                  {label}
+                  {active && (
+                    <span style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', width: 20, height: 2, borderRadius: 2, background: 'var(--lime)' }} />
+                  )}
+                </NavLink>
+              );
+            })}
+
+            {/* More button */}
+            <button
+              onClick={() => setMoreOpen(v => !v)}
+              style={{
+                flex: 1,
+                display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'center',
+                gap: 3, fontSize: 9.5, paddingBottom: 2,
+                color: (moreOpen || MORE_NAV.some(n => isActive(n.to))) ? 'var(--lime)' : 'var(--text-4)',
+                fontWeight: (moreOpen || MORE_NAV.some(n => isActive(n.to))) ? 600 : 400,
+                background: 'none', border: 'none', cursor: 'pointer', position: 'relative',
+              }}
+            >
+              <div style={{ position: 'relative' }}>
+                <MoreHorizontal size={18} />
+                {MORE_NAV.some(n => isActive(n.to)) && (
+                  <span style={{ position: 'absolute', top: -3, right: -3, width: 6, height: 6, borderRadius: '50%', background: 'var(--lime)' }} />
                 )}
-              </NavLink>
-            );
-          })}
-        </nav>
+              </div>
+              More
+              {(moreOpen || MORE_NAV.some(n => isActive(n.to))) && (
+                <span style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', width: 20, height: 2, borderRadius: 2, background: 'var(--lime)' }} />
+              )}
+            </button>
+          </nav>
+        </>
       )}
     </div>
   );
