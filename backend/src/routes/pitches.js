@@ -94,8 +94,10 @@ router.post('/generate/:leadId', aiLimiter, asyncHandler(async (req, res) => {
     const voiceDNA = userRow?.voice_dna ? JSON.parse(userRow.voice_dna) : {};
     const creatorData = buildCreatorData(lead);
 
+    const emailSubject = result.email_subject || result.subject || '';
     gateResult = await runQualityGate(
-      finalEmailBody, creatorData, voiceDNA,
+      emailSubject ? `Subject: ${emailSubject}\n\n${finalEmailBody}` : finalEmailBody,
+      creatorData, voiceDNA,
       async (attemptNum, _email, evalResult) => {
         await logQualityAttempt(db, req.user.id, lead, attemptNum, _email, evalResult);
       },
@@ -170,8 +172,10 @@ router.post('/bulk-generate', aiLimiter, asyncHandler(async (req, res) => {
         try {
           const userRow  = await db.get('SELECT voice_dna FROM users WHERE id = ?', [req.user.id]);
           const voiceDNA = userRow?.voice_dna ? JSON.parse(userRow.voice_dna) : {};
+          const emailSubject2 = result.email_subject || result.subject || '';
           gateResult = await runQualityGate(
-            finalEmailBody, buildCreatorData(lead), voiceDNA,
+            emailSubject2 ? `Subject: ${emailSubject2}\n\n${finalEmailBody}` : finalEmailBody,
+            buildCreatorData(lead), voiceDNA,
             async (attemptNum, _email, evalResult) => {
               await logQualityAttempt(db, req.user.id, lead, attemptNum, _email, evalResult);
             },
@@ -230,8 +234,10 @@ router.post('/generate-and-send', aiLimiter, asyncHandler(async (req, res) => {
         let emailBody  = result.email_body || result.body;
         let gateScore  = null;
         try {
+          const emailSub3 = result.email_subject || result.subject || '';
           const gate = await runQualityGate(
-            emailBody, buildCreatorData(lead), voiceDNA,
+            emailSub3 ? `Subject: ${emailSub3}\n\n${emailBody}` : emailBody,
+            buildCreatorData(lead), voiceDNA,
             async (n, _e, r) => { await logQualityAttempt(db, req.user.id, lead, n, _e, r); },
             result.intelligence_pack,
             result.angle_result,
@@ -408,8 +414,10 @@ async function runPowerSendJob(jobId, { lead_ids, max_leads = 100, per_account_l
           let emailBody  = result.email_body || result.body;
           let gateScore  = null;
           try {
+            const emailSub4 = result.email_subject || result.subject || '';
             const gate = await runQualityGate(
-              emailBody, buildCreatorData(lead), voiceDNA,
+              emailSub4 ? `Subject: ${emailSub4}\n\n${emailBody}` : emailBody,
+              buildCreatorData(lead), voiceDNA,
               async (n, _e, r) => { await logQualityAttempt(db, _userId, lead, n, _e, r); },
               result.intelligence_pack,
               result.angle_result,

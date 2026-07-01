@@ -365,6 +365,10 @@ function getQualityStatus(score) {
 // Params 5+6: fullIntelligencePack + angleResult from generateWithMarcus.
 // When present: smart surgical regen. Without: legacy fallback.
 
+function stripSubjectPrefix(text) {
+  return text.replace(/^Subject:\s*.+\n+/i, '').trim();
+}
+
 async function runQualityGate(emailText, creatorData, voiceDNA, onAttempt, fullIntelligencePack, angleResult) {
   const MAX_ATTEMPTS    = 5;
   const TARGET_SCORE    = 85;
@@ -408,7 +412,7 @@ async function runQualityGate(emailText, creatorData, voiceDNA, onAttempt, fullI
 
     if (result.score >= TARGET_SCORE && !result.auto_regen) {
       return {
-        email: currentEmail, quality: result,
+        email: stripSubjectPrefix(currentEmail), quality: result,
         regenerated: i > 1, attempts: i, warning: false,
         qualityStatus: getQualityStatus(result.score),
       };
@@ -454,7 +458,7 @@ Return ONLY JSON: {"subject": "<subject>", "body": "<body>"}`;
   }
 
   return {
-    email:         bestEmail,
+    email:         stripSubjectPrefix(bestEmail),
     quality:       bestResult,
     regenerated,
     attempts:      MAX_ATTEMPTS,

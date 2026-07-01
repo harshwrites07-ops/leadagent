@@ -70,7 +70,7 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-const isHttps = !!(
+const isHttps = process.env.NODE_ENV === 'production' || !!(
   process.env.RAILWAY_STATIC_URL ||
   process.env.FORCE_HTTPS === 'true' ||
   (process.env.APP_URL || '').startsWith('https://')
@@ -228,24 +228,6 @@ const isHttps = !!(
   app.use('/api/quality',   requireAuth, require('./src/routes/qualityLeads'));
   app.use('/api/stripe',    requireAuth, stripeRouter);
   app.use('/api/razorpay',  requireAuth, razorpayRouter);
-
-  const { createProxyMiddleware } = require('http-proxy-middleware');
-  const QUELRO_SITE_DIR = path.join(__dirname, '../quelro-website');
-  const QUELRO_IMAGES_URL = process.env.QUELRO_SITE_URL || 'https://web-production-58f048.up.railway.app';
-  const imagesProxy = createProxyMiddleware({ target: QUELRO_IMAGES_URL, changeOrigin: true, on: { error: (_e, _r, res) => res.status(502).send('Images unavailable') } });
-  app.use('/images', imagesProxy);
-  const QUELRO_SITE = process.env.QUELRO_SITE_URL || 'https://web-production-58f048.up.railway.app';
-  const cdnProxy = createProxyMiddleware({ target: QUELRO_SITE, changeOrigin: true });
-  app.use('/wp-content', cdnProxy);
-  app.use('/wp-includes', cdnProxy);
-  app.use('/fonts', cdnProxy);
-  app.use('/video', cdnProxy);
-
-  app.use('/css', express.static(path.join(QUELRO_SITE_DIR, 'css'), { maxAge: '7d' }));
-  app.use('/js',  express.static(path.join(QUELRO_SITE_DIR, 'js'),  { maxAge: '7d' }));
-
-  const MARKETING_DIRS = ['pricing','about','features','contact-us','blog','case-studies','webinars','whitepapers','demo','practice-intelligence','practice-management','qai','lp','wp','feature-releases','events','company','privacy-policy','terms-of-service','webinar-2025-intelligent-firm'];
-  MARKETING_DIRS.forEach(dir => app.use('/' + dir, express.static(path.join(QUELRO_SITE_DIR, dir), { maxAge: '1h' })));
 
   app.get('/', (req, res) => res.sendFile(path.join(FRONTEND_DIST, 'index.html')));
 
