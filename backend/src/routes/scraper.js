@@ -118,7 +118,7 @@ router.post('/powermode/start', asyncHandler(async (req, res) => {
 
   const runLimit = getRunLimit(req.user);
   const usageCheck = await checkUsageLimit(req.user, 'leads');
-  const remaining = usageCheck.allowed ? (usageCheck.limit - usageCheck.used) : 0;
+  const remaining = usageCheck.allowed ? (usageCheck.limit < 0 ? Infinity : usageCheck.limit - usageCheck.used) : 0;
 
   let targetCount = parseInt(req.body?.targetCount) || 100;
   if (targetCount > runLimit) return res.status(400).json({ success: false, error: `Your ${req.user.plan || 'free'} plan allows up to ${runLimit} leads per run. Upgrade to get more.`, runLimit, upgradeRequired: targetCount > runLimit });
