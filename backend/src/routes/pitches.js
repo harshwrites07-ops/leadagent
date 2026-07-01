@@ -90,8 +90,10 @@ router.get('/generate-stream/:leadId', aiLimiter, asyncHandler(async (req, res) 
   try {
     result = await claude.generateWithMarcus(lead, req.user.id);
   } catch (e) {
-    console.error('[Marcus] AI failed for', lead.channel_name, ':', e.message);
-    send({ type: 'error', error: `AI unavailable: ${e.message?.substring(0, 100)}` });
+    const isTimeout = e.code === 'ECONNABORTED' || /timeout/i.test(e.message || '');
+    const errMsg = isTimeout ? 'Generation timed out — Claude API took too long. Try again.' : `AI unavailable: ${e.message?.substring(0, 120)}`;
+    console.error(`[Marcus/SSE] FAILED lead=${lead.id} channel="${lead.channel_name}" isTimeout=${isTimeout} err="${e.message}"`);
+    send({ type: 'error', error: errMsg });
     return res.end();
   }
 
@@ -173,8 +175,12 @@ router.post('/generate/:leadId', aiLimiter, asyncHandler(async (req, res) => {
   try {
     result = await claude.generateWithMarcus(lead, req.user.id);
   } catch (e) {
-    console.error('[Marcus] AI failed for', lead.channel_name, ':', e.message);
-    return res.status(502).json({ success: false, error: `AI unavailable: ${e.message?.substring(0, 100)}` });
+    const isTimeout = e.code === 'ECONNABORTED' || /timeout/i.test(e.message || '');
+    const errMsg = isTimeout
+      ? `Generation timed out — Claude API took too long. Try again.`
+      : `AI unavailable: ${e.message?.substring(0, 120)}`;
+    console.error(`[Marcus] FAILED lead=${lead.id} channel="${lead.channel_name}" err="${e.message}" stack=${e.stack?.split('\n')[1] || ''}`);
+    return res.status(502).json({ success: false, error: errMsg });
   }
 
   let redditDm = null;
@@ -202,7 +208,9 @@ router.post('/generate/:leadId', aiLimiter, asyncHandler(async (req, res) => {
     );
     finalEmailBody = gateResult.email;
   } catch (err) {
-    console.error('[QualityGate] Gate failed, using MARCUS output directly:', err.message);
+    const isTimeout = err.code === 'ECONNABORTED' || /timeout/i.test(err.message || '');
+    console.error(`[QualityGate] FAILED lead=${lead.id} channel="${lead.channel_name}" isTimeout=${isTimeout} err="${err.message}"`);
+    // Gate failure is non-fatal — fall through with MARCUS output
   }
   // ────────────────────────────────────────────────────────────────────────────
 
@@ -303,7 +311,9 @@ router.post('/bulk-generate', aiLimiter, asyncHandler(async (req, res) => {
             result.angle_result,
           );
           finalEmailBody = gateResult.email;
-        } catch {}
+        } catch (gateErr) {
+          console.error(`[BulkGate] FAILED lead=${id} channel="${lead.channel_name}" err="${gateErr.message}"`);
+        }
 
         // N-gram dedup check — skip leads whose email is too similar to one already generated this session
         const dedup = dedupCheck(req.user.id, finalEmailBody);
@@ -327,8 +337,16 @@ router.post('/bulk-generate', aiLimiter, asyncHandler(async (req, res) => {
         return { id, success: true, qualityScore: gateResult?.quality?.score ?? null };
       })
     );
-    for (const r of batchResults) {
-      results.push(r.status === 'fulfilled' ? r.value : { id: batch[batchResults.indexOf(r)], success: false, error: r.reason?.message });
+    for (let ri = 0; ri < batchResults.length; ri++) {
+      const r = batchResults[ri];
+      if (r.status === 'fulfilled') {
+        results.push(r.value);
+      } else {
+        const failId = batch[ri];
+        const errMsg = r.reason?.message || 'Unknown failure';
+        console.error(`[BulkGenerate] REJECTED lead=${failId} err="${errMsg}" stack=${r.reason?.stack?.split('\n')[1] || ''}`);
+        results.push({ id: failId, success: false, error: errMsg });
+      }
     }
   }
   res.json({ success: true, results });

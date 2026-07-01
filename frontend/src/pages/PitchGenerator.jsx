@@ -301,6 +301,7 @@ export default function PitchGenerator() {
     setPitchJobLeadId(selectedLead?.id ?? null);
     addBackgroundTask({ id: 'pitch-bulk', label: `Generating ${toProcess.length} pitch${toProcess.length !== 1 ? 'es' : ''}`, page: '/pitch' });
 
+    let bulkSuccessCount = 0;
     for (let i = 0; i < toProcess.length; i++) {
       const lead = toProcess[i];
       setBulkProgress(p => ({ ...p, current: i + 1 }));
@@ -310,12 +311,14 @@ export default function PitchGenerator() {
         if (andSend && p) {
           await api.post('/emails/queue', { lead_id: lead.id, subject: p.email_subject, body: p.cold_email_body });
         }
+        bulkSuccessCount++;
         const newResult = { lead, status: andSend ? 'queued' : 'generated', pitch: p };
         setBulkResults(prev => [...prev, newResult]);
         setPitchJobProgress(i + 1);
         setPitchJobResults(prev => [...prev, newResult]);
-      } catch (e) {
-        const errResult = { lead, status: 'error', error: e.message };
+      } catch (err) {
+        const errMsg = err.response?.data?.error || err.message || 'Request failed';
+        const errResult = { lead, status: 'error', error: errMsg };
         setBulkResults(prev => [...prev, errResult]);
         setPitchJobProgress(i + 1);
         setPitchJobResults(prev => [...prev, errResult]);
@@ -329,7 +332,11 @@ export default function PitchGenerator() {
     setBulkProgress(p => ({ ...p, done: true }));
     setPitchJobRunning(false);
     removeBackgroundTask('pitch-bulk');
-    toast.success(`Done! ${toProcess.length} pitches ${andSend ? 'generated & queued' : 'generated'}`);
+    const bulkFailCount = toProcess.length - bulkSuccessCount;
+    const bulkAction = andSend ? 'generated & queued' : 'generated';
+    if (bulkFailCount === 0) toast.success(`Done! ${bulkSuccessCount} pitches ${bulkAction}`);
+    else if (bulkSuccessCount === 0) toast.error(`All ${bulkFailCount} pitches failed — check errors above`);
+    else toast(`${bulkSuccessCount} pitches ${bulkAction}, ${bulkFailCount} failed`, { icon: '⚠️', duration: 6000 });
   };
 
   const handleStreamGenerate = async () => {
@@ -344,26 +351,33 @@ export default function PitchGenerator() {
     setPitchJobProgress(0);
     addBackgroundTask({ id: 'pitch-stream', label: `Generating ${toProcess.length} pitch${toProcess.length !== 1 ? 'es' : ''}`, page: '/pitch' });
 
-    let done = 0;
+    let streamDone = 0;
+    let streamSuccessCount = 0;
     await Promise.allSettled(toProcess.map(async lead => {
       try {
         const { data } = await api.post(`/pitches/generate/${lead.id}`);
         const p = normalizePitch(data.pitch ?? data);
+        streamSuccessCount++;
         setStreamEmails(prev => prev.map(e =>
           e.leadId === lead.id ? { ...e, status: 'done', data: { ...data, pitch: p } } : e
         ));
-      } catch (e) {
+      } catch (err) {
+        // Fix: use 'err' (not 'e') so it isn't shadowed by the .map callback parameter
+        const errMsg = err.response?.data?.error || err.message || 'Request failed';
         setStreamEmails(prev => prev.map(e =>
-          e.leadId === lead.id ? { ...e, status: 'error', error: e.message } : e
+          e.leadId === lead.id ? { ...e, status: 'error', error: errMsg } : e
         ));
       }
-      done++;
-      setPitchJobProgress(done);
+      streamDone++;
+      setPitchJobProgress(streamDone);
     }));
 
     setPitchJobRunning(false);
     removeBackgroundTask('pitch-stream');
-    toast.success(`Done! ${toProcess.length} pitches generated`);
+    const streamFailCount = toProcess.length - streamSuccessCount;
+    if (streamFailCount === 0) toast.success(`Done! ${streamSuccessCount} pitches generated`);
+    else if (streamSuccessCount === 0) toast.error(`All ${toProcess.length} pitches failed — check errors above`);
+    else toast(`${streamSuccessCount} generated, ${streamFailCount} failed`, { icon: '⚠️', duration: 6000 });
   };
 
   const filteredLeads = leads.filter(l =>
@@ -640,7 +654,7 @@ export default function PitchGenerator() {
                     <motion.div key={leadId} initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                       style={{ padding: 16, background: 'rgba(255,80,80,.05)', border: '1px solid rgba(255,80,80,.2)', borderRadius: 10 }}>
                       <div style={{ fontSize: 12.5, fontWeight: 500, marginBottom: 4 }}>{lead.channel_name}</div>
-                      <div className="muted" style={{ fontSize: 11, color: 'var(--bad)' }}>Failed: {error || 'Unknown error'}</div>
+                      <div className="muted" style={{ fontSize: 11, color: 'var(--bad)' }}>Failed: {error || 'Request failed — check Railway logs for details'}</div>
                     </motion.div>
                   );
                 }
