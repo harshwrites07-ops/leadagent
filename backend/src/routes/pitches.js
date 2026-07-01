@@ -5,6 +5,7 @@ const { asyncHandler } = require('../middleware/errorHandler');
 const { aiLimiter } = require('../middleware/rateLimiter');
 const claude = require('../services/claudeService');
 const { runQualityGate, generateInitialDraft, buildCreatorData, getQualityStatus } = require('../qualityGate');
+const { checkAndRegister: dedupCheck, clearSession: dedupClear } = require('../services/ngramDedup');
 
 function parsePitch(pitch) {
   if (!pitch) return null;
@@ -150,6 +151,30 @@ router.get('/by-lead/:leadId', asyncHandler(async (req, res) => {
   res.json({ success: true, pitch });
 }));
 
+// Phase 8 — Pre-send checklist
+router.get('/checklist/:leadId', asyncHandler(async (req, res) => {
+  const db = getDb();
+  const lead = await db.get('SELECT * FROM leads WHERE id=? AND user_id=?', [req.params.leadId, req.user.id]);
+  if (!lead) return res.status(404).json({ error: 'Lead not found' });
+  const pitch = await db.get('SELECT * FROM pitches WHERE lead_id=?', [req.params.leadId]);
+  const userRow = await db.get('SELECT voice_dna FROM users WHERE id=?', [req.user.id]);
+
+  const items = [];
+  const add = (label, pass, detail, critical = false) => items.push({ label, pass, detail, critical });
+
+  add('Has email address', !!lead.email && !lead.email_invalid, lead.email ? `${lead.email}` : 'No email found for this lead', true);
+  add('Email generated', !!pitch?.cold_email, pitch?.cold_email ? 'Email body ready' : 'Generate pitch first', true);
+  add('Subject line set', !!(pitch?.email_subject), pitch?.email_subject || 'No subject — will use fallback', false);
+  add('Quality score', !pitch || !pitch.quality_score || pitch.quality_score >= 70, pitch?.quality_score ? `Score: ${pitch.quality_score}/100` : 'Not scored yet', false);
+  add('Voice profile set', !!(userRow?.voice_dna), userRow?.voice_dna ? 'Voice DNA active' : 'Go to Settings → Voice Profile', false);
+  add('Not already emailed', lead.crm_stage !== 'emailed', lead.crm_stage === 'emailed' ? `Already emailed — follow-up instead` : 'Good to send', false);
+  add('Personalization present', !!(pitch?.cold_email?.toLowerCase().includes(lead.channel_name?.toLowerCase())), 'Channel name referenced in email', false);
+
+  const allPass = items.every(i => i.pass);
+  const criticalFail = items.some(i => i.critical && !i.pass);
+  res.json({ success: true, items, allPass, canSend: !criticalFail });
+}));
+
 router.post('/bulk-generate', aiLimiter, asyncHandler(async (req, res) => {
   const leadIds = req.body.lead_ids || req.body.leadIds;
   if (!leadIds?.length) return res.status(400).json({ success: false, error: 'lead_ids required' });
@@ -184,6 +209,13 @@ router.post('/bulk-generate', aiLimiter, asyncHandler(async (req, res) => {
           );
           finalEmailBody = gateResult.email;
         } catch {}
+
+        // N-gram dedup check — skip leads whose email is too similar to one already generated this session
+        const dedup = dedupCheck(req.user.id, finalEmailBody);
+        if (dedup.isDuplicate) {
+          console.log(`[Dedup] Similarity ${dedup.similarity} — skipping lead ${id}, body too close to a previous email`);
+          return { id, success: false, error: `Skipped (${Math.round(dedup.similarity * 100)}% duplicate)` };
+        }
 
         await savePitch(db, id, req.user.id, {
           email_subject:       result.email_subject || result.subject,

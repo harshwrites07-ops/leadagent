@@ -383,4 +383,72 @@ router.get('/follow-up/settings', asyncHandler(async (req, res) => {
   res.json({ settings: settings || { interval_days: 3, max_count: 2, enabled: false } });
 }));
 
+// ── Phase 7: Reply Intelligence ───────────────────────────────────────────────
+
+function classifyReply(replyBody) {
+  if (!replyBody) return 'unknown';
+  const t = replyBody.toLowerCase();
+  if (/out of office|away|vacation|holiday|will return|back on|auto.?reply/i.test(t)) return 'out_of_office';
+  if (/not interested|no thank|don.t need|pass on|remove me|unsubscribe|stop emailing|leave me alone/i.test(t)) return 'not_interested';
+  if (/yes|interested|tell me more|sounds good|let.s talk|when can|schedule|book|call|sounds interesting|would love|want to know|send me|how much|price|rate|cost/i.test(t)) return 'interested';
+  if (/you should (talk|contact|reach|email)|speak with|pass (you|this) on|forward|refer/i.test(t)) return 'referral';
+  if (/\?|how|what|when|who|where|why|which|can you|could you|do you/i.test(t)) return 'question';
+  if (/already have|working with someone|have an editor|found someone|covered|sorted/i.test(t)) return 'has_vendor';
+  return 'neutral';
+}
+
+function suggestResponse(classification, replyBody, channelName, senderName) {
+  const name = channelName || 'there';
+  const me = senderName || 'Alex';
+  switch (classification) {
+    case 'interested':
+      return `Hey ${name} — great to hear from you!\n\nWould love to hop on a quick call to show you what I have in mind for your channel. 15 minutes — totally low pressure.\n\nWhat does your schedule look like this week?\n\n${me}`;
+    case 'question':
+      return `Hey ${name} — good question.\n\n[Answer their specific question here]\n\nHappy to jump on a quick call if it's easier to go through it live — totally up to you.\n\n${me}`;
+    case 'out_of_office':
+      return `[Follow up automatically when they're back — no action needed now]`;
+    case 'not_interested':
+      return `Hey ${name} — completely understood, no worries at all.\n\nIf anything changes in the future, feel free to reach out. Good luck with the channel!\n\n${me}`;
+    case 'has_vendor':
+      return `Makes total sense — glad you're covered.\n\nIf you ever want a second set of eyes or your situation changes, happy to chat. Good luck!\n\n${me}`;
+    case 'referral':
+      return `Thanks for passing it along! I'll reach out to them directly.\n\nAppreciate the intro — let me know if there's anything I can do for your channel too.\n\n${me}`;
+    default:
+      return `Hey ${name} — thanks for replying!\n\n[Personalize based on their message]\n\n${me}`;
+  }
+}
+
+router.get('/replies/classify', asyncHandler(async (req, res) => {
+  const db = getDb();
+  const replies = (await db.all(`
+    SELECT e.id, e.reply_body, e.reply_subject, e.my_reply_body,
+           l.channel_name, l.niche
+    FROM emails e LEFT JOIN leads l ON l.id = e.lead_id
+    WHERE e.status = 'replied' AND e.user_id = ? AND e.reply_body IS NOT NULL
+    ORDER BY e.replied_at DESC LIMIT 100
+  `, [req.user.id])).map(r => {
+    const clean = ensureClean(r.reply_body);
+    const classification = classifyReply(clean);
+    return { ...r, reply_body: clean, classification };
+  });
+  res.json({ success: true, replies, counts: replies.reduce((acc, r) => { acc[r.classification] = (acc[r.classification] || 0) + 1; return acc; }, {}) });
+}));
+
+router.get('/replies/:emailId/suggest', asyncHandler(async (req, res) => {
+  const db = getDb();
+  const email = await db.get(`
+    SELECT e.id, e.reply_body, e.from_email,
+           l.channel_name, u.full_name
+    FROM emails e
+    LEFT JOIN leads l ON l.id = e.lead_id
+    LEFT JOIN users u ON u.id = e.user_id
+    WHERE e.id = ? AND e.user_id = ?
+  `, [req.params.emailId, req.user.id]);
+  if (!email) return res.status(404).json({ error: 'Email not found' });
+  const clean = ensureClean(email.reply_body || '');
+  const classification = classifyReply(clean);
+  const suggestion = suggestResponse(classification, clean, email.channel_name, email.full_name?.split(' ')[0]);
+  res.json({ success: true, classification, suggestion, reply_body: clean });
+}));
+
 module.exports = router;

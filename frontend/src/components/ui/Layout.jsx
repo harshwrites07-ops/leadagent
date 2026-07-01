@@ -369,6 +369,7 @@ export default function Layout({ children }) {
         minHeight: 'calc(100vh - var(--topbar-h))',
         width: isMobile ? '100vw' : `calc(100vw - var(--sidebar-w))`,
         overflowX: 'hidden',
+        paddingBottom: isMobile ? 'calc(60px + env(safe-area-inset-bottom, 0px))' : 0,
       }}>
         <AnimatePresence mode="wait">
           <motion.div

@@ -76,6 +76,10 @@ export default function PitchGenerator() {
   const [qualityBlocked, setQualityBlocked] = useState(false);
   const [blockDetails, setBlockDetails] = useState(null);
 
+  // Pre-send checklist
+  const [checklist, setChecklist] = useState(null);
+  const [checklistLoading, setChecklistLoading] = useState(false);
+
   // Streaming batch (parallel generation)
   const [streamMode, setStreamMode] = useState(false);
   const [streamEmails, setStreamEmails] = useState([]);
@@ -120,6 +124,7 @@ export default function PitchGenerator() {
   const handleSelectLead = async lead => {
     setSelectedLead(lead);
     setPitch(null);
+    setChecklist(null);
     setCompletedSteps(new Set());
     setCurrentStep(null);
     setShowLeadPicker(false);
@@ -131,6 +136,7 @@ export default function PitchGenerator() {
         setEmailSubject(p.email_subject);
         setEmailBody(p.cold_email_body);
         setCompletedSteps(new Set(GEN_STEPS.map(s => s.key)));
+        loadChecklist(lead.id);
       }
     } catch { /* no pitch yet */ }
   };
@@ -173,6 +179,7 @@ export default function PitchGenerator() {
       setEmailBody(p.cold_email_body);
       setCompletedSteps(new Set(GEN_STEPS.map(s => s.key)));
       setCurrentStep(null);
+      if (selectedLead?.id) loadChecklist(selectedLead.id);
       setLeads(prev => prev.map(l => l.id === selectedLead.id ? { ...l, pitch_id: data.pitch?.id ?? true } : l));
       if (data.warning) toast(data.warning, { icon: '⚠️', duration: 6000 });
       if (data.qualityWarning) {
@@ -202,8 +209,20 @@ export default function PitchGenerator() {
     finally { setRescoring(false); }
   };
 
+  const loadChecklist = async (leadId) => {
+    if (!leadId) return;
+    setChecklistLoading(true);
+    try {
+      const { data } = await api.get(`/pitches/checklist/${leadId}`);
+      setChecklist(data);
+    } catch {}
+    finally { setChecklistLoading(false); }
+  };
+
   const handleAddToQueue = async () => {
     if (!selectedLead) return;
+    // Load checklist if not yet loaded
+    if (!checklist) await loadChecklist(selectedLead.id);
     try {
       await api.post('/emails/queue', { lead_id: selectedLead.id, subject: emailSubject, body: emailBody });
       toast.success(`${selectedLead.channel_name} added to email queue!`);
@@ -1210,6 +1229,24 @@ export default function PitchGenerator() {
                       ))}
                     </div>
                   </motion.div>
+
+                  {/* Pre-send checklist */}
+                  {checklist && (
+                    <div style={{ padding: '12px 14px', background: checklist.canSend ? 'rgba(200,246,84,0.04)' : 'rgba(255,138,115,0.06)', border: `1px solid ${checklist.canSend ? 'var(--lime-border)' : 'rgba(255,138,115,0.25)'}`, borderRadius: 8, marginBottom: 4 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: checklist.canSend ? 'var(--lime)' : 'var(--coral)', marginBottom: 8 }}>
+                        {checklist.canSend ? '✓ Ready to send' : '⚠ Issues found'}
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                        {checklist.items.map((item, i) => (
+                          <div key={i} className="row" style={{ gap: 8, alignItems: 'flex-start' }}>
+                            <span style={{ fontSize: 12, color: item.pass ? 'var(--lime)' : item.critical ? 'var(--coral)' : 'var(--text-4)', flexShrink: 0, lineHeight: 1.6 }}>{item.pass ? '✓' : item.critical ? '✗' : '·'}</span>
+                            <span style={{ fontSize: 12, color: item.pass ? 'var(--text-2)' : item.critical ? 'var(--coral)' : 'var(--text-3)', lineHeight: 1.6 }}>{item.label}</span>
+                            {!item.pass && <span className="muted" style={{ fontSize: 11, lineHeight: 1.6 }}>— {item.detail}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Action row */}
                   <div className="row" style={{ gap: 8 }}>

@@ -3,6 +3,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, MessageSquare, RefreshCw, Mail, ArrowLeft, Send, Check, ChevronRight } from 'lucide-react';
 import api, { formatDate } from '../../utils/api';
 
+const CLASSIFICATION_LABELS = {
+  interested:    { label: 'Interested', color: 'var(--lime)' },
+  question:      { label: 'Has question', color: 'var(--sky)' },
+  not_interested:{ label: 'Not interested', color: 'var(--coral)' },
+  out_of_office: { label: 'Out of office', color: 'var(--text-3)' },
+  has_vendor:    { label: 'Has vendor', color: 'var(--text-3)' },
+  referral:      { label: 'Referral', color: 'var(--cream)' },
+  neutral:       { label: 'Neutral', color: 'var(--text-3)' },
+};
+
 // ─── Conversation thread view ─────────────────────────────────────────────────
 function ConversationView({ reply, onBack, onReplySent }) {
   const [replyBody, setReplyBody] = useState('');
@@ -11,6 +21,21 @@ function ConversationView({ reply, onBack, onReplySent }) {
   const [mySentReplies, setMySentReplies] = useState(
     reply.my_reply_body ? [{ body: reply.my_reply_body, sent_at: reply.my_reply_sent_at }] : []
   );
+  const [classification, setClassification] = useState(null);
+  const [suggestion, setSuggestion] = useState(null);
+  const [loadingSuggestion, setLoadingSuggestion] = useState(false);
+
+  const loadSuggestion = async () => {
+    if (suggestion) { setReplyBody(suggestion); return; }
+    setLoadingSuggestion(true);
+    try {
+      const { data } = await api.get(`/emails/replies/${reply.id}/suggest`);
+      setClassification(data.classification);
+      setSuggestion(data.suggestion);
+      if (data.classification !== 'out_of_office') setReplyBody(data.suggestion);
+    } catch {}
+    finally { setLoadingSuggestion(false); }
+  };
   const textareaRef = useRef(null);
   const bottomRef = useRef(null);
 
@@ -65,6 +90,11 @@ function ConversationView({ reply, onBack, onReplySent }) {
           <p className="text-xs truncate" style={{ color: 'var(--text-3)' }}>{reply.reply_from || reply.lead_email}</p>
         </div>
         <div className="text-right flex-shrink-0">
+          {classification && CLASSIFICATION_LABELS[classification] && (
+            <div style={{ fontSize: 10, fontWeight: 700, color: CLASSIFICATION_LABELS[classification].color, border: `1px solid ${CLASSIFICATION_LABELS[classification].color}44`, padding: '2px 8px', borderRadius: 99, marginBottom: 2 }}>
+              {CLASSIFICATION_LABELS[classification].label}
+            </div>
+          )}
           <p className="text-xs" style={{ color: 'var(--text-3)' }}>via</p>
           <p className="text-xs font-semibold" style={{ color: 'var(--violet)' }}>{reply.from_email}</p>
         </div>
@@ -147,6 +177,15 @@ function ConversationView({ reply, onBack, onReplySent }) {
             onKeyDown={handleKeyDown}
           />
           <button
+            onClick={loadSuggestion}
+            disabled={loadingSuggestion}
+            title="AI suggested response"
+            className="flex-shrink-0 p-3 rounded-xl transition-colors"
+            style={{ background: 'var(--surface-2)', border: '1px solid var(--lime-border)', color: 'var(--lime)', opacity: loadingSuggestion ? 0.5 : 1 }}
+          >
+            <span style={{ fontSize: 14 }}>{loadingSuggestion ? '…' : '✦'}</span>
+          </button>
+          <button
             onClick={sendReply}
             disabled={sending || !replyBody.trim()}
             className="flex-shrink-0 p-3 rounded-xl transition-colors disabled:opacity-40"
@@ -188,6 +227,11 @@ function ReplyRow({ reply, onOpen }) {
         <div className="flex items-center gap-2 mb-0.5">
           <p className="text-sm font-semibold truncate" style={{ color: 'var(--text)' }}>{reply.channel_name || reply.lead_email}</p>
           <span className="badge badge--coral text-xs flex-shrink-0">REPLIED</span>
+          {reply.classification && CLASSIFICATION_LABELS[reply.classification] && (
+            <span style={{ fontSize: 10, fontWeight: 600, color: CLASSIFICATION_LABELS[reply.classification].color, flexShrink: 0 }}>
+              · {CLASSIFICATION_LABELS[reply.classification].label}
+            </span>
+          )}
         </div>
         <p className="text-xs truncate" style={{ color: 'var(--text-2)' }}>{reply.reply_subject || reply.subject || 'No subject'}</p>
         <p className={`text-xs truncate mt-0.5${!hasContent ? ' italic' : ''}`} style={{ color: hasContent ? 'var(--text-3)' : 'var(--text-4)' }}>{preview}</p>
@@ -214,13 +258,21 @@ export default function RepliesInbox({ onClose }) {
   const load = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const { data } = await api.get('/emails/replies');
-      const fresh = data.replies || [];
-      setReplies(fresh);
+      const [repliesRes, classifyRes] = await Promise.allSettled([
+        api.get('/emails/replies'),
+        api.get('/emails/replies/classify'),
+      ]);
+      const fresh = repliesRes.status === 'fulfilled' ? (repliesRes.value.data.replies || []) : [];
+      const classifyMap = {};
+      if (classifyRes.status === 'fulfilled') {
+        for (const r of classifyRes.value.data.replies || []) classifyMap[r.id] = r.classification;
+      }
+      const merged = fresh.map(r => ({ ...r, classification: classifyMap[r.id] || null }));
+      setReplies(merged);
       // Keep activeReply in sync if it's open
       setActiveReply(prev => {
         if (!prev) return prev;
-        const updated = fresh.find(r => r.id === prev.id);
+        const updated = merged.find(r => r.id === prev.id);
         return updated || prev;
       });
     } catch {

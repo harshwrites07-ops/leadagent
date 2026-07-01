@@ -37,6 +37,9 @@ const safeUser = (u) => u ? {
   outreach_goal: u.outreach_goal, origin_story: u.origin_story,
   unique_difference: u.unique_difference, profile_completed: u.profile_completed,
   voice_dna: u.voice_dna,
+  voice_sample_1: u.voice_sample_1 || null,
+  voice_sample_2: u.voice_sample_2 || null,
+  voice_sample_3: u.voice_sample_3 || null,
 } : null;
 
 router.get('/me', requireAuth, (req, res) => {
@@ -345,7 +348,8 @@ router.post('/skip-onboarding', requireAuth, asyncHandler(async (req, res) => {
 
 router.put('/profile', requireAuth, asyncHandler(async (req, res) => {
   const allowed = ['full_name','service_type','one_liner','experience_years','best_result','case_study',
-    'target_niches','pricing_range','personality_traits','outreach_goal','origin_story','unique_difference'];
+    'target_niches','pricing_range','personality_traits','outreach_goal','origin_story','unique_difference',
+    'voice_sample_1','voice_sample_2','voice_sample_3'];
   const db = getDb();
   const sets = [], vals = [];
   for (const key of allowed) {

@@ -341,6 +341,40 @@ export default function Analytics() {
               </div>
             </motion.div>
 
+            {/* Timing intelligence — best send windows */}
+            {emailData?.best_times?.length > 0 && (() => {
+              const top3 = [...emailData.best_times]
+                .sort((a, b) => (b.replies || b.open_rate || 0) - (a.replies || a.open_rate || 0))
+                .slice(0, 3);
+              const fmt = h => {
+                const ampm = h < 12 ? 'am' : 'pm';
+                const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+                return `${h12}${ampm}`;
+              };
+              return (
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.32, duration: 0.4 }} className="card" style={{ marginBottom: 16 }}>
+                  <div className="card__head">
+                    <div className="card__title">Optimal send windows</div>
+                    <span className="muted" style={{ fontSize: 11 }}>based on your reply data</span>
+                  </div>
+                  <div className="card__body">
+                    <div className="row" style={{ gap: 12 }}>
+                      {top3.map((t, i) => (
+                        <div key={i} style={{ flex: 1, padding: '14px 16px', background: i === 0 ? 'rgba(200,246,84,0.06)' : 'var(--bg-2)', border: `1px solid ${i === 0 ? 'var(--lime-border)' : 'var(--line)'}`, borderRadius: 10, textAlign: 'center' }}>
+                          <div style={{ fontSize: 22, fontWeight: 800, fontFamily: 'var(--f-mono)', color: i === 0 ? 'var(--lime)' : 'var(--text)', marginBottom: 4 }}>{fmt(Number(t.hour))}</div>
+                          <div className="muted" style={{ fontSize: 11 }}>{t.sent} sent · {t.open_rate?.toFixed(0) || '—'}% open</div>
+                          {i === 0 && <div style={{ fontSize: 10, color: 'var(--lime)', fontWeight: 600, marginTop: 4 }}>Best window</div>}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="muted" style={{ fontSize: 11, marginTop: 10 }}>
+                      Schedule bulk sends to start at your top window for the highest open rate.
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })()}
+
             {/* Top copy + Niche performance */}
             <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 16 }}>
               <motion.div

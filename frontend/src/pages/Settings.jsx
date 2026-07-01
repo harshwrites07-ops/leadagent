@@ -22,6 +22,7 @@ export default function Settings() {
     service_type: '', one_liner: '', experience_years: '', best_result: '', case_study: '',
     target_niches: [], pricing_range: '', personality_traits: [],
     outreach_goal: '', origin_story: '', unique_difference: '',
+    voice_sample_1: '', voice_sample_2: '', voice_sample_3: '',
   });
   const [voiceDNA, setVoiceDNA] = useState(null);
   const [savingVoice, setSavingVoice] = useState(false);
@@ -115,6 +116,9 @@ export default function Settings() {
         outreach_goal: u.outreach_goal || '',
         origin_story: u.origin_story || '',
         unique_difference: u.unique_difference || '',
+        voice_sample_1: u.voice_sample_1 || '',
+        voice_sample_2: u.voice_sample_2 || '',
+        voice_sample_3: u.voice_sample_3 || '',
       });
       try { setVoiceDNA(JSON.parse(u.voice_dna || '{}')); } catch {}
     } catch {}
@@ -510,6 +514,36 @@ export default function Settings() {
                 <textarea className="input" rows={3} maxLength={300} style={{ resize: 'none' }}
                   value={voice.unique_difference} onChange={e => setV('unique_difference', e.target.value)}
                   placeholder="e.g. I only take 3 clients at a time so every creator gets my full attention." />
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card__head">
+              <div>
+                <div className="card__title">Email voice samples <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>(optional but powerful)</span></div>
+              </div>
+            </div>
+            <div className="card__body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div className="muted" style={{ fontSize: 12, lineHeight: 1.6 }}>
+                Paste 1-3 emails you've actually written and sent. MARCUS will copy your exact vocabulary, sentence rhythm, and personality — not just your settings. The more real examples you give, the more the AI sounds like you.
+              </div>
+              {[1,2,3].map(n => (
+                <div className="field" key={n}>
+                  <div className="field__label" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Email sample {n} {voice[`voice_sample_${n}`] ? <span style={{ color: 'var(--lime)' }}>✓</span> : <span className="muted">(optional)</span>}</span>
+                    <span className="muted" style={{ fontWeight: 400 }}>{voice[`voice_sample_${n}`].length}/2000</span>
+                  </div>
+                  <textarea
+                    className="input" rows={5} maxLength={2000} style={{ resize: 'vertical', fontFamily: 'var(--f-sans)', fontSize: 12.5, lineHeight: 1.7 }}
+                    value={voice[`voice_sample_${n}`]}
+                    onChange={e => setV(`voice_sample_${n}`, e.target.value)}
+                    placeholder={`Paste a real cold email you wrote and sent${n === 1 ? ' — ideally one that got a reply' : ''}...`}
+                  />
+                </div>
+              ))}
+              <div className="muted" style={{ fontSize: 11, padding: '8px 12px', background: 'rgba(200,246,84,0.04)', border: '1px solid var(--lime-border)', borderRadius: 8 }}>
+                Your samples are only used to build your Voice DNA. They are never sent or shared.
               </div>
             </div>
           </div>
