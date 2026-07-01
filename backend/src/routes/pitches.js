@@ -4,7 +4,7 @@ const { getDb, logActivity, USE_PG } = require('../models/database');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { aiLimiter } = require('../middleware/rateLimiter');
 const claude = require('../services/claudeService');
-const { runQualityGate, generateInitialDraft, buildCreatorData } = require('../qualityGate');
+const { runQualityGate, generateInitialDraft, buildCreatorData, getQualityStatus } = require('../qualityGate');
 
 function parsePitch(pitch) {
   if (!pitch) return null;
@@ -125,16 +125,18 @@ router.post('/generate/:leadId', aiLimiter, asyncHandler(async (req, res) => {
   logActivity('pitch_generated', `Pitch generated for ${lead.channel_name}`, lead.id, {}, req.user.id);
 
   const pitch = parsePitch(await db.get('SELECT * FROM pitches WHERE lead_id = ?', [lead.id]));
+  const qualityScore = gateResult?.quality?.score ?? null;
   res.json({
     success: true,
     pitch,
     warning:            result.name_warning || null,
-    qualityScore:       gateResult?.quality?.score ?? null,
+    qualityScore,
     qualityPassed:      gateResult?.quality?.passed ?? null,
     qualityFeedback:    gateResult?.quality?.overall_feedback ?? null,
     qualityBreakdown:   gateResult?.quality?.breakdown ?? null,
     qualityRegenerated: gateResult?.regenerated ?? false,
     qualityWarning:     gateResult?.warning ?? false,
+    qualityStatus:      gateResult?.qualityStatus ?? getQualityStatus(qualityScore ?? 0),
     angleUsed:          result.angle_used || result.signal_used || null,
   });
 }));

@@ -917,31 +917,30 @@ export default function PitchGenerator() {
                         </div>
                       )}
 
-                      {/* Quality Gate Badge */}
+                      {/* Quality Gate Badge — label only, no raw number shown to users */}
                       {pitch.quality_score != null && (
                         <div style={{ marginBottom: 14 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                            <div style={{
-                              display: 'inline-flex', alignItems: 'center', gap: 6,
-                              padding: '5px 12px',
-                              borderRadius: 6,
-                              fontSize: 11, fontWeight: 700,
-                              fontFamily: 'var(--f-mono)',
-                              background: pitch.quality_warning
-                                ? '#ff8a73'
-                                : pitch.quality_score >= 85
-                                  ? '#c8f654'
-                                  : pitch.quality_score >= 75
-                                    ? '#c8f654cc'
-                                    : '#ff8a73',
-                              color: '#0a0a0c',
-                            }}>
-                              {pitch.quality_warning
-                                ? `⚠ Quality: ${pitch.quality_score}/100 — Low confidence`
-                                : pitch.quality_score >= 85
-                                  ? `✅ Quality: ${pitch.quality_score}/100`
-                                  : `✓ Quality: ${pitch.quality_score}/100`}
-                            </div>
+                            {(() => {
+                              const qs = pitch.quality_score;
+                              const warn = pitch.quality_warning;
+                              const label = warn || qs < 70
+                                ? '⚠ Needs polish'
+                                : qs >= 90 ? '✅ Quality: Excellent'
+                                : qs >= 85 ? '✓ Quality: Good'
+                                : '✓ Quality: Enhanced';
+                              const bg = warn || qs < 70 ? '#ff8a73' : qs >= 85 ? '#c8f654' : '#c8f654cc';
+                              return (
+                                <div style={{
+                                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                                  padding: '5px 12px', borderRadius: 6,
+                                  fontSize: 11, fontWeight: 700, fontFamily: 'var(--f-mono)',
+                                  background: bg, color: '#0a0a0c',
+                                }}>
+                                  {label}
+                                </div>
+                              );
+                            })()}
                             {pitch.quality_regenerated && (
                               <span style={{ fontSize: 10, color: 'var(--lime)', fontFamily: 'var(--f-mono)' }}>
                                 ENHANCED
@@ -1161,7 +1160,7 @@ export default function PitchGenerator() {
 
                       <div className="grid g-3" style={{ gap: 10, marginTop: 14 }}>
                         {[
-                          { l: 'Pitch score', v: (pitch.quality_score ?? pitch.pitch_score) != null ? `${pitch.quality_score ?? pitch.pitch_score}/100` : '—', c: 'var(--lime)' },
+                          { l: 'Pitch quality', v: pitch.quality_score >= 90 ? 'Excellent' : pitch.quality_score >= 85 ? 'Good' : pitch.quality_score >= 70 ? 'Enhanced' : (pitch.quality_score ?? pitch.pitch_score) != null ? 'Needs polish' : '—', c: 'var(--lime)' },
                           { l: 'Spam risk',   v: '0.4',  c: 'var(--ok)',   d: '/ 10' },
                           { l: 'Open rate',   v: '64%',  c: 'var(--lime)', d: '+8 vs avg' },
                         ].map((m, i) => (

@@ -1862,13 +1862,77 @@ CTA (1 sentence):
 SIGN: first name only. Nothing else.
 
 ═══════════════════════════════════════════
-HUMANIZATION RULES — NON-NEGOTIABLE
+THE HUMANIZATION LAYER — READ THIS BEFORE WRITING
 ═══════════════════════════════════════════
 
-SENTENCE STRUCTURE: Vary length intentionally. Mix short punchy with longer ones. Real people write unevenly.
-Use contractions throughout: don't, you're, it's, that's, won't, I've, we've
+Your default instinct — trained on millions of "professional persuasive writing" examples — will produce something that sounds like a competent marketer. That is exactly what you must NOT produce. A competent marketer's email gets deleted. A specific person's email gets read.
 
-THE 26 THINGS YOU MUST NEVER WRITE:
+THE CORE INSTRUCTION:
+Write the BLUNT version first. Do not write a polished version and then add personality. Polish is the enemy. Every clause added to make a sentence sound more professional or balanced makes it sound more like AI. Imagine texting this observation to a friend who happens to run a YouTube channel. You noticed something. You're telling them. That's it.
+
+THE 7 FORBIDDEN SENTENCE PATTERNS (these are the mechanical fingerprint of AI writing — avoid the SHAPE, not just the words):
+
+PATTERN 1 — CONCESSIVE CONTRAST (hardest tell)
+Forbidden: "X is solid/fine, but Y is the problem."
+Forbidden: "The content is great, but something in the packaging..."
+Why: AI always signals "balanced fairness" before criticism. Real humans just say the thing.
+Instead: State the problem directly. No setup. No fairness clause.
+"Your last video did 92K. Your channel normally does 290K." — two facts, no "but."
+
+PATTERN 2 — SETUP-THEN-REVEAL
+Forbidden: "That gap usually means one thing: [reveal]"
+Forbidden: "Here's what's actually happening: [reveal]"
+Why: This is a TED talk / presentation deck device. Nobody writes to strangers like this.
+Instead: Just say the thing. "Looks like a hook problem, not a content one."
+
+PATTERN 3 — CLEAN BINARY REFRAME
+Forbidden: "It's not a X problem. It's a Y problem."
+Forbidden: "This isn't about X. It's about Y."
+Why: Most detectable AI construction that exists. Models love tidy opposites.
+Instead: "Looks like a hook problem" — state your read, skip the negation.
+
+PATTERN 4 — STACKED EM-DASHES
+Forbidden: "[claim] — [clause] — [second clause]"
+Why: Three-part em-dash sentences are written/edited prose, not typed messages.
+Instead: Break into two short sentences. "Same editor every video. No handoffs."
+
+PATTERN 5 — RULE OF THREE
+Forbidden: "Fast, reliable, and professional." / "Hooks, thumbnails, and pacing."
+Why: One tricolon is fine. AI uses this structure repeatedly, making it feel templated.
+Instead: Use two items, or one, or restructure as a sentence.
+
+PATTERN 6 — ABSTRACT VERBS
+Forbidden as main verb: leverage, optimize, streamline, empower, elevate, unlock, transform, maximize, enhance
+Why: These describe nothing. They're a substitute for a real, specific claim.
+Instead: Say the concrete action. Not "I optimize your retention" → "I re-cut your intros so people stop leaving in the first 20 seconds."
+
+PATTERN 7 — UNIFORM SENTENCE RHYTHM
+Forbidden: 3+ consecutive sentences all in the 15-25 word range with similar structure.
+Why: The deepest, hardest-to-fake tell. Even without banned phrases, even rhythm reads as AI.
+Instead: Deliberately vary. A 4-word sentence. Then one that runs 18-20 words with a subordinate clause. Then a fragment. Then medium again.
+
+THE BLUNT-DRAFT METHOD — YOUR WRITING PROCESS:
+STEP 1: Write the single blunt fact. Just the observation. "Your last video pulled 92K. Your channel usually does 290K."
+STEP 2: Write your blunt read on why. Unfiltered. "Looks like a hook problem, not a content one."
+STEP 3: Write the blunt claim about what you do. Specific, or nothing. "I edit music essay channels. Fixed this exact thing for one — took them from 50K to 200K in three months."
+STEP 4: Write the blunt ask. "Want me to look at what's happening in your last one?"
+STEP 5: Assemble. Do NOT add connective tissue or make it "flow better." The blunt version IS the final version. If you feel the urge to polish — that urge is the AI-tell instinct. Resist it.
+
+THE SPECIFIC-DETAIL REQUIREMENT:
+Every email MUST reference at least ONE of these NAMED things:
+- An actual video title (exact or close)
+- An actual upload date or gap in days
+- An actual format/series name they run
+A ratio alone ("169K subs, 15K views") is NOT sufficient personalization. It proves you have analytics access, not that you watched their work. Always pair a number with a named thing.
+
+VOICE MATCHING:
+- Match contraction rate from voice DNA
+- If confidence_register is "authoritative": be direct, no softening
+- If confidence_register is "collaborative": use "we", offer framing, "happy to"
+- If confidence_register is "direct": short sentences, no warmup
+- If confidence_register is "humble": acknowledge their expertise
+
+THE 26 BANNED PHRASES (any of these = immediate fail):
 1. "I hope this email finds you well" (or any variant)
 2. "I wanted to reach out" / "I'm reaching out because"
 3. "I came across your channel"
@@ -1883,11 +1947,11 @@ THE 26 THINGS YOU MUST NEVER WRITE:
 12. "Best regards" / "Kind regards" / "Sincerely" / "Warm regards"
 13. "As per my previous email"
 14. "quick question" as subject line
-15. Three parallel things: "fast, reliable, and professional"
+15. Three parallel things for rhythm: "fast, reliable, and professional"
 16. "Moreover" / "Furthermore" / "Additionally" / "In conclusion"
 17. Rhetorical questions as structure ("Are you struggling with X? We can help.")
 18. Perfect grammar with zero conversational texture
-19. "We are a team of..." / "We specialize in..." as an opener
+19. "We are a team of..." / "We specialize in..." as opener
 20. Any form of: "I noticed you post about [niche] content"
 21. Exclamation marks anywhere
 22. "at the end of the day" / "it goes without saying"
@@ -1895,13 +1959,6 @@ THE 26 THINGS YOU MUST NEVER WRITE:
 24. Repeating the same point twice in different words
 25. Overly formal paragraph structure
 26. Starting the email body with the word "I"
-
-VOICE MATCHING:
-- Match contraction rate from voice DNA
-- If confidence_register is "authoritative": be direct, no softening
-- If confidence_register is "collaborative": use "we", offer framing, "happy to"
-- If confidence_register is "direct": short sentences, no warmup
-- If confidence_register is "humble": acknowledge their expertise
 
 ═══════════════════════════════════════════
 FINAL INTERNAL TEST (run before output):
