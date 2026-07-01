@@ -393,10 +393,13 @@ async function runQualityGate(emailText, creatorData, voiceDNA, onAttempt, fullI
   let bestScore    = 0;
   let regenerated  = false;
   const attempts   = [];
+  const gateStart  = Date.now();
 
   for (let i = 1; i <= MAX_ATTEMPTS; i++) {
+    const t0 = Date.now();
     const result = await evaluateEmailQuality(currentEmail, scoringPack, voiceDNA, voiceDNA.service || 'video editing');
-    console.log(`[QualityGate] Attempt ${i}: ${result.score}/100 ${result.auto_regen ? '(auto_regen)' : ''}`);
+    const evalMs = Date.now() - t0;
+    console.log(`[QualityGate] Attempt ${i}/${MAX_ATTEMPTS}: score=${result.score}/100 eval=${evalMs}ms${result.auto_regen ? ' auto_regen' : ''}${result.automatic_fail_triggered ? ` FAIL(${result.fail_reason})` : ''}`);
 
     if (onAttempt) {
       try { await onAttempt(i, currentEmail, result); } catch {}
@@ -411,6 +414,7 @@ async function runQualityGate(emailText, creatorData, voiceDNA, onAttempt, fullI
     }
 
     if (result.score >= TARGET_SCORE && !result.auto_regen) {
+      console.log(`[QualityGate] PASS on attempt ${i} — total=${Date.now() - gateStart}ms`);
       return {
         email: stripSubjectPrefix(currentEmail), quality: result,
         regenerated: i > 1, attempts: i, warning: false,
@@ -446,10 +450,13 @@ Return ONLY JSON: {"subject": "<subject>", "body": "<body>"}`;
       }
 
       try {
+        const tr = Date.now();
         const raw = await completeSmart(regenPrompt, '', 1400);
+        const regenMs = Date.now() - tr;
         const cleaned = raw.replace(/```json|```/g, '').trim();
         const parsed = JSON.parse(cleaned.match(/\{[\s\S]*\}/)[0]);
         currentEmail = parsed.body || raw;
+        console.log(`[QualityGate] Regen ${i}→${i + 1}: ${regenMs}ms`);
       } catch (err) {
         console.error(`[QualityGate] Regen attempt ${i + 1} failed:`, err.message);
         currentEmail = bestEmail; // fallback to best on parse failure
@@ -457,6 +464,7 @@ Return ONLY JSON: {"subject": "<subject>", "body": "<body>"}`;
     }
   }
 
+  console.log(`[QualityGate] DONE: best=${bestScore}/100 all ${MAX_ATTEMPTS} attempts used total=${Date.now() - gateStart}ms`);
   return {
     email:         stripSubjectPrefix(bestEmail),
     quality:       bestResult,

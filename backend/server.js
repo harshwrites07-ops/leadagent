@@ -244,7 +244,7 @@ const isHttps = process.env.NODE_ENV === 'production' || !!(
 
   app.use(errorHandler);
 
-  app.listen(PORT, '0.0.0.0', async () => {
+  const server = app.listen(PORT, '0.0.0.0', async () => {
     const os = require('os');
     const nets = os.networkInterfaces();
     let localIp = 'localhost';
@@ -337,6 +337,7 @@ const isHttps = process.env.NODE_ENV === 'production' || !!(
       }, 14 * 60 * 1000);
     }
   });
+  server.setTimeout(0); // no idle timeout — AI generation can take 3-4 min
 })();
 
 module.exports = app;

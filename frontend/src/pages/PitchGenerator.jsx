@@ -80,6 +80,9 @@ export default function PitchGenerator() {
   const [checklist, setChecklist] = useState(null);
   const [checklistLoading, setChecklistLoading] = useState(false);
 
+  // Live quality gate progress (SSE)
+  const [generatingStatus, setGeneratingStatus] = useState('');
+
   // Streaming batch (parallel generation)
   const [streamMode, setStreamMode] = useState(false);
   const [streamEmails, setStreamEmails] = useState([]);
@@ -150,6 +153,7 @@ export default function PitchGenerator() {
     setPitch(null);
     setCompletedSteps(new Set());
     setCurrentStep(GEN_STEPS[0].key);
+    setGeneratingStatus('');
 
     let animCancelled = false;
     ;(async () => {
@@ -164,8 +168,42 @@ export default function PitchGenerator() {
     })();
 
     try {
-      const { data } = await api.post(`/pitches/generate/${selectedLead.id}`);
+      // Use SSE endpoint so quality-gate progress events stream back in real time
+      const response = await fetch(`/api/pitches/generate-stream/${selectedLead.id}`, {
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        const text = await response.text();
+        let msg = 'Generation failed';
+        try { msg = JSON.parse(text).error || msg; } catch {}
+        throw new Error(msg);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let data = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          let event;
+          try { event = JSON.parse(line.slice(6)); } catch { continue; }
+          if (event.type === 'error') throw new Error(event.error || 'Generation failed');
+          if (event.type === 'status') setGeneratingStatus(event.message);
+          if (event.type === 'progress') setGeneratingStatus(`Quality check ${event.attempt} of ${event.max} — score ${event.score}/100`);
+          if (event.type === 'result') data = event;
+        }
+      }
+      if (!data) throw new Error('Generation failed — no result received');
+
       animCancelled = true;
+      setGeneratingStatus('');
 
       if (data.qualityRegenerated) {
         setQualityEnhancing(true);
@@ -191,6 +229,7 @@ export default function PitchGenerator() {
       }
     } catch (err) {
       animCancelled = true;
+      setGeneratingStatus('');
       toast.error(err.message ?? 'Generation failed');
       setCurrentStep(null);
     } finally {
@@ -729,7 +768,11 @@ export default function PitchGenerator() {
                   </span>
                 </div>
                 <div className="muted" style={{ fontSize: 12 }}>
-                  {qualityEnhancing ? 'Running quality gate — rewriting to score 75+' : 'This usually takes 15–45 seconds'}
+                  {generatingStatus
+                    ? generatingStatus
+                    : qualityEnhancing
+                      ? 'Running quality gate — rewriting to score 75+'
+                      : 'This usually takes 60–120 seconds'}
                 </div>
               </motion.div>
             )}

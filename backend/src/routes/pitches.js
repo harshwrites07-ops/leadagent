@@ -65,6 +65,101 @@ async function logQualityAttempt(db, userId, lead, attemptNum, email, result) {
   }
 }
 
+// SSE streaming pitch generation — sends progress events so the frontend can show
+// "Quality check N of 5" instead of a blank loading state during long gate runs.
+router.get('/generate-stream/:leadId', aiLimiter, asyncHandler(async (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no'); // prevent nginx from buffering the stream
+
+  const send = (obj) => {
+    res.write(`data: ${JSON.stringify(obj)}\n\n`);
+    if (typeof res.flush === 'function') res.flush();
+  };
+
+  const db = getDb();
+  const lead = await db.get('SELECT * FROM leads WHERE id = ? AND user_id = ?', [req.params.leadId, req.user.id]);
+  if (!lead) { send({ type: 'error', error: 'Lead not found' }); return res.end(); }
+
+  await db.run(`UPDATE leads SET crm_stage='studying', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [lead.id]);
+  logActivity('pitch_generating', `Generating pitch for ${lead.channel_name}`, lead.id, {}, req.user.id);
+  send({ type: 'status', message: 'Analyzing creator channel...' });
+
+  let result;
+  try {
+    result = await claude.generateWithMarcus(lead, req.user.id);
+  } catch (e) {
+    console.error('[Marcus] AI failed for', lead.channel_name, ':', e.message);
+    send({ type: 'error', error: `AI unavailable: ${e.message?.substring(0, 100)}` });
+    return res.end();
+  }
+
+  let redditDm = null;
+  if (lead.platform === 'reddit' || lead.reddit_username) {
+    try { redditDm = await claude.generateRedditDM(lead, result.key_insight); } catch {}
+  }
+
+  send({ type: 'status', message: 'Running quality gate...' });
+
+  let gateResult = null;
+  let finalEmailBody = result.email_body || result.body;
+  try {
+    const userRow  = await db.get('SELECT voice_dna FROM users WHERE id = ?', [req.user.id]);
+    const voiceDNA = userRow?.voice_dna ? JSON.parse(userRow.voice_dna) : {};
+    const creatorData = buildCreatorData(lead);
+    const emailSubject = result.email_subject || result.subject || '';
+    gateResult = await runQualityGate(
+      emailSubject ? `Subject: ${emailSubject}\n\n${finalEmailBody}` : finalEmailBody,
+      creatorData, voiceDNA,
+      async (attemptNum, _email, evalResult) => {
+        await logQualityAttempt(db, req.user.id, lead, attemptNum, _email, evalResult);
+        send({ type: 'progress', attempt: attemptNum, max: 5, score: evalResult.score,
+               message: `Quality check ${attemptNum} of 5 — score ${evalResult.score}/100` });
+      },
+      result.intelligence_pack,
+      result.angle_result,
+    );
+    finalEmailBody = gateResult.email;
+  } catch (err) {
+    console.error('[QualityGate] Gate failed, using MARCUS output directly:', err.message);
+  }
+
+  await savePitch(db, lead.id, req.user.id, {
+    email_subject:       result.email_subject || result.subject,
+    email_body:          finalEmailBody,
+    deep_study:          result.key_insight,
+    custom_offer:        result.custom_offer,
+    subject_variants:    result.subject_variants || result.alt_subjects || [],
+    reddit_dm:           redditDm,
+    quality_score:       gateResult?.quality?.score ?? null,
+    quality_breakdown:   gateResult?.quality?.breakdown ?? null,
+    quality_regenerated: gateResult?.regenerated ?? false,
+    quality_warning:     gateResult?.warning ?? false,
+  });
+
+  await db.run(`UPDATE leads SET crm_stage='pitch_ready', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [lead.id]);
+  logActivity('pitch_generated', `Pitch generated for ${lead.channel_name}`, lead.id, {}, req.user.id);
+
+  const pitch = parsePitch(await db.get('SELECT * FROM pitches WHERE lead_id = ?', [lead.id]));
+  const qualityScore = gateResult?.quality?.score ?? null;
+  send({
+    type: 'result',
+    success: true,
+    pitch,
+    warning:            result.name_warning || null,
+    qualityScore,
+    qualityPassed:      gateResult?.quality?.passed ?? null,
+    qualityFeedback:    gateResult?.quality?.overall_feedback ?? null,
+    qualityBreakdown:   gateResult?.quality?.breakdown ?? null,
+    qualityRegenerated: gateResult?.regenerated ?? false,
+    qualityWarning:     gateResult?.warning ?? false,
+    qualityStatus:      gateResult?.qualityStatus ?? getQualityStatus(qualityScore ?? 0),
+    angleUsed:          result.angle_used || result.signal_used || null,
+  });
+  res.end();
+}));
+
 router.post('/generate/:leadId', aiLimiter, asyncHandler(async (req, res) => {
   const db = getDb();
   const lead = await db.get('SELECT * FROM leads WHERE id = ? AND user_id = ?', [req.params.leadId, req.user.id]);
