@@ -36,9 +36,9 @@ function Sparkline({ data = [], color = 'var(--lime)', height = 36 }) {
 
 function Avatar({ name, color }) {
   const init = (name || '?').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase();
-  const palette = ['#D4FF00', '#ff8a73', '#8ec5ff', '#c4b5fd', '#f4ecd8', '#6ee7a8', '#ffd166'];
+  const palette = ['var(--lime)', 'var(--coral)', 'var(--sky)', 'var(--violet)', 'var(--cream)', 'var(--ok)', 'var(--warn)'];
   const bg = color || palette[(name?.charCodeAt(0) ?? 0) % palette.length];
-  return <span className="ava" style={{ background: bg, color: '#0a0a0c' }}>{init}</span>;
+  return <span className="ava" style={{ background: bg, color: 'var(--bg)' }}>{init}</span>;
 }
 
 function Badge({ children, kind = '' }) {
@@ -200,8 +200,32 @@ export default function Dashboard() {
         </div>
       </motion.div>
 
-      {/* ── Stat Tiles ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: isMobile ? 8 : 12, marginBottom: isMobile ? 10 : 16 }}>
+      {/* ── Hero metric: is everything okay? ── */}
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+        className="stat"
+        style={{
+          cursor: 'default', marginBottom: isMobile ? 8 : 12,
+          padding: isMobile ? '20px 20px 18px' : '28px 32px 26px',
+          background: 'radial-gradient(ellipse at top right, var(--lime-soft) 0%, transparent 65%), var(--surface)',
+        }}
+      >
+        <div className="stat__label">PIPELINE VALUE · IS EVERYTHING OKAY?</div>
+        <div className="row" style={{ alignItems: 'baseline', gap: 16, flexWrap: 'wrap' }}>
+          <div className="stat__value" style={{ fontSize: isMobile ? 44 : 64, color: 'var(--ok)' }}>
+            ${Number(stats.pipeline).toLocaleString()}
+          </div>
+          <div className="stat__delta stat__delta--up" style={{ fontSize: 13 }}>
+            <Icon name="check" size={12} />{animCalls} call{animCalls !== 1 ? 's' : ''} booked
+          </div>
+        </div>
+        <div className="stat__meta">Everything else below is one click away.</div>
+      </motion.div>
+
+      {/* ── Secondary metrics ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)', gap: isMobile ? 8 : 12, marginBottom: isMobile ? 10 : 16 }}>
         {[
           {
             label: 'LEADS FOUND',
@@ -231,31 +255,18 @@ export default function Dashboard() {
             delay: 160,
             serif: true,
           },
-          {
-            label: 'IN THE PIPE',
-            value: `$${Number(stats.pipeline).toLocaleString()}`,
-            meta: `${animCalls} calls booked`,
-            metaColor: 'var(--ok)',
-            spark: null,
-            sparkColor: 'var(--ok)',
-            delay: 240,
-            highlight: true,
-          },
-        ].map(({ label, value, meta, metaColor, spark, sparkColor, delay, serif, highlight }) => (
+        ].map(({ label, value, meta, metaColor, spark, sparkColor, delay, serif }) => (
           <motion.div
             key={label}
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: delay / 1000, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0.4, delay: 0.1 + delay / 1000, ease: [0.16, 1, 0.3, 1] }}
             whileHover={{ y: -3, transition: { duration: 0.2 } }}
             className="stat"
             style={{ cursor: 'default' }}
           >
             <div className="stat__label">{label}</div>
-            <div
-              className={serif ? 'stat__value' : 'stat__value stat__value--mono'}
-              style={highlight ? { color: 'var(--ok)' } : {}}
-            >
+            <div className={serif ? 'stat__value' : 'stat__value stat__value--mono'}>
               {value}
             </div>
             {spark ? (

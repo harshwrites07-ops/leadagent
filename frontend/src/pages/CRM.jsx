@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
 import toast from 'react-hot-toast';
 import Icon from '../components/ui/Icon';
 import PowerSendOverlay from '../components/ui/PowerSendOverlay';
@@ -42,6 +42,9 @@ export default function CRM() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [checkedLeads, setCheckedLeads] = useState(new Set());
   const [showPowerSend, setShowPowerSend] = useState(false);
+  const [draggingId, setDraggingId] = useState(null);
+  const [dragOverCol, setDragOverCol] = useState(null);
+  const [justDropped, setJustDropped] = useState(null);
 
   const columns = STAGES.map(s => ({
     ...s,
@@ -102,8 +105,26 @@ export default function CRM() {
       await api.put(`/crm/${leadId}/stage`, { stage });
       setLeads(prev => prev.map(l => l.id === leadId ? { ...l, crm_stage: stage, stage } : l));
       if (selected?.id === leadId) setSelected(s => ({ ...s, crm_stage: stage, stage }));
+      setJustDropped(leadId);
+      setTimeout(() => setJustDropped(id => (id === leadId ? null : id)), 700);
       toast.success('Stage updated');
     } catch (err) { toast.error(err.message || 'Failed'); }
+  };
+
+  const handleCardDragStart = (e, lead) => {
+    e.dataTransfer.setData('text/plain', String(lead.id));
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggingId(lead.id);
+  };
+  const handleCardDragEnd = () => { setDraggingId(null); setDragOverCol(null); };
+  const handleColDragOver = (e, colId) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (dragOverCol !== colId) setDragOverCol(colId); };
+  const handleColDrop = (e, colId) => {
+    e.preventDefault();
+    const leadId = Number(e.dataTransfer.getData('text/plain'));
+    setDragOverCol(null);
+    setDraggingId(null);
+    const lead = leads.find(l => l.id === leadId);
+    if (lead && (lead.crm_stage || lead.stage) !== colId) handleMoveStage(leadId, colId);
   };
 
   const handleExportCsv = async () => {
@@ -153,6 +174,7 @@ export default function CRM() {
             <span className="dot dot--pulse" style={{ marginRight: 8, display: 'inline-block' }} />Loading pipeline...
           </motion.div>
         ) : (
+          <LayoutGroup>
           <motion.div
             key="board"
             initial={{ opacity: 0, y: 8 }}
@@ -163,6 +185,7 @@ export default function CRM() {
           >
             {columns.map((col, colIdx) => {
               const colValue = col.leads.reduce((sum, l) => sum + (l.deal_value || 0), 0);
+              const isDropTarget = dragOverCol === col.id;
               return (
                 <motion.div
                   key={col.id}
@@ -170,6 +193,12 @@ export default function CRM() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: colIdx * 0.04, duration: 0.35, ease: [0.16,1,0.3,1] }}
                   className="kb__col"
+                  style={{
+                    borderTop: `2px solid ${col.color}`,
+                    borderColor: isDropTarget ? 'var(--lime-border)' : undefined,
+                    background: isDropTarget ? 'var(--lime-soft)' : undefined,
+                    transition: 'background 150ms, border-color 150ms',
+                  }}
                 >
                   <div className="kb__col-head">
                     <div className="kb__col-title">
@@ -181,25 +210,49 @@ export default function CRM() {
                       {colValue > 0 ? `$${(colValue / 1000).toFixed(1)}k` : '—'}
                     </div>
                   </div>
-                  <div className="kb__list">
+                  <div
+                    className="kb__list"
+                    onDragOver={e => handleColDragOver(e, col.id)}
+                    onDragLeave={() => setDragOverCol(c => (c === col.id ? null : c))}
+                    onDrop={e => handleColDrop(e, col.id)}
+                    style={{ minHeight: 60 }}
+                  >
+                    {col.leads.length === 0 && isDropTarget && (
+                      <div style={{ border: '1px dashed var(--lime-border)', borderRadius: 8, padding: '14px', textAlign: 'center', color: 'var(--lime)', fontSize: 11.5 }}>
+                        Drop to move here
+                      </div>
+                    )}
                     {col.leads.map((lead, i) => {
                       const isHot = lead.temperature === 'hot' || col.id === 'replied' || col.id === 'call_booked';
                       const nicheColor = NICHE_COLORS[lead.niche] || 'var(--text-3)';
                       const isChecked = checkedLeads.has(lead.id);
                       const url = channelUrl(lead);
+                      const isDropped = justDropped === lead.id;
                       return (
                         <motion.div
                           key={lead.id || i}
+                          layout
+                          layoutId={`crm-card-${lead.id}`}
                           initial={{ opacity: 0, scale: 0.97 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          transition={{ delay: colIdx * 0.04 + i * 0.03, duration: 0.3 }}
+                          animate={{
+                            opacity: draggingId === lead.id ? 0.35 : 1,
+                            scale: 1,
+                            boxShadow: isDropped ? '0 0 0 2px var(--lime), 0 8px 24px rgba(200,246,84,0.25)' : '0 0 0 0 transparent',
+                          }}
+                          transition={{ delay: colIdx * 0.04 + i * 0.03, duration: 0.3, boxShadow: { duration: 0.5 } }}
                           whileHover={{ y: -2, boxShadow: 'var(--sh-sm)' }}
                           whileTap={{ scale: 0.98 }}
                           className="kb__card"
+                          draggable
+                          onDragStart={e => handleCardDragStart(e, lead)}
+                          onDragEnd={handleCardDragEnd}
                           onClick={() => handleSelectLead(lead)}
-                          style={isChecked
-                            ? { borderColor: 'var(--lime-border)', background: 'rgba(var(--lime-rgb),0.04)' }
-                            : isHot ? { borderColor: 'var(--coral-border)' } : undefined}
+                          style={{
+                            cursor: 'grab',
+                            ...(isChecked
+                              ? { borderColor: 'var(--lime-border)', background: 'rgba(var(--lime-rgb),0.04)' }
+                              : isHot ? { borderColor: 'var(--coral-border)' } : undefined),
+                          }}
                         >
                           <div className="kb__card-head">
                             {/* Checkbox */}
@@ -278,6 +331,7 @@ export default function CRM() {
               );
             })}
           </motion.div>
+          </LayoutGroup>
         )}
       </AnimatePresence>
 

@@ -620,7 +620,7 @@ export default function PitchGenerator() {
                 const p = data?.pitch;
                 const qs = p?.quality_score ?? null;
                 const blocked = qs !== null && qs < 70;
-                const badgeColor = blocked ? '#ff8a73' : qs >= 85 ? '#c8f654' : qs >= 75 ? '#c8f654cc' : null;
+                const badgeColor = blocked ? 'var(--coral)' : qs >= 85 ? 'var(--lime)' : qs >= 75 ? 'var(--lime-dim)' : null;
 
                 if (status === 'loading') {
                   return (
@@ -661,7 +661,7 @@ export default function PitchGenerator() {
 
                 return (
                   <motion.div key={leadId} initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}
-                    style={{ padding: 16, background: 'var(--bg-2)', border: `1px solid ${blocked ? '#ff8a7340' : 'var(--line)'}`, borderRadius: 10 }}>
+                    style={{ padding: 16, background: 'var(--bg-2)', border: `1px solid ${blocked ? 'var(--coral-border)' : 'var(--line)'}`, borderRadius: 10 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                       <span className="ava" style={{ fontSize: 10 }}>{(lead.channel_name || '?')[0].toUpperCase()}</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
@@ -669,7 +669,7 @@ export default function PitchGenerator() {
                         <div className="muted" style={{ fontSize: 11 }}>{formatNumber(lead.subscriber_count ?? 0)} subs</div>
                       </div>
                       {qs !== null && badgeColor && (
-                        <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--f-mono)', padding: '3px 8px', borderRadius: 5, background: badgeColor, color: '#0a0a0c', flexShrink: 0 }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--f-mono)', padding: '3px 8px', borderRadius: 5, background: badgeColor, color: 'var(--bg)', flexShrink: 0 }}>
                           {blocked ? `⚠ ${qs}/100` : `✓ ${qs}/100`}
                         </span>
                       )}
@@ -771,23 +771,45 @@ export default function PitchGenerator() {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0 }}
                 className="card"
-                style={{ textAlign: 'center', padding: '48px 24px', marginBottom: 20 }}
+                style={{ textAlign: 'center', padding: '56px 24px', marginBottom: 20 }}
               >
-                <div className="row" style={{ justifyContent: 'center', gap: 10, marginBottom: 8 }}>
-                  <span className="dot dot--pulse" />
-                  <span style={{ fontSize: 13, color: 'var(--text-2)' }}>
-                    {qualityEnhancing
-                      ? 'Enhancing quality...'
-                      : (GEN_STEPS.find(s => s.key === currentStep)?.label ?? 'Generating pitch...')}
-                  </span>
-                </div>
-                <div className="muted" style={{ fontSize: 12 }}>
-                  {generatingStatus
-                    ? generatingStatus
-                    : qualityEnhancing
-                      ? 'Running quality gate — rewriting to score 75+'
-                      : 'This usually takes 60–120 seconds'}
-                </div>
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={qualityEnhancing ? 'enhancing' : currentStep}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                  >
+                    <div
+                      style={{
+                        width: 40, height: 40, margin: '0 auto 16px', borderRadius: 12,
+                        display: 'grid', placeItems: 'center',
+                        background: 'var(--lime-soft)', border: '1px solid var(--lime-border)',
+                      }}
+                    >
+                      <motion.span
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 1.6, repeat: Infinity, ease: 'linear' }}
+                        style={{ display: 'grid', placeItems: 'center' }}
+                      >
+                        <Icon name="sparkle" size={18} style={{ color: 'var(--lime)' }} />
+                      </motion.span>
+                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text)', marginBottom: 6 }}>
+                      {qualityEnhancing
+                        ? 'Enhancing quality...'
+                        : (GEN_STEPS.find(s => s.key === currentStep)?.label ?? 'Generating pitch...')}
+                    </div>
+                    <div className="muted" style={{ fontSize: 12 }}>
+                      {generatingStatus
+                        ? generatingStatus
+                        : qualityEnhancing
+                          ? 'Running quality gate — rewriting to score 75+'
+                          : 'This usually takes 60–120 seconds'}
+                    </div>
+                  </motion.div>
+                </AnimatePresence>
               </motion.div>
             )}
           </AnimatePresence>
@@ -937,7 +959,7 @@ export default function PitchGenerator() {
                           >
                             <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
                               <span className="mono muted" style={{ fontSize: 10.5 }}>VARIANT {String.fromCharCode(65 + i)}</span>
-                              <span className="mono" style={{ fontSize: 11, color: i === 0 ? 'var(--coral)' : 'var(--text-2)' }}>{95 - i * 8}/100</span>
+                              {i === 0 && <span className="badge badge--coral" style={{ fontSize: 9.5 }}>Recommended</span>}
                             </div>
                             <div style={{ fontSize: 12.5, fontWeight: 500 }}>{s}</div>
                           </motion.button>
@@ -1005,13 +1027,13 @@ export default function PitchGenerator() {
                                 : qs >= 90 ? '✅ Quality: Excellent'
                                 : qs >= 85 ? '✓ Quality: Good'
                                 : '✓ Quality: Enhanced';
-                              const bg = warn || qs < 70 ? '#ff8a73' : qs >= 85 ? '#c8f654' : '#c8f654cc';
+                              const bg = warn || qs < 70 ? 'var(--coral)' : qs >= 85 ? 'var(--lime)' : 'var(--lime-dim)';
                               return (
                                 <div style={{
                                   display: 'inline-flex', alignItems: 'center', gap: 6,
                                   padding: '5px 12px', borderRadius: 6,
                                   fontSize: 11, fontWeight: 700, fontFamily: 'var(--f-mono)',
-                                  background: bg, color: '#0a0a0c',
+                                  background: bg, color: 'var(--bg)',
                                 }}>
                                   {label}
                                 </div>
@@ -1138,10 +1160,10 @@ export default function PitchGenerator() {
                             exit={{ opacity: 0 }}
                             style={{
                               marginTop: 14,
-                              padding: '12px 14px',
-                              background: '#ff8a73',
+                              padding: '14px 16px',
+                              background: 'var(--coral)',
                               borderRadius: 8,
-                              color: '#0a0a0c',
+                              color: 'var(--bg)',
                             }}
                           >
                             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
@@ -1165,9 +1187,12 @@ export default function PitchGenerator() {
                               style={{
                                 padding: '6px 14px', fontSize: 12, fontWeight: 600,
                                 background: 'transparent',
-                                border: '1px solid #0a0a0c',
-                                borderRadius: 6, cursor: 'pointer', color: '#0a0a0c',
+                                border: '1px solid var(--bg)',
+                                borderRadius: 6, cursor: 'pointer', color: 'var(--bg)',
+                                transition: 'background 150ms',
                               }}
+                              onMouseEnter={e => e.currentTarget.style.background = 'rgba(10,10,12,0.12)'}
+                              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                             >
                               Rewrite pitch
                             </button>
@@ -1237,8 +1262,8 @@ export default function PitchGenerator() {
                       <div className="grid g-3" style={{ gap: 10, marginTop: 14 }}>
                         {[
                           { l: 'Pitch quality', v: pitch.quality_score >= 90 ? 'Excellent' : pitch.quality_score >= 85 ? 'Good' : pitch.quality_score >= 70 ? 'Enhanced' : (pitch.quality_score ?? pitch.pitch_score) != null ? 'Needs polish' : '—', c: 'var(--lime)' },
-                          { l: 'Spam risk',   v: '0.4',  c: 'var(--ok)',   d: '/ 10' },
-                          { l: 'Open rate',   v: '64%',  c: 'var(--lime)', d: '+8 vs avg' },
+                          { l: 'Word count', v: String((emailBody || '').trim().split(/\s+/).filter(Boolean).length), c: 'var(--text)' },
+                          { l: 'Read time', v: `${Math.max(1, Math.round((emailBody || '').trim().split(/\s+/).filter(Boolean).length / 200))} min`, c: 'var(--text)' },
                         ].map((m, i) => (
                           <motion.div
                             key={i}
@@ -1316,11 +1341,11 @@ export default function PitchGenerator() {
                         <div className="row" style={{ gap: 8 }}>
                           <button
                             className="btn btn--ghost"
-                            style={{ borderColor: '#ff8a73', color: '#ff8a73', opacity: 0.9 }}
+                            style={{ borderColor: 'var(--coral-border)', color: 'var(--coral)' }}
                             onClick={handleGenerate}
                             disabled={generating}
                           >
-                            Rewrite
+                            <Icon name="refresh" size={11} />Rewrite
                           </button>
                           <button
                             className="btn btn--primary"

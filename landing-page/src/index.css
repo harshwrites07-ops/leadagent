@@ -1,0 +1,67 @@
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap');
+@import "tailwindcss";
+
+/* Quelro brand tokens — mirrors frontend/src/index.css (DESIGN_SYSTEM.md).
+   Duotone rule: lime = the machine acting, coral = a human/attention moment.
+   Never both on the same element. */
+@theme {
+  --color-background:        #0a0a0c;
+  --color-foreground:        #f3f3f5;
+
+  --color-card:               #131318;
+  --color-card-foreground:    #f3f3f5;
+
+  --color-muted:              #181820;
+  --color-muted-foreground:   #a8a8b3;
+
+  --color-border:             #23232c;
+  --color-ring:                #c8f654;
+
+  --color-primary:             #c8f654;
+  --color-primary-foreground:  #0a0a0c;
+
+  --color-secondary:           #ff8a73;
+  --color-secondary-foreground: #0a0a0c;
+
+  --color-accent:               #f4e9b2;
+  --color-accent-foreground:    #0a0a0c;
+
+  --color-destructive:          #ff8a73;
+  --color-destructive-foreground: #0a0a0c;
+
+  --font-heading: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-body:    "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-serif:   "Instrument Serif", serif;
+  --font-mono:    "Geist Mono", ui-monospace, monospace;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-heading);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

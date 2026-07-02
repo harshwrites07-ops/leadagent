@@ -1,12 +1,23 @@
 const express = require('express');
 const router = express.Router();
 const { getDb } = require('../models/database');
+const { requireAdmin } = require('../middleware/requireAuth');
 const { calibrate, scoreAndPopulate, scoreNewMasterLeads, getStats, getDistribution } = require('../services/qualityLeadsService');
 const { scanSubreddits } = require('../services/redditSignalService');
 const { startLoop, stopLoop, getLoopStatus, runOneCycle } = require('../services/scraperLoopService');
 const { scanUpworkJobs, getUpworkStats } = require('../services/upworkService');
 const { runAdvancedScan } = require('../services/youtubeAdvancedService');
 const { runConfirmedSignalScan, getConfirmedSignalStats, deepScanDescriptions } = require('../services/confirmedSignalService');
+
+// Maps a "Confirmed HOT Signal Sources" card to the platform_signals rows it represents
+const SIGNAL_SOURCES = {
+  description: { platform: 'youtube_description', signal_type: 'confirmed_hiring', label: 'Description Says "Hiring"' },
+  email:       { platform: 'email_analysis',       signal_type: null,              label: 'Business Email' },
+  upwork:      { platform: 'upwork',                signal_type: null,              label: 'Upwork Job Post' },
+  twitter:     { platform: 'twitter',               signal_type: null,              label: 'Twitter Hiring Post' },
+  community:   { platform: 'youtube_community',     signal_type: null,              label: 'Community Post' },
+  google:      { platform: 'google_search',         signal_type: null,              label: 'Google Found' },
+};
 
 router.get('/stats', async (req, res) => {
   try { res.json(await getStats()); } catch (e) { res.status(500).json({ error: e.message }); }
@@ -140,5 +151,44 @@ router.post('/youtube/advanced-scan',        async (req, res) => { try { res.jso
 router.post('/confirmed/scan',               async (req, res) => { try { console.log('[API] Starting confirmed signal scan...'); res.json({ success: true, data: await runConfirmedSignalScan() }); } catch (e) { res.status(500).json({ error: e.message }); } });
 router.get('/confirmed/stats',               async (req, res) => { try { res.json({ success: true, data: await getConfirmedSignalStats() }); } catch (e) { res.status(500).json({ error: e.message }); } });
 router.post('/confirmed/scan-descriptions',  async (req, res) => { try { res.json({ success: true, data: await deepScanDescriptions() }); } catch (e) { res.status(500).json({ error: e.message }); } });
+
+// Drill-down: the exact leads behind one "Confirmed HOT Signal Sources" card.
+// Admin-only — these are the highest-intent leads, meant for personal outreach
+// before they enter the general automated pool.
+router.get('/confirmed/leads', requireAdmin, async (req, res) => {
+  const { source, page = 1, limit = 100 } = req.query;
+  const cfg = SIGNAL_SOURCES[source];
+  if (!cfg) return res.status(400).json({ success: false, error: `Invalid source. Valid: ${Object.keys(SIGNAL_SOURCES).join(', ')}` });
+  const db = getDb();
+  const conditions = ['ps.platform = ?'];
+  const params = [cfg.platform];
+  if (cfg.signal_type) { conditions.push('ps.signal_type = ?'); params.push(cfg.signal_type); }
+  const where = `WHERE ${conditions.join(' AND ')}`;
+  const offset = (parseInt(page) - 1) * parseInt(limit);
+  try {
+    const totalRow = await db.get(`SELECT COUNT(*) as n FROM platform_signals ps ${where}`, params);
+    const leads = await db.all(`
+      SELECT
+        ps.id as signal_id, ps.creator_id, ps.signal_text, ps.signal_url, ps.confidence, ps.found_at,
+        COALESCE(ql.channel_name, ml.channel_name) as channel_name,
+        COALESCE(ql.subscriber_count, ml.subscriber_count, 0) as subscriber_count,
+        COALESCE(ql.email, ml.email) as email,
+        COALESCE(ql.niche, ml.niche) as niche,
+        CASE
+          WHEN ml.channel_handle IS NOT NULL AND ml.channel_handle != ''
+            THEN 'https://youtube.com/' || (CASE WHEN ml.channel_handle LIKE '@%' THEN ml.channel_handle ELSE '@' || ml.channel_handle END)
+          ELSE 'https://youtube.com/channel/' || ps.creator_id
+        END as channel_url,
+        ql.intent_score, ql.intent_tier, ql.outreached
+      FROM platform_signals ps
+      LEFT JOIN quality_leads ql ON ql.creator_id = ps.creator_id
+      LEFT JOIN master_leads ml ON ml.channel_id = ps.creator_id
+      ${where}
+      ORDER BY ql.intent_score DESC, ps.confidence DESC, ps.found_at DESC
+      LIMIT ? OFFSET ?
+    `, [...params, parseInt(limit), offset]);
+    res.json({ success: true, leads, total: totalRow.n, page: parseInt(page), source, label: cfg.label });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
 
 module.exports = router;

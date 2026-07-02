@@ -25,16 +25,24 @@ function ConversationView({ reply, onBack, onReplySent }) {
   const [suggestion, setSuggestion] = useState(null);
   const [loadingSuggestion, setLoadingSuggestion] = useState(false);
 
+  const [showSuggestion, setShowSuggestion] = useState(false);
+
   const loadSuggestion = async () => {
-    if (suggestion) { setReplyBody(suggestion); return; }
+    if (suggestion) { setShowSuggestion(true); return; }
     setLoadingSuggestion(true);
     try {
       const { data } = await api.get(`/emails/replies/${reply.id}/suggest`);
       setClassification(data.classification);
       setSuggestion(data.suggestion);
-      if (data.classification !== 'out_of_office') setReplyBody(data.suggestion);
+      setShowSuggestion(true);
     } catch {}
     finally { setLoadingSuggestion(false); }
+  };
+
+  const useSuggestion = () => {
+    setReplyBody(suggestion);
+    setShowSuggestion(false);
+    textareaRef.current?.focus();
   };
   const textareaRef = useRef(null);
   const bottomRef = useRef(null);
@@ -165,6 +173,38 @@ function ConversationView({ reply, onBack, onReplySent }) {
         {sendError && (
           <div className="px-4 pt-2 text-xs text-red-400">{sendError}</div>
         )}
+
+        {/* AI-suggested reply — a considered suggestion, not a raw text dump */}
+        <AnimatePresence>
+          {showSuggestion && suggestion && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+              style={{ overflow: 'hidden', margin: '10px 12px 0' }}
+            >
+              <div style={{ background: 'var(--lime-soft)', border: '1px solid var(--lime-border)', borderRadius: 12, padding: 12 }}>
+                <div className="flex items-center gap-2" style={{ marginBottom: 6 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.06em', color: 'var(--lime)', fontFamily: 'var(--f-mono)', textTransform: 'uppercase' }}>
+                    ✦ Marcus suggests
+                  </span>
+                  {classification && CLASSIFICATION_LABELS[classification] && (
+                    <span style={{ fontSize: 10, color: CLASSIFICATION_LABELS[classification].color }}>
+                      · {CLASSIFICATION_LABELS[classification].label}
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm whitespace-pre-wrap leading-relaxed" style={{ color: 'var(--text)', marginBottom: 10 }}>{suggestion}</p>
+                <div className="flex items-center gap-2">
+                  <button onClick={useSuggestion} className="btn btn--primary btn--sm">Use this</button>
+                  <button onClick={() => setShowSuggestion(false)} className="btn btn--ghost btn--sm">Dismiss</button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <div className="flex items-end gap-3 p-3">
           <textarea
             ref={textareaRef}
@@ -181,7 +221,7 @@ function ConversationView({ reply, onBack, onReplySent }) {
             disabled={loadingSuggestion}
             title="AI suggested response"
             className="flex-shrink-0 p-3 rounded-xl transition-colors"
-            style={{ background: 'var(--surface-2)', border: '1px solid var(--lime-border)', color: 'var(--lime)', opacity: loadingSuggestion ? 0.5 : 1 }}
+            style={{ background: showSuggestion ? 'var(--lime)' : 'var(--surface-2)', border: '1px solid var(--lime-border)', color: showSuggestion ? 'var(--bg)' : 'var(--lime)', opacity: loadingSuggestion ? 0.5 : 1 }}
           >
             <span style={{ fontSize: 14 }}>{loadingSuggestion ? '…' : '✦'}</span>
           </button>
@@ -201,8 +241,12 @@ function ConversationView({ reply, onBack, onReplySent }) {
   );
 }
 
+// Priority: replies needing a human now rank above low-signal ones — restraint over noise.
+const PRIORITY = { interested: 0, question: 1, referral: 2, neutral: 3, has_vendor: 4, not_interested: 5, out_of_office: 6 };
+function replyPriority(r) { return PRIORITY[r.classification] ?? (r.classification ? 3 : -1); }
+
 // ─── Reply list item ───────────────────────────────────────────────────────────
-function ReplyRow({ reply, onOpen }) {
+function ReplyRow({ reply, onOpen, isHot }) {
   const initials = (reply.channel_name || '??').slice(0, 2).toUpperCase();
   const hasContent = reply.reply_body && reply.reply_body.trim().length > 0;
   const preview = hasContent
@@ -212,9 +256,9 @@ function ReplyRow({ reply, onOpen }) {
   return (
     <div
       className="flex items-center gap-3 py-3 px-4 rounded-xl cursor-pointer transition-colors border"
-      style={{ borderColor: 'transparent' }}
-      onMouseEnter={e => { e.currentTarget.style.background = 'var(--hover)'; e.currentTarget.style.borderColor = 'var(--line)'; }}
-      onMouseLeave={e => { e.currentTarget.style.background = ''; e.currentTarget.style.borderColor = 'transparent'; }}
+      style={{ borderColor: 'transparent', borderLeft: isHot ? '2px solid var(--coral)' : '2px solid transparent' }}
+      onMouseEnter={e => { e.currentTarget.style.background = 'var(--hover)'; e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.borderLeftColor = isHot ? 'var(--coral)' : 'var(--line)'; }}
+      onMouseLeave={e => { e.currentTarget.style.background = ''; e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.borderLeftColor = isHot ? 'var(--coral)' : 'transparent'; }}
       onClick={() => onOpen(reply)}
     >
       <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center text-xs font-bold" style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}>
@@ -226,7 +270,7 @@ function ReplyRow({ reply, onOpen }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-0.5">
           <p className="text-sm font-semibold truncate" style={{ color: 'var(--text)' }}>{reply.channel_name || reply.lead_email}</p>
-          <span className="badge badge--coral text-xs flex-shrink-0">REPLIED</span>
+          <span className={`badge text-xs flex-shrink-0 ${isHot ? 'badge--coral' : 'badge--neutral'}`}>REPLIED</span>
           {reply.classification && CLASSIFICATION_LABELS[reply.classification] && (
             <span style={{ fontSize: 10, fontWeight: 600, color: CLASSIFICATION_LABELS[reply.classification].color, flexShrink: 0 }}>
               · {CLASSIFICATION_LABELS[reply.classification].label}
@@ -394,7 +438,9 @@ export default function RepliesInbox({ onClose }) {
                       </button>
                     </div>
                   ) : (
-                    replies.map(r => <ReplyRow key={r.id} reply={r} onOpen={setActiveReply} />)
+                    [...replies]
+                      .sort((a, b) => replyPriority(a) - replyPriority(b))
+                      .map(r => <ReplyRow key={r.id} reply={r} onOpen={setActiveReply} isHot={replyPriority(r) <= 1} />)
                   )}
                 </div>
               </motion.div>

@@ -180,7 +180,7 @@ export default function EmailSender() {
           { label: 'Queued', value: formatNumber(queueCount), sub: 'across mailboxes', color: 'var(--text)', delay: 0 },
           { label: 'Sent today', value: formatNumber(animSent), sub: `${formatNumber((stats?.daily_limit ?? 150) - sentToday)} capacity left`, color: 'var(--lime)', delay: 0.06 },
           { label: 'Replied', value: formatNumber(animReplied), sub: 'need attention', color: 'var(--coral)', delay: 0.12 },
-          { label: 'Inbox placement', value: stats?.inbox_placement != null ? `${stats.inbox_placement}%` : '98.6%', sub: '0 bounces · 0 spam', color: 'var(--lime)', delay: 0.18 },
+          { label: 'Inbox placement', value: stats?.inbox_placement != null ? `${stats.inbox_placement}%` : '—', sub: `${formatNumber(stats?.bounced_count ?? 0)} bounces`, color: 'var(--lime)', delay: 0.18 },
         ].map(({ label, value, sub, color, delay }) => (
           <motion.div
             key={label}

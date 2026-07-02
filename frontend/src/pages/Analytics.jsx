@@ -85,22 +85,17 @@ export default function Analytics() {
   const subjects = emailData?.best_subjects || [];
   const niches = platformsData?.niche_stats || [];
 
-  const deliveredRate = emailData?.delivered_rate ?? 0.986;
-  const deliveredPct = Math.round(deliveredRate * 100);
+  const deliveredRate = emailData?.delivered_rate ?? null;
+  const deliveredPct = deliveredRate != null ? Math.round(deliveredRate * 100) : null;
 
+  const hasHeatData = (emailData?.best_times?.length ?? 0) > 0;
   const heat = useMemo(() => {
     const btimes = emailData?.best_times;
-    return Array.from({ length: 7 }, (_, d) =>
+    if (!btimes?.length) return null;
+    return Array.from({ length: 7 }, () =>
       Array.from({ length: 24 }, (_, h) => {
-        if (btimes) {
-          const match = btimes.find(t => t.hour === h);
-          return match ? Math.min(1, match.replies / 20) : 0.1;
-        }
-        let v = 0.1 + Math.random() * 0.2;
-        if ([1, 2, 3].includes(d) && [9, 10, 11, 14, 15].includes(h)) v = 0.7 + Math.random() * 0.3;
-        else if ([0, 1, 2, 3, 4].includes(d) && h >= 8 && h <= 18) v = 0.3 + Math.random() * 0.4;
-        else if ([5, 6].includes(d)) v = 0.05 + Math.random() * 0.15;
-        return Math.min(1, v);
+        const match = btimes.find(t => t.hour === h);
+        return match ? Math.min(1, (match.replies ?? match.open_rate ?? 0) / 20) : 0;
       })
     );
   }, [emailData]);
@@ -196,7 +191,7 @@ export default function Analytics() {
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 10 }}>
                         <span className="serif" style={{ fontSize: 64, lineHeight: 1, letterSpacing: '-0.03em' }}>{costPerMeeting}</span>
                       </div>
-                      <div className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>vs $24 industry median</div>
+                      <div className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>pipeline value ÷ meetings booked</div>
                       <div style={{ marginTop: 14 }}>
                         <Sparkline data={emailData?.rate_trend?.map(r => r.reply_rate || 0) || []} color="var(--lime)" height={36} />
                       </div>
@@ -270,12 +265,18 @@ export default function Analytics() {
               >
                 <div className="card__head">
                   <div className="card__title">Deliverability</div>
-                  <span className="badge badge--lime"><Icon name="check" size={11} />Healthy</span>
+                  {deliveredPct != null ? (
+                    <span className={`badge ${deliveredPct >= 95 ? 'badge--lime' : 'badge--warn'}`}>
+                      <Icon name="check" size={11} />{deliveredPct >= 95 ? 'Healthy' : 'Watch closely'}
+                    </span>
+                  ) : (
+                    <span className="badge badge--neutral">No data yet</span>
+                  )}
                 </div>
                 <div className="card__body">
                   <div className="row" style={{ gap: 20, marginBottom: 20 }}>
-                    <div className="ring" style={{ '--p': deliveredPct, '--c': 'var(--lime)', width: 96, height: 96 }}>
-                      <span className="mono" style={{ fontSize: 18 }}>{deliveredRate >= 1 ? '100' : (deliveredRate * 100).toFixed(1)}%</span>
+                    <div className="ring" style={{ '--p': deliveredPct ?? 0, '--c': 'var(--lime)', width: 96, height: 96 }}>
+                      <span className="mono" style={{ fontSize: 18 }}>{deliveredPct != null ? `${deliveredPct}%` : '—'}</span>
                     </div>
                     <div>
                       <div style={{ fontSize: 13, marginBottom: 6 }}>Inbox placement</div>
@@ -283,11 +284,11 @@ export default function Analytics() {
                     </div>
                   </div>
                   {[
-                    { l: 'SPF', v: emailData?.spf || 'pass', good: true },
-                    { l: 'DKIM', v: emailData?.dkim || 'pass', good: true },
-                    { l: 'DMARC', v: emailData?.dmarc || 'pass', good: true },
-                    { l: 'Spam score (avg)', v: emailData?.spam_score != null ? `${emailData.spam_score} / 10` : '—', good: true },
-                    { l: 'Bounce rate', v: emailData?.bounce_rate != null ? `${emailData.bounce_rate}%` : '—', good: true },
+                    { l: 'SPF', v: emailData?.spf || '—', good: emailData?.spf === 'pass' },
+                    { l: 'DKIM', v: emailData?.dkim || '—', good: emailData?.dkim === 'pass' },
+                    { l: 'DMARC', v: emailData?.dmarc || '—', good: emailData?.dmarc === 'pass' },
+                    { l: 'Spam score (avg)', v: emailData?.spam_score != null ? `${emailData.spam_score} / 10` : '—', good: (emailData?.spam_score ?? 0) < 3 },
+                    { l: 'Bounce rate', v: emailData?.bounce_rate != null ? `${emailData.bounce_rate}%` : '—', good: (emailData?.bounce_rate ?? 0) < 5 },
                   ].map((row, i) => (
                     <div key={i} className="row" style={{ justifyContent: 'space-between', padding: '8px 0', borderTop: i > 0 ? '1px dashed var(--line)' : 'none' }}>
                       <span style={{ fontSize: 12.5, color: 'var(--text-2)' }}>{row.l}</span>
@@ -308,36 +309,46 @@ export default function Analytics() {
               style={{ marginBottom: 16 }}
             >
               <div className="card__body">
-                <div style={{ display: 'grid', gridTemplateColumns: '24px repeat(24, 1fr)', gap: 3 }}>
-                  <div />
-                  {HOURS.map(h => (
-                    <div key={h} className="mono muted" style={{ fontSize: 9, textAlign: 'center' }}>
-                      {h % 3 === 0 ? `${h}` : ''}
+                {!hasHeatData ? (
+                  <div className="empty" style={{ padding: '32px 0' }}>
+                    <Icon name="clock" size={24} style={{ opacity: 0.2, marginBottom: 8 }} />
+                    <div className="empty__title">Not enough send data yet</div>
+                    <div className="empty__desc">Send more pitches across different hours and this heatmap will fill in from your real reply data.</div>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ display: 'grid', gridTemplateColumns: '24px repeat(24, 1fr)', gap: 3 }}>
+                      <div />
+                      {HOURS.map(h => (
+                        <div key={h} className="mono muted" style={{ fontSize: 9, textAlign: 'center' }}>
+                          {h % 3 === 0 ? `${h}` : ''}
+                        </div>
+                      ))}
+                      {DAYS.map((day, di) => (
+                        <React.Fragment key={di}>
+                          <div className="mono muted" style={{ fontSize: 10, lineHeight: '20px' }}>{day}</div>
+                          {HOURS.map(h => {
+                            const v = heat[di][h];
+                            return (
+                              <div key={h} style={{
+                                height: 20, borderRadius: 3,
+                                background: `oklch(${(0.18 + v * 0.6).toFixed(3)} ${(v * 0.15).toFixed(3)} 130)`,
+                                border: '1px solid var(--bg)',
+                              }} title={`${day} ${h}:00 · ${(v * 100).toFixed(0)}% reply`} />
+                            );
+                          })}
+                        </React.Fragment>
+                      ))}
                     </div>
-                  ))}
-                  {DAYS.map((day, di) => (
-                    <React.Fragment key={di}>
-                      <div className="mono muted" style={{ fontSize: 10, lineHeight: '20px' }}>{day}</div>
-                      {HOURS.map(h => {
-                        const v = heat[di][h];
-                        return (
-                          <div key={h} style={{
-                            height: 20, borderRadius: 3,
-                            background: `oklch(${(0.18 + v * 0.6).toFixed(3)} ${(v * 0.15).toFixed(3)} 130)`,
-                            border: '1px solid var(--bg)',
-                          }} title={`${day} ${h}:00 · ${(v * 100).toFixed(0)}% reply`} />
-                        );
-                      })}
-                    </React.Fragment>
-                  ))}
-                </div>
-                <div className="row" style={{ marginTop: 14, gap: 12, justifyContent: 'flex-end' }}>
-                  <span className="muted" style={{ fontSize: 11 }}>Low</span>
-                  {[0.1, 0.3, 0.5, 0.7, 0.9].map(v => (
-                    <div key={v} style={{ width: 18, height: 12, borderRadius: 2, background: `oklch(${(0.18 + v * 0.6).toFixed(3)} ${(v * 0.15).toFixed(3)} 130)` }} />
-                  ))}
-                  <span className="muted" style={{ fontSize: 11 }}>High</span>
-                </div>
+                    <div className="row" style={{ marginTop: 14, gap: 12, justifyContent: 'flex-end' }}>
+                      <span className="muted" style={{ fontSize: 11 }}>Low</span>
+                      {[0.1, 0.3, 0.5, 0.7, 0.9].map(v => (
+                        <div key={v} style={{ width: 18, height: 12, borderRadius: 2, background: `oklch(${(0.18 + v * 0.6).toFixed(3)} ${(v * 0.15).toFixed(3)} 130)` }} />
+                      ))}
+                      <span className="muted" style={{ fontSize: 11 }}>High</span>
+                    </div>
+                  </>
+                )}
               </div>
             </motion.div>
 

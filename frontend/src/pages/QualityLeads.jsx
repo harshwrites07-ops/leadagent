@@ -1,8 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCountUp } from '../hooks/useCountUp';
+import { useAuth } from '../context/AuthContext';
+import Icon from '../components/ui/Icon';
 
 const API = '/api/quality';
+
+const SIGNAL_SOURCE_KEYS = ['description', 'email', 'upwork', 'twitter', 'community', 'google'];
 
 function fmt(n) { return n == null ? '—' : Number(n).toLocaleString(); }
 function pct(n) { return n == null ? '—' : `${n}%`; }
@@ -38,7 +42,7 @@ function TierBar({ hot_pct, warm_pct, cold_pct }) {
           initial={{ width: 0 }}
           animate={{ width: `${warm_pct}%` }}
           transition={{ duration: 0.8, delay: 0.1, ease: [0.16,1,0.3,1] }}
-          style={{ background: '#f5a623' }}
+          style={{ background: 'var(--warn)' }}
         />
         <motion.div
           initial={{ width: 0 }}
@@ -59,7 +63,7 @@ function StatusDot({ status }) {
 
 function ValidationBucket({ label, data }) {
   if (!data) return null;
-  const statusColor = data.status === 'passing' ? 'var(--ok)' : data.status === 'close' ? '#f5a623' : data.status === 'failing' ? 'var(--coral)' : 'var(--text-3)';
+  const statusColor = data.status === 'passing' ? 'var(--ok)' : data.status === 'close' ? 'var(--warn)' : data.status === 'failing' ? 'var(--coral)' : 'var(--text-3)';
   return (
     <div className="card" style={{ padding: '14px 18px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
@@ -120,6 +124,7 @@ function SignalRow({ label, val }) {
 }
 
 export default function QualityLeads() {
+  const { user } = useAuth();
   const [tab, setTab]               = useState('dashboard');
   const [stats, setStats]           = useState(null);
   const [dist, setDist]             = useState(null);
@@ -138,8 +143,55 @@ export default function QualityLeads() {
   const [tierFilter, setTierFilter] = useState('all');
   const [niches, setNiches]         = useState([]);
   const [confirmedStats, setConfirmedStats] = useState(null);
+  const [signalDrill, setSignalDrill] = useState(null); // { source, label, leads, total, loading, added: Set }
+  const [addingAll, setAddingAll]   = useState(false);
 
   const flash = (m) => { setMsg(m); setTimeout(() => setMsg(''), 4000); };
+
+  async function openSignalDrill(source, label) {
+    if (!user?.is_admin) { flash('Admin access required to browse signal-matched leads'); return; }
+    setSignalDrill({ source, label, leads: [], total: 0, loading: true, added: new Set() });
+    try {
+      const r = await fetch(`${API}/confirmed/leads?source=${source}&limit=200`).then(r => r.json());
+      if (r.success) setSignalDrill(prev => prev && prev.source === source ? { ...prev, leads: r.leads, total: r.total, loading: false } : prev);
+      else { flash(`Error: ${r.error}`); setSignalDrill(null); }
+    } catch (e) { flash(`Error: ${e.message}`); setSignalDrill(null); }
+  }
+
+  async function addLeadToCrm(lead) {
+    const r = await fetch('/api/leads', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        platform: 'youtube',
+        channel_id: lead.creator_id,
+        channel_name: lead.channel_name,
+        subscriber_count: lead.subscriber_count,
+        email: lead.email,
+        niche: lead.niche,
+        temperature: 'hot',
+        lead_score: Math.round((lead.intent_score || 0.75) * 100),
+        crm_stage: 'new_lead',
+      }),
+    }).then(r => r.json());
+    if (r.success || r.error === 'Lead already exists') {
+      setSignalDrill(prev => prev ? { ...prev, added: new Set(prev.added).add(lead.creator_id) } : prev);
+      return true;
+    }
+    return false;
+  }
+
+  async function handleAddAllToCrm() {
+    if (!signalDrill) return;
+    setAddingAll(true);
+    let added = 0;
+    for (const lead of signalDrill.leads) {
+      if (signalDrill.added.has(lead.creator_id)) continue;
+      try { if (await addLeadToCrm(lead)) added++; } catch {}
+    }
+    setAddingAll(false);
+    flash(`Added ${added} lead${added === 1 ? '' : 's'} to CRM pipeline`);
+  }
 
   const load = useCallback(async () => {
     try {
@@ -295,7 +347,7 @@ export default function QualityLeads() {
               <div className="grid g-4">
                 <StatCard label="Quality Leads" value={fmt(dist?.quality_total ?? ((dist?.hot || 0) + (dist?.warm || 0)))} sub={`HOT ${fmt(animHot)} · WARM ${fmt(animWarm)}`} accent="var(--lime)" delay={0} />
                 <StatCard label="Master Pool"   value={fmt(animTotal)} sub={`${pct(dist?.quality_pct)} quality`} delay={0.06} />
-                <StatCard label="Buying Signals" value={fmt(stats?.buying_signals)} sub="from Reddit scans" accent="#f5a623" delay={0.12} />
+                <StatCard label="Buying Signals" value={fmt(stats?.buying_signals)} sub="from Reddit scans" accent="var(--warn)" delay={0.12} />
                 <StatCard label="Archived (COLD)" value={fmt(dist?.cold)} sub="< 0.50 proxy score" delay={0.18} />
               </div>
 
@@ -313,7 +365,7 @@ export default function QualityLeads() {
                   <TierBar hot_pct={dist.hot_pct} warm_pct={dist.warm_pct} cold_pct={dist.cold_pct} />
                   <div className="t-mono" style={{ display: 'flex', gap: 24, marginTop: 12, fontSize: 11 }}>
                     <span className="t-lime">HOT ≥0.75 {fmt(dist.hot)} ({pct(dist.hot_pct)})</span>
-                    <span style={{ color: '#f5a623' }}>WARM 0.50–0.75 {fmt(dist.warm)} ({pct(dist.warm_pct)})</span>
+                    <span style={{ color: 'var(--warn)' }}>WARM 0.50–0.75 {fmt(dist.warm)} ({pct(dist.warm_pct)})</span>
                     <span className="t-muted">COLD &lt;0.50 {fmt(dist.cold)} ({pct(dist.cold_pct)})</span>
                   </div>
                   <div className="t-mono t-muted" style={{ marginTop: 10, fontSize: 11 }}>
@@ -408,20 +460,28 @@ export default function QualityLeads() {
                       description: 'Google indexed public hiring post',
                       value: confirmedStats?.google_signals ?? 0,
                       confidence: '88%',
-                      color: '#f5a623',
+                      color: 'var(--warn)',
                       active: true,
                     },
-                  ].map(({ label, icon, description, value, confidence, color, active }) => (
-                    <motion.div
+                  ].map(({ label, icon, description, value, confidence, color, active }, i) => (
+                    <motion.button
                       key={label}
                       whileHover={{ y: -3 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => openSignalDrill(SIGNAL_SOURCE_KEYS[i], label)}
+                      title={user?.is_admin ? `View the ${value} lead${value === 1 ? '' : 's'} behind this signal` : 'Admin access required'}
                       style={{
+                        width: '100%',
                         padding: '14px 16px',
                         background: active ? 'rgba(255,255,255,0.03)' : 'var(--surface-2, rgba(255,255,255,0.02))',
                         border: `1px solid ${active ? color + '30' : 'var(--line)'}`,
                         borderRadius: 12,
                         opacity: active ? 1 : 0.5,
                         transition: 'all 200ms',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        font: 'inherit',
+                        color: 'inherit',
                       }}
                     >
                       <div style={{ fontSize: 20, marginBottom: 8 }}>{icon}</div>
@@ -444,7 +504,7 @@ export default function QualityLeads() {
                           {confidence} INTENT
                         </span>
                       </div>
-                    </motion.div>
+                    </motion.button>
                   ))}
                 </div>
               </motion.div>
@@ -517,7 +577,7 @@ export default function QualityLeads() {
                 {['all', 'hot', 'warm'].map(t => (
                   <button key={t} onClick={() => { setTierFilter(t); setLeadsPage(1); }}
                     className={`btn btn--sm ${tierFilter === t ? (t === 'hot' ? 'btn--coral' : t === 'warm' ? '' : 'btn--primary') : 'btn--ghost'}`}
-                    style={tierFilter === t && t === 'warm' ? { background: '#f5a623', color: '#0a0a0c', borderColor: '#f5a623', fontWeight: 700 } : undefined}
+                    style={tierFilter === t && t === 'warm' ? { background: 'var(--warn)', color: '#0a0a0c', borderColor: 'var(--warn)', fontWeight: 700 } : undefined}
                   >
                     {t.toUpperCase()}
                   </button>
@@ -608,7 +668,7 @@ export default function QualityLeads() {
                             <div><a href={s.channel_url} target="_blank" rel="noopener noreferrer" className="t-lime t-xs">{s.channel_url.slice(0, 50)}</a></div>
                           )}
                         </td>
-                        <td className={s.intent_classification === 'ACTIVE_SEEKING' ? 't-lime t-xs' : 't-xs'} style={s.intent_classification !== 'ACTIVE_SEEKING' ? { color: '#f5a623' } : {}}>{s.intent_classification}</td>
+                        <td className={s.intent_classification === 'ACTIVE_SEEKING' ? 't-lime t-xs' : 't-xs'} style={s.intent_classification !== 'ACTIVE_SEEKING' ? { color: 'var(--warn)' } : {}}>{s.intent_classification}</td>
                         <td>{s.budget_mentioned || '—'}</td>
                       </motion.tr>
                     ))}
@@ -667,7 +727,7 @@ export default function QualityLeads() {
                               </span>
                               <TierBar hot_pct={r.hot_pct} warm_pct={r.warm_pct} cold_pct={r.cold_pct} />
                               <span className="t-lime">HOT {pct(r.hot_pct)}</span>
-                              <span style={{ color: '#f5a623' }}>WARM {pct(r.warm_pct)}</span>
+                              <span style={{ color: 'var(--warn)' }}>WARM {pct(r.warm_pct)}</span>
                               <span className="t-muted">COLD {pct(r.cold_pct)}</span>
                             </div>
                           ))}
@@ -700,7 +760,7 @@ export default function QualityLeads() {
                       <StatCard label="COLD Discarded" value={fmt(popResult.cold)} />
                     </div>
                     {popResult.hot_pct < 40 && (
-                      <div className="t-mono" style={{ marginTop: 12, fontSize: 11, color: '#f5a623' }}>
+                      <div className="t-mono" style={{ marginTop: 12, fontSize: 11, color: 'var(--warn)' }}>
                         ⚠ Only {popResult.hot_pct}% HOT (target 40-50%). Run calibration and try "option_a" or "option_b" weights.
                       </div>
                     )}
@@ -737,7 +797,7 @@ export default function QualityLeads() {
                           <span style={{ color: log.status === 'completed' ? 'var(--lime)' : log.status === 'error' ? 'var(--coral)' : 'var(--text-2)' }}>{log.status}</span>
                         </td>
                         <td className="t-lime mono">{fmt(log.hot_added)}</td>
-                        <td className="mono" style={{ color: '#f5a623' }}>{fmt(log.warm_archived)}</td>
+                        <td className="mono" style={{ color: 'var(--warn)' }}>{fmt(log.warm_archived)}</td>
                         <td className="t-muted mono">{fmt(log.cold_discarded)}</td>
                         <td className="t-muted mono">{dur}</td>
                       </motion.tr>
@@ -749,6 +809,105 @@ export default function QualityLeads() {
           )}
 
         </motion.div>
+      </AnimatePresence>
+
+      {/* Signal drill-down modal */}
+      <AnimatePresence>
+        {signalDrill && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="modal-backdrop"
+            onClick={e => e.target === e.currentTarget && setSignalDrill(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.97, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.97 }}
+              transition={{ duration: 0.22, ease: [0.16,1,0.3,1] }}
+              className="modal"
+              style={{ maxWidth: 940, maxHeight: '82vh', display: 'flex', flexDirection: 'column', padding: 22 }}
+            >
+              <div className="modal__head" style={{ marginBottom: 4 }}>
+                <div>
+                  <div className="modal__title">{signalDrill.label}</div>
+                  <div className="t-mono t-muted" style={{ fontSize: 11, marginTop: 2 }}>
+                    {signalDrill.loading ? 'Loading…' : `${fmt(signalDrill.total)} matched lead${signalDrill.total === 1 ? '' : 's'}`}
+                  </div>
+                </div>
+                <div className="row" style={{ gap: 8 }}>
+                  {!signalDrill.loading && signalDrill.leads.length > 0 && (
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.97 }}
+                      className="btn btn--primary btn--sm"
+                      disabled={addingAll}
+                      onClick={handleAddAllToCrm}
+                    >
+                      {addingAll ? 'Adding…' : 'Add All to CRM'}
+                    </motion.button>
+                  )}
+                  <button className="btn btn--ghost btn--sm" onClick={() => setSignalDrill(null)}>
+                    <Icon name="x" size={12} />Close
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ overflowY: 'auto', flex: 1, marginTop: 12 }}>
+                {signalDrill.loading ? (
+                  <div className="t-mono t-muted" style={{ padding: '24px 0', textAlign: 'center', fontSize: 12 }}>Loading matched leads…</div>
+                ) : signalDrill.leads.length === 0 ? (
+                  <div className="empty">
+                    <div className="empty__title">No leads matched yet</div>
+                    <div className="empty__desc">Run a Scan Now to look for this signal across the master pool.</div>
+                  </div>
+                ) : (
+                  <table className="tbl">
+                    <thead>
+                      <tr>
+                        <th>Channel</th><th>Subs</th><th>Matched Signal</th><th>Intent</th><th>Link</th><th>CRM</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {signalDrill.leads.map((l, i) => (
+                        <motion.tr
+                          key={l.signal_id}
+                          initial={{ opacity: 0, y: 6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: Math.min(i * 0.02, 0.3), duration: 0.25 }}
+                        >
+                          <td>
+                            <div style={{ fontWeight: 600, color: 'var(--text)' }}>{l.channel_name}</div>
+                            <div className="t-xs t-muted">{l.niche || '—'} · {l.email || 'no email'}</div>
+                          </td>
+                          <td className="mono">{fmt(l.subscriber_count)}</td>
+                          <td className="t-xs" style={{ maxWidth: 280 }}>{l.signal_text || '—'}</td>
+                          <td className="mono t-lime" style={{ fontWeight: 700 }}>
+                            {l.intent_score != null ? score(l.intent_score) : '—'}
+                            {l.intent_tier && <span className="t-xs t-muted" style={{ marginLeft: 4 }}>{l.intent_tier}</span>}
+                          </td>
+                          <td>
+                            <a href={l.channel_url} target="_blank" rel="noopener noreferrer" className="t-lime t-xs">View ↗</a>
+                          </td>
+                          <td>
+                            {signalDrill.added.has(l.creator_id) ? (
+                              <span className="t-lime t-xs"><Icon name="check" size={11} /> Added</span>
+                            ) : (
+                              <button className="btn btn--ghost btn--sm" onClick={() => addLeadToCrm(l)}>
+                                <Icon name="plus" size={11} />Add to CRM
+                              </button>
+                            )}
+                          </td>
+                        </motion.tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
       </AnimatePresence>
     </div>
   );

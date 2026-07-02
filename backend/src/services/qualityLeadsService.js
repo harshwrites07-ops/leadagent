@@ -19,8 +19,9 @@ async function scoreBatch(batch, weights) {
   for (const ml of batch) {
     try {
       const { intent_score, temperature, signals } = scoreMasterLead(ml);
-      const channelUrl = ml.channel_handle
-        ? `https://youtube.com/@${ml.channel_handle}`
+      const handle = (ml.channel_handle || '').replace(/^@+/, '');
+      const channelUrl = handle
+        ? `https://youtube.com/@${handle}`
         : `https://youtube.com/channel/${ml.channel_id}`;
 
       if (intent_score >= 0.50) {

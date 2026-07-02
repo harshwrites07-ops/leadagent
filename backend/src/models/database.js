@@ -399,6 +399,10 @@ function _initSqliteSchema(db) {
   alterTry(`UPDATE notes SET user_id=1 WHERE user_id IS NULL`);
   alterTry(`UPDATE power_send_jobs SET user_id=1 WHERE user_id IS NULL`);
 
+  // Fix double-@ in quality_leads.channel_url from a historical bug where
+  // channel_handle (already prefixed with @) was concatenated with another @
+  alterTry(`UPDATE quality_leads SET channel_url = 'https://youtube.com/' || channel_handle WHERE channel_url LIKE '%youtube.com/@@%' AND channel_handle LIKE '@%'`);
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS master_leads (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

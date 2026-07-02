@@ -19,7 +19,7 @@ function TempBadge({ temp }) {
 
 function IntentBar({ score }) {
   const pct   = Math.round((score || 0) * 100);
-  const color = score >= 0.75 ? 'var(--coral)' : score >= 0.50 ? '#f59e0b' : 'var(--text-4)';
+  const color = score >= 0.75 ? 'var(--coral)' : score >= 0.50 ? 'var(--warn)' : 'var(--text-4)';
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       <div style={{ flex: 1, height: 4, background: 'var(--line-2)', borderRadius: 99, overflow: 'hidden' }}>
@@ -47,7 +47,7 @@ function SignalGrid({ signals }) {
       {Object.entries(signals).map(([key, val]) => (
         <div key={key} style={{ background: 'var(--bg)', borderRadius: 6, padding: '6px 8px' }}>
           <div style={{ fontFamily: 'var(--f-mono)', fontSize: 9, color: 'var(--text-4)', letterSpacing: '0.08em', marginBottom: 2 }}>{labels[key] || key}</div>
-          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 13, color: val >= 0.7 ? 'var(--lime)' : val >= 0.4 ? '#f59e0b' : 'var(--text-3)' }}>{Math.round(val * 100)}%</div>
+          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 13, color: val >= 0.7 ? 'var(--lime)' : val >= 0.4 ? 'var(--warn)' : 'var(--text-3)' }}>{Math.round(val * 100)}%</div>
         </div>
       ))}
     </div>
@@ -220,7 +220,7 @@ function LeadRow({ cl, campaignId, onUpdate }) {
                 {cl.email_quality_score > 0 && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
                     <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--text-4)' }}>EMAIL QUALITY</span>
-                    <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, fontWeight: 600, color: cl.email_quality_score >= 70 ? 'var(--ok)' : cl.email_quality_score >= 50 ? '#f59e0b' : 'var(--bad)' }}>
+                    <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, fontWeight: 600, color: cl.email_quality_score >= 70 ? 'var(--ok)' : cl.email_quality_score >= 50 ? 'var(--warn)' : 'var(--bad)' }}>
                       {cl.email_quality_score}/100
                     </span>
                   </div>
@@ -391,7 +391,7 @@ function AddLeadsModal({ campaign, onClose, onDone }) {
             </motion.div>
             <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 20 }}>leads scored and added</div>
             <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginBottom: 24 }}>
-              {[{ label: 'HOT', val: result.hot, color: 'var(--coral)' }, { label: 'WARM', val: result.warm, color: '#f59e0b' }, { label: 'COLD', val: result.cold, color: 'var(--text-3)' }].map(({ label, val, color }) => (
+              {[{ label: 'HOT', val: result.hot, color: 'var(--coral)' }, { label: 'WARM', val: result.warm, color: 'var(--warn)' }, { label: 'COLD', val: result.cold, color: 'var(--text-3)' }].map(({ label, val, color }) => (
                 <div key={label} style={{ textAlign: 'center' }}>
                   <div style={{ fontFamily: 'var(--f-mono)', fontSize: 20, color }}>{val}</div>
                   <div style={{ fontFamily: 'var(--f-mono)', fontSize: 9, color: 'var(--text-4)' }}>{label}</div>
@@ -525,7 +525,7 @@ function CampaignDetail({ campaign: initialCampaign, onBack }) {
           { label: 'TOTAL',      value: campaign.total_leads || 0 },
           { label: 'HOT',        value: campaign.hot_leads || 0,      color: 'var(--coral)' },
           { label: 'SENT',       value: campaign.emails_sent || 0 },
-          { label: 'REPLY RATE', value: `${replyRate}%`,              color: replyRate >= 40 ? 'var(--ok)' : replyRate >= 20 ? '#f59e0b' : 'var(--text-3)' },
+          { label: 'REPLY RATE', value: `${replyRate}%`,              color: replyRate >= 40 ? 'var(--ok)' : replyRate >= 20 ? 'var(--warn)' : 'var(--text-3)' },
           { label: 'CALLS',      value: campaign.calls_booked || 0,   color: 'var(--lime)' },
           { label: 'CLIENTS',    value: campaign.clients_closed || 0, color: 'var(--coral)' },
         ].map(({ label, value, color }, i) => (
@@ -562,7 +562,7 @@ function CampaignDetail({ campaign: initialCampaign, onBack }) {
       <div className="tabs">
         {[
           { key: 'hot',  label: 'HOT',  count: hot.length,  Icon: Flame,       color: 'var(--coral)' },
-          { key: 'warm', label: 'WARM', count: warm.length, Icon: Thermometer, color: '#f59e0b' },
+          { key: 'warm', label: 'WARM', count: warm.length, Icon: Thermometer, color: 'var(--warn)' },
           { key: 'cold', label: 'COLD', count: cold.length, Icon: Snowflake,   color: 'var(--text-3)' },
         ].map(({ key, label, count, Icon, color }) => (
           <button key={key} onClick={() => setTab(key)} className={`tab ${tab === key ? 'active' : ''}`}
