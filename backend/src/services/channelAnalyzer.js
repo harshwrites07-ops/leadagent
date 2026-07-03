@@ -9,12 +9,25 @@ function daysSince(dateStr) {
 function getRecentVideos(lead, n = 10) {
   try {
     const vids = JSON.parse(lead.recent_videos || '[]');
-    return Array.isArray(vids) ? vids.slice(0, n) : [];
-  } catch { return []; }
+    if (Array.isArray(vids) && vids.length) return vids.slice(0, n);
+  } catch { /* fall through to the flat-column fallback below */ }
+  // recent_videos JSON is empty/missing for a lot of leads — recent_video_title
+  // is a separate flat column (see models/database.js migration + the
+  // backfillVideoTitles.js script) that's populated even when the JSON isn't.
+  // Without this fallback, buildCreatorIntelligencePack() reports zero watched
+  // signals for leads that actually have a real title on file, which trips
+  // the "needs research" gate incorrectly.
+  if (lead.recent_video_title) {
+    // views is intentionally null, not 0 — we don't know this video's view
+    // count, and a fake "0" would leak into ratio math as if it were a real
+    // verified stat (e.g. a fabricated "0% of subscribers watched").
+    return [{ title: lead.recent_video_title, views: null }];
+  }
+  return [];
 }
 
 function calculateRecentAvg(lead, count = 5) {
-  const vids = getRecentVideos(lead, count);
+  const vids = getRecentVideos(lead, count).filter(v => v.views != null);
   if (!vids.length) return lead.avg_views || 0;
   return vids.reduce((s, v) => s + (v.views || 0), 0) / vids.length;
 }
