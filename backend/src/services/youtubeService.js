@@ -488,4 +488,20 @@ function isQuotaExhausted() {
   return keys.length > 0 && keys.every(k => exhaustedKeys.has(k));
 }
 
-module.exports = { searchChannels, searchChannelsMulti, buildChannelProfile, testApiKey, detectViralChannels, resolveChannelUrl, getChannelByUrl, getAllKeys, getKeyPoolStatus, isQuotaExhausted, getNextKey: getKey };
+// One-off, on-demand version of what scripts/backfillVideoTitles.js does in
+// bulk offline — used as a last resort when a lead reaches pitch generation
+// with no video data at all (never backfilled, or added after the batch run).
+async function fetchLatestVideoTitle(channelId) {
+  if (!channelId) return null;
+  try {
+    const { data } = await ytGet('/search', {
+      part: 'snippet', channelId, order: 'date', maxResults: 1, type: 'video',
+    });
+    return data.items?.[0]?.snippet?.title || null;
+  } catch (e) {
+    console.warn('[YouTube] fetchLatestVideoTitle failed:', e.message);
+    return null;
+  }
+}
+
+module.exports = { searchChannels, searchChannelsMulti, buildChannelProfile, testApiKey, detectViralChannels, resolveChannelUrl, getChannelByUrl, getAllKeys, getKeyPoolStatus, isQuotaExhausted, getNextKey: getKey, fetchLatestVideoTitle };

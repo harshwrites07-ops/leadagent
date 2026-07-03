@@ -1843,14 +1843,32 @@ async function generateWithMarcus(lead, userId) {
 
   // Build creator intelligence pack
   const { buildCreatorIntelligencePack } = require('./channelAnalyzer');
-  const intelligencePack = buildCreatorIntelligencePack(lead);
+  let intelligencePack = buildCreatorIntelligencePack(lead);
   console.log(`[Marcus] Intelligence pack built for ${lead.channel_name} — archetype: ${intelligencePack.archetype}`);
 
   // Input contract, section 1: specific_video_title is required — no watched
-  // signal, no email. Rather than ship a thin, generic-sounding draft that
-  // will fail the personalization hard-check anyway, route the lead to a
-  // "needs research" state so a human can backfill video data first.
+  // signal, no email. Before giving up, try one live YouTube lookup — the
+  // same call scripts/backfillVideoTitles.js makes in bulk offline, just
+  // on-demand for leads that batch never reached (added after it ran, or
+  // past its 500-lead cap). Only route to "needs research" if that also fails.
   const { hasWatchedSignal } = require('./codeGate');
+  if (!hasWatchedSignal(intelligencePack)) {
+    if (lead.channel_id) {
+      try {
+        const { fetchLatestVideoTitle } = require('./youtubeService');
+        const title = await fetchLatestVideoTitle(lead.channel_id);
+        if (title) {
+          await db.run('UPDATE leads SET recent_video_title = ? WHERE id = ?', [title, lead.id]);
+          lead.recent_video_title = title;
+          intelligencePack = buildCreatorIntelligencePack(lead);
+          console.log(`[Marcus] Live-backfilled video title for ${lead.channel_name}: "${title}"`);
+        }
+      } catch (e) {
+        console.warn(`[Marcus] Live video-title backfill failed for ${lead.channel_name}:`, e.message);
+      }
+    }
+  }
+
   if (!hasWatchedSignal(intelligencePack)) {
     const err = new Error(`No video data available for ${lead.channel_name} — cannot generate a specific-enough pitch. Needs manual research.`);
     err.code = 'NEEDS_RESEARCH';
