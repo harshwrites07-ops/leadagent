@@ -1794,7 +1794,9 @@ ${MARCUS_V2_EXAMPLES}
 - Sign-off: first name only, or "— [name]". No title, no signature block.
 - Subject: 3-5 words, lowercase-feeling, specific, no first name, no question mark. Good shapes: "your carbonara intro" / "quick thing on your last upload" / "the 4:12 moment".
 - Vocabulary: creator lingo where it fits naturally — retention, CTR, AVD, packaging, hook, the dip, browse/suggested.
-- specific_video_title is required — you have one in the signal pack (${signalPack.watched_signals.specific_video_title ? `"${signalPack.watched_signals.specific_video_title}"` : 'MISSING — this should not happen, flag it in personalization_elements'}). Anchor movement 1 to it.
+${signalPack.watched_signals.specific_video_title
+  ? `- Anchor movement 1 to the specific video title in the signal pack: "${signalPack.watched_signals.specific_video_title}".`
+  : `- No specific video title is available for this lead — do NOT invent one. Anchor movement 1 on the strongest pattern signal instead: ${signalPack.pattern_signals.view_pattern || signalPack.pattern_signals.upload_cadence_shift || signalPack.pattern_signals.intent_signal || 'subscriber count vs. niche norms'}.`}
 
 ═══ THE USER'S REAL VOICE (write like this person) ═══
 ${voiceSamples || '(no samples provided — default to the register and style above)'}
@@ -1846,31 +1848,36 @@ async function generateWithMarcus(lead, userId) {
   let intelligencePack = buildCreatorIntelligencePack(lead);
   console.log(`[Marcus] Intelligence pack built for ${lead.channel_name} — archetype: ${intelligencePack.archetype}`);
 
-  // Input contract, section 1: specific_video_title is required — no watched
-  // signal, no email. Before giving up, try one live YouTube lookup — the
-  // same call scripts/backfillVideoTitles.js makes in bulk offline, just
+  // Input contract, section 1: a specific video title is the strongest
+  // signal. Before giving up on one, try a live YouTube lookup — the same
+  // call scripts/backfillVideoTitles.js makes in bulk offline, just
   // on-demand for leads that batch never reached (added after it ran, or
-  // past its 500-lead cap). Only route to "needs research" if that also fails.
-  const { hasWatchedSignal } = require('./codeGate');
-  if (!hasWatchedSignal(intelligencePack)) {
-    if (lead.channel_id) {
-      try {
-        const { fetchLatestVideoTitle } = require('./youtubeService');
-        const title = await fetchLatestVideoTitle(lead.channel_id);
-        if (title) {
-          await db.run('UPDATE leads SET recent_video_title = ? WHERE id = ?', [title, lead.id]);
-          lead.recent_video_title = title;
-          intelligencePack = buildCreatorIntelligencePack(lead);
-          console.log(`[Marcus] Live-backfilled video title for ${lead.channel_name}: "${title}"`);
-        }
-      } catch (e) {
-        console.warn(`[Marcus] Live video-title backfill failed for ${lead.channel_name}:`, e.message);
+  // past its 500-lead cap).
+  const { hasWatchedSignal, hasAnySignal } = require('./codeGate');
+  if (!hasWatchedSignal(intelligencePack) && lead.channel_id) {
+    try {
+      const { fetchLatestVideoTitle } = require('./youtubeService');
+      const title = await fetchLatestVideoTitle(lead.channel_id);
+      if (title) {
+        await db.run('UPDATE leads SET recent_video_title = ? WHERE id = ?', [title, lead.id]);
+        lead.recent_video_title = title;
+        intelligencePack = buildCreatorIntelligencePack(lead);
+        console.log(`[Marcus] Live-backfilled video title for ${lead.channel_name}: "${title}"`);
       }
+    } catch (e) {
+      console.warn(`[Marcus] Live video-title backfill failed for ${lead.channel_name}:`, e.message);
     }
   }
 
-  if (!hasWatchedSignal(intelligencePack)) {
-    const err = new Error(`No video data available for ${lead.channel_name} — cannot generate a specific-enough pitch. Needs manual research.`);
+  // No title even after the live lookup is common in this dataset (YouTube
+  // quota gaps, leads added between scrape passes) and is NOT a reason to
+  // refuse to generate — a lead with a real subscriber count, view average,
+  // or upload gap can still get a genuinely personalized email off those
+  // (buildMARCUSPrompt and personalizationCheck both handle a null title).
+  // Only the true dead end — no title AND no numbers at all — routes to
+  // "needs research", since there's nothing real left to write from.
+  if (!hasAnySignal(intelligencePack)) {
+    const err = new Error(`No usable data at all for ${lead.channel_name} (no video title, no subscriber/view/upload data) — needs manual research.`);
     err.code = 'NEEDS_RESEARCH';
     throw err;
   }

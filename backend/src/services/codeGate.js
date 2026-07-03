@@ -161,14 +161,27 @@ function personalizationCheck(body, intelligencePack) {
   return hasTitleRef || hasStatRef;
 }
 
-// Does the lead have at least one watched signal at all? Per the input
-// contract, `specific_video_title` is required — if enrichment produced
-// neither a best nor most-recent video title, the lead can't get a real
-// email and should go to a "needs research" queue instead (see
-// generateWithMarcus in claudeService.js).
+// Does the lead have a specific video title at all? Per the input contract
+// this is the strongest signal — generateWithMarcus tries a live YouTube
+// lookup when this is false before falling back to hasAnySignal below.
 function hasWatchedSignal(intelligencePack) {
   const hook = (intelligencePack || {}).hook_data || {};
   return !!(hook.most_recent_video_title || hook.best_video_title);
+}
+
+// Is there ANYTHING real to personalize on — a title, or failing that, a
+// real number (subscriber count, view average, upload gap)? This is
+// deliberately more permissive than hasWatchedSignal: a video-title-less
+// lead can still get a genuinely personalized email off subscriber count or
+// upload cadence (personalizationCheck below accepts either). Only block
+// generation entirely — needs-research — when NOTHING verifiable exists at
+// all, which should be rare; most of this app's leads carry at least a
+// subscriber count from the YouTube scrape.
+function hasAnySignal(intelligencePack) {
+  const p = intelligencePack || {};
+  const hook = p.hook_data || {};
+  if (hasWatchedSignal(p)) return true;
+  return !!(p.subscribers || hook.recent_avg_views || hook.channel_avg_views || p.last_upload_days_ago != null);
 }
 
 /**
@@ -250,6 +263,7 @@ module.exports = {
   runCodeGate,
   personalizationCheck,
   hasWatchedSignal,
+  hasAnySignal,
   describeViolation,
   fleschKincaidGrade,
   wordCount,
