@@ -430,6 +430,29 @@ router.post('/master/bulk-import', requireAdmin, asyncHandler(async (req, res) =
   res.json({ success: true, inserted, total });
 }));
 
+// Kicks off the rate-limited video-data backfill (services/videoBackfillService.js)
+// for every existing lead missing recent_videos/recent_video_title. Fire-and-forget —
+// runs in this server process, safe to trigger from an admin session with no
+// Railway CLI/SSH access needed. Poll the status route for progress.
+router.post('/admin/backfill-video-data', requireAdmin, asyncHandler(async (req, res) => {
+  const { runVideoBackfill, getBackfillStatus } = require('../services/videoBackfillService');
+  const current = getBackfillStatus();
+  if (current.running) return res.json({ success: true, message: 'Already running', status: current });
+  runVideoBackfill({}).catch(e => console.error('[VideoBackfill] crashed:', e.message));
+  res.json({ success: true, message: 'Backfill started', status: getBackfillStatus() });
+}));
+
+router.get('/admin/backfill-video-data/status', requireAdmin, asyncHandler(async (req, res) => {
+  const { getBackfillStatus } = require('../services/videoBackfillService');
+  res.json({ success: true, status: getBackfillStatus() });
+}));
+
+router.post('/admin/backfill-video-data/stop', requireAdmin, asyncHandler(async (req, res) => {
+  const { stopBackfill, getBackfillStatus } = require('../services/videoBackfillService');
+  stopBackfill();
+  res.json({ success: true, status: getBackfillStatus() });
+}));
+
 // Video data goes stale fast and master_leads is a shared pool (2,000+
 // channels) — refreshing it continuously would burn API quota keeping
 // channels fresh that nobody has claimed yet. Instead, fetch live the moment
