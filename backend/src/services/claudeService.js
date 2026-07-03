@@ -1807,7 +1807,7 @@ Return JSON only:
 
 // ── generateWithMarcus: full MARCUS pipeline (replaces generateFullPitch + generateInitialDraft) ──
 
-async function generateWithMarcus(lead, userId) {
+async function generateWithMarcus(lead, userId, onProgress) {
   const db = getDb();
 
   // Load user + voice DNA
@@ -1849,23 +1849,27 @@ async function generateWithMarcus(lead, userId) {
   console.log(`[Marcus] Intelligence pack built for ${lead.channel_name} — archetype: ${intelligencePack.archetype}`);
 
   // Input contract, section 1: a specific video title is the strongest
-  // signal. Before giving up on one, try a live YouTube lookup — the same
-  // call scripts/backfillVideoTitles.js makes in bulk offline, just
-  // on-demand for leads that batch never reached (added after it ran, or
-  // past its 500-lead cap).
+  // signal. Before giving up on one, try a live YouTube lookup — this is the
+  // safety net for leads the master-pool copy step (routes/leads.js) or the
+  // background backfill haven't reached yet.
   const { hasWatchedSignal, hasAnySignal } = require('./codeGate');
-  if (!hasWatchedSignal(intelligencePack) && lead.channel_id) {
+  let videoFetchResult = null;
+  if (!hasWatchedSignal(intelligencePack) && lead.channel_id && lead.video_data_status !== 'channel_gone') {
+    onProgress?.('researching');
     try {
-      const { fetchLatestVideoTitle } = require('./youtubeService');
-      const title = await fetchLatestVideoTitle(lead.channel_id);
-      if (title) {
-        await db.run('UPDATE leads SET recent_video_title = ? WHERE id = ?', [title, lead.id]);
-        lead.recent_video_title = title;
+      const { fetchVideoData, applyVideoDataToLead } = require('./youtubeService');
+      videoFetchResult = await fetchVideoData(lead.channel_id);
+      await applyVideoDataToLead(db, lead.id, videoFetchResult);
+      if (videoFetchResult.status === 'ok') {
+        lead.recent_videos = JSON.stringify(videoFetchResult.recentVideos || []);
+        lead.recent_video_title = videoFetchResult.recentVideos?.[0]?.title || null;
         intelligencePack = buildCreatorIntelligencePack(lead);
-        console.log(`[Marcus] Live-backfilled video title for ${lead.channel_name}: "${title}"`);
+        console.log(`[Marcus] Live-enriched video data for ${lead.channel_name} — ${videoFetchResult.recentVideos?.length || 0} videos`);
+      } else {
+        console.warn(`[Marcus] Live video enrichment for ${lead.channel_name} came back "${videoFetchResult.status}"`);
       }
     } catch (e) {
-      console.warn(`[Marcus] Live video-title backfill failed for ${lead.channel_name}:`, e.message);
+      console.warn(`[Marcus] Live video enrichment failed for ${lead.channel_name}:`, e.message);
     }
   }
 
@@ -1877,8 +1881,12 @@ async function generateWithMarcus(lead, userId) {
   // Only the true dead end — no title AND no numbers at all — routes to
   // "needs research", since there's nothing real left to write from.
   if (!hasAnySignal(intelligencePack)) {
-    const err = new Error(`No usable data at all for ${lead.channel_name} (no video title, no subscriber/view/upload data) — needs manual research.`);
+    const reason = videoFetchResult?.status === 'channel_gone' ? 'this channel appears to be deleted or private'
+      : videoFetchResult?.quotaExceeded ? 'the YouTube API quota is exhausted right now — try again later'
+      : 'no video, subscriber, or view data is on file for this lead';
+    const err = new Error(`Can't generate a specific-enough pitch for ${lead.channel_name} — ${reason}.`);
     err.code = 'NEEDS_RESEARCH';
+    err.videoDataStatus = videoFetchResult?.status || lead.video_data_status || null;
     throw err;
   }
 

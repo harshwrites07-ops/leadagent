@@ -713,6 +713,13 @@ async function initPostgres() {
     try { await query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS recent_video_title TEXT`); } catch {}
     try { await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS case_study TEXT`); } catch {}
 
+    // video_data_status distinguishes "not fetched yet" (NULL) from a fetch
+    // that ran and either succeeded ('ok'), failed transiently
+    // ('fetch_failed' — quota/timeout, safe to retry), or hit a dead channel
+    // ('channel_gone' — deleted/private, should not be retried).
+    try { await query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS video_data_status TEXT`); } catch {}
+    try { await query(`CREATE INDEX IF NOT EXISTS idx_leads_video_data_status ON leads(video_data_status)`); } catch {}
+
     // Per-user unique indexes
     try { await query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_channel_id_user ON leads(channel_id, user_id) WHERE channel_id IS NOT NULL AND channel_id != ''`); } catch {}
     try { await query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_handle_user ON leads(channel_handle, user_id) WHERE channel_handle IS NOT NULL AND channel_handle != ''`); } catch {}

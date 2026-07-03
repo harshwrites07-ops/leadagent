@@ -430,6 +430,34 @@ router.post('/master/bulk-import', requireAdmin, asyncHandler(async (req, res) =
   res.json({ success: true, inserted, total });
 }));
 
+// Video data goes stale fast and master_leads is a shared pool (2,000+
+// channels) — refreshing it continuously would burn API quota keeping
+// channels fresh that nobody has claimed yet. Instead, fetch live the moment
+// a user actually copies a lead into their own list, so quota is only spent
+// on leads someone wants, and the data is as fresh as the claim itself.
+// Runs after the response is sent — never blocks the master-pool request,
+// which is exactly the kind of synchronous per-lead API work that caused the
+// original 524 timeout bug in pitch generation.
+async function enrichNewLeadsInBackground(db, newLeads) {
+  const { fetchVideoData, applyVideoDataToLead, isQuotaExhausted } = require('../services/youtubeService');
+  const CONCURRENCY = 3;
+  for (let i = 0; i < newLeads.length; i += CONCURRENCY) {
+    if (isQuotaExhausted()) {
+      console.warn(`[MasterCopy] YouTube quota exhausted — leaving ${newLeads.length - i} lead(s) unenriched for a later retry`);
+      break;
+    }
+    const batch = newLeads.slice(i, i + CONCURRENCY);
+    await Promise.all(batch.map(async lead => {
+      try {
+        const result = await fetchVideoData(lead.channel_id);
+        await applyVideoDataToLead(db, lead.id, result);
+      } catch (e) {
+        console.warn(`[MasterCopy] Enrichment failed for lead ${lead.id} (${lead.channel_name}):`, e.message);
+      }
+    }));
+  }
+}
+
 router.get('/master', asyncHandler(async (req, res) => {
   const db = getDb();
   const uid = req.user.id;
@@ -447,11 +475,15 @@ router.get('/master', asyncHandler(async (req, res) => {
 
   const masterLeads = await db.all(`SELECT * FROM master_leads WHERE ${where} ORDER BY lead_score DESC, subscriber_count DESC LIMIT ? OFFSET ?`, [...params, Number(limit), Number(offset)]);
   let copied = 0;
+  const newlyAdded = [];
   for (const l of masterLeads) {
     try {
-      const r = await db.run(`INSERT INTO leads (user_id,platform,channel_id,channel_name,channel_handle,subscriber_count,avg_views,email,website,channel_description,lead_score,temperature,crm_stage,country,niche) VALUES (?,'youtube',?,?,?,?,?,?,?,?,?,?,'new_lead',?,?) ON CONFLICT DO NOTHING`,
+      const r = await db.run(`INSERT INTO leads (user_id,platform,channel_id,channel_name,channel_handle,subscriber_count,avg_views,email,website,channel_description,lead_score,temperature,crm_stage,country,niche) VALUES (?,'youtube',?,?,?,?,?,?,?,?,?,?,'new_lead',?,?) ON CONFLICT DO NOTHING ${USE_PG ? 'RETURNING id' : ''}`,
         [uid,l.channel_id,l.channel_name,l.channel_handle,l.subscriber_count,l.avg_views,l.email,l.website,l.channel_description,l.lead_score,l.temperature,l.country,l.niche]);
-      if (r.changes > 0) copied++;
+      if (r.changes > 0) {
+        copied++;
+        if (r.lastID) newlyAdded.push({ id: r.lastID, channel_id: l.channel_id, channel_name: l.channel_name });
+      }
     } catch {}
   }
   const userLeads = masterLeads.length
@@ -459,6 +491,8 @@ router.get('/master', asyncHandler(async (req, res) => {
     : [];
   const masterCount = (await db.get(`SELECT COUNT(*) as c FROM master_leads WHERE ${where}`, params)).c;
   res.json({ success: true, leads: userLeads, total: masterCount, master_total: total.c, copied });
+
+  if (newlyAdded.length) enrichNewLeadsInBackground(db, newlyAdded).catch(() => {});
 }));
 
 router.get('/master/stats', asyncHandler(async (req, res) => {

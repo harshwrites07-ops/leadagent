@@ -488,20 +488,87 @@ function isQuotaExhausted() {
   return keys.length > 0 && keys.every(k => exhaustedKeys.has(k));
 }
 
-// One-off, on-demand version of what scripts/backfillVideoTitles.js does in
-// bulk offline — used as a last resort when a lead reaches pitch generation
-// with no video data at all (never backfilled, or added after the batch run).
-async function fetchLatestVideoTitle(channelId) {
-  if (!channelId) return null;
+// Fetches a lead's recent-video data on demand — same shape buildChannelProfile
+// produces during a full scrape, but standalone: takes just a channel_id, no
+// pre-fetched channel object required. Used at three call sites: the
+// master-pool copy step (routes/leads.js), the pre-generation safety net
+// (claudeService.js), and the backfill script (scripts/backfillMissingVideoData.js).
+//
+// Returns { status: 'ok', recentVideos, totalVideos, avgViews, avgLikes,
+// avgComments, uploadFreqDays, lastUploadDate } on success, or
+// { status: 'channel_gone' } for a deleted/private channel, or
+// { status: 'fetch_failed', quotaExceeded } for a transient failure —
+// callers use `status` to decide whether a retry is worth it later.
+async function fetchVideoData(channelId, maxResults = 10) {
+  if (!channelId) return { status: 'fetch_failed', error: 'no channel_id' };
   try {
-    const { data } = await ytGet('/search', {
-      part: 'snippet', channelId, order: 'date', maxResults: 1, type: 'video',
-    });
-    return data.items?.[0]?.snippet?.title || null;
+    const chRes = await ytGet('/channels', { part: 'contentDetails,statistics', id: channelId });
+    const ch = chRes.data.items?.[0];
+    if (!ch) return { status: 'channel_gone' };
+
+    const totalVideos = parseInt(ch.statistics?.videoCount || '0');
+    const uploadsPlaylistId = ch.contentDetails?.relatedPlaylists?.uploads;
+    if (!uploadsPlaylistId) return { status: 'ok', recentVideos: [], totalVideos, avgViews: 0, avgLikes: 0, avgComments: 0, uploadFreqDays: 0, lastUploadDate: null };
+
+    const plRes = await ytGet('/playlistItems', { part: 'contentDetails', playlistId: uploadsPlaylistId, maxResults });
+    const videoIds = plRes.data.items.map(v => v.contentDetails.videoId).filter(Boolean);
+    if (!videoIds.length) return { status: 'ok', recentVideos: [], totalVideos, avgViews: 0, avgLikes: 0, avgComments: 0, uploadFreqDays: 0, lastUploadDate: null };
+
+    const videoStats = await ytGet('/videos', { part: 'statistics,snippet', id: videoIds.join(',') });
+    const recentVideos = videoStats.data.items.map(v => ({
+      id: v.id, title: v.snippet.title,
+      views: parseInt(v.statistics.viewCount || '0'),
+      likes: parseInt(v.statistics.likeCount || '0'),
+      comments: parseInt(v.statistics.commentCount || '0'),
+      date: v.snippet.publishedAt,
+    }));
+
+    let avgViews = 0, avgLikes = 0, avgComments = 0, uploadFreqDays = 0, lastUploadDate = null;
+    if (recentVideos.length) {
+      avgViews    = recentVideos.reduce((a, v) => a + v.views, 0) / recentVideos.length;
+      avgLikes    = recentVideos.reduce((a, v) => a + v.likes, 0) / recentVideos.length;
+      avgComments = recentVideos.reduce((a, v) => a + v.comments, 0) / recentVideos.length;
+      lastUploadDate = recentVideos[0]?.date || null;
+      if (recentVideos.length >= 2) {
+        const span = (new Date(recentVideos[0].date) - new Date(recentVideos[recentVideos.length - 1].date)) / 86400000;
+        uploadFreqDays = span / (recentVideos.length - 1);
+      }
+    }
+
+    return { status: 'ok', recentVideos, totalVideos, avgViews, avgLikes, avgComments, uploadFreqDays, lastUploadDate };
   } catch (e) {
-    console.warn('[YouTube] fetchLatestVideoTitle failed:', e.message);
-    return null;
+    if (e.response?.status === 404) return { status: 'channel_gone' };
+    const reason = e.response?.data?.error?.errors?.[0]?.reason;
+    const quotaExceeded = reason === 'quotaExceeded' || reason === 'dailyLimitExceeded' || reason === 'rateLimitExceeded' || /quota/i.test(e.message || '');
+    console.warn('[YouTube] fetchVideoData failed:', e.message);
+    return { status: 'fetch_failed', quotaExceeded, error: e.message };
   }
 }
 
-module.exports = { searchChannels, searchChannelsMulti, buildChannelProfile, testApiKey, detectViralChannels, resolveChannelUrl, getChannelByUrl, getAllKeys, getKeyPoolStatus, isQuotaExhausted, getNextKey: getKey, fetchLatestVideoTitle };
+// Shared write-back for fetchVideoData()'s result — used by all three
+// enrichment call sites (master-pool copy, pre-generation safety net, and
+// the backfill script) so the column list and status semantics stay in sync.
+async function applyVideoDataToLead(db, leadId, result) {
+  if (result.status === 'ok') {
+    await db.run(
+      `UPDATE leads SET recent_videos=?, recent_video_title=?, total_videos=COALESCE(?,total_videos),
+        avg_views=CASE WHEN ? > 0 THEN ? ELSE avg_views END,
+        upload_frequency_days=CASE WHEN ? > 0 THEN ? ELSE upload_frequency_days END,
+        last_upload_date=COALESCE(?,last_upload_date), video_data_status='ok', updated_at=CURRENT_TIMESTAMP
+       WHERE id=?`,
+      [
+        JSON.stringify(result.recentVideos || []),
+        result.recentVideos?.[0]?.title || null,
+        result.totalVideos ?? null,
+        result.avgViews || 0, Math.round(result.avgViews || 0),
+        result.uploadFreqDays || 0, parseFloat((result.uploadFreqDays || 0).toFixed(1)),
+        result.lastUploadDate || null,
+        leadId,
+      ]
+    );
+  } else {
+    await db.run(`UPDATE leads SET video_data_status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`, [result.status, leadId]);
+  }
+}
+
+module.exports = { searchChannels, searchChannelsMulti, buildChannelProfile, testApiKey, detectViralChannels, resolveChannelUrl, getChannelByUrl, getAllKeys, getKeyPoolStatus, isQuotaExhausted, getNextKey: getKey, fetchVideoData, applyVideoDataToLead };

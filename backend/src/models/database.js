@@ -620,6 +620,13 @@ function _initSqliteSchema(db) {
   alterTry(`ALTER TABLE leads ADD COLUMN recent_video_title TEXT`);
   alterTry(`ALTER TABLE users ADD COLUMN case_study TEXT`);
 
+  // video_data_status distinguishes "not fetched yet" (NULL) from a fetch that
+  // ran and either succeeded ('ok'), failed transiently ('fetch_failed' —
+  // quota/timeout, safe to retry), or hit a dead channel ('channel_gone' —
+  // deleted/private, should not be retried).
+  alterTry(`ALTER TABLE leads ADD COLUMN video_data_status TEXT`);
+  alterTry(`CREATE INDEX IF NOT EXISTS idx_leads_video_data_status ON leads(video_data_status)`);
+
   db.exec(`CREATE TABLE IF NOT EXISTS user_followup_settings (
     user_id INTEGER PRIMARY KEY,
     interval_days INTEGER DEFAULT 3,

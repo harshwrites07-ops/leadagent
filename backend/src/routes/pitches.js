@@ -99,11 +99,13 @@ router.get('/generate-stream/:leadId', aiLimiter, asyncHandler(async (req, res) 
 
   let result;
   try {
-    result = await claude.generateWithMarcus(lead, req.user.id);
+    result = await claude.generateWithMarcus(lead, req.user.id, (stage) => {
+      if (stage === 'researching') send({ type: 'status', message: 'Researching channel...' });
+    });
   } catch (e) {
     if (e.code === 'NEEDS_RESEARCH') {
       await db.run(`UPDATE leads SET crm_stage='needs_research', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [lead.id]);
-      send({ type: 'error', error: e.message, code: 'NEEDS_RESEARCH' });
+      send({ type: 'error', error: e.message, code: 'NEEDS_RESEARCH', videoDataStatus: e.videoDataStatus || null });
       return res.end();
     }
     const isTimeout = e.code === 'ECONNABORTED' || /timeout/i.test(e.message || '');
@@ -196,7 +198,7 @@ router.post('/generate/:leadId', aiLimiter, asyncHandler(async (req, res) => {
   } catch (e) {
     if (e.code === 'NEEDS_RESEARCH') {
       await db.run(`UPDATE leads SET crm_stage='needs_research', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [lead.id]);
-      return res.status(422).json({ success: false, error: e.message, code: 'NEEDS_RESEARCH' });
+      return res.status(422).json({ success: false, error: e.message, code: 'NEEDS_RESEARCH', videoDataStatus: e.videoDataStatus || null });
     }
     const isTimeout = e.code === 'ECONNABORTED' || /timeout/i.test(e.message || '');
     const errMsg = isTimeout

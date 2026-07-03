@@ -194,7 +194,12 @@ export default function PitchGenerator() {
           if (!line.startsWith('data: ')) continue;
           let event;
           try { event = JSON.parse(line.slice(6)); } catch { continue; }
-          if (event.type === 'error') throw new Error(event.error || 'Generation failed');
+          if (event.type === 'error') {
+            const e = new Error(event.error || 'Generation failed');
+            e.code = event.code || null;
+            e.videoDataStatus = event.videoDataStatus || null;
+            throw e;
+          }
           if (event.type === 'status') setGeneratingStatus(event.message);
           if (event.type === 'progress') setGeneratingStatus(`Quality check ${event.attempt} of ${event.max} — score ${event.score}/100`);
           if (event.type === 'result') data = event;
@@ -370,7 +375,12 @@ export default function PitchGenerator() {
         if (!line.startsWith('data: ')) continue;
         let event;
         try { event = JSON.parse(line.slice(6)); } catch { continue; }
-        if (event.type === 'error') throw new Error(event.error || 'Generation failed');
+        if (event.type === 'error') {
+          const e = new Error(event.error || 'Generation failed');
+          e.code = event.code || null;
+          e.videoDataStatus = event.videoDataStatus || null;
+          throw e;
+        }
         if (event.type === 'status' && onStatus) onStatus(event.message);
         if (event.type === 'progress' && onStatus) onStatus(`Quality check ${event.attempt} of ${event.max} — score ${event.score}/100`);
         if (event.type === 'result') data = event;
@@ -407,7 +417,7 @@ export default function PitchGenerator() {
       } catch (err) {
         const errMsg = err.message || 'Request failed';
         setStreamEmails(prev => prev.map(e =>
-          e.leadId === lead.id ? { ...e, status: 'error', error: errMsg } : e
+          e.leadId === lead.id ? { ...e, status: 'error', error: errMsg, code: err.code || null, videoDataStatus: err.videoDataStatus || null } : e
         ));
       }
       streamDone++;
@@ -420,6 +430,30 @@ export default function PitchGenerator() {
     if (streamFailCount === 0) toast.success(`Done! ${streamSuccessCount} pitches generated`);
     else if (streamSuccessCount === 0) toast.error(`All ${toProcess.length} pitches failed — check errors above`);
     else toast(`${streamSuccessCount} generated, ${streamFailCount} failed`, { icon: '⚠️', duration: 6000 });
+  };
+
+  // Re-runs generation for a single failed lead in the batch grid — the
+  // backend safety net (live YouTube fetch) runs again here too, so a
+  // transient quota/timeout failure has a real chance of succeeding on retry.
+  const retryLeadGeneration = async (lead) => {
+    setStreamEmails(prev => prev.map(e => e.leadId === lead.id ? { ...e, status: 'loading', error: null, code: null, statusMessage: 'Retrying...' } : e));
+    try {
+      const data = await generatePitchViaStream(lead.id, message => {
+        setStreamEmails(prev => prev.map(e => e.leadId === lead.id ? { ...e, statusMessage: message } : e));
+      });
+      const p = normalizePitch(data.pitch ?? data);
+      setStreamEmails(prev => prev.map(e => e.leadId === lead.id ? { ...e, status: 'done', data: { ...data, pitch: p } } : e));
+    } catch (err) {
+      setStreamEmails(prev => prev.map(e =>
+        e.leadId === lead.id ? { ...e, status: 'error', error: err.message || 'Request failed', code: err.code || null, videoDataStatus: err.videoDataStatus || null } : e
+      ));
+    }
+  };
+
+  // Removes a lead from the batch grid without blocking review of the rest —
+  // used when a lead's data gap isn't worth chasing right now.
+  const skipLead = (leadId) => {
+    setStreamEmails(prev => prev.filter(e => e.leadId !== leadId));
   };
 
   const filteredLeads = leads.filter(l =>
@@ -658,7 +692,7 @@ export default function PitchGenerator() {
               </button>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 14 }}>
-              {streamEmails.map(({ leadId, lead, status, data, error }) => {
+              {streamEmails.map(({ leadId, lead, status, data, error, code, videoDataStatus, statusMessage }) => {
                 const p = data?.pitch;
                 const qs = p?.quality_score ?? null;
                 const blocked = qs !== null && qs < 70;
@@ -685,18 +719,35 @@ export default function PitchGenerator() {
                       ))}
                       <div className="row" style={{ gap: 6, marginTop: 10, justifyContent: 'center' }}>
                         <span className="dot dot--pulse" style={{ width: 6, height: 6 }} />
-                        <span className="muted" style={{ fontSize: 10 }}>Enhancing quality...</span>
+                        <span className="muted" style={{ fontSize: 10 }}>{statusMessage || 'Generating...'}</span>
                       </div>
                     </motion.div>
                   );
                 }
 
                 if (status === 'error') {
+                  const isNeedsResearch = code === 'NEEDS_RESEARCH';
                   return (
                     <motion.div key={leadId} initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                       style={{ padding: 16, background: 'rgba(255,80,80,.05)', border: '1px solid rgba(255,80,80,.2)', borderRadius: 10 }}>
                       <div style={{ fontSize: 12.5, fontWeight: 500, marginBottom: 4 }}>{lead.channel_name}</div>
-                      <div className="muted" style={{ fontSize: 11, color: 'var(--bad)' }}>Failed: {error || 'Request failed — check Railway logs for details'}</div>
+                      <div className="muted" style={{ fontSize: 11, color: 'var(--bad)', marginBottom: 10 }}>
+                        {isNeedsResearch ? error : `Failed: ${error || 'Request failed — check Railway logs for details'}`}
+                      </div>
+                      <div className="row" style={{ gap: 6 }}>
+                        <button
+                          className="btn btn--ghost btn--sm"
+                          style={{ flex: 1 }}
+                          disabled={videoDataStatus === 'channel_gone'}
+                          title={videoDataStatus === 'channel_gone' ? 'Channel appears deleted or private — retry unlikely to help' : undefined}
+                          onClick={() => retryLeadGeneration(lead)}
+                        >
+                          <Icon name="refresh" size={11} />{isNeedsResearch ? 'Retry research' : 'Retry'}
+                        </button>
+                        <button className="btn btn--ghost btn--sm" style={{ flex: 1 }} onClick={() => skipLead(leadId)}>
+                          Skip this lead
+                        </button>
+                      </div>
                     </motion.div>
                   );
                 }
