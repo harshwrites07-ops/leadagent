@@ -212,6 +212,8 @@ export default function PitchGenerator() {
       }
 
       const p = normalizePitch(data.pitch ?? data);
+      p.angle_used = data.angleUsed || p.signal_used || null;
+      p.personalization_elements = data.personalizationElements || [];
       setPitch(p);
       setEmailSubject(p.email_subject);
       setEmailBody(p.cold_email_body);
@@ -306,7 +308,7 @@ export default function PitchGenerator() {
       const lead = toProcess[i];
       setBulkProgress(p => ({ ...p, current: i + 1 }));
       try {
-        const { data } = await api.post(`/pitches/generate/${lead.id}`);
+        const data = await generatePitchViaStream(lead.id);
         const p = normalizePitch(data.pitch ?? data);
         if (andSend && p) {
           await api.post('/emails/queue', { lead_id: lead.id, subject: p.email_subject, body: p.cold_email_body });
@@ -339,6 +341,45 @@ export default function PitchGenerator() {
     else toast(`${bulkSuccessCount} pitches ${bulkAction}, ${bulkFailCount} failed`, { icon: '⚠️', duration: 6000 });
   };
 
+  // Generates a single pitch over the SSE endpoint instead of the plain POST route.
+  // The plain route holds the connection open with zero bytes for the full research +
+  // Marcus + up-to-5-attempt quality-gate pipeline, which routinely exceeds 100s — long
+  // enough for Cloudflare's proxy to kill the connection and return a 524 to the browser.
+  // The SSE endpoint sends periodic status/progress frames, keeping the connection alive.
+  const generatePitchViaStream = async (leadId, onStatus) => {
+    const response = await fetch(`/api/pitches/generate-stream/${leadId}`, { credentials: 'include' });
+    if (!response.ok) {
+      const text = await response.text();
+      let msg = 'Generation failed';
+      try { msg = JSON.parse(text).error || msg; } catch {}
+      throw new Error(msg);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let data = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        let event;
+        try { event = JSON.parse(line.slice(6)); } catch { continue; }
+        if (event.type === 'error') throw new Error(event.error || 'Generation failed');
+        if (event.type === 'status' && onStatus) onStatus(event.message);
+        if (event.type === 'progress' && onStatus) onStatus(`Quality check ${event.attempt} of ${event.max} — score ${event.score}/100`);
+        if (event.type === 'result') data = event;
+      }
+    }
+    if (!data) throw new Error('Generation failed — no result received');
+    return data;
+  };
+
   const handleStreamGenerate = async () => {
     const toProcess = leads.filter(l => selectedLeads.has(l.id));
     if (!toProcess.length) return;
@@ -355,15 +396,16 @@ export default function PitchGenerator() {
     let streamSuccessCount = 0;
     await Promise.allSettled(toProcess.map(async lead => {
       try {
-        const { data } = await api.post(`/pitches/generate/${lead.id}`);
+        const data = await generatePitchViaStream(lead.id, message => {
+          setStreamEmails(prev => prev.map(e => e.leadId === lead.id ? { ...e, statusMessage: message } : e));
+        });
         const p = normalizePitch(data.pitch ?? data);
         streamSuccessCount++;
         setStreamEmails(prev => prev.map(e =>
           e.leadId === lead.id ? { ...e, status: 'done', data: { ...data, pitch: p } } : e
         ));
       } catch (err) {
-        // Fix: use 'err' (not 'e') so it isn't shadowed by the .map callback parameter
-        const errMsg = err.response?.data?.error || err.message || 'Request failed';
+        const errMsg = err.message || 'Request failed';
         setStreamEmails(prev => prev.map(e =>
           e.leadId === lead.id ? { ...e, status: 'error', error: errMsg } : e
         ));
@@ -1003,28 +1045,53 @@ export default function PitchGenerator() {
                       </div>
                     </div>
                     <div className="card__body">
-                      {/* Signal type badge */}
-                      {pitch.signal_used && (
-                        <div style={{
-                          display: 'inline-flex', alignItems: 'center', gap: 6,
-                          background: 'var(--lime-soft)',
-                          border: '1px solid var(--lime-border)',
-                          borderRadius: 6, padding: '4px 10px',
-                          fontSize: 10, fontWeight: 700,
-                          color: 'var(--lime)',
-                          fontFamily: 'var(--f-mono)',
-                          letterSpacing: '0.5px',
-                          marginBottom: 12,
-                        }}>
-                          {pitch.signal_used === 'confirmed_hiring' && '🎯 CONFIRMED HIRING SIGNAL'}
-                          {pitch.signal_used === 'video_drop' && '📉 VIDEO DROP DETECTED'}
-                          {pitch.signal_used === 'upload_gap' && '⏰ UPLOAD GAP DETECTED'}
-                          {pitch.signal_used === 'viral_gap' && '🚀 VIRAL GAP DETECTED'}
-                          {pitch.signal_used === 'ratio_gap' && '📊 VIEW RATIO SIGNAL'}
-                          {pitch.signal_used === 'frequency_slow' && '🐢 FREQUENCY SIGNAL'}
-                          {pitch.signal_used === 'growth_opportunity' && '⚠️ GENERIC (improve lead data)'}
-                        </div>
-                      )}
+                      {/* Angle badge — shows which signal Marcus wrote from, per angleEngine.js's
+                          MARCUS_ANGLES taxonomy. Older v3 signal ids are mapped for backward compat
+                          with pitches generated before the angle-engine rewrite. */}
+                      {(pitch.angle_used || pitch.signal_used) && (() => {
+                        const ANGLE_LABELS = {
+                          diagnosis:            '🩺 DIAGNOSIS',
+                          unclaimed_window:     '🪟 UNCLAIMED WINDOW',
+                          bottleneck_removal:   '🚧 BOTTLENECK REMOVAL',
+                          specific_fit:         '🎯 SPECIFIC FIT',
+                          risk_reframe:         '🛡️ RISK REFRAME',
+                          social_proof_mirror:  '👥 SOCIAL PROOF MIRROR',
+                          honest_observation:   '👁️ HONEST OBSERVATION',
+                          value_drop:           '🎁 VALUE DROP',
+                          // legacy v3 signal ids
+                          confirmed_hiring:     '🎯 CONFIRMED HIRING SIGNAL',
+                          video_drop:           '📉 VIDEO DROP DETECTED',
+                          upload_gap:           '⏰ UPLOAD GAP DETECTED',
+                          viral_gap:            '🚀 VIRAL GAP DETECTED',
+                          ratio_gap:            '📊 VIEW RATIO SIGNAL',
+                          frequency_slow:       '🐢 FREQUENCY SIGNAL',
+                          growth_opportunity:   '⚠️ GENERIC (improve lead data)',
+                        };
+                        const angleKey = pitch.angle_used || pitch.signal_used;
+                        const label = ANGLE_LABELS[angleKey] || angleKey.replace(/_/g, ' ').toUpperCase();
+                        const elements = pitch.personalization_elements || [];
+                        return (
+                          <div style={{ marginBottom: 12 }}>
+                            <div style={{
+                              display: 'inline-flex', alignItems: 'center', gap: 6,
+                              background: 'var(--lime-soft)',
+                              border: '1px solid var(--lime-border)',
+                              borderRadius: 6, padding: '4px 10px',
+                              fontSize: 10, fontWeight: 700,
+                              color: 'var(--lime)',
+                              fontFamily: 'var(--f-mono)',
+                              letterSpacing: '0.5px',
+                            }}>
+                              {label}
+                            </div>
+                            {elements.length > 0 && (
+                              <div style={{ fontSize: 10.5, color: 'var(--text-4)', marginTop: 5 }}>
+                                Generated from: {elements.join(' + ')}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       {/* Quality Gate Badge — label only, no raw number shown to users */}
                       {pitch.quality_score != null && (
@@ -1161,7 +1228,11 @@ export default function PitchGenerator() {
                       <div className="mail">
                         <div className="mail__sub">{emailSubject || pitch.email_subject}</div>
                         <div className="mail__meta">
-                          To {selectedLead.email || `${selectedLead.channel_name}@...`} · AI-personalized · ready to send
+                          To {selectedLead.email || `${selectedLead.channel_name}@...`} · AI-personalized ·{' '}
+                          {(() => {
+                            const qs = pitch.quality_score ?? pitch.pitch_score;
+                            return qs != null && qs < 70 ? 'needs polish before sending' : 'ready to send';
+                          })()}
                         </div>
                         <div className="mail__body">
                           {emailBody || pitch.cold_email_body}

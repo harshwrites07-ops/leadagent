@@ -346,6 +346,24 @@ router.post('/skip-onboarding', requireAuth, asyncHandler(async (req, res) => {
   res.json({ success: true, user: safeUser(user) });
 }));
 
+// Marcus V2, Part 6 — voice sample quality check at save time. A sample that's
+// too short or itself reads like AI-written boilerplate can't teach Marcus
+// anything; warn the user instead of silently accepting it.
+function checkSampleQuality(sampleKey, text) {
+  if (!text || !text.trim()) return null;
+  const { wordCount, runCodeGate } = require('../services/codeGate');
+  const words = wordCount(text);
+  if (words < 40) {
+    return { field: sampleKey, warning: `This sample is only ${words} words — paste something longer you actually wrote to a client for Marcus to learn from.` };
+  }
+  const gate = runCodeGate({ subject: '', body: text }, {});
+  const bannedHit = gate.violations.find(v => v.type === 'banned_phrase');
+  if (bannedHit) {
+    return { field: sampleKey, warning: `This sample reads like a template (uses "${bannedHit.found}") — paste something you actually typed to a client.` };
+  }
+  return null;
+}
+
 router.put('/profile', requireAuth, asyncHandler(async (req, res) => {
   const allowed = ['full_name','service_type','one_liner','experience_years','best_result','case_study',
     'target_niches','pricing_range','personality_traits','outreach_goal','origin_story','unique_difference',
@@ -363,6 +381,10 @@ router.put('/profile', requireAuth, asyncHandler(async (req, res) => {
   vals.push(req.user.id);
   await db.run(`UPDATE users SET ${sets.join(',')} WHERE id=?`, vals);
 
+  const sampleWarnings = ['voice_sample_1', 'voice_sample_2', 'voice_sample_3']
+    .map(key => req.body[key] !== undefined ? checkSampleQuality(key, req.body[key]) : null)
+    .filter(Boolean);
+
   try {
     const { rebuildVoiceDNA } = require('../services/voiceDNA');
     const dna = await rebuildVoiceDNA(req.user.id);
@@ -370,11 +392,11 @@ router.put('/profile', requireAuth, asyncHandler(async (req, res) => {
       try { if (!USE_PG) { const { syncUsersToTurso } = require('../services/tursoSync'); await syncUsersToTurso(getDb()); } } catch {}
     });
     const user = await getUserById(req.user.id);
-    return res.json({ success: true, user: safeUser(user), voice_dna: dna });
+    return res.json({ success: true, user: safeUser(user), voice_dna: dna, sample_warnings: sampleWarnings });
   } catch {}
 
   const user = await getUserById(req.user.id);
-  res.json({ success: true, user: safeUser(user) });
+  res.json({ success: true, user: safeUser(user), sample_warnings: sampleWarnings });
 }));
 
 router.get('/usage', requireAuth, (req, res) => {

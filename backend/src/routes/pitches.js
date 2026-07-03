@@ -51,6 +51,17 @@ async function savePitch(db, leadId, userId, { email_subject, email_body, deep_s
   }
 }
 
+// Marcus V2, Part 6 — Voice DNA enforcement. Bulk/power-send generation is
+// blocked without at least one voice sample + register detection; single
+// pitches still work but the caller should show a default-voice banner.
+async function checkVoiceProfile(db, userId) {
+  const user = await db.get('SELECT voice_sample_1, voice_sample_2, voice_sample_3, voice_dna FROM users WHERE id = ?', [userId]);
+  const hasSample = !!(user?.voice_sample_1 || user?.voice_sample_2 || user?.voice_sample_3);
+  let hasRegister = false;
+  try { hasRegister = !!(JSON.parse(user?.voice_dna || '{}').confidence_register); } catch {}
+  return { ready: hasSample && hasRegister, hasSample, hasRegister };
+}
+
 async function logQualityAttempt(db, userId, lead, attemptNum, email, result) {
   try {
     await db.run(
@@ -90,6 +101,11 @@ router.get('/generate-stream/:leadId', aiLimiter, asyncHandler(async (req, res) 
   try {
     result = await claude.generateWithMarcus(lead, req.user.id);
   } catch (e) {
+    if (e.code === 'NEEDS_RESEARCH') {
+      await db.run(`UPDATE leads SET crm_stage='needs_research', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [lead.id]);
+      send({ type: 'error', error: e.message, code: 'NEEDS_RESEARCH' });
+      return res.end();
+    }
     const isTimeout = e.code === 'ECONNABORTED' || /timeout/i.test(e.message || '');
     const errMsg = isTimeout ? 'Generation timed out — Claude API took too long. Try again.' : `AI unavailable: ${e.message?.substring(0, 120)}`;
     console.error(`[Marcus/SSE] FAILED lead=${lead.id} channel="${lead.channel_name}" isTimeout=${isTimeout} err="${e.message}"`);
@@ -107,7 +123,7 @@ router.get('/generate-stream/:leadId', aiLimiter, asyncHandler(async (req, res) 
   let gateResult = null;
   let finalEmailBody = result.email_body || result.body;
   try {
-    const userRow  = await db.get('SELECT voice_dna FROM users WHERE id = ?', [req.user.id]);
+    const userRow  = await db.get('SELECT * FROM users WHERE id = ?', [req.user.id]);
     const voiceDNA = userRow?.voice_dna ? JSON.parse(userRow.voice_dna) : {};
     const creatorData = buildCreatorData(lead);
     const emailSubject = result.email_subject || result.subject || '';
@@ -121,6 +137,7 @@ router.get('/generate-stream/:leadId', aiLimiter, asyncHandler(async (req, res) 
       },
       result.intelligence_pack,
       result.angle_result,
+      lead, userRow,
     );
     finalEmailBody = gateResult.email;
   } catch (err) {
@@ -150,6 +167,7 @@ router.get('/generate-stream/:leadId', aiLimiter, asyncHandler(async (req, res) 
     success: true,
     pitch,
     warning:            result.name_warning || null,
+    voiceWarning:       result.voice_warning || null,
     qualityScore,
     qualityPassed:      gateResult?.quality?.passed ?? null,
     qualityFeedback:    gateResult?.quality?.overall_feedback ?? null,
@@ -158,6 +176,7 @@ router.get('/generate-stream/:leadId', aiLimiter, asyncHandler(async (req, res) 
     qualityWarning:     gateResult?.warning ?? false,
     qualityStatus:      gateResult?.qualityStatus ?? getQualityStatus(qualityScore ?? 0),
     angleUsed:          result.angle_used || result.signal_used || null,
+    personalizationElements: result.personalization_elements || [],
   });
   res.end();
 }));
@@ -175,6 +194,10 @@ router.post('/generate/:leadId', aiLimiter, asyncHandler(async (req, res) => {
   try {
     result = await claude.generateWithMarcus(lead, req.user.id);
   } catch (e) {
+    if (e.code === 'NEEDS_RESEARCH') {
+      await db.run(`UPDATE leads SET crm_stage='needs_research', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [lead.id]);
+      return res.status(422).json({ success: false, error: e.message, code: 'NEEDS_RESEARCH' });
+    }
     const isTimeout = e.code === 'ECONNABORTED' || /timeout/i.test(e.message || '');
     const errMsg = isTimeout
       ? `Generation timed out — Claude API took too long. Try again.`
@@ -192,7 +215,7 @@ router.post('/generate/:leadId', aiLimiter, asyncHandler(async (req, res) => {
   let gateResult = null;
   let finalEmailBody = result.email_body || result.body;
   try {
-    const userRow  = await db.get('SELECT voice_dna FROM users WHERE id = ?', [req.user.id]);
+    const userRow  = await db.get('SELECT * FROM users WHERE id = ?', [req.user.id]);
     const voiceDNA = userRow?.voice_dna ? JSON.parse(userRow.voice_dna) : {};
     const creatorData = buildCreatorData(lead);
 
@@ -205,6 +228,7 @@ router.post('/generate/:leadId', aiLimiter, asyncHandler(async (req, res) => {
       },
       result.intelligence_pack,  // full pack → regen uses buildMARCUSPrompt
       result.angle_result,
+      lead, userRow,
     );
     finalEmailBody = gateResult.email;
   } catch (err) {
@@ -236,6 +260,7 @@ router.post('/generate/:leadId', aiLimiter, asyncHandler(async (req, res) => {
     success: true,
     pitch,
     warning:            result.name_warning || null,
+    voiceWarning:       result.voice_warning || null,
     qualityScore,
     qualityPassed:      gateResult?.quality?.passed ?? null,
     qualityFeedback:    gateResult?.quality?.overall_feedback ?? null,
@@ -244,6 +269,7 @@ router.post('/generate/:leadId', aiLimiter, asyncHandler(async (req, res) => {
     qualityWarning:     gateResult?.warning ?? false,
     qualityStatus:      gateResult?.qualityStatus ?? getQualityStatus(qualityScore ?? 0),
     angleUsed:          result.angle_used || result.signal_used || null,
+    personalizationElements: result.personalization_elements || [],
   });
 }));
 
@@ -260,7 +286,7 @@ router.get('/checklist/:leadId', asyncHandler(async (req, res) => {
   const lead = await db.get('SELECT * FROM leads WHERE id=? AND user_id=?', [req.params.leadId, req.user.id]);
   if (!lead) return res.status(404).json({ error: 'Lead not found' });
   const pitch = await db.get('SELECT * FROM pitches WHERE lead_id=?', [req.params.leadId]);
-  const userRow = await db.get('SELECT voice_dna FROM users WHERE id=?', [req.user.id]);
+  const userRow = await db.get('SELECT * FROM users WHERE id=?', [req.user.id]);
 
   const items = [];
   const add = (label, pass, detail, critical = false) => items.push({ label, pass, detail, critical });
@@ -282,6 +308,14 @@ router.post('/bulk-generate', aiLimiter, asyncHandler(async (req, res) => {
   const leadIds = req.body.lead_ids || req.body.leadIds;
   if (!leadIds?.length) return res.status(400).json({ success: false, error: 'lead_ids required' });
   const db = getDb();
+  const voiceCheck = await checkVoiceProfile(db, req.user.id);
+  if (!voiceCheck.ready) {
+    return res.status(400).json({
+      success: false,
+      error: 'Add at least one voice sample in Settings → Voice Profile before bulk-generating pitches. Single-pitch generation still works.',
+      code: 'VOICE_PROFILE_INCOMPLETE',
+    });
+  }
   const ids = leadIds.slice(0, 20);
   const results = [];
   const CONCURRENCY = 5;
@@ -298,7 +332,7 @@ router.post('/bulk-generate', aiLimiter, asyncHandler(async (req, res) => {
         let finalEmailBody = result.email_body || result.body;
         let gateResult = null;
         try {
-          const userRow  = await db.get('SELECT voice_dna FROM users WHERE id = ?', [req.user.id]);
+          const userRow  = await db.get('SELECT * FROM users WHERE id = ?', [req.user.id]);
           const voiceDNA = userRow?.voice_dna ? JSON.parse(userRow.voice_dna) : {};
           const emailSubject2 = result.email_subject || result.subject || '';
           gateResult = await runQualityGate(
@@ -309,6 +343,7 @@ router.post('/bulk-generate', aiLimiter, asyncHandler(async (req, res) => {
             },
             result.intelligence_pack,
             result.angle_result,
+            lead, userRow,
           );
           finalEmailBody = gateResult.email;
         } catch (gateErr) {
@@ -344,8 +379,11 @@ router.post('/bulk-generate', aiLimiter, asyncHandler(async (req, res) => {
       } else {
         const failId = batch[ri];
         const errMsg = r.reason?.message || 'Unknown failure';
+        if (r.reason?.code === 'NEEDS_RESEARCH') {
+          try { await db.run(`UPDATE leads SET crm_stage='needs_research', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [failId]); } catch {}
+        }
         console.error(`[BulkGenerate] REJECTED lead=${failId} err="${errMsg}" stack=${r.reason?.stack?.split('\n')[1] || ''}`);
-        results.push({ id: failId, success: false, error: errMsg });
+        results.push({ id: failId, success: false, error: errMsg, code: r.reason?.code || null });
       }
     }
   }
@@ -356,6 +394,14 @@ router.post('/generate-and-send', aiLimiter, asyncHandler(async (req, res) => {
   const leadIds = req.body.lead_ids || req.body.leadIds;
   if (!leadIds?.length) return res.status(400).json({ success: false, error: 'lead_ids required' });
   const db = getDb();
+  const voiceCheck = await checkVoiceProfile(db, req.user.id);
+  if (!voiceCheck.ready) {
+    return res.status(400).json({
+      success: false,
+      error: 'Add at least one voice sample in Settings → Voice Profile before sending in bulk. Single-pitch generation still works.',
+      code: 'VOICE_PROFILE_INCOMPLETE',
+    });
+  }
   const { sendEmail } = require('../services/emailService');
   const { incrementUsage } = require('../services/authService');
   const ids = leadIds.slice(0, 20);
@@ -374,7 +420,7 @@ router.post('/generate-and-send', aiLimiter, asyncHandler(async (req, res) => {
         const result = await claude.generateWithMarcus(lead, req.user.id);
 
         // Quality gate on MARCUS-generated body
-        const userRow  = await db.get('SELECT voice_dna FROM users WHERE id = ?', [req.user.id]);
+        const userRow  = await db.get('SELECT * FROM users WHERE id = ?', [req.user.id]);
         const voiceDNA = userRow?.voice_dna ? JSON.parse(userRow.voice_dna) : {};
         let emailBody  = result.email_body || result.body;
         let gateScore  = null;
@@ -386,6 +432,7 @@ router.post('/generate-and-send', aiLimiter, asyncHandler(async (req, res) => {
             async (n, _e, r) => { await logQualityAttempt(db, req.user.id, lead, n, _e, r); },
             result.intelligence_pack,
             result.angle_result,
+            lead, userRow,
           );
           emailBody = gate.email;
           gateScore = gate.quality?.score ?? null;
@@ -434,8 +481,9 @@ router.post('/generate-and-send', aiLimiter, asyncHandler(async (req, res) => {
         results.push(r.value);
       } else {
         const id = batch[batchResults.indexOf(r)];
-        results.push({ id, success: false, error: r.reason?.message });
-        try { await db.run(`UPDATE leads SET crm_stage='pitch_ready', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [id]); } catch {}
+        results.push({ id, success: false, error: r.reason?.message, code: r.reason?.code || null });
+        const fallbackStage = r.reason?.code === 'NEEDS_RESEARCH' ? 'needs_research' : 'pitch_ready';
+        try { await db.run(`UPDATE leads SET crm_stage=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`, [fallbackStage, id]); } catch {}
       }
     }
   }
@@ -554,7 +602,7 @@ async function runPowerSendJob(jobId, { lead_ids, max_leads = 100, per_account_l
           await jobUpdate(db, jobId, { studied: stats.studied, generated: stats.generated });
 
           // Quality gate on MARCUS-generated body
-          const userRow  = await db.get('SELECT voice_dna FROM users WHERE id = ?', [_userId]);
+          const userRow  = await db.get('SELECT * FROM users WHERE id = ?', [_userId]);
           const voiceDNA = userRow?.voice_dna ? JSON.parse(userRow.voice_dna) : {};
           let emailBody  = result.email_body || result.body;
           let gateScore  = null;
@@ -566,6 +614,7 @@ async function runPowerSendJob(jobId, { lead_ids, max_leads = 100, per_account_l
               async (n, _e, r) => { await logQualityAttempt(db, _userId, lead, n, _e, r); },
               result.intelligence_pack,
               result.angle_result,
+              lead, userRow,
             );
             emailBody = gate.email;
             gateScore = gate.quality?.score ?? null;
@@ -614,8 +663,10 @@ async function runPowerSendJob(jobId, { lead_ids, max_leads = 100, per_account_l
         } catch (err) {
           stats.failed++;
           await jobUpdate(db, jobId, { failed: stats.failed });
-          await jobLog(db, jobId, 'failed', `Failed: ${lead.channel_name} — ${err.message?.substring(0, 100)}`);
-          try { await db.run(`UPDATE leads SET crm_stage='pitch_ready', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [lead.id]); } catch {}
+          const label = err.code === 'NEEDS_RESEARCH' ? 'needs research' : 'Failed';
+          await jobLog(db, jobId, 'failed', `${label}: ${lead.channel_name} — ${err.message?.substring(0, 100)}`);
+          const fallbackStage = err.code === 'NEEDS_RESEARCH' ? 'needs_research' : 'pitch_ready';
+          try { await db.run(`UPDATE leads SET crm_stage=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`, [fallbackStage, lead.id]); } catch {}
         }
       }));
     }
@@ -634,6 +685,14 @@ async function runPowerSendJob(jobId, { lead_ids, max_leads = 100, per_account_l
 
 router.post('/power-send', aiLimiter, asyncHandler(async (req, res) => {
   const db = getDb();
+  const voiceCheck = await checkVoiceProfile(db, req.user.id);
+  if (!voiceCheck.ready) {
+    return res.status(400).json({
+      success: false,
+      error: 'Add at least one voice sample in Settings → Voice Profile before running Power Send. Single-pitch generation still works.',
+      code: 'VOICE_PROFILE_INCOMPLETE',
+    });
+  }
   const existing = await db.get(`SELECT id FROM power_send_jobs WHERE status='running' AND user_id=? LIMIT 1`, [req.user.id]);
   if (existing) return res.json({ success: true, job_id: existing.id, status: 'already_running' });
 
@@ -716,7 +775,7 @@ router.post('/suggest-reply/:leadId', aiLimiter, asyncHandler(async (req, res) =
   const lead = await db.get('SELECT id FROM leads WHERE id = ? AND user_id = ?', [req.params.leadId, req.user.id]);
   if (!lead) return res.status(404).json({ success: false, error: 'Lead not found' });
   const pitch = await db.get('SELECT * FROM pitches WHERE lead_id = ?', [req.params.leadId]);
-  const suggestion = await claude.suggestReplyResponse(pitch?.cold_email || '', replyText);
+  const suggestion = await claude.suggestReplyResponse(pitch?.cold_email || '', replyText, req.user.id);
   res.json({ success: true, suggestion });
 }));
 

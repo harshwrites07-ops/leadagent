@@ -1,148 +1,221 @@
-// Quality Gate — 8-Dimension, 100-point scoring + smart surgical regeneration
+// Quality Gate V2 — Marcus v2 email-engine rebuild spec, section 5.
+// 9-row point table, mostly deterministic (codeGate.js does word count, raw-
+// stat-dump, ban-list, personalization, burstiness, CTA shape, reading grade,
+// P.S. presence for free and instantly). The AI is only asked to judge the one
+// thing code can't: tone (conversational vs. informative), plus a fact-check
+// pass against the lead's verified data to kill hallucinated personalization.
 
 const { completeSmart } = require('./services/claudeService');
 const { buildCreatorIntelligencePack } = require('./services/channelAnalyzer');
+const { runCodeGate, describeViolation, wordCount } = require('./services/codeGate');
 
-// ── Dimension max points (for sorting weakest dims) ────────────────────────────
-const DIM_MAX = {
-  replaceability:        25,
-  personalization:       18,
-  hook_strength:         15,
-  sentence_architecture: 12,
-  cta_quality:           10,
-  value_proposition:     10,
-  specificity:            5,
-  tone_matching:          5,
-};
+// ═══════════════════════════════════════════════════════════════════════════
+// AI GATE V2 — deterministic 95 pts (codeGate) + AI-judged tone (5 pts) + fact-check
+// ═══════════════════════════════════════════════════════════════════════════
 
-// ── Scoring prompt (8 dimensions, 100 pts total) ───────────────────────────────
-
-function buildScoringPrompt(subject, body, intelligencePack, voiceDNA, serviceType) {
-  return `You are Quelro's email quality scoring engine. Score this cold outreach email on 8 dimensions.
-Be RUTHLESS. Generous scoring helps nobody.
-
-THE EMAIL TO SCORE:
-Subject: ${subject}
-
-Body:
-${body}
-
-THE CREATOR:
-Channel: ${intelligencePack.channel_name}
-Subscribers: ${intelligencePack.subscribers?.toLocaleString()}
-Niche: ${intelligencePack.niche}
-Recent video: ${intelligencePack.hook_data?.most_recent_video_title || 'N/A'}
-Days since upload: ${intelligencePack.hook_data?.days_since_upload || 'N/A'}
-Recent avg views: ${intelligencePack.hook_data?.recent_avg_views?.toLocaleString() || 'N/A'}
-Pain signals: ${JSON.stringify(intelligencePack.pain_signals || {})}
-
-SERVICE TYPE: ${serviceType || 'video editing'}
-
-SCORING DIMENSIONS:
-
-DIMENSION 1: REPLACEABILITY (25 points) — MOST IMPORTANT
-Could this email (name swapped) be sent to ANY other creator in this niche?
-25: 3+ facts unique to THIS creator that cannot apply to any other
-15-24: 2 creator-specific facts — opening somewhat specific
-5-14: Only 1 creator-specific fact
-0-4: Generic — name swap works identically for any creator
-
-DIMENSION 2: PERSONALIZATION (18 points)
-Does the email reference specific, verifiable facts?
-18: Specific video titles, exact view counts, upload patterns, creator-specific language
-9-17: General facts (sub count, niche) but not specific content — ratio alone is NOT enough
-0-8: No real personalization
-
-DIMENSION 3: HOOK STRENGTH (15 points)
-Does line 1 immediately prove research AND create a reason to keep reading?
-15: Specific observation/diagnosis/data about THIS creator. Not a compliment. Does NOT start with "I"
-8-14: Specific but doesn't create strong curiosity
-0-7: Compliment, generic statement, or starts with "I"
-
-DIMENSION 4: SENTENCE ARCHITECTURE (12 points)
-Does this email avoid the 7 forbidden AI sentence patterns? Check every sentence:
-1. Concessive contrast: "X is fine/solid, but Y is the problem" — the AI fairness tell
-2. Setup-then-reveal: "that gap usually means one thing:" / "here's what's happening:"
-3. Clean binary reframe: "It's not a X problem. It's a Y problem."
-4. Stacked em-dashes: Two or more em-dashes in a single sentence
-5. Rule of three: Any list or rhythm of exactly 3 parallel items
-6. Abstract verbs used as the main verb: leverage, optimize, streamline, empower, elevate, unlock, transform, maximize
-7. Uniform rhythm: 3+ consecutive sentences all within 5 words of each other in length
-
-12: Zero forbidden patterns. Sentence lengths vary noticeably (at least one under 8 words, one over 15). Reads like a quick typed message.
-8-11: 1 minor pattern instance, otherwise varied and natural
-4-7: 2-3 pattern instances, or noticeably uniform rhythm throughout
-0-3: 4+ pattern instances. Sounds like marketing copy or LinkedIn ghostwriter prose.
-
-DIMENSION 5: CTA QUALITY (10 points)
-One low-friction question easy to say yes to?
-10: Single question, low commitment, natural language, ends with "?"
-5-9: Single ask but slightly high commitment
-0-4: Multiple asks, "book a call", no CTA, or doesn't end in "?"
-
-DIMENSION 6: VALUE PROPOSITION (10 points)
-Is the service positioned as solution to THIS creator's specific pain?
-10: One clear benefit tied directly to the pain in the hook. No feature list. No price.
-5-9: Value connected but not tight
-0-4: Generic or feature list
-
-DIMENSION 7: SPECIFICITY (5 points)
-Real numbers, real video titles, real data?
-5: 2+ specific numbers or named videos/results
-3-4: 1 specific number or reference
-0-2: All vague — stat ratios alone without named video/format do NOT count
-
-DIMENSION 8: TONE MATCHING (5 points)
-Does it sound human — like a real typed message?
-5: Contractions present, varied sentence rhythm, reads like someone typed it quickly
-2-4: Partial — some natural elements, some polished
-0-1: Sounds composed/corporate/AI-written
-
-AUTOMATIC FAIL CONDITIONS (total_score = 0 regardless):
-- Body starts with "I" as first word
-- Contains: "I hope this email finds you well", "I came across your channel", "love your content",
-  "collaboration opportunity", "leaving money on the table", "I'd love to connect"
-- Subject line over 7 words
-- Body over 130 words
-- Multiple CTAs (more than one question mark)
-- Mentions pricing
-
-AUTO-REGEN TRIGGER: If Dimension 1 scores below 15 → flag auto_regen = true
-
-Return ONLY this JSON. No explanation. No preamble.
-
-{
-  "total_score": <0-100>,
-  "pass": <true if total >= 85>,
-  "auto_regen": <true if Dimension 1 < 15 OR any automatic fail met>,
-  "hard_block": <true if total < 70>,
-  "dimensions": {
-    "replaceability":        { "score": <0-25>, "feedback": "<specific issue or strength>" },
-    "personalization":       { "score": <0-18>, "feedback": "<specific issue or strength>" },
-    "hook_strength":         { "score": <0-15>, "feedback": "<specific issue or strength>" },
-    "sentence_architecture": { "score": <0-12>, "feedback": "<which patterns found or none>" },
-    "cta_quality":           { "score": <0-10>, "feedback": "<specific issue or strength>" },
-    "value_proposition":     { "score": <0-10>, "feedback": "<specific issue or strength>" },
-    "specificity":           { "score": <0-5>,  "feedback": "<specific issue or strength>" },
-    "tone_matching":         { "score": <0-5>,  "feedback": "<specific issue or strength>" }
-  },
-  "automatic_fail_triggered": <true|false>,
-  "fail_reason": "<which condition was violated, or null>",
-  "regeneration_instruction": "<if auto_regen: specific instruction for what must change>",
-  "top_strength": "<the single best thing about this email>",
-  "critical_fix": "<the single most important thing that must change>",
-  "flagged_sentences": [
-    {
-      "sentence": "<exact sentence from draft>",
-      "problem_type": "<concessive_contrast|setup_reveal|binary_reframe|em_dash_stack|rule_of_three|abstract_verb|uniform_rhythm|weak_personalization>",
-      "specific_issue": "<what exactly is wrong with it>",
-      "fix_direction": "<what the blunt, direct version should say instead>"
-    }
-  ]
-}`;
+function buildLeadFactsCompact(intelligencePack) {
+  const p = intelligencePack || {};
+  const hook = p.hook_data || {};
+  const facts = [];
+  if (p.subscribers) facts.push(`subscribers: ${p.subscribers}`);
+  if (hook.best_video_title) facts.push(`best video: "${hook.best_video_title}" (${hook.best_video_views || '?'} views)`);
+  if (hook.most_recent_video_title) facts.push(`most recent video: "${hook.most_recent_video_title}" (${hook.most_recent_video_views || '?'} views)`);
+  if (hook.recent_avg_views) facts.push(`recent avg views: ${hook.recent_avg_views}`);
+  if (hook.channel_avg_views) facts.push(`channel avg views: ${hook.channel_avg_views}`);
+  if (p.last_upload_days_ago != null) facts.push(`days since last upload: ${p.last_upload_days_ago}`);
+  return facts.join('\n') || 'No verified facts available for this lead.';
 }
 
-// ── Legacy helpers (kept for backward compat) ──────────────────────────────────
+// Deterministic 95-point subscore from codeGate's violation list. Mirrors the
+// spec's table exactly: word count 15, personalization 20, no-raw-stat 15,
+// ban-list 15, burstiness 10, CTA shape 10, reading grade 5, P.S. present 5.
+function scoreDeterministic(gate, body) {
+  const types = new Set(gate.violations.map(v => v.type));
+  const has = (...t) => t.some(x => types.has(x));
+
+  const wc = wordCount(body);
+  const wordCountPts = (wc >= 70 && wc <= 120) ? 15 : has('tooLong', 'tooShort') ? 0 : 8;
+  const personalizationPts = has('no_verifiable_personalization') ? 0 : 20;
+  const rawStatPts = has('rawNumberDump') ? 0 : 15;
+  const banListPts = has('banned_phrase', 'ruleOfThree', 'ingSentenceOpener', 'tooManyEmDashes', 'mentionsPricing') ? 0 : 15;
+  const burstinessPts = has('noBurstiness') ? 0 : 10;
+  const ctaPts = has('noQuestionCTA', 'tooManyQuestions') ? 0 : 10;
+  const readingGradePts = has('readingGradeOff') ? 0 : 5;
+  const psPts = has('psAbsent') ? 0 : 5;
+
+  return {
+    total: wordCountPts + personalizationPts + rawStatPts + banListPts + burstinessPts + ctaPts + readingGradePts + psPts,
+    breakdown: {
+      word_count:       { points: wordCountPts, max: 15, feedback: wordCountPts < 15 ? `${wc} words — target is 70-120` : '' },
+      personalization:  { points: personalizationPts, max: 20, feedback: personalizationPts === 0 ? 'No real video title or stat from this lead\'s data appears in the body' : '' },
+      no_raw_stat_dump: { points: rawStatPts, max: 15, feedback: rawStatPts === 0 ? 'Contains a raw 4+ digit number — convert to a formatted stat or story-form comparison' : '' },
+      ban_list_clean:   { points: banListPts, max: 15, feedback: banListPts === 0 ? 'Hit a banned phrase, tricolon, -ing opener, pricing mention, or 2+ em-dashes' : '' },
+      burstiness:       { points: burstinessPts, max: 10, feedback: burstinessPts === 0 ? 'Needs one sentence under 5 words and one over 20 words' : '' },
+      cta_shape:        { points: ctaPts, max: 10, feedback: ctaPts === 0 ? 'CTA must end in exactly one question' : '' },
+      reading_grade:    { points: readingGradePts, max: 5, feedback: readingGradePts === 0 ? 'Reading level drifted outside grade 3-5' : '' },
+      ps_present:       { points: psPts, max: 5, feedback: psPts === 0 ? 'Missing a P.S. with a genuine specific detail' : '' },
+    },
+  };
+}
+
+function buildToneAndFactCheckPrompt(subject, body, intelligencePack, knownIssues) {
+  return `Judge ONE thing about this cold email, plus fact-check it. Everything else (word count, banned phrases, personalization, CTA shape) has already been checked by a separate deterministic pass — do not re-score those.
+
+EMAIL:
+Subject: ${subject}
+${body}
+
+LEAD FACTS (verify claims against these — any number or title in the email that doesn't match is an automatic fail):
+${buildLeadFactsCompact(intelligencePack)}
+${knownIssues.length ? `\nKNOWN STRUCTURAL ISSUES (already detected, factor into weakest_sentence/fix_direction if relevant):\n${knownIssues.map(d => `- ${d}`).join('\n')}` : ''}
+
+TONE (0-5): Is this conversational (a person typed it quickly between tasks) or informative (a service talking AT the reader)? 5 = unmistakably conversational — casual rhythm, sounds spoken. 0 = reads like a service description or marketing copy.
+
+FACT CHECK: "fact_violations" must contain ONLY claims that are WRONG or unverifiable against the lead facts above. If every claim checks out, "fact_violations" MUST be an empty array []. Do NOT list confirmations.
+
+Also name the single weakest sentence in the email (for a surgical one-sentence rewrite) and what it should do instead — pull from the known structural issues above if one applies, otherwise judge freely.
+
+Return JSON only:
+{"tone": N, "fact_violations": [], "weakest_sentence": "<exact sentence>", "fix_direction": "<one line>"}`;
+}
+
+async function evaluateEmailQualityV2(subject, body, intelligencePack) {
+  const gate = runCodeGate({ subject, body }, intelligencePack || {});
+  const deterministic = scoreDeterministic(gate, body);
+  const knownIssues = gate.softViolations.map(describeViolation);
+
+  try {
+    const prompt = buildToneAndFactCheckPrompt(subject, body, intelligencePack || {}, knownIssues);
+    const text = await completeSmart(prompt, '', 400);
+    const cleaned = text.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(cleaned.match(/\{[\s\S]*\}/)[0]);
+
+    const tonePts = Math.max(0, Math.min(5, Number.isFinite(parsed.tone) ? parsed.tone : 0));
+    // Defensive filter: some model responses pad fact_violations with
+    // confirmation entries ("X — confirmed, no violation") instead of leaving
+    // the array empty. Only count entries that actually describe a mismatch.
+    const realViolations = (Array.isArray(parsed.fact_violations) ? parsed.fact_violations : [])
+      .filter(v => !/no violation|confirmed|correct|matches|checks out/i.test(String(v)));
+    const hasFactViolation = realViolations.length > 0;
+
+    const rawTotal = deterministic.total + tonePts;
+    // Hard-block conditions (spec: word count/personalization/raw-stat/ban-list
+    // are all "hard block" rows) and fact violations both force the email below
+    // the 70 threshold so runQualityGate's existing regen/angle-switch path
+    // picks it up, without needing separate control flow here.
+    const hardBlocked = gate.hardViolations.length > 0 || hasFactViolation;
+    const total = hardBlocked ? Math.min(rawTotal, 40) : rawTotal;
+
+    return {
+      score: total,
+      passed: total >= 85 && !hardBlocked,
+      hardBlocked,
+      codeGateViolations: gate.violations,
+      dimensions: {
+        ...deterministic.breakdown,
+        tone: { score: tonePts, max: 5 },
+      },
+      fact_violations:  realViolations,
+      weakest_sentence: parsed.weakest_sentence || '',
+      fix_direction:    parsed.fix_direction || (gate.hardViolations[0] ? describeViolation(gate.hardViolations[0]) : ''),
+      breakdown: {
+        ...deterministic.breakdown,
+        tone: { points: tonePts, max: 5, feedback: tonePts < 5 ? 'Reads informative rather than conversational' : '' },
+      },
+      overall_feedback: parsed.fix_direction || (gate.hardViolations[0] ? describeViolation(gate.hardViolations[0]) : ''),
+    };
+  } catch (err) {
+    console.error('[QualityGate] V2 evaluation error:', err.message);
+    // Even if the AI call fails, ship the deterministic part of the score —
+    // it's free and already computed, no reason to zero it out.
+    const hardBlocked = gate.hardViolations.length > 0;
+    return {
+      score: hardBlocked ? Math.min(deterministic.total, 40) : deterministic.total,
+      passed: false,
+      hardBlocked,
+      error: true,
+      codeGateViolations: gate.violations,
+      breakdown: deterministic.breakdown,
+      weakest_sentence: '',
+      fix_direction: gate.hardViolations[0] ? describeViolation(gate.hardViolations[0]) : '',
+    };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Surgical fix — edits ONLY the flagged weakest_sentence, per Part 5
+// ═══════════════════════════════════════════════════════════════════════════
+
+function buildSurgicalFixPrompt(subject, body, weakestSentence, fixDirection) {
+  return `You are editing a cold outreach email. This is SURGICAL WORK — do NOT rewrite from scratch.
+
+CURRENT EMAIL:
+Subject: ${subject}
+${body}
+
+THE ONE SENTENCE THAT MUST CHANGE:
+"${weakestSentence}"
+
+WHAT IT SHOULD DO INSTEAD:
+${fixDirection}
+
+YOUR ONLY JOB: fix that sentence. Leave every other sentence exactly as written — they scored well, touching them will make things worse. Keep the same subject unless it was the flagged text.
+
+Return ONLY this JSON:
+{"subject": "${subject.replace(/"/g, '\\"')}", "body": "<edited body>"}`;
+}
+
+async function surgicalFix(subject, body, weakestSentence, fixDirection) {
+  try {
+    const prompt = buildSurgicalFixPrompt(subject, body, weakestSentence, fixDirection);
+    const raw = await completeSmart(prompt, '', 400);
+    const cleaned = raw.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(cleaned.match(/\{[\s\S]*\}/)[0]);
+    return { subject: parsed.subject || subject, body: parsed.body || body };
+  } catch (err) {
+    console.error('[QualityGate] Surgical fix failed:', err.message);
+    return { subject, body };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Angle-switch regeneration — full redraft with a different angle, used only
+// when 2 consecutive AI-gate attempts score under 70 (Part 5)
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function angleSwitchRegenerate(lead, user, voiceDNA, intelligencePack, previousAngleResult) {
+  const { selectAngle } = require('./services/angleEngine');
+  const { buildMARCUSPrompt } = require('./services/claudeService');
+
+  const newAngleResult = selectAngle(intelligencePack, { ...user, voice_dna: voiceDNA }, {
+    excludeAngle: previousAngleResult?.selected_angle,
+  });
+
+  const prompt = buildMARCUSPrompt(lead, user, voiceDNA, intelligencePack, newAngleResult, null);
+  try {
+    const raw = await completeSmart(prompt, '', 1200);
+    const cleaned = raw.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(cleaned.match(/\{[\s\S]*\}/)[0]);
+    if (!parsed.subject || !parsed.body) throw new Error('Missing subject/body');
+
+    // Run the fresh draft through the code gate too — it's a genuinely new
+    // generation, not an edit, so it needs the same deterministic checks.
+    const gate = runCodeGate(parsed, intelligencePack);
+    if (!gate.passed) {
+      console.log(`[QualityGate] Angle-switch draft has code-gate violations: ${gate.violations.map(v => v.type).join(', ')} — shipping anyway (last resort)`);
+    }
+    return { subject: parsed.subject, body: parsed.body, angleResult: newAngleResult };
+  } catch (err) {
+    console.error('[QualityGate] Angle-switch regeneration failed:', err.message);
+    return null;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Legacy helpers — kept for backward compat (buildCreatorData/getQualityStatus
+// are still used by every route call site; generateInitialDraft/MARCUS_LEGACY_PROMPT
+// preserved per Part 8 instruction not to delete old prompt code).
+// ═══════════════════════════════════════════════════════════════════════════
 
 function buildCreatorData(lead) {
   let recentVideoTitle = lead.recent_video_title || null;
@@ -175,139 +248,6 @@ function buildCreatorData(lead) {
     growthTrend: lead.view_trend || 'Unknown',
   };
 }
-
-// ── Evaluator ──────────────────────────────────────────────────────────────────
-
-async function evaluateEmailQuality(emailText, intelligencePack, voiceDNA, serviceType) {
-  let subject = '';
-  let body = emailText;
-  const subjectMatch = emailText.match(/^Subject:\s*(.+)\n/i);
-  if (subjectMatch) {
-    subject = subjectMatch[1].trim();
-    body = emailText.replace(subjectMatch[0], '').trim();
-  }
-
-  const pack = intelligencePack || {
-    channel_name: 'Unknown', subscribers: 0, niche: 'Unknown', pain_signals: {}, hook_data: {},
-  };
-
-  try {
-    const prompt = buildScoringPrompt(subject, body, pack, voiceDNA || {}, serviceType || 'video editing');
-    const text = await completeSmart(prompt, '', 1400);
-    const cleaned = text.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(cleaned);
-
-    const dims = parsed.dimensions || {};
-    return {
-      score:    parsed.total_score,
-      passed:   parsed.pass,
-      auto_regen: parsed.auto_regen,
-      hard_block: parsed.hard_block,
-      dimensions: dims,
-      flagged_sentences: parsed.flagged_sentences || [],
-      automatic_fail_triggered: parsed.automatic_fail_triggered,
-      fail_reason: parsed.fail_reason,
-      regeneration_instruction: parsed.regeneration_instruction,
-      top_strength: parsed.top_strength,
-      critical_fix: parsed.critical_fix,
-      overall_feedback: `${parsed.top_strength} | Fix: ${parsed.critical_fix}`,
-      breakdown: {
-        personalization:       { points: dims?.personalization?.score       ?? 0, feedback: dims?.personalization?.feedback       ?? '' },
-        hook:                  { points: dims?.hook_strength?.score         ?? 0, feedback: dims?.hook_strength?.feedback         ?? '' },
-        sentence_architecture: { points: dims?.sentence_architecture?.score ?? 0, feedback: dims?.sentence_architecture?.feedback ?? '' },
-        specificity:           { points: dims?.specificity?.score           ?? 0, feedback: dims?.specificity?.feedback           ?? '' },
-        value_prop:            { points: dims?.value_proposition?.score     ?? 0, feedback: dims?.value_proposition?.feedback     ?? '' },
-        cta:                   { points: dims?.cta_quality?.score           ?? 0, feedback: dims?.cta_quality?.feedback           ?? '' },
-        tone:                  { points: dims?.tone_matching?.score         ?? 0, feedback: dims?.tone_matching?.feedback         ?? '' },
-      },
-    };
-  } catch (err) {
-    console.error('[QualityGate] Evaluation error:', err.message);
-    return { score: 0, passed: false, error: true, overall_feedback: 'Evaluation failed', breakdown: {}, flagged_sentences: [] };
-  }
-}
-
-// ── Regeneration context builder (legacy fallback path) ────────────────────────
-
-function buildRegenerationContext(previousAttempts) {
-  const last = previousAttempts[previousAttempts.length - 1];
-  const dims = last.score?.dimensions || {};
-  return `
-PREVIOUS ATTEMPT FAILED (Score: ${last.score?.score || 0}/100)
-
-Critical fix needed: ${last.score?.critical_fix || 'Improve specificity and replaceability'}
-Regeneration instruction: ${last.score?.regeneration_instruction || 'Use a completely different opening hook'}
-
-Dimension failures:
-- Replaceability (${dims.replaceability?.score ?? '?'}/25): ${dims.replaceability?.feedback || ''}
-- Hook (${dims.hook_strength?.score ?? '?'}/15): ${dims.hook_strength?.feedback || ''}
-- Personalization (${dims.personalization?.score ?? '?'}/18): ${dims.personalization?.feedback || ''}
-
-The previous email's opening was: "${(last.email || '').split('\\n')[0].substring(0, 100)}"
-DO NOT use this opening or any similar structure.
-Use a COMPLETELY DIFFERENT hook — new data point, new angle, new structure.
-`.trim();
-}
-
-// ── Smart surgical regeneration prompt (used when intelligence pack available) ──
-
-function buildSmartRegenPrompt(bestDraft, bestScore, attempts, voiceDNA, intelligencePack, angleResult) {
-  const lastAttempt = attempts[attempts.length - 1];
-  const dims = lastAttempt.score?.dimensions || {};
-  const flaggedSentences = lastAttempt.score?.flagged_sentences || [];
-
-  // Sort dimensions by % of max to surface the weakest first
-  const dimLines = Object.entries(dims)
-    .map(([k, v]) => ({ key: k, score: v.score, max: DIM_MAX[k] || 10, feedback: v.feedback }))
-    .sort((a, b) => (a.score / a.max) - (b.score / b.max))
-    .slice(0, 4)
-    .map(d => `${d.key.replace(/_/g, ' ')} (${d.score}/${d.max}): ${d.feedback}`)
-    .join('\n');
-
-  const flaggedStr = flaggedSentences.length > 0
-    ? flaggedSentences.map(f =>
-        `SENTENCE: "${f.sentence}"\nPROBLEM: ${f.problem_type} — ${f.specific_issue}\nFIX: ${f.fix_direction}`
-      ).join('\n\n')
-    : `CRITICAL FIX: ${lastAttempt.score?.critical_fix || 'Make the opening hook more specific to this creator'}`;
-
-  const senderName = voiceDNA.name || 'Alex';
-  const serviceType = voiceDNA.service || 'video editing';
-
-  return `You are editing a cold outreach email. This is SURGICAL WORK — do NOT rewrite from scratch.
-
-BEST DRAFT SO FAR (Score: ${bestScore}/100):
-${bestDraft}
-
-WEAKEST DIMENSIONS:
-${dimLines}
-
-SENTENCES THAT MUST BE FIXED:
-${flaggedStr}
-
-YOUR ONLY JOB:
-Fix the specific flagged sentences above. Leave every other sentence EXACTLY as written.
-Do not add sentences. Do not change the angle or structure.
-A sentence that isn't flagged scored well — touching it will make things worse.
-
-THE BLUNT-DRAFT METHOD (apply to every fix):
-Write the point as plainly and directly as possible. Skip all of the following:
-- "X is fine/solid, but Y" → just say the problem directly
-- "that usually means one thing:" → just say the thing
-- "It's not X, it's Y" → say what it is, skip the negation
-- Three em-dashes in one sentence → break into two sentences
-- Three parallel items for rhythm → use two or restructure
-- leverage / optimize / streamline / empower / elevate / unlock → say the specific action
-Also: vary sentence length. Mix a short one (under 8 words) next to a longer one.
-
-SENDER CONTEXT:
-Name: ${senderName}
-Service: ${serviceType}
-
-Return ONLY this JSON:
-{"subject": "<same subject unless it was flagged>", "body": "<edited body>", "word_count": <number>, "angle_used": "${angleResult?.selected_angle || ''}", "personalization_elements": [], "hook_type": "observation", "generation_notes": "surgical edit — attempt ${attempts.length + 1}"}`;
-}
-
-// ── Initial draft generator (backward compat, legacy path only) ───────────────
 
 const MARCUS_LEGACY_PROMPT = (creatorData, voiceDNA) => `You are Marcus — an elite cold email writer for YouTube creator outreach.
 Write cold emails that make a real human being stop, read carefully, and reply within 24 hours.
@@ -352,8 +292,6 @@ async function generateInitialDraft(creatorData, voiceDNA) {
   }
 }
 
-// ── Quality status helper ──────────────────────────────────────────────────────
-
 function getQualityStatus(score) {
   if (score >= 90) return 'EXCELLENT';
   if (score >= 85) return 'GOOD';
@@ -361,18 +299,38 @@ function getQualityStatus(score) {
   return 'NEEDS_REVIEW';
 }
 
-// ── 5-attempt quality gate loop ────────────────────────────────────────────────
-// Params 5+6: fullIntelligencePack + angleResult from generateWithMarcus.
-// When present: smart surgical regen. Without: legacy fallback.
-
 function stripSubjectPrefix(text) {
   return text.replace(/^Subject:\s*.+\n+/i, '').trim();
 }
 
-async function runQualityGate(emailText, creatorData, voiceDNA, onAttempt, fullIntelligencePack, angleResult) {
-  const MAX_ATTEMPTS    = 5;
-  const TARGET_SCORE    = 85;
+function splitSubjectBody(emailText) {
+  let subject = '';
+  let body = emailText;
+  const m = emailText.match(/^Subject:\s*(.+)\n/i);
+  if (m) {
+    subject = m[1].trim();
+    body = emailText.replace(m[0], '').trim();
+  }
+  return { subject, body };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// runQualityGate — Marcus V2 orchestrator (Part 2 + Part 5).
+// Signature stays backward compatible with all existing call sites; `lead`
+// and `user` are new OPTIONAL trailing params that unlock the angle-switch
+// regeneration step. Without them, the gate still runs (code gate already
+// happened inside generateWithMarcus) but falls back to surgical-only retries.
+//
+// Flow: AI-gate score → 85+ ship · 70-84 one surgical retry · <70 twice in a
+// row → angle-switch regenerate once → still <70 → NEEDS_REVIEW.
+// Max 3 total AI generations (1 initial, already done by the caller, + up to
+// 2 more here).
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function runQualityGate(emailText, creatorData, voiceDNA, onAttempt, fullIntelligencePack, angleResult, lead = null, user = null) {
+  const TARGET_SCORE = 85;
   const HARD_BLOCK_SCORE = 70;
+  const gateStart = Date.now();
 
   const scoringPack = fullIntelligencePack || {
     channel_name: creatorData.channelTitle || 'Unknown',
@@ -381,95 +339,74 @@ async function runQualityGate(emailText, creatorData, voiceDNA, onAttempt, fullI
     pain_signals: {},
     hook_data: {
       most_recent_video_title: creatorData.recentVideoTitle,
-      days_since_upload: null,
       recent_avg_views: creatorData.avgViews || 0,
       channel_avg_views: creatorData.avgViews || 0,
     },
   };
 
-  let currentEmail = emailText;
-  let bestEmail    = emailText;
-  let bestResult   = null;
-  let bestScore    = 0;
-  let regenerated  = false;
-  const attempts   = [];
-  const gateStart  = Date.now();
+  let { subject, body } = splitSubjectBody(emailText);
+  let currentAngleResult = angleResult;
+  let bestScore = -1, bestSubject = subject, bestBody = body, bestResult = null;
+  let attemptNum = 0;
+  let regenerated = false;
+  let under70Count = 0;
 
-  for (let i = 1; i <= MAX_ATTEMPTS; i++) {
+  async function score(label) {
+    attemptNum++;
     const t0 = Date.now();
-    const result = await evaluateEmailQuality(currentEmail, scoringPack, voiceDNA, voiceDNA.service || 'video editing');
-    const evalMs = Date.now() - t0;
-    console.log(`[QualityGate] Attempt ${i}/${MAX_ATTEMPTS}: score=${result.score}/100 eval=${evalMs}ms${result.auto_regen ? ' auto_regen' : ''}${result.automatic_fail_triggered ? ` FAIL(${result.fail_reason})` : ''}`);
-
-    if (onAttempt) {
-      try { await onAttempt(i, currentEmail, result); } catch {}
-    }
-
-    attempts.push({ email: currentEmail, score: result, attempt: i });
-
-    if (result.score > bestScore) {
-      bestScore  = result.score;
-      bestEmail  = currentEmail;
-      bestResult = result;
-    }
-
-    if (result.score >= TARGET_SCORE && !result.auto_regen) {
-      console.log(`[QualityGate] PASS on attempt ${i} — total=${Date.now() - gateStart}ms`);
-      return {
-        email: stripSubjectPrefix(currentEmail), quality: result,
-        regenerated: i > 1, attempts: i, warning: false,
-        qualityStatus: getQualityStatus(result.score),
-      };
-    }
-
-    if (i < MAX_ATTEMPTS) {
-      regenerated = true;
-
-      // Regression guard: if score dropped from previous attempt, use bestEmail as base
-      const prevScore = i >= 2 ? attempts[i - 2].score.score : 0;
-      const regressionDetected = i >= 2 && result.score < prevScore;
-      const regenBase = regressionDetected ? bestEmail : currentEmail;
-
-      if (regressionDetected) {
-        console.log(`[QualityGate] Regression ${result.score} < ${prevScore} — reverting to best (${bestScore})`);
-      }
-
-      let regenPrompt;
-      if (fullIntelligencePack && angleResult) {
-        regenPrompt = buildSmartRegenPrompt(
-          regenBase, bestScore, attempts, voiceDNA, fullIntelligencePack, angleResult
-        );
-      } else {
-        const regenContext = buildRegenerationContext(attempts);
-        regenPrompt = `${MARCUS_LEGACY_PROMPT(creatorData, voiceDNA)}
-
-${regenContext}
-
-IMPORTANT: Write a completely different email. Use a new hook. Don't repeat the previous approach.
-Return ONLY JSON: {"subject": "<subject>", "body": "<body>"}`;
-      }
-
-      try {
-        const tr = Date.now();
-        const raw = await completeSmart(regenPrompt, '', 1400);
-        const regenMs = Date.now() - tr;
-        const cleaned = raw.replace(/```json|```/g, '').trim();
-        const parsed = JSON.parse(cleaned.match(/\{[\s\S]*\}/)[0]);
-        currentEmail = parsed.body || raw;
-        console.log(`[QualityGate] Regen ${i}→${i + 1}: ${regenMs}ms`);
-      } catch (err) {
-        console.error(`[QualityGate] Regen attempt ${i + 1} failed:`, err.message);
-        currentEmail = bestEmail; // fallback to best on parse failure
-      }
-    }
+    const result = await evaluateEmailQualityV2(subject, body, scoringPack);
+    console.log(`[QualityGate] ${label} (attempt ${attemptNum}): score=${result.score}/100 eval=${Date.now() - t0}ms`);
+    if (onAttempt) { try { await onAttempt(attemptNum, `Subject: ${subject}\n\n${body}`, result); } catch {} }
+    if (result.score > bestScore) { bestScore = result.score; bestSubject = subject; bestBody = body; bestResult = result; }
+    return result;
   }
 
-  console.log(`[QualityGate] DONE: best=${bestScore}/100 all ${MAX_ATTEMPTS} attempts used total=${Date.now() - gateStart}ms`);
+  // ── Attempt 1: score the draft as generated ──────────────────────────────
+  let result = await score('initial');
+
+  if (result.score >= TARGET_SCORE) {
+    console.log(`[QualityGate] PASS — total=${Date.now() - gateStart}ms`);
+    return { email: stripSubjectPrefix(`Subject: ${subject}\n\n${body}`), quality: result, regenerated: false, attempts: attemptNum, warning: false, qualityStatus: getQualityStatus(result.score) };
+  }
+
+  if (result.score < HARD_BLOCK_SCORE) under70Count++;
+
+  // ── 70-84: one surgical retry on the weakest sentence ────────────────────
+  if (result.score >= HARD_BLOCK_SCORE && result.score < TARGET_SCORE && result.weakest_sentence) {
+    regenerated = true;
+    const fixed = await surgicalFix(subject, body, result.weakest_sentence, result.fix_direction);
+    subject = fixed.subject; body = fixed.body;
+    result = await score('surgical retry');
+    if (result.score >= TARGET_SCORE) {
+      console.log(`[QualityGate] PASS after surgical retry — total=${Date.now() - gateStart}ms`);
+      return { email: stripSubjectPrefix(`Subject: ${subject}\n\n${body}`), quality: result, regenerated: true, attempts: attemptNum, warning: false, qualityStatus: getQualityStatus(result.score) };
+    }
+    if (result.score < HARD_BLOCK_SCORE) under70Count++;
+  }
+
+  // ── <70 twice (or 70-84 surgical retry still landed <70): angle-switch ──
+  if (under70Count >= 2 && lead && user) {
+    regenerated = true;
+    const regen = await angleSwitchRegenerate(lead, user, voiceDNA, scoringPack, currentAngleResult);
+    if (regen) {
+      subject = regen.subject; body = regen.body; currentAngleResult = regen.angleResult;
+      console.log(`[QualityGate] Angle-switch regen: ${currentAngleResult.selected_angle}`);
+      result = await score('angle-switch regen');
+      if (result.score >= TARGET_SCORE) {
+        console.log(`[QualityGate] PASS after angle-switch — total=${Date.now() - gateStart}ms`);
+        return { email: stripSubjectPrefix(`Subject: ${subject}\n\n${body}`), quality: result, regenerated: true, attempts: attemptNum, warning: false, qualityStatus: getQualityStatus(result.score) };
+      }
+    }
+  } else if (under70Count >= 2 && result.score >= HARD_BLOCK_SCORE) {
+    // Landed in 70-84 after the surgical retry but no lead/user for angle-switch — ship best.
+  }
+
+  console.log(`[QualityGate] DONE: best=${bestScore}/100 attempts=${attemptNum} total=${Date.now() - gateStart}ms status=NEEDS_REVIEW`);
   return {
-    email:         stripSubjectPrefix(bestEmail),
+    email:         stripSubjectPrefix(`Subject: ${bestSubject}\n\n${bestBody}`),
     quality:       bestResult,
     regenerated,
-    attempts:      MAX_ATTEMPTS,
+    attempts:      attemptNum,
     warning:       bestScore < HARD_BLOCK_SCORE,
     qualityStatus: getQualityStatus(bestScore),
   };
@@ -477,9 +414,9 @@ Return ONLY JSON: {"subject": "<subject>", "body": "<body>"}`;
 
 module.exports = {
   runQualityGate,
-  evaluateEmailQuality,
+  evaluateEmailQualityV2,
+  buildToneAndFactCheckPrompt,
   generateInitialDraft,
   buildCreatorData,
-  buildScoringPrompt,
   getQualityStatus,
 };

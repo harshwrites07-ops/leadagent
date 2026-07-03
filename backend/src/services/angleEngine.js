@@ -61,119 +61,123 @@ function formatNum(n) {
   return String(Math.round(n));
 }
 
-// Rule-based angle selection — returns the same structure the AI prompt returns
-function selectAngle(intelligencePack, user) {
+// Rule-based angle selection — returns the same structure the AI prompt returns.
+// Candidates are evaluated in priority order; each `matches` predicate must be
+// true for that candidate to be eligible. Structured as an array (not an
+// if/else chain) so `excludeAngle` can skip a candidate and fall through to
+// the next-best match — used by the AI gate's angle-switch regeneration
+// (Marcus V2, Part 5) when the top angle scores under 70 twice in a row.
+function buildAngleCandidates(intelligencePack, user) {
   const pain      = intelligencePack.pain_signals || {};
   const hook      = intelligencePack.hook_data    || {};
-  const archetype = intelligencePack.archetype    || 'growth_chaser';
   const subs      = intelligencePack.subscribers  || 0;
   const niche     = intelligencePack.niche        || 'general';
+
+  return [
+    // ── Priority 1: Confirmed job post / hiring signal ──────────────────────
+    {
+      matches: () => pain.job_post_detected,
+      selectedAngle: 'specific_fit',
+      openingObservation: `Your channel description mentions you're looking for help — not many people in the ${niche} space with ${formatNum(subs)} subscribers are at that stage`,
+      painAddressed: 'actively searching for a service provider',
+      angleReasoning: 'Creator is explicitly looking — highest purchase intent signal available',
+      ctaDirection: 'sample_offer',
+    },
+    // ── Priority 2: Long upload gap + solo creator ──────────────────────────
+    {
+      matches: () => pain.upload_gap_over_14_days && pain.no_team_detected && hook.days_since_upload,
+      selectedAngle: 'bottleneck_removal',
+      openingObservation: hook.most_recent_video_title
+        ? `"${hook.most_recent_video_title}" was uploaded ${hook.days_since_upload} days ago — nothing since`
+        : `Last upload was ${hook.days_since_upload} days ago`,
+      painAddressed: 'editing bottleneck preventing consistent uploads',
+      angleReasoning: 'Solo creator with a significant upload gap — classic editing bottleneck signal',
+      ctaDirection: 'interest_check',
+    },
+    // ── Priority 3: Views declining ──────────────────────────────────────────
+    {
+      matches: () => pain.views_declining,
+      selectedAngle: 'diagnosis',
+      openingObservation: hook.views_decline_pct && hook.recent_avg_views && hook.channel_avg_views
+        ? `Last 3 videos averaged ${formatNum(hook.recent_avg_views)} views — down ${hook.views_decline_pct}% from the ${formatNum(hook.channel_avg_views)} channel average`
+        : hook.most_recent_video_title
+          ? `"${hook.most_recent_video_title}" underperformed your channel average`
+          : `View decline pattern on your channel — recent uploads averaging below your historical baseline`,
+      painAddressed: 'views declining despite consistent content quality',
+      angleReasoning: 'Declining view trend is a clear pain point — diagnosis angle creates curiosity about the cause',
+      ctaDirection: 'interest_check',
+    },
+    // ── Priority 4: Viral spike with plateau after ───────────────────────────
+    {
+      matches: () => hook.best_video_views && hook.recent_avg_views &&
+        hook.best_video_views > hook.recent_avg_views * 4 && hook.best_video_title,
+      selectedAngle: 'diagnosis',
+      openingObservation: `"${hook.best_video_title}" hit ${formatNum(hook.best_video_views)} views. The most recent uploads are averaging ${formatNum(hook.recent_avg_views)}`,
+      painAddressed: 'unable to replicate breakout video performance',
+      angleReasoning: 'Major gap between best and recent performance — classic unreplicated viral spike',
+      ctaDirection: 'interest_check',
+    },
+    // ── Priority 5: Low view-to-sub ratio ────────────────────────────────────
+    {
+      matches: () => pain.low_view_sub_ratio && hook.view_sub_ratio_pct,
+      selectedAngle: 'diagnosis',
+      openingObservation: hook.most_recent_video_title
+        ? `"${hook.most_recent_video_title}" — ${hook.view_sub_ratio_pct}% of ${formatNum(subs)} subscribers watched. That gap has a specific cause`
+        : `${hook.view_sub_ratio_pct}% of ${formatNum(subs)} subscribers are watching each video`,
+      painAddressed: 'subscriber count far exceeding video views',
+      angleReasoning: 'Low view-to-sub ratio is a concrete, specific signal the creator will recognize',
+      ctaDirection: 'interest_check',
+    },
+    // ── Priority 6: Upload frequency slowing (not as severe as priority 2) ──
+    {
+      matches: () => pain.upload_frequency_dropped && hook.days_since_upload,
+      selectedAngle: 'bottleneck_removal',
+      openingObservation: `Upload frequency has been slowing — last video was ${hook.days_since_upload} days ago`,
+      painAddressed: 'declining upload consistency',
+      angleReasoning: 'Slowing frequency on a growing channel — bottleneck is likely production time',
+      ctaDirection: 'interest_check',
+    },
+    // ── Priority 7: Growth plateaued ─────────────────────────────────────────
+    {
+      matches: () => pain.growth_plateaued && hook.channel_avg_views,
+      selectedAngle: 'social_proof_mirror',
+      openingObservation: `${formatNum(subs)} subscribers, ${formatNum(hook.channel_avg_views)} average views — holding consistent but not breaking through`,
+      painAddressed: 'channel stuck at the same performance level',
+      angleReasoning: 'Plateau is relatable — social proof mirror shows what breakthrough looks like for similar channels',
+      ctaDirection: 'sample_offer',
+    },
+    // ── Default: honest observation with most recent video ──────────────────
+    {
+      matches: () => true,
+      selectedAngle: 'honest_observation',
+      openingObservation: hook.most_recent_video_title
+        ? `"${hook.most_recent_video_title}" — ${formatNum(hook.recent_avg_views)} average views on ${formatNum(subs)} subscribers`
+        : `${formatNum(subs)} subscribers in the ${niche} space`,
+      painAddressed: 'gap between current performance and channel potential',
+      angleReasoning: 'No dominant pain signal — honest observation lets specificity do the work',
+      ctaDirection: 'interest_check',
+    },
+  ];
+}
+
+function selectAngle(intelligencePack, user, opts = {}) {
   const serviceType = user.service_type || user.service || 'video editing';
   const proofPoint  = user.best_result || user.case_study || null;
+  const excludeAngle = opts.excludeAngle || null;
 
-  let selectedAngle = 'honest_observation';
-  let openingObservation = '';
-  let painAddressed = '';
-  let angleReasoning = '';
-  let ctaDirection = 'interest_check';
-
-  // ── Priority 1: Confirmed job post / hiring signal ──────────────────────────
-  if (pain.job_post_detected) {
-    selectedAngle      = 'specific_fit';
-    openingObservation = `Your channel description mentions you're looking for help — not many people in the ${niche} space with ${formatNum(subs)} subscribers are at that stage`;
-    painAddressed      = 'actively searching for a service provider';
-    angleReasoning     = 'Creator is explicitly looking — highest purchase intent signal available';
-    ctaDirection       = 'sample_offer';
-  }
-
-  // ── Priority 2: Long upload gap + solo creator ──────────────────────────────
-  else if (pain.upload_gap_over_14_days && pain.no_team_detected && hook.days_since_upload) {
-    selectedAngle      = 'bottleneck_removal';
-    openingObservation = hook.most_recent_video_title
-      ? `"${hook.most_recent_video_title}" was uploaded ${hook.days_since_upload} days ago — nothing since`
-      : `Last upload was ${hook.days_since_upload} days ago`;
-    painAddressed      = 'editing bottleneck preventing consistent uploads';
-    angleReasoning     = 'Solo creator with a significant upload gap — classic editing bottleneck signal';
-    ctaDirection       = 'interest_check';
-  }
-
-  // ── Priority 3: Views declining ─────────────────────────────────────────────
-  else if (pain.views_declining) {
-    selectedAngle = 'diagnosis';
-    if (hook.views_decline_pct && hook.recent_avg_views && hook.channel_avg_views) {
-      openingObservation = `Last 3 videos averaged ${formatNum(hook.recent_avg_views)} views — down ${hook.views_decline_pct}% from the ${formatNum(hook.channel_avg_views)} channel average`;
-    } else if (hook.most_recent_video_title) {
-      openingObservation = `"${hook.most_recent_video_title}" underperformed your channel average`;
-    } else {
-      openingObservation = `View decline pattern on your channel — recent uploads averaging below your historical baseline`;
-    }
-    painAddressed  = 'views declining despite consistent content quality';
-    angleReasoning = 'Declining view trend is a clear pain point — diagnosis angle creates curiosity about the cause';
-    ctaDirection   = 'interest_check';
-  }
-
-  // ── Priority 4: Viral spike with plateau after ──────────────────────────────
-  else if (
-    hook.best_video_views && hook.recent_avg_views &&
-    hook.best_video_views > hook.recent_avg_views * 4 &&
-    hook.best_video_title
-  ) {
-    selectedAngle      = 'diagnosis';
-    openingObservation = `"${hook.best_video_title}" hit ${formatNum(hook.best_video_views)} views. The most recent uploads are averaging ${formatNum(hook.recent_avg_views)}`;
-    painAddressed      = 'unable to replicate breakout video performance';
-    angleReasoning     = 'Major gap between best and recent performance — classic unreplicated viral spike';
-    ctaDirection       = 'interest_check';
-  }
-
-  // ── Priority 5: Low view-to-sub ratio ──────────────────────────────────────
-  else if (pain.low_view_sub_ratio && hook.view_sub_ratio_pct) {
-    selectedAngle      = 'diagnosis';
-    openingObservation = hook.most_recent_video_title
-      ? `"${hook.most_recent_video_title}" — ${hook.view_sub_ratio_pct}% of ${formatNum(subs)} subscribers watched. That gap has a specific cause`
-      : `${hook.view_sub_ratio_pct}% of ${formatNum(subs)} subscribers are watching each video`;
-    painAddressed      = 'subscriber count far exceeding video views';
-    angleReasoning     = 'Low view-to-sub ratio is a concrete, specific signal the creator will recognize';
-    ctaDirection       = 'interest_check';
-  }
-
-  // ── Priority 6: Upload frequency slowing (not as severe as priority 2) ──────
-  else if (pain.upload_frequency_dropped && hook.days_since_upload) {
-    selectedAngle      = 'bottleneck_removal';
-    openingObservation = `Upload frequency has been slowing — last video was ${hook.days_since_upload} days ago`;
-    painAddressed      = 'declining upload consistency';
-    angleReasoning     = 'Slowing frequency on a growing channel — bottleneck is likely production time';
-    ctaDirection       = 'interest_check';
-  }
-
-  // ── Priority 7: Growth plateaued ────────────────────────────────────────────
-  else if (pain.growth_plateaued && hook.channel_avg_views) {
-    selectedAngle      = 'social_proof_mirror';
-    openingObservation = `${formatNum(subs)} subscribers, ${formatNum(hook.channel_avg_views)} average views — holding consistent but not breaking through`;
-    painAddressed      = 'channel stuck at the same performance level';
-    angleReasoning     = 'Plateau is relatable — social proof mirror shows what breakthrough looks like for similar channels';
-    ctaDirection       = 'sample_offer';
-  }
-
-  // ── Default: honest observation with most recent video ──────────────────────
-  else {
-    selectedAngle = 'honest_observation';
-    openingObservation = hook.most_recent_video_title
-      ? `"${hook.most_recent_video_title}" — ${formatNum(hook.recent_avg_views)} average views on ${formatNum(subs)} subscribers`
-      : `${formatNum(subs)} subscribers in the ${niche} space`;
-    painAddressed  = 'gap between current performance and channel potential';
-    angleReasoning = 'No dominant pain signal — honest observation lets specificity do the work';
-    ctaDirection   = 'interest_check';
-  }
+  const candidates = buildAngleCandidates(intelligencePack, user);
+  const winner = candidates.find(c => c.matches() && c.selectedAngle !== excludeAngle)
+    || candidates[candidates.length - 1]; // default always matches — safety net
 
   return {
-    selected_angle:    selectedAngle,
-    selection_reasoning: angleReasoning,
+    selected_angle:    winner.selectedAngle,
+    selection_reasoning: winner.angleReasoning,
     hook_data: {
-      opening_observation:  openingObservation,
-      pain_being_addressed: painAddressed,
-      connection_to_service: `${serviceType} that directly addresses: ${painAddressed}`,
+      opening_observation:  winner.openingObservation,
+      pain_being_addressed: winner.painAddressed,
+      connection_to_service: `${serviceType} that directly addresses: ${winner.painAddressed}`,
       proof_point:    proofPoint,
-      cta_direction:  ctaDirection,
+      cta_direction:  winner.ctaDirection,
     },
     angle_specific_instructions: '',
   };
