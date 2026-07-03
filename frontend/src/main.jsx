@@ -39,7 +39,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               secondary: 'var(--bg)',
             },
             style: {
-              border: '1px solid rgba(255,59,48,0.3)',
+              border: '1px solid var(--coral-border)',
             },
           },
           duration: 3000,

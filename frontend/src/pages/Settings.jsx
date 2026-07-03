@@ -68,7 +68,7 @@ export default function Settings() {
     setSavingGemini(true);
     try {
       await api.post('/settings/gemini-key', { key: geminiKey.trim() });
-      toast.success('Gemini key saved — Jack AI is ready');
+      toast.success('Gemini key saved — Marcus AI is ready');
       setGeminiKey('');
       checkGeminiStatus();
     } catch (err) {
@@ -268,7 +268,7 @@ export default function Settings() {
         name: 'LeadAgent',
         description: plan_name,
         prefill: { name: user_name, email: user_email, contact: user_contact },
-        theme: { color: '#c8f04c' },
+        theme: { color: '#c8f654' },
         handler: async (response) => {
           try {
             await api.post('/razorpay/verify-payment', {
@@ -724,7 +724,7 @@ export default function Settings() {
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 2 }}>Gemini API Key</div>
                   <div className="muted" style={{ fontSize: 11.5 }}>
-                    Powers Jack AI and pitch generation. Get a free key at{' '}
+                    Powers Marcus AI and pitch generation. Get a free key at{' '}
                     <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" style={{ color: 'var(--lime)' }}>aistudio.google.com</a>.
                   </div>
                   {geminiStatus && (
@@ -733,7 +733,7 @@ export default function Settings() {
                       <span style={{ color: geminiStatus.configured ? 'var(--lime)' : 'var(--coral)' }}>
                         {geminiStatus.configured
                           ? `${geminiStatus.source === 'env' ? 'Set via Railway env var (permanent)' : `${geminiStatus.count} key${geminiStatus.count !== 1 ? 's' : ''} configured — add to Railway Variables to persist`}`
-                          : 'No key configured — Jack AI and pitch gen are unavailable'}
+                          : 'No key configured — Marcus AI and pitch gen are unavailable'}
                       </span>
                     </div>
                   )}
@@ -869,7 +869,7 @@ export default function Settings() {
           <div className="card__body" style={{ padding: 0 }}>
             <div className="row" style={{ padding: 14, borderBottom: '1px solid var(--line)', gap: 14 }}>
               <div style={{ position: 'relative' }}>
-                <span className="ava" style={{ width: 32, height: 32, fontSize: 12, minWidth: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-3)', color: '#0a0a0c' }}>
+                <span className="ava" style={{ width: 32, height: 32, fontSize: 12, minWidth: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-3)', color: 'var(--bg)' }}>
                   {(user?.email || 'Y')[0].toUpperCase()}
                 </span>
                 <span style={{ position: 'absolute', bottom: -1, right: -1, width: 8, height: 8, borderRadius: '50%', background: 'var(--lime)', border: '2px solid var(--surface)' }} />

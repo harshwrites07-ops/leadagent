@@ -442,7 +442,7 @@ export default function QualityLeads() {
                       description: 'Tweeted "looking for editor"',
                       value: confirmedStats?.twitter_signals ?? 0,
                       confidence: '90%',
-                      color: 'var(--sky, #8ec5ff)',
+                      color: 'var(--sky)',
                       active: (confirmedStats?.twitter_signals ?? 0) > 0,
                     },
                     {
@@ -577,7 +577,7 @@ export default function QualityLeads() {
                 {['all', 'hot', 'warm'].map(t => (
                   <button key={t} onClick={() => { setTierFilter(t); setLeadsPage(1); }}
                     className={`btn btn--sm ${tierFilter === t ? (t === 'hot' ? 'btn--coral' : t === 'warm' ? '' : 'btn--primary') : 'btn--ghost'}`}
-                    style={tierFilter === t && t === 'warm' ? { background: 'var(--warn)', color: '#0a0a0c', borderColor: 'var(--warn)', fontWeight: 700 } : undefined}
+                    style={tierFilter === t && t === 'warm' ? { background: 'var(--warn)', color: 'var(--bg)', borderColor: 'var(--warn)', fontWeight: 700 } : undefined}
                   >
                     {t.toUpperCase()}
                   </button>

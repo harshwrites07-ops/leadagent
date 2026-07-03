@@ -11,18 +11,35 @@ import {
   Sparkles, Menu, X, MoreHorizontal,
 } from 'lucide-react';
 
-const NAV_ITEMS = [
-  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/leads',     icon: Search,          label: 'Lead Finder' },
-  { to: '/analyzer',  icon: Youtube,         label: 'Channel Analyzer' },
-  { to: '/pitch',     icon: Zap,             label: 'Pitch Gen' },
-  { to: '/email',     icon: Mail,            label: 'Email Sender', dot: true },
-  { to: '/crm',       icon: Users,           label: 'CRM' },
-  { to: '/campaigns', icon: TrendingUp,      label: 'Campaigns' },
-  { to: '/quality',   icon: Star,            label: 'Quality Leads' },
-  { to: '/analytics', icon: BarChart2,       label: 'Analytics' },
-  { to: '/settings',  icon: Settings,        label: 'Settings' },
+/* Grouped by the journey — same narrative as the landing page */
+const NAV_GROUPS = [
+  { label: null, items: [
+    { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  ]},
+  { label: 'Find', items: [
+    { to: '/leads',     icon: Search,  label: 'Lead Finder' },
+    { to: '/analyzer',  icon: Youtube, label: 'Channel Analyzer' },
+    { to: '/quality',   icon: Star,    label: 'Quality Leads' },
+  ]},
+  { label: 'Write', items: [
+    { to: '/pitch',     icon: Zap,     label: 'Pitch Gen' },
+  ]},
+  { label: 'Send', items: [
+    { to: '/email',     icon: Mail,        label: 'Email Sender', dot: true },
+    { to: '/campaigns', icon: TrendingUp,  label: 'Campaigns' },
+  ]},
+  { label: 'Close', items: [
+    { to: '/crm',       icon: Users,    label: 'CRM' },
+  ]},
+  { label: 'Measure', items: [
+    { to: '/analytics', icon: BarChart2, label: 'Analytics' },
+  ]},
+  { label: null, items: [
+    { to: '/settings',  icon: Settings, label: 'Settings' },
+  ]},
 ];
+
+const NAV_ITEMS = NAV_GROUPS.flatMap(g => g.items);
 
 const BOTTOM_NAV = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Home' },
@@ -94,7 +111,7 @@ export default function Layout({ children }) {
           flexShrink: 0, boxShadow: '0 0 12px rgba(200,246,84,0.35)',
         }}>
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <path d="M8.5 1L3 7.5H7L5.5 13L11 6.5H7L8.5 1Z" fill="#0a0a0c" strokeLinejoin="round"/>
+            <path d="M8.5 1L3 7.5H7L5.5 13L11 6.5H7L8.5 1Z" fill="var(--bg)" strokeLinejoin="round"/>
           </svg>
         </div>
         <div>
@@ -108,32 +125,33 @@ export default function Layout({ children }) {
         )}
       </div>
 
-      {/* Nav items */}
+      {/* Nav items — grouped by journey stage */}
       <nav style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
-        <div style={{ padding: '16px 16px 4px', fontSize: 9, fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--text-4)', fontFamily: 'var(--f-mono)' }}>
-          WORKSPACE
-        </div>
-
-        {NAV_ITEMS.map(({ to, icon: Icon, label, dot }) => {
-          const active = isActive(to);
-          const taskRunning = (to === '/leads' && powerModeRunning) || (to === '/pitch' && pitchJobRunning);
-          return (
-            <NavLink key={to} to={to} className={`sb__nav-item${active ? ' active' : ''}`}>
-              <Icon size={15} style={{ flexShrink: 0, opacity: active ? 1 : 0.6, color: active ? 'var(--lime)' : 'inherit' }} />
-              {label}
-              {taskRunning && (
-                <span style={{ marginLeft: 'auto', width: 6, height: 6, borderRadius: '50%', background: 'var(--lime)', boxShadow: '0 0 6px var(--lime)', animation: 'pulse-lime 2s infinite' }} />
-              )}
-              {dot && !taskRunning && (
-                <span style={{ marginLeft: 'auto', width: 6, height: 6, borderRadius: '50%', background: 'var(--coral)', boxShadow: '0 0 6px var(--coral)', animation: 'pulse-coral 2s infinite' }} />
-              )}
-            </NavLink>
-          );
-        })}
+        {NAV_GROUPS.map((group, gi) => (
+          <React.Fragment key={group.label || `g${gi}`}>
+            {group.label && <div className="sb__group">{group.label}</div>}
+            {group.items.map(({ to, icon: Icon, label, dot }) => {
+              const active = isActive(to);
+              const taskRunning = (to === '/leads' && powerModeRunning) || (to === '/pitch' && pitchJobRunning);
+              return (
+                <NavLink key={to} to={to} className={`sb__nav-item${active ? ' active' : ''}`}>
+                  <Icon size={15} style={{ flexShrink: 0, opacity: active ? 1 : 0.6, color: active ? 'var(--lime)' : 'inherit' }} />
+                  {label}
+                  {taskRunning && (
+                    <span style={{ marginLeft: 'auto', width: 6, height: 6, borderRadius: '50%', background: 'var(--lime)', boxShadow: '0 0 6px var(--lime)', animation: 'pulse-lime 2s infinite' }} />
+                  )}
+                  {dot && !taskRunning && (
+                    <span style={{ marginLeft: 'auto', width: 6, height: 6, borderRadius: '50%', background: 'var(--coral)', boxShadow: '0 0 6px var(--coral)', animation: 'pulse-coral 2s infinite' }} />
+                  )}
+                </NavLink>
+              );
+            })}
+          </React.Fragment>
+        ))}
 
         {user?.is_admin && (
           <>
-            <div style={{ padding: '16px 16px 4px', fontSize: 9, fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--text-4)', fontFamily: 'var(--f-mono)' }}>ADMIN</div>
+            <div className="sb__group">Admin</div>
             {ADMIN_ITEMS.map(({ to, icon: Icon, label }) => {
               const active = isActive(to);
               return (
@@ -177,20 +195,20 @@ export default function Layout({ children }) {
         )}
       </AnimatePresence>
 
-      {/* Ask Jack + user row */}
+      {/* Ask Marcus + user row */}
       <div style={{ padding: '12px 8px 8px', borderTop: '1px solid var(--line)', flexShrink: 0 }}>
         <button
           onClick={() => window.dispatchEvent(new CustomEvent('jack:open'))}
           style={{
             width: '100%', display: 'flex', alignItems: 'center', gap: 8,
             padding: '8px 12px', borderRadius: 8,
-            background: 'linear-gradient(135deg,rgba(200,246,84,0.1) 0%,rgba(200,246,84,0.05) 100%)',
-            border: '1px solid rgba(200,246,84,0.2)', color: 'var(--lime)',
+            background: 'var(--lime-soft)',
+            border: '1px solid var(--lime-border)', color: 'var(--lime)',
             fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 150ms', marginBottom: 8,
           }}
         >
           <Sparkles size={13} />
-          Ask Jack
+          Ask Marcus
           <span style={{ marginLeft: 'auto', fontFamily: 'var(--f-mono)', fontSize: 9, color: 'var(--text-4)', background: 'var(--surface-3)', padding: '2px 5px', borderRadius: 3 }}>⌘K</span>
         </button>
 
@@ -314,7 +332,7 @@ export default function Layout({ children }) {
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
               <svg width="11" height="11" viewBox="0 0 14 14" fill="none">
-                <path d="M8.5 1L3 7.5H7L5.5 13L11 6.5H7L8.5 1Z" fill="#0a0a0c" strokeLinejoin="round"/>
+                <path d="M8.5 1L3 7.5H7L5.5 13L11 6.5H7L8.5 1Z" fill="var(--bg)" strokeLinejoin="round"/>
               </svg>
             </div>
             <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>Quelro</span>
@@ -328,19 +346,13 @@ export default function Layout({ children }) {
           </span>
         )}
 
-        {/* Search (desktop only) */}
+        {/* ⌘K command trigger (desktop only) */}
         {!isMobile && (
-          <div style={{
-            flex: 1, maxWidth: 400,
-            display: 'flex', alignItems: 'center', gap: 8,
-            background: 'var(--surface)', border: '1px solid var(--line)',
-            borderRadius: 8, padding: '0 12px',
-            height: 34, color: 'var(--text-3)', cursor: 'pointer',
-          }}>
+          <button type="button" className="cmdk-trigger" onClick={() => window.dispatchEvent(new CustomEvent('jack:open'))}>
             <Search size={13} style={{ flexShrink: 0, opacity: 0.5 }} />
-            <span style={{ flex: 1, fontSize: 12 }}>Search leads, campaigns, replies...</span>
-            <span style={{ fontFamily: 'var(--f-mono)', fontSize: 9, color: 'var(--text-4)', background: 'var(--surface-3)', padding: '2px 5px', borderRadius: 3 }}>⌘K</span>
-          </div>
+            <span style={{ flex: 1 }}>Search or ask Marcus…</span>
+            <kbd>⌘K</kbd>
+          </button>
         )}
 
         {/* Right actions */}
@@ -356,7 +368,7 @@ export default function Layout({ children }) {
             </>
           )}
 
-          <button style={{
+          <button onClick={() => window.dispatchEvent(new CustomEvent('jack:open'))} style={{
             display: 'flex', alignItems: 'center', gap: 5,
             padding: '0 10px', height: 32, borderRadius: 6,
             color: 'var(--text-2)', fontSize: 12, fontWeight: 600,
@@ -394,7 +406,7 @@ export default function Layout({ children }) {
       </main>
 
       {/* ══ MOBILE BOTTOM NAV ════════════════════════════════════ */}
-      {/* ══ JACK AI CHAT ════════════════════════════════════════ */}
+      {/* ══ Marcus AI CHAT ════════════════════════════════════════ */}
       <AssistantChat />
 
       {isMobile && (

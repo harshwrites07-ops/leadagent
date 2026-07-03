@@ -42,7 +42,7 @@ export default function TrialBanner() {
           onClick={() => navigate('/settings#billing')}
           style={{
             background: urgent ? 'var(--coral)' : 'var(--lime)',
-            color: '#0a0a0c',
+            color: 'var(--bg)',
             border: 'none',
             borderRadius: 7,
             padding: '5px 14px',

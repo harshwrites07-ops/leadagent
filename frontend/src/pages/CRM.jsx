@@ -236,10 +236,15 @@ export default function CRM() {
                           initial={{ opacity: 0, scale: 0.97 }}
                           animate={{
                             opacity: draggingId === lead.id ? 0.35 : 1,
-                            scale: 1,
+                            scale: draggingId === lead.id ? 0.97 : 1,
+                            rotate: draggingId === lead.id ? -2 : 0,
                             boxShadow: isDropped ? '0 0 0 2px var(--lime), 0 8px 24px rgba(200,246,84,0.25)' : '0 0 0 0 transparent',
                           }}
-                          transition={{ delay: colIdx * 0.04 + i * 0.03, duration: 0.3, boxShadow: { duration: 0.5 } }}
+                          transition={{
+                            delay: colIdx * 0.04 + i * 0.03, duration: 0.3, boxShadow: { duration: 0.5 },
+                            scale: { type: 'spring', stiffness: 400, damping: 30 },
+                            rotate: { type: 'spring', stiffness: 400, damping: 30 },
+                          }}
                           whileHover={{ y: -2, boxShadow: 'var(--sh-sm)' }}
                           whileTap={{ scale: 0.98 }}
                           className="kb__card"
@@ -267,7 +272,7 @@ export default function CRM() {
                               }}
                             >
                               {isChecked && (
-                                <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke="#0a0a0c" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round">
+                                <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke="var(--bg)" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round">
                                   <path d="m5 12 5 5 9-11"/>
                                 </svg>
                               )}
@@ -276,7 +281,7 @@ export default function CRM() {
                             {lead.thumbnail_url ? (
                               <img src={lead.thumbnail_url} alt="" style={{ width: 26, height: 26, minWidth: 26, borderRadius: '50%', objectFit: 'cover' }} onError={e => { e.target.style.display='none'; e.target.nextSibling.style.display='flex'; }} />
                             ) : null}
-                            <span className="ava" style={{ fontSize: 10, width: 26, height: 26, minWidth: 26, borderRadius: '50%', display: lead.thumbnail_url ? 'none' : 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-3)', color: '#0a0a0c' }}>
+                            <span className="ava" style={{ fontSize: 10, width: 26, height: 26, minWidth: 26, borderRadius: '50%', display: lead.thumbnail_url ? 'none' : 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-3)', color: 'var(--bg)' }}>
                               {(lead.channel_name || '?')[0].toUpperCase()}
                             </span>
                             <div style={{ flex: 1, minWidth: 0 }}>
@@ -311,7 +316,7 @@ export default function CRM() {
                                     border: '1px solid var(--line)', background: 'var(--bg-2)',
                                     transition: 'color 0.12s, border-color 0.12s',
                                   }}
-                                  onMouseEnter={e => { e.currentTarget.style.color = '#ff0000'; e.currentTarget.style.borderColor = 'rgba(255,0,0,0.3)'; }}
+                                  onMouseEnter={e => { e.currentTarget.style.color = 'var(--bad)'; e.currentTarget.style.borderColor = 'rgba(255,0,0,0.3)'; }}
                                   onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-3)'; e.currentTarget.style.borderColor = 'var(--line)'; }}
                                 >
                                   <Icon name="youtube" size={10} />
@@ -359,7 +364,7 @@ export default function CRM() {
               style={{
                 display: 'flex', alignItems: 'center', gap: 6,
                 padding: '7px 14px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                background: 'var(--gradient-orange)', color: '#0a0a0c',
+                background: 'var(--lime)', color: 'var(--bg)',
                 fontSize: 13, fontWeight: 700,
                 boxShadow: '0 0 16px rgba(var(--lime-rgb),0.3)',
               }}
@@ -432,7 +437,7 @@ export default function CRM() {
                   rel="noopener noreferrer"
                   className="btn btn--ghost btn--sm"
                   style={{ textDecoration: 'none', color: 'var(--text-2)' }}
-                  onMouseEnter={e => { e.currentTarget.style.color = '#ff0000'; }}
+                  onMouseEnter={e => { e.currentTarget.style.color = 'var(--bad)'; }}
                   onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-2)'; }}
                 >
                   <Icon name="youtube" size={12} />Open Channel
@@ -447,7 +452,7 @@ export default function CRM() {
               {selected.thumbnail_url ? (
                 <img src={selected.thumbnail_url} alt="" style={{ width: 44, height: 44, minWidth: 44, borderRadius: '50%', objectFit: 'cover' }} />
               ) : (
-                <span className="ava" style={{ fontSize: 14, width: 44, height: 44, minWidth: 44, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-3)', color: '#0a0a0c' }}>
+                <span className="ava" style={{ fontSize: 14, width: 44, height: 44, minWidth: 44, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-3)', color: 'var(--bg)' }}>
                   {(selected.channel_name || '?')[0].toUpperCase()}
                 </span>
               )}

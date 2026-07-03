@@ -8,31 +8,11 @@ import {
 } from 'lucide-react';
 import Icon from '../components/ui/Icon';
 import PowerSendOverlay from '../components/ui/PowerSendOverlay';
+import Sparkline from '../components/ui/Sparkline';
 import { useApp } from '../context/AppContext';
 import { formatNumber, formatDate } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { useCountUp } from '../hooks/useCountUp';
-
-/* Smooth SVG sparkline */
-function Sparkline({ data = [], color = 'var(--lime)', height = 36 }) {
-  if (!data.length) return null;
-  const w = 200, h = height;
-  const vals = data.map(d => (typeof d === 'object' ? (d.count ?? d.value ?? 0) : d));
-  const min = Math.min(...vals), max = Math.max(...vals);
-  const span = (max - min) || 1;
-  const pts = vals.map((v, i) => [
-    (i / (vals.length - 1)) * w,
-    h - ((v - min) / span) * (h - 4) - 2,
-  ]);
-  const d = pts.map((p, i) => (i === 0 ? `M${p[0]},${p[1]}` : `L${p[0]},${p[1]}`)).join(' ');
-  const dFill = `${d} L${w},${h} L0,${h} Z`;
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ width: '100%', height }}>
-      <path d={dFill} fill={color} opacity={0.10} />
-      <path d={d} fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
 
 function Avatar({ name, color }) {
   const init = (name || '?').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase();
@@ -83,8 +63,7 @@ export default function Dashboard() {
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Hey' : 'Good evening';
   const urgentCount = activities.filter(a => a.type === 'reply_received').length;
 
-  const spark1 = s?.charts?.weekly_emails?.map(d => d.count) || [12, 18, 14, 22, 24, 20, 30, 28, 36, 40, 38, 44, 52, 48, 60];
-  const spark2 = [40, 38, 42, 36, 44, 40, 48, 44, 52, 50, 58, 54, 62, 60, 66];
+  const spark1 = s?.charts?.weekly_emails?.map(d => d.count) || null;
 
   const stats = {
     leadsFound:      s?.total_leads ?? 0,
@@ -124,6 +103,7 @@ export default function Dashboard() {
   const animLeads = useCountUp(stats.leadsFound, 1000, 100);
   const animPitches = useCountUp(stats.pitchesSent, 1000, 200);
   const animCalls = useCountUp(stats.callsBooked, 1000, 400);
+  const animPipeline = useCountUp(stats.pipeline, 1200, 150);
 
   if (loadingDash) {
     return (
@@ -209,13 +189,14 @@ export default function Dashboard() {
         style={{
           cursor: 'default', marginBottom: isMobile ? 8 : 12,
           padding: isMobile ? '20px 20px 18px' : '28px 32px 26px',
-          background: 'radial-gradient(ellipse at top right, var(--lime-soft) 0%, transparent 65%), var(--surface)',
+          background: 'radial-gradient(ellipse at top right, var(--lime-soft) 0%, transparent 65%), var(--surface-2)',
+          borderColor: 'var(--lime-border)',
         }}
       >
-        <div className="stat__label">PIPELINE VALUE · IS EVERYTHING OKAY?</div>
+        <div className="stat__label">PIPELINE VALUE</div>
         <div className="row" style={{ alignItems: 'baseline', gap: 16, flexWrap: 'wrap' }}>
-          <div className="stat__value" style={{ fontSize: isMobile ? 44 : 64, color: 'var(--ok)' }}>
-            ${Number(stats.pipeline).toLocaleString()}
+          <div className="stat__value" style={{ fontSize: isMobile ? 44 : 64, color: 'var(--cream)' }}>
+            ${Number(animPipeline).toLocaleString()}
           </div>
           <div className="stat__delta stat__delta--up" style={{ fontSize: 13 }}>
             <Icon name="check" size={12} />{animCalls} call{animCalls !== 1 ? 's' : ''} booked
@@ -246,16 +227,16 @@ export default function Dashboard() {
             delay: 80,
           },
           {
-            label: 'OPENS',
-            value: `${stats.openRate}%`,
-            meta: `reply rate ${stats.replyRate}%`,
+            label: 'REPLIES',
+            value: `${stats.replyRate}%`,
+            valueColor: 'var(--coral)',
+            meta: `open rate ${stats.openRate}%`,
             metaColor: 'var(--text-3)',
-            spark: spark2,
+            spark: s?.charts?.weekly_replies?.map(d => d.count) || null,
             sparkColor: 'var(--coral)',
             delay: 160,
-            serif: true,
           },
-        ].map(({ label, value, meta, metaColor, spark, sparkColor, delay, serif }) => (
+        ].map(({ label, value, valueColor, meta, metaColor, spark, sparkColor, delay, serif }) => (
           <motion.div
             key={label}
             initial={{ opacity: 0, y: 16 }}
@@ -266,33 +247,22 @@ export default function Dashboard() {
             style={{ cursor: 'default' }}
           >
             <div className="stat__label">{label}</div>
-            <div className={serif ? 'stat__value' : 'stat__value stat__value--mono'}>
+            <div className="stat__value stat__value--mono" style={valueColor ? { color: valueColor } : undefined}>
               {value}
             </div>
-            {spark ? (
+            {spark && spark.length > 1 ? (
               <div style={{ marginBottom: 10, height: 40 }}>
                 <Sparkline data={spark} color={sparkColor} />
               </div>
             ) : (
-              <div style={{ height: 40, marginBottom: 10, display: 'flex', alignItems: 'flex-end' }}>
-                <div style={{ display: 'flex', gap: 3, alignItems: 'flex-end', width: '100%' }}>
-                  {[3, 6, 4, 7, 5, 8, 6, 9, 7, 10].map((h, i) => (
-                    <motion.div
-                      key={i}
-                      initial={{ scaleY: 0 }}
-                      animate={{ scaleY: 1 }}
-                      transition={{ delay: (delay / 1000) + (i * 0.04), duration: 0.3 }}
-                      style={{
-                        flex: 1,
-                        height: `${h * 3}px`,
-                        background: sparkColor,
-                        opacity: 0.15 + (i / 10) * 0.5,
-                        borderRadius: '2px 2px 0 0',
-                        transformOrigin: 'bottom',
-                      }}
-                    />
-                  ))}
-                </div>
+              <div style={{
+                height: 40, marginBottom: 10,
+                display: 'flex', alignItems: 'center',
+                borderBottom: '1px dashed var(--line-2)',
+                fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--text-4)',
+                letterSpacing: '.04em',
+              }}>
+                trend appears after 7 days of activity
               </div>
             )}
             <div className="stat__meta" style={{ color: metaColor }}>{meta}</div>

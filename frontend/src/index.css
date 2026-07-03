@@ -62,6 +62,28 @@
   --f-serif: 'Instrument Serif', 'Times New Roman', serif;
   --f-mono:  'Geist Mono', ui-monospace, 'JetBrains Mono', monospace;
 
+  /* ── Type scale (strict: nothing between these steps) ── */
+  --fs-xs:   12px;
+  --fs-sm:   14px;
+  --fs-base: 16px;
+  --fs-lg:   20px;
+  --fs-xl:   24px;
+  --fs-2xl:  32px;
+  --fs-3xl:  48px;
+  --fs-4xl:  64px;
+
+  /* ── Spacing (4px grid — every gap/pad/margin is one of these) ── */
+  --sp-1:  4px;
+  --sp-2:  8px;
+  --sp-3:  12px;
+  --sp-4:  16px;
+  --sp-5:  20px;
+  --sp-6:  24px;
+  --sp-8:  32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+  --sp-16: 64px;
+
   /* ── Radius ── */
   --r-sm: 6px;
   --r:    10px;
@@ -522,6 +544,16 @@ a { color: inherit; text-decoration: none; }
 .btn--sm { height: 26px; padding: 0 9px; font-size: 11.5px; border-radius: 6px; }
 .btn--lg { height: 40px; padding: 0 18px; font-size: 13.5px; border-radius: 10px; }
 
+/* Loading state — spinner replaces nothing, sits before label */
+.btn--loading { pointer-events: none; opacity: 0.75; }
+.btn__spinner {
+  width: 12px; height: 12px; flex-shrink: 0;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  border-top-color: transparent;
+  animation: spin 600ms linear infinite;
+}
+
 .kbd {
   font-family: var(--f-mono);
   font-size: 10.5px;
@@ -587,6 +619,43 @@ a { color: inherit; text-decoration: none; }
 }
 .card__title { font-size: 13px; font-weight: 500; letter-spacing: -0.005em; }
 .card__body { padding: 16px; }
+
+/* Card elevation variants — cards are a DIFFERENT shade than the page,
+   raised cards a different shade than cards. Never identical-black + border. */
+.card--raised {
+  background: var(--surface-2);
+  border-color: var(--line-2);
+}
+.card--hero {
+  background:
+    radial-gradient(ellipse at top left, var(--lime-soft) 0%, transparent 55%),
+    var(--surface-2);
+  border-color: var(--lime-border);
+}
+.card--hero:hover { border-color: var(--lime-border); box-shadow: var(--sh-lime); }
+
+/* ═══════════════════════════════════════════════════════════
+   BENTO GRID — the only 3 tile sizes in the app (Ramp law)
+   Base unit: 1 column × 1 row on a 4-col grid.
+   ═══════════════════════════════════════════════════════════ */
+.bento {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-auto-rows: minmax(120px, auto);
+  gap: var(--sp-4);
+}
+.bento__1x1 { grid-column: span 1; grid-row: span 1; }
+.bento__2x1 { grid-column: span 2; grid-row: span 1; }
+.bento__2x2 { grid-column: span 2; grid-row: span 2; }
+
+@media (max-width: 1100px) {
+  .bento { grid-template-columns: repeat(2, 1fr); }
+  .bento__2x2 { grid-row: span 1; }
+}
+@media (max-width: 540px) {
+  .bento { grid-template-columns: 1fr; }
+  .bento__1x1, .bento__2x1, .bento__2x2 { grid-column: span 1; grid-row: span 1; }
+}
 
 /* ── Stat tiles ── */
 .stat {
@@ -1408,6 +1477,15 @@ a { color: inherit; text-decoration: none; }
   100% { box-shadow: 0 0 0 0   rgba(255,138,115,0); }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════
    RESPONSIVE
    ═══════════════════════════════════════════════════════════ */
@@ -1587,13 +1665,60 @@ a { color: inherit; text-decoration: none; }
   transform: translateX(2px);
 }
 .sb__nav-item.active {
-  background: rgba(200,246,84,0.06);
-  color: var(--lime);
-  font-weight: 600;
-  box-shadow: inset 3px 0 0 var(--lime);
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 500;
+  box-shadow: inset 3px 0 0 var(--lime), 0 0 0 1px var(--line);
 }
 .sb__nav-item.active:hover {
   transform: none;
+}
+
+/* Sidebar group label — mono eyebrow, one per journey stage */
+.sb__group {
+  padding: 14px 16px 4px;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text-4);
+  font-family: var(--f-mono);
+  user-select: none;
+}
+
+/* ⌘K command-palette trigger (topbar) */
+.cmdk-trigger {
+  flex: 1;
+  max-width: 400px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text-3);
+  font-size: 12px;
+  font-family: var(--f-sans);
+  cursor: pointer;
+  transition: border-color var(--t-fast), background var(--t-fast), color var(--t-fast);
+  text-align: left;
+}
+.cmdk-trigger:hover {
+  border-color: var(--line-3);
+  background: var(--surface-2);
+  color: var(--text-2);
+}
+.cmdk-trigger kbd {
+  margin-left: auto;
+  font-family: var(--f-mono);
+  font-size: 9.5px;
+  color: var(--text-3);
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  padding: 1px 5px;
+  border-radius: 4px;
 }
 
 /* Page enter keyframe */

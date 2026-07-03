@@ -7,11 +7,11 @@ import { useApp } from '../context/AppContext';
 import api, { formatNumber } from '../utils/api';
 
 const GEN_STEPS = [
-  { key: 'deep_study',       label: 'Brief',    n: 1 },
-  { key: 'custom_offer',     label: 'Research', n: 2 },
-  { key: 'cold_email',       label: 'Variants', n: 3 },
-  { key: 'subject_variants', label: 'Sequence', n: 4 },
-  { key: 'done',             label: 'Send',     n: 5 },
+  { key: 'deep_study',       label: 'Brief',    n: 1, work: 'analyzing channel' },
+  { key: 'custom_offer',     label: 'Research', n: 2, work: 'selecting angle' },
+  { key: 'cold_email',       label: 'Variants', n: 3, work: 'writing' },
+  { key: 'subject_variants', label: 'Sequence', n: 4, work: 'scoring variants' },
+  { key: 'done',             label: 'Send',     n: 5, work: 'finalizing' },
 ];
 
 function normalizePitch(raw) {
@@ -678,7 +678,7 @@ export default function PitchGenerator() {
                       {(p?.cold_email_body || '').slice(0, 180)}{(p?.cold_email_body || '').length > 180 ? '…' : ''}
                     </div>
                     {blocked && (
-                      <div style={{ fontSize: 10.5, color: '#ff8a73', marginBottom: 8, padding: '5px 8px', background: 'rgba(255,138,115,.08)', borderRadius: 5 }}>
+                      <div style={{ fontSize: 10.5, color: 'var(--coral)', marginBottom: 8, padding: '5px 8px', background: 'var(--coral-soft)', borderRadius: 5 }}>
                         Score too low to send — needs rewrite
                       </div>
                     )}
@@ -763,53 +763,64 @@ export default function PitchGenerator() {
             })}
           </div>
 
-          {/* Generating state */}
+          {/* Generating state — Marcus working, staged terminal lines */}
           <AnimatePresence>
             {(generating || qualityEnhancing) && (
               <motion.div
-                initial={{ opacity: 0, scale: 0.97 }}
-                animate={{ opacity: 1, scale: 1 }}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
+                transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
                 className="card"
-                style={{ textAlign: 'center', padding: '56px 24px', marginBottom: 20 }}
+                style={{ padding: 0, marginBottom: 20, overflow: 'hidden' }}
               >
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={qualityEnhancing ? 'enhancing' : currentStep}
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -6 }}
-                    transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-                  >
-                    <div
-                      style={{
-                        width: 40, height: 40, margin: '0 auto 16px', borderRadius: 12,
-                        display: 'grid', placeItems: 'center',
-                        background: 'var(--lime-soft)', border: '1px solid var(--lime-border)',
-                      }}
-                    >
-                      <motion.span
-                        animate={{ rotate: 360 }}
-                        transition={{ duration: 1.6, repeat: Infinity, ease: 'linear' }}
-                        style={{ display: 'grid', placeItems: 'center' }}
-                      >
-                        <Icon name="sparkle" size={18} style={{ color: 'var(--lime)' }} />
-                      </motion.span>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '10px 16px', borderBottom: '1px solid var(--line)',
+                  background: 'var(--bg-2)',
+                }}>
+                  <span className="dot dot--lime dot--pulse" style={{ width: 6, height: 6 }} />
+                  <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10.5, letterSpacing: '.08em', color: 'var(--text-3)', textTransform: 'uppercase' }}>
+                    Marcus is working
+                  </span>
+                  <span style={{ marginLeft: 'auto', fontFamily: 'var(--f-mono)', fontSize: 10.5, color: 'var(--text-4)' }}>
+                    ~60–120s
+                  </span>
+                </div>
+                <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 7 }}>
+                  {GEN_STEPS.map((s, i) => {
+                    const isDone = completedSteps.has(s.key);
+                    const isCurrent = !isDone && (currentStep === s.key || stepIdx === i);
+                    const isFuture = !isDone && !isCurrent;
+                    return (
+                      <div key={s.key} style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        fontFamily: 'var(--f-mono)', fontSize: 12,
+                        color: isDone ? 'var(--text-2)' : isCurrent ? 'var(--lime)' : 'var(--text-4)',
+                        transition: 'color 200ms ease',
+                      }}>
+                        {isDone
+                          ? <Icon name="check" size={12} style={{ color: 'var(--lime)', flexShrink: 0 }} />
+                          : <span className={isCurrent ? 'dot dot--lime dot--pulse' : 'dot dot--neutral'} style={{ width: 5, height: 5, flexShrink: 0 }} />}
+                        <span style={{ opacity: isFuture ? 0.55 : 1 }}>{s.work}{isCurrent ? '…' : ''}</span>
+                      </div>
+                    );
+                  })}
+                  {qualityEnhancing && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--lime)' }}>
+                      <span className="dot dot--lime dot--pulse" style={{ width: 5, height: 5, flexShrink: 0 }} />
+                      quality gate — rewriting to score 75+…
                     </div>
-                    <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text)', marginBottom: 6 }}>
-                      {qualityEnhancing
-                        ? 'Enhancing quality...'
-                        : (GEN_STEPS.find(s => s.key === currentStep)?.label ?? 'Generating pitch...')}
+                  )}
+                  {generatingStatus && (
+                    <div style={{
+                      marginTop: 8, paddingTop: 10, borderTop: '1px dashed var(--line)',
+                      fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--text-3)',
+                    }}>
+                      {generatingStatus}
                     </div>
-                    <div className="muted" style={{ fontSize: 12 }}>
-                      {generatingStatus
-                        ? generatingStatus
-                        : qualityEnhancing
-                          ? 'Running quality gate — rewriting to score 75+'
-                          : 'This usually takes 60–120 seconds'}
-                    </div>
-                  </motion.div>
-                </AnimatePresence>
+                  )}
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -1029,14 +1040,20 @@ export default function PitchGenerator() {
                                 : '✓ Quality: Enhanced';
                               const bg = warn || qs < 70 ? 'var(--coral)' : qs >= 85 ? 'var(--lime)' : 'var(--lime-dim)';
                               return (
-                                <div style={{
-                                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                                  padding: '5px 12px', borderRadius: 6,
-                                  fontSize: 11, fontWeight: 700, fontFamily: 'var(--f-mono)',
-                                  background: bg, color: 'var(--bg)',
-                                }}>
+                                <motion.div
+                                  key={label}
+                                  initial={{ opacity: 0, scale: 0.8 }}
+                                  animate={{ opacity: 1, scale: 1 }}
+                                  transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                                  style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                                    padding: '5px 12px', borderRadius: 6,
+                                    fontSize: 11, fontWeight: 700, fontFamily: 'var(--f-mono)',
+                                    background: bg, color: 'var(--bg)',
+                                  }}
+                                >
                                   {label}
-                                </div>
+                                </motion.div>
                               );
                             })()}
                             {pitch.quality_regenerated && (
@@ -1088,7 +1105,7 @@ export default function PitchGenerator() {
                                           </span>
                                         </div>
                                         <div style={{ height: 3, background: 'var(--surface-3)', borderRadius: 2, overflow: 'hidden', marginBottom: 2 }}>
-                                          <div style={{ width: `${pct}%`, height: '100%', borderRadius: 2, background: pct >= 75 ? '#c8f654' : pct >= 50 ? 'var(--warn)' : '#ff8a73', transition: 'width 0.4s ease' }} />
+                                          <div style={{ width: `${pct}%`, height: '100%', borderRadius: 2, background: pct >= 75 ? 'var(--lime)' : pct >= 50 ? 'var(--warn)' : 'var(--coral)', transition: 'width 0.4s ease' }} />
                                         </div>
                                         <div style={{ fontSize: 10, color: 'var(--text-4)', lineHeight: 1.4 }}>{val.feedback}</div>
                                       </div>

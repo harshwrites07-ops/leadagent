@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { X, Send, Bot, User, Loader2, Trash2, Minus, GripHorizontal, Mic, MicOff, Volume2, VolumeX, Radio } from 'lucide-react';
 import api from '../../utils/api';
 
-const WELCOME = `Jack online. Full control of your outreach OS.\n\nTry **"daily briefing"**, **"find 50 fitness leads"**, **"send emails to hot leads"**, or **"power follow-up"** — I execute immediately, no questions asked.`;
+const WELCOME = `Marcus online. Full control of your outreach OS.\n\nTry **"daily briefing"**, **"find 50 fitness leads"**, **"send emails to hot leads"**, or **"power follow-up"** — I execute immediately, no questions asked.`;
 
 const SUGGESTIONS = [
   'Daily briefing',
@@ -29,14 +29,14 @@ function renderText(text) {
   return text.split('\n').map((line, i) => {
     if (!line.trim()) return <br key={i} />;
     if (line.startsWith('## ')) {
-      return <p key={i} style={{ fontWeight: 700, color: '#fff', margin: '6px 0 2px', fontSize: 12 }}>{line.slice(3)}</p>;
+      return <p key={i} style={{ fontWeight: 700, color: 'var(--text)', margin: '6px 0 2px', fontSize: 12 }}>{line.slice(3)}</p>;
     }
     const parts = line.split(/(\*\*[^*]+\*\*)/g);
     return (
       <p key={i} style={{ marginBottom: 2, lineHeight: 1.5 }}>
         {parts.map((part, j) =>
           part.startsWith('**') && part.endsWith('**')
-            ? <strong key={j} style={{ color: '#fff', fontWeight: 600 }}>{part.slice(2, -2)}</strong>
+            ? <strong key={j} style={{ color: 'var(--text)', fontWeight: 600 }}>{part.slice(2, -2)}</strong>
             : part
         )}
       </p>
@@ -54,16 +54,16 @@ function Message({ msg }) {
         background: isUser ? 'var(--surface-2)' : 'var(--lime)',
         border: isUser ? '1px solid var(--line)' : 'none',
       }}>
-        {isUser ? <User size={12} color="#aaa" /> : <Bot size={12} color="#fff" />}
+        {isUser ? <User size={12} color="var(--text-2)" /> : <Bot size={12} color="var(--bg)" />}
       </div>
       <div style={{
         maxWidth: '82%', borderRadius: 14, padding: '8px 12px', fontSize: 12,
         background: isUser ? 'var(--coral)' : 'var(--surface)',
-        color: isUser ? '#0a0a0c' : 'var(--text-2)',
+        color: isUser ? 'var(--bg)' : 'var(--text-2)',
         borderTopRightRadius: isUser ? 4 : 14,
         borderTopLeftRadius: isUser ? 14 : 4,
         lineHeight: 1.5,
-        border: isUser ? 'none' : '1px solid #1e1e1e',
+        border: isUser ? 'none' : '1px solid var(--line)',
       }}>
         {renderText(msg.content)}
       </div>
@@ -130,11 +130,24 @@ export default function AssistantChat() {
     } catch {}
   }, [messages]);
 
-  // Listen for sidebar button click
+  // Listen for sidebar button click + ⌘K / Ctrl+K toggle + Esc close
   useEffect(() => {
     const handler = () => { setOpen(true); setMinimized(false); };
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setOpen(v => !v);
+        setMinimized(false);
+      } else if (e.key === 'Escape') {
+        setOpen(false);
+      }
+    };
     window.addEventListener('jack:open', handler);
-    return () => window.removeEventListener('jack:open', handler);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('jack:open', handler);
+      window.removeEventListener('keydown', onKey);
+    };
   }, []);
 
   // ── Speech Recognition setup ─────────────────────────────────────────────────
@@ -172,7 +185,7 @@ export default function AssistantChat() {
     };
 
     rec.onerror = (e) => {
-      console.warn('[Jack Voice] Recognition error:', e.error);
+      console.warn('[Marcus Voice] Recognition error:', e.error);
       intentionalStop.current = false;
       setListening(false);
     };
@@ -321,62 +334,37 @@ export default function AssistantChat() {
         recognitionRef.current.start();
         setListening(true);
       } catch (e) {
-        console.warn('[Jack Voice] Could not start recognition:', e.message);
+        console.warn('[Marcus Voice] Could not start recognition:', e.message);
       }
     }
   };
 
   const showSuggestions = messages.length === 1 && !minimized;
 
-  const posStyle = pos
-    ? { position: 'fixed', left: pos.x, top: pos.y, bottom: 'auto', right: 'auto' }
-    : { position: 'fixed', bottom: 24, right: 24 };
-
-  if (!open) {
-    return (
-      <button
-        onClick={() => setOpen(true)}
-        title="Open Jack — Outreach OS"
-        style={{
-          ...posStyle, width: 56, height: 56, borderRadius: '50%', zIndex: 9999,
-          background: 'var(--lime)',
-          boxShadow: '0 8px 32px rgba(200,246,84,0.3)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          border: 'none', cursor: 'pointer', transition: 'transform 0.15s',
-        }}
-        onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.08)'}
-        onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-      >
-        <Bot size={22} color="#fff" />
-        <span style={{
-          position: 'absolute', top: -2, right: -2, width: 14, height: 14,
-          borderRadius: '50%', background: 'var(--ok)', border: '2px solid var(--bg)',
-        }} />
-      </button>
-    );
-  }
+  /* Agent is a docked slide-out peer, not a floating bot.
+     Open via sidebar "Ask Marcus", the ⌘K trigger, or the topbar Agent button. */
+  if (!open) return null;
 
   return (
     <div
       ref={windowRef}
       style={{
-        ...posStyle, zIndex: 9999, width: 390,
+        position: 'fixed', top: 0, right: 0, bottom: 0,
+        zIndex: 9999,
+        width: 'min(420px, 100vw)',
         display: 'flex', flexDirection: 'column',
-        background: '#0d0d0d', border: '1px solid #1e1e1e', borderRadius: 18,
-        boxShadow: '0 24px 60px rgba(0,0,0,0.8), 0 0 0 1px rgba(var(--lime-rgb),0.08)',
+        background: 'var(--bg-2)', borderLeft: '1px solid var(--line)',
+        boxShadow: 'var(--sh-xl)',
         overflow: 'hidden',
-        height: minimized ? 'auto' : 560,
-        transition: 'height 0.2s ease',
+        animation: 'slideIn 300ms cubic-bezier(0.16,1,0.3,1)',
       }}
     >
       {/* Header */}
       <div
-        onMouseDown={onHeaderMouseDown}
         style={{
-          display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
-          flexShrink: 0, borderBottom: minimized ? 'none' : '1px solid #1a1a1a',
-          background: 'rgba(200,246,84,0.06)',
-          cursor: 'grab', userSelect: 'none',
+          display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px',
+          flexShrink: 0, borderBottom: '1px solid var(--line)',
+          userSelect: 'none',
         }}
       >
         <div style={{
@@ -386,11 +374,11 @@ export default function AssistantChat() {
           boxShadow: speaking ? '0 0 12px rgba(200,246,84,0.7)' : 'none',
           transition: 'box-shadow 0.3s',
         }}>
-          {speaking ? <Radio size={16} color="#fff" /> : <Bot size={17} color="#fff" />}
+          {speaking ? <Radio size={16} color="var(--bg)" /> : <Bot size={17} color="var(--bg)" />}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <p style={{ fontSize: 13, fontWeight: 700, color: '#fff', margin: 0 }}>Jack</p>
+            <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', margin: 0 }}>Marcus</p>
             {speaking
               ? <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 20, fontWeight: 700, background: 'rgba(200,246,84,0.15)', color: 'var(--lime)', border: '1px solid rgba(200,246,84,0.3)' }}>SPEAKING</span>
               : listening
@@ -398,11 +386,11 @@ export default function AssistantChat() {
               : <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 20, fontWeight: 700, background: 'rgba(var(--ok-rgb),0.15)', color: 'var(--ok)', border: '1px solid rgba(var(--ok-rgb),0.3)' }}>LIVE</span>
             }
           </div>
-          <p style={{ fontSize: 10, color: '#555', margin: 0 }}>
-            {speaking ? 'Jack is speaking...' : listening ? 'Listening to you...' : 'Quelro · Outreach OS'}
+          <p style={{ fontSize: 10, color: 'var(--text-3)', margin: 0 }}>
+            {speaking ? 'Marcus is speaking...' : listening ? 'Listening to you...' : 'Quelro · Outreach OS'}
           </p>
         </div>
-        <GripHorizontal size={14} color="#333" style={{ flexShrink: 0 }} />
+        <span style={{ fontFamily: 'var(--f-mono)', fontSize: 9.5, color: 'var(--text-4)', flexShrink: 0 }}>⌘K</span>
 
         {/* Voice output toggle */}
         {hasSpeechSupport && (
@@ -415,16 +403,12 @@ export default function AssistantChat() {
           </button>
         )}
 
-        <button onClick={clearChat} title="Clear chat" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#444', padding: 4 }}
-          onMouseEnter={e => e.currentTarget.style.color = '#888'} onMouseLeave={e => e.currentTarget.style.color = '#444'}>
+        <button onClick={clearChat} title="Clear chat" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-4)', padding: 4 }}
+          onMouseEnter={e => { e.currentTarget.style.color = 'var(--text-2)'; }} onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-4)'; }}>
           <Trash2 size={14} />
         </button>
-        <button onClick={() => setMinimized(m => !m)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#444', padding: 4 }}
-          onMouseEnter={e => e.currentTarget.style.color = '#888'} onMouseLeave={e => e.currentTarget.style.color = '#444'}>
-          <Minus size={14} />
-        </button>
-        <button onClick={() => { setOpen(false); stopSpeaking(); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#444', padding: 4 }}
-          onMouseEnter={e => e.currentTarget.style.color = '#fff'} onMouseLeave={e => e.currentTarget.style.color = '#444'}>
+        <button onClick={() => { setOpen(false); stopSpeaking(); }} title="Close (Esc)" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-4)', padding: 4 }}
+          onMouseEnter={e => { e.currentTarget.style.color = 'var(--text)'; }} onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-4)'; }}>
           <X size={16} />
         </button>
       </div>
@@ -447,19 +431,19 @@ export default function AssistantChat() {
             {speaking && !listening && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: 'rgba(200,246,84,0.06)', border: '1px solid rgba(200,246,84,0.2)', borderRadius: 12 }}>
                 <VoiceWave color="var(--lime)" bars={6} />
-                <span style={{ fontSize: 11, color: 'var(--lime)' }}>Jack is speaking</span>
-                <button onClick={stopSpeaking} style={{ marginLeft: 'auto', fontSize: 10, color: '#555', background: 'none', border: 'none', cursor: 'pointer' }}>stop</button>
+                <span style={{ fontSize: 11, color: 'var(--lime)' }}>Marcus is speaking</span>
+                <button onClick={stopSpeaking} style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer' }}>stop</button>
               </div>
             )}
 
             {loading && (
               <div style={{ display: 'flex', gap: 8 }}>
                 <div style={{ width: 26, height: 26, borderRadius: '50%', flexShrink: 0, background: 'var(--lime)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Bot size={12} color="#0a0a0c" />
+                  <Bot size={12} color="var(--bg)" />
                 </div>
                 <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 14, borderTopLeftRadius: 4, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Loader2 size={12} style={{ color: 'var(--lime)', animation: 'spin 1s linear infinite' }} />
-                  <span style={{ fontSize: 11, color: '#555' }}>Thinking...</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-3)' }}>Thinking...</span>
                 </div>
               </div>
             )}
@@ -472,36 +456,36 @@ export default function AssistantChat() {
               {SUGGESTIONS.map(s => (
                 <button key={s} onClick={() => send(s)} style={{
                   fontSize: 10, padding: '4px 10px', borderRadius: 20, cursor: 'pointer',
-                  background: 'transparent', border: '1px solid #222', color: '#555', transition: 'all 0.15s',
+                  background: 'transparent', border: '1px solid var(--line-2)', color: 'var(--text-3)', transition: 'all 0.15s',
                 }}
                   onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(200,246,84,0.4)'; e.currentTarget.style.color = 'var(--lime)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#222'; e.currentTarget.style.color = '#555'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--line-2)'; e.currentTarget.style.color = 'var(--text-3)'; }}
                 >{s}</button>
               ))}
             </div>
           )}
 
           {/* Input row */}
-          <div style={{ flexShrink: 0, padding: '8px 12px 12px', borderTop: '1px solid #1a1a1a' }}>
+          <div style={{ flexShrink: 0, padding: '8px 12px 12px', borderTop: '1px solid var(--line)' }}>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
               {/* Mic button */}
               {hasSpeechSupport && (
                 <button
                   onClick={toggleMic}
                   disabled={loading}
-                  title={listening ? 'Stop listening' : 'Speak to Jack'}
+                  title={listening ? 'Stop listening' : 'Speak to Marcus'}
                   style={{
                     flexShrink: 0, width: 36, height: 36, borderRadius: 10, border: 'none',
-                    background: listening ? 'rgba(var(--ok-rgb),0.15)' : '#111',
+                    background: listening ? 'rgba(var(--ok-rgb),0.15)' : 'var(--surface)',
                     cursor: loading ? 'default' : 'pointer',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    boxShadow: listening ? '0 0 0 2px rgba(var(--ok-rgb),0.5)' : '0 0 0 1px #222',
+                    boxShadow: listening ? '0 0 0 2px rgba(var(--ok-rgb),0.5)' : '0 0 0 1px var(--line-2)',
                     transition: 'all 0.2s',
                   }}
                 >
                   {listening
                     ? <MicOff size={15} color="var(--ok)" />
-                    : <Mic size={15} color={loading ? '#333' : '#888'} />
+                    : <Mic size={15} color={loading ? 'var(--text-4)' : 'var(--text-2)'} />
                   }
                 </button>
               )}
@@ -514,12 +498,12 @@ export default function AssistantChat() {
                 placeholder={listening ? 'Listening...' : 'Type or speak a command...'}
                 disabled={loading || listening}
                 style={{
-                  flex: 1, background: '#111', border: '1px solid #222', borderRadius: 10,
-                  padding: '8px 12px', color: '#fff', fontSize: 12, outline: 'none', fontFamily: 'inherit',
-                  borderColor: listening ? 'rgba(var(--ok-rgb),0.4)' : '#222',
+                  flex: 1, background: 'var(--surface)', border: '1px solid var(--line-2)', borderRadius: 10,
+                  padding: '8px 12px', color: 'var(--text)', fontSize: 12, outline: 'none', fontFamily: 'inherit',
+                  borderColor: listening ? 'rgba(var(--ok-rgb),0.4)' : 'var(--line-2)',
                 }}
                 onFocus={e => { if (!listening) e.target.style.borderColor = 'rgba(var(--lime-rgb),0.5)'; }}
-                onBlur={e => { if (!listening) e.target.style.borderColor = '#222'; }}
+                onBlur={e => { if (!listening) e.target.style.borderColor = 'var(--line-2)'; }}
               />
 
               <button
@@ -532,13 +516,13 @@ export default function AssistantChat() {
                   display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s',
                 }}
               >
-                <Send size={14} color={input.trim() && !loading && !listening ? '#fff' : '#333'} />
+                <Send size={14} color={input.trim() && !loading && !listening ? 'var(--bg)' : 'var(--text-4)'} />
               </button>
             </div>
 
             {hasSpeechSupport && (
-              <p style={{ fontSize: 9, color: '#333', textAlign: 'center', marginTop: 5, margin: '5px 0 0' }}>
-                {voiceOut ? '🔊 Voice on — Jack will speak replies' : '🔇 Voice muted — tap 🔊 in header to unmute'}
+              <p style={{ fontSize: 9, color: 'var(--text-4)', textAlign: 'center', marginTop: 5, margin: '5px 0 0' }}>
+                {voiceOut ? '🔊 Voice on — Marcus will speak replies' : '🔇 Voice muted — tap 🔊 in header to unmute'}
               </p>
             )}
           </div>

@@ -64,7 +64,7 @@ export default function UpgradeWall() {
           alignItems: 'center', justifyContent: 'center',
           margin: '0 auto 20px',
         }}>
-          <svg width="16" height="16" viewBox="0 0 14 14" fill="none"><path d="M8.5 1L3 7.5H7L5.5 13L11 6.5H7L8.5 1Z" fill="#0a0a0c" strokeLinejoin="round"/></svg>
+          <svg width="16" height="16" viewBox="0 0 14 14" fill="none"><path d="M8.5 1L3 7.5H7L5.5 13L11 6.5H7L8.5 1Z" fill="var(--bg)" strokeLinejoin="round"/></svg>
         </div>
 
         <h2 style={{ fontFamily: 'var(--f-serif)', fontSize: 32, color: 'var(--text)', margin: '0 0 8px', fontStyle: 'italic' }}>
@@ -88,7 +88,7 @@ export default function UpgradeWall() {
               {plan.highlight && (
                 <div style={{
                   position: 'absolute', top: -11, left: '50%', transform: 'translateX(-50%)',
-                  background: 'var(--lime)', color: '#0a0a0c',
+                  background: 'var(--lime)', color: 'var(--bg)',
                   fontSize: 10, fontWeight: 800, letterSpacing: '0.1em',
                   padding: '3px 12px', borderRadius: 99,
                   fontFamily: 'var(--f-mono)',
@@ -107,7 +107,7 @@ export default function UpgradeWall() {
                 style={{
                   width: '100%',
                   background: plan.highlight ? 'var(--lime)' : 'var(--surface-3)',
-                  color: plan.highlight ? '#0a0a0c' : 'var(--text)',
+                  color: plan.highlight ? 'var(--bg)' : 'var(--text)',
                   border: `1px solid ${plan.highlight ? 'transparent' : 'var(--line-2)'}`,
                   borderRadius: 8,
                   padding: '10px 0',

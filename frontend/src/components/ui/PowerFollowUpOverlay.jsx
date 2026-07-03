@@ -122,7 +122,7 @@ export default function PowerFollowUpOverlay({ onClose }) {
               <button
                 onClick={start}
                 disabled={pending === 0}
-                style={{ padding: '8px 20px', background: 'var(--lime)', border: 'none', borderRadius: 'var(--r)', color: '#0a0a0c', cursor: pending === 0 ? 'not-allowed' : 'pointer', fontWeight: 600, fontFamily: 'var(--f-sans)', fontSize: 13, opacity: pending === 0 ? 0.4 : 1 }}
+                style={{ padding: '8px 20px', background: 'var(--lime)', border: 'none', borderRadius: 'var(--r)', color: 'var(--bg)', cursor: pending === 0 ? 'not-allowed' : 'pointer', fontWeight: 600, fontFamily: 'var(--f-sans)', fontSize: 13, opacity: pending === 0 ? 0.4 : 1 }}
               >
                 Send Follow-Ups
               </button>

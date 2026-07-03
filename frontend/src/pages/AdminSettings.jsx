@@ -27,11 +27,11 @@ function TestButton({ onClick, status }) {
       display: 'flex', alignItems: 'center', gap: 5,
       padding: '7px 14px', borderRadius: 6, cursor: 'pointer', fontSize: 12, flexShrink: 0,
       background: 'transparent', border: '1px solid var(--border-default)',
-      color: status === 'ok' ? 'var(--ok)' : status === 'error' ? '#FF4444' : 'var(--text-secondary)',
+      color: status === 'ok' ? 'var(--ok)' : status === 'error' ? 'var(--bad)' : 'var(--text-secondary)',
     }}>
       {status === 'loading' && <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} />}
       {status === 'ok' && <CheckCircle2 size={11} style={{ color: 'var(--ok)' }} />}
-      {status === 'error' && <XCircle size={11} style={{ color: '#FF4444' }} />}
+      {status === 'error' && <XCircle size={11} style={{ color: 'var(--bad)' }} />}
       {!status && <Bot size={11} />}
       Test
     </button>
@@ -303,7 +303,7 @@ export default function AdminSettings() {
                   <span style={{ fontSize: 13, color: 'var(--text-primary)' }}>{inbox.email}</span>
                   <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-muted)' }}>{inbox.host}:{inbox.port}</span>
                 </div>
-                <button onClick={() => removeInbox(inbox.email)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#FF4444', padding: '4px' }}><X size={13} /></button>
+                <button onClick={() => removeInbox(inbox.email)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--bad)', padding: '4px' }}><X size={13} /></button>
               </div>
             ))}
           </div>
@@ -324,7 +324,7 @@ export default function AdminSettings() {
               </div>
               <div><label style={labelSt}>App Password</label><PasswordInput value={newInbox.pass} onChange={e => setNewInbox(p => ({ ...p, pass: e.target.value }))} /></div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={addInbox} disabled={addingInbox} style={{ flex: 1, padding: '8px', borderRadius: 6, background: 'var(--gradient-orange)', border: 'none', color: '#0a0a0c', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                <button onClick={addInbox} disabled={addingInbox} style={{ flex: 1, padding: '8px', borderRadius: 6, background: 'var(--lime)', border: 'none', color: 'var(--bg)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                   {addingInbox ? 'Testing & Saving...' : 'Add Inbox'}
                 </button>
                 <button onClick={() => setShowAddInbox(false)} style={{ padding: '8px 14px', borderRadius: 6, background: 'transparent', border: '1px solid var(--border-default)', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer' }}>
@@ -374,7 +374,7 @@ export default function AdminSettings() {
               {caseStudies.map((cs, i) => (
                 <div key={i} style={{ display: 'flex', gap: 8 }}>
                   <input style={{ ...inputSt, flex: 1, fontSize: 12 }} value={cs} onChange={e => { const arr = [...caseStudies]; arr[i] = e.target.value; set('case_studies', arr); }} placeholder="e.g. Helped FitnessGuru grow from 2K to 50K views in 60 days" />
-                  <button onClick={() => set('case_studies', caseStudies.filter((_, j) => j !== i))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#FF4444', padding: '0 4px' }}><X size={13} /></button>
+                  <button onClick={() => set('case_studies', caseStudies.filter((_, j) => j !== i))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--bad)', padding: '0 4px' }}><X size={13} /></button>
                 </div>
               ))}
             </div>
@@ -432,8 +432,8 @@ export default function AdminSettings() {
         <button onClick={save} disabled={!dirty || saving} style={{
           display: 'flex', alignItems: 'center', gap: 8, padding: '10px 24px', borderRadius: 8,
           cursor: (!dirty || saving) ? 'not-allowed' : 'pointer',
-          background: dirty ? 'var(--gradient-orange)' : 'var(--bg-elevated)',
-          color: dirty ? '#0a0a0c' : 'var(--text-muted)',
+          background: dirty ? 'var(--lime)' : 'var(--bg-elevated)',
+          color: dirty ? 'var(--bg)' : 'var(--text-muted)',
           border: dirty ? 'none' : '1px solid var(--border-default)',
           fontSize: 13, fontWeight: 600, boxShadow: dirty ? '0 4px 16px rgba(var(--lime-rgb),0.3)' : 'none',
           transition: 'all 0.2s',

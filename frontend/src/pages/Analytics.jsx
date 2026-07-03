@@ -4,23 +4,7 @@ import toast from 'react-hot-toast';
 import Icon from '../components/ui/Icon';
 import api, { formatNumber } from '../utils/api';
 import { useCountUp } from '../hooks/useCountUp';
-
-const Sparkline = ({ data = [], color = 'var(--lime)', height = 56 }) => {
-  if (data.length < 2) return null;
-  const max = Math.max(...data);
-  const min = Math.min(...data);
-  const range = max - min || 1;
-  const pts = data.map((v, i) => {
-    const x = (i / (data.length - 1)) * 100;
-    const y = height - ((v - min) / range) * (height - 4) - 2;
-    return `${x},${y}`;
-  }).join(' ');
-  return (
-    <svg width="100%" height={height} viewBox={`0 0 100 ${height}`} preserveAspectRatio="none" style={{ display: 'block' }}>
-      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
-    </svg>
-  );
-};
+import Sparkline from '../components/ui/Sparkline';
 
 const DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -230,7 +214,11 @@ export default function Analytics() {
                 </div>
                 <div className="card__body">
                   {funnelRows.length === 0 ? (
-                    <div className="muted" style={{ fontSize: 12 }}>No funnel data yet.</div>
+                    <div className="empty" style={{ padding: '32px 0' }}>
+                      <Icon name="filter" size={24} style={{ opacity: 0.2, marginBottom: 8 }} />
+                      <div className="empty__title">No funnel data yet</div>
+                      <div className="empty__desc">Send your first pitches and the conversion funnel fills in stage by stage.</div>
+                    </div>
                   ) : funnelRows.map((row, i) => {
                     const pct = Math.round((row.count / maxFunnelCount) * 100);
                     const color = FUNNEL_COLORS[row.stage] || 'var(--text)';

@@ -1,794 +1,881 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence, useInView } from 'framer-motion';
+import {
+  Zap, PenLine, Send, Handshake, Check, ArrowRight,
+  Radar, ShieldCheck, Clock, Flame,
+} from 'lucide-react';
+import { fadeUp, stagger, springIn, viewportOnce } from '../lib/motion';
 
+/* ─────────────────────────────────────────────────────────────
+   Kinetic headline — rotating word set, 3s cadence
+   ───────────────────────────────────────────────────────────── */
+const ROTATING = ['client', 'video editor gig', 'thumbnail contract', 'retainer'];
+
+function RotatingWord() {
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setI(v => (v + 1) % ROTATING.length), 3000);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <span style={{ display: 'inline-grid', verticalAlign: 'bottom', overflow: 'hidden' }}>
+      <AnimatePresence mode="popLayout" initial={false}>
+        <motion.span
+          key={ROTATING[i]}
+          initial={{ y: '105%', opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: '-105%', opacity: 0 }}
+          transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+          style={{
+            gridArea: '1 / 1',
+            fontFamily: 'var(--f-serif)', fontStyle: 'italic', fontWeight: 400,
+            color: 'var(--lime)', whiteSpace: 'nowrap',
+          }}
+        >
+          {ROTATING[i]}
+        </motion.span>
+      </AnimatePresence>
+    </span>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────
+   THE LIVE MARCUS MOMENT — one clock drives a ~13.5s loop:
+   intel flickers in → staged status lines → email typed
+   word-by-word → gate score counts to 92 → lime pulse → loop.
+   ───────────────────────────────────────────────────────────── */
+const INTEL = [
+  { k: 'CHANNEL', v: '@TechWithTara' },
+  { k: 'SUBS', v: '284,000' },
+  { k: 'LAST UPLOAD', v: '9 days ago · gap ↑' },
+  { k: 'SIGNAL', v: '"looking for an editor" — community post' },
+];
+const STATUSES = ['analyzing channel', 'selecting angle', 'writing', 'scoring'];
+const SUBJECT = 'Tara — that 9-day gap says your editor left';
+const BODY = `Hey Tara,
+
+Your last three uploads averaged 310K views — then nine days of silence. That pattern is usually an editing bottleneck, not a content one.
+
+I cut tech reviews exactly like your M4 teardown (the pacing at 4:12 was perfect). I'll edit your next video free — if it doesn't save you 10+ hours, delete this email.
+
+— sent by Marcus, reviewed by you`;
+
+/* timeline (ms) */
+const T_INTEL = 400;      // intel rows start
+const T_STATUS = 1600;    // status lines start
+const T_SUBJECT = 3000;   // subject starts typing
+const T_BODY = 4200;      // body starts typing
+const BODY_MS = 5600;     // body typing duration
+const T_SCORE = 10200;    // score counts up
+const T_HOLD = 12000;     // everything visible
+const T_LOOP = 13500;     // fade + restart
+
+const prefersReducedMotion = () =>
+  typeof window !== 'undefined' &&
+  window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+function MarcusDemo() {
+  const ref = useRef(null);
+  const inView = useInView(ref, { amount: 0.25 });
+  const reduced = useMemo(prefersReducedMotion, []);
+  const [t, setT] = useState(reduced ? T_HOLD : 0);
+
+  useEffect(() => {
+    if (reduced || !inView) return;
+    let raf, start;
+    const step = (ts) => {
+      if (!start) start = ts;
+      const e = (ts - start) % T_LOOP;
+      setT(e);
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [inView, reduced]);
+
+  const fading = !reduced && t > T_HOLD + 700;
+  const intelShown = Math.min(INTEL.length, Math.max(0, Math.floor((t - T_INTEL) / 250) + 1));
+  const statusShown = Math.min(STATUSES.length, Math.max(0, Math.floor((t - T_STATUS) / 380) + 1));
+  const subjChars = t < T_SUBJECT ? 0 : Math.min(SUBJECT.length, Math.floor(((t - T_SUBJECT) / 1000) * SUBJECT.length));
+  const bodyChars = t < T_BODY ? 0 : Math.min(BODY.length, Math.floor(((t - T_BODY) / BODY_MS) * BODY.length));
+  const typing = bodyChars > 0 && bodyChars < BODY.length;
+  const scoreP = t < T_SCORE ? 0 : Math.min(1, (t - T_SCORE) / 900);
+  const score = Math.round(92 * (1 - Math.pow(1 - scoreP, 3)));
+  const passed = scoreP >= 1;
+
+  return (
+    <div
+      ref={ref}
+      className="lp-demo"
+      style={{
+        opacity: fading ? 0 : 1,
+        transition: 'opacity 600ms ease',
+      }}
+    >
+      {/* window chrome */}
+      <div style={{
+        height: 36, display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px',
+        background: 'var(--bg-2)', borderBottom: '1px solid var(--line)',
+      }}>
+        <span style={{ width: 9, height: 9, borderRadius: '50%', background: 'var(--line-3)' }} />
+        <span style={{ width: 9, height: 9, borderRadius: '50%', background: 'var(--line-3)' }} />
+        <span style={{ width: 9, height: 9, borderRadius: '50%', background: 'var(--line-3)' }} />
+        <span style={{
+          marginLeft: 10, fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--text-3)',
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+        }}>
+          <span className="dot dot--lime dot--pulse" style={{ width: 5, height: 5 }} />
+          quelro · pitchgen
+        </span>
+        <span style={{ marginLeft: 'auto', fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--text-4)' }}>
+          marcus is working
+        </span>
+      </div>
+
+      <div className="lp-demo__grid">
+        {/* left: intel + terminal */}
+        <div style={{ padding: 'var(--sp-4)', borderRight: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)', minWidth: 0 }}>
+          <div>
+            <div className="lp-demo__label">CREATOR INTELLIGENCE</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {INTEL.map((row, i) => (
+                <div key={row.k} style={{
+                  display: 'flex', gap: 10, fontFamily: 'var(--f-mono)', fontSize: 11,
+                  opacity: i < intelShown ? 1 : 0,
+                  transform: i < intelShown ? 'none' : 'translateY(4px)',
+                  transition: 'opacity 240ms ease, transform 240ms ease',
+                }}>
+                  <span style={{ color: 'var(--text-4)', width: 92, flexShrink: 0 }}>{row.k}</span>
+                  <span style={{ color: i === 3 ? 'var(--coral)' : 'var(--text-2)' }}>{row.v}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ borderTop: '1px dashed var(--line)', paddingTop: 'var(--sp-3)' }}>
+            <div className="lp-demo__label">MARCUS</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              {STATUSES.map((s, i) => {
+                const isDone = i < statusShown - 1 || (i === STATUSES.length - 1 && passed);
+                const isCurrent = i === statusShown - 1 && !isDone;
+                return (
+                  <div key={s} style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    fontFamily: 'var(--f-mono)', fontSize: 11,
+                    color: isDone ? 'var(--text-2)' : isCurrent ? 'var(--lime)' : 'var(--text-4)',
+                    opacity: i < statusShown ? 1 : 0.35,
+                    transition: 'color 200ms ease, opacity 200ms ease',
+                  }}>
+                    {isDone
+                      ? <Check size={11} style={{ color: 'var(--lime)', flexShrink: 0 }} />
+                      : <span className={isCurrent ? 'dot dot--lime dot--pulse' : 'dot dot--neutral'} style={{ width: 5, height: 5 }} />}
+                    {s}{isCurrent ? '…' : ''}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* quality gate */}
+          <div style={{
+            marginTop: 'auto', border: '1px solid', borderRadius: 'var(--r)',
+            borderColor: passed ? 'var(--lime-border)' : 'var(--line)',
+            background: passed ? 'var(--lime-soft)' : 'var(--bg-2)',
+            padding: '10px 12px', transition: 'border-color 300ms ease, background 300ms ease',
+            animation: passed ? 'pulse-lime 1.8s 1' : 'none',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '.06em', color: 'var(--text-3)' }}>QUALITY GATE</span>
+              {passed && (
+                <motion.span variants={springIn} initial="hidden" animate="visible" className="badge badge--lime" style={{ marginLeft: 'auto' }}>
+                  PASSED · Excellent
+                </motion.span>
+              )}
+            </div>
+            <div style={{
+              fontFamily: 'var(--f-mono)', fontSize: 28, marginTop: 4, letterSpacing: '-0.02em',
+              color: score > 0 ? 'var(--lime)' : 'var(--text-4)', fontVariantNumeric: 'tabular-nums',
+            }}>
+              {score > 0 ? score : '—'}<span style={{ fontSize: 13, color: 'var(--text-3)' }}> / 100</span>
+            </div>
+          </div>
+        </div>
+
+        {/* right: the email being written */}
+        <div style={{ padding: 'var(--sp-4)', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+          <div className="lp-demo__label">DRAFT · sequence 1 of 4</div>
+          <div style={{ fontSize: 14, fontWeight: 500, minHeight: 22, color: 'var(--text)', letterSpacing: '-0.005em' }}>
+            {SUBJECT.slice(0, subjChars)}
+            {subjChars > 0 && subjChars < SUBJECT.length && <span className="lp-caret" />}
+          </div>
+          <div style={{
+            marginTop: 'var(--sp-3)', fontSize: 12.5, lineHeight: 1.7, color: 'var(--text-2)',
+            whiteSpace: 'pre-wrap', flex: 1, minHeight: 208,
+          }}>
+            {BODY.slice(0, bodyChars)}
+            {typing && <span className="lp-caret" />}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Product-real section visuals (Find / Write / Send / Close)
+   ───────────────────────────────────────────────────────────── */
+function VisualFind() {
+  const rows = [
+    { name: 'Tara Chen', handle: '@TechWithTara', subs: '284K', score: 94, hot: true },
+    { name: 'Dev Patel', handle: '@DevBuilds', subs: '141K', score: 88, hot: false },
+    { name: 'Mia Torres', handle: '@MiaMakes', subs: '96K', score: 82, hot: false },
+    { name: 'Leo Park', handle: '@LeoPlays', subs: '412K', score: 71, hot: false },
+  ];
+  return (
+    <div className="lp-visual">
+      <div className="lp-demo__label" style={{ padding: '12px 14px 0' }}>QUALITY LEADS · scored this hour</div>
+      {rows.map((r, i) => (
+        <div key={r.handle} style={{
+          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
+          borderTop: i === 0 ? 'none' : '1px solid var(--line)', fontSize: 12.5,
+        }}>
+          <span className="ava" style={{ background: i === 0 ? 'var(--lime)' : 'var(--surface-3)', color: i === 0 ? 'var(--bg)' : 'var(--text-2)' }}>
+            {r.name.split(' ').map(p => p[0]).join('')}
+          </span>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 500, color: 'var(--text)' }}>{r.name}</div>
+            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10.5, color: 'var(--text-3)' }}>{r.handle} · {r.subs}</div>
+          </div>
+          <span className={`score ${r.score >= 90 ? 'score--hot' : r.score >= 80 ? 'score--warm' : 'score--cold'}`} style={{ marginLeft: 'auto' }}>
+            {r.score}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function VisualWrite() {
+  return (
+    <div className="lp-visual" style={{ padding: 14 }}>
+      <div className="lp-demo__label">SUBJECT VARIANTS</div>
+      {[
+        { s: 'Tara — that 9-day gap says your editor left', score: 92, top: true },
+        { s: 'Quick idea for your next tech review', score: 74, top: false },
+        { s: 'Editing help for @TechWithTara?', score: 61, top: false },
+      ].map(v => (
+        <div key={v.s} style={{
+          display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', marginBottom: 8,
+          border: '1px solid', borderColor: v.top ? 'var(--lime-border)' : 'var(--line)',
+          background: v.top ? 'var(--lime-soft)' : 'var(--bg-2)', borderRadius: 'var(--r)',
+          fontSize: 12.5, color: v.top ? 'var(--text)' : 'var(--text-2)',
+        }}>
+          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.s}</span>
+          <span style={{ marginLeft: 'auto', fontFamily: 'var(--f-mono)', fontSize: 11, color: v.top ? 'var(--lime)' : 'var(--text-3)', flexShrink: 0 }}>{v.score}</span>
+        </div>
+      ))}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
+        <span className="badge badge--lime">gate: 90+ required</span>
+        <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10.5, color: 'var(--text-3)' }}>below the bar never sends</span>
+      </div>
+    </div>
+  );
+}
+
+function VisualSend() {
+  const boxes = [
+    { email: 'sam@studio.co', warmth: 92, today: 38, cap: 60 },
+    { email: 'hello@studio.co', warmth: 78, today: 24, cap: 40 },
+    { email: 'sam.k@gmail.com', warmth: 54, today: 9, cap: 20 },
+  ];
+  return (
+    <div className="lp-visual" style={{ padding: 14 }}>
+      <div className="lp-demo__label">MAILBOXES · sending window 9:40–11:20 AM recipient-local</div>
+      {boxes.map(b => (
+        <div key={b.email} style={{ padding: '9px 0', borderBottom: '1px solid var(--line)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, marginBottom: 6 }}>
+            <span style={{ fontFamily: 'var(--f-mono)', color: 'var(--text-2)' }}>{b.email}</span>
+            <span style={{ marginLeft: 'auto', fontFamily: 'var(--f-mono)', fontSize: 10.5, color: 'var(--text-3)' }}>{b.today}/{b.cap} today</span>
+          </div>
+          <div className="bar"><span style={{ width: `${b.warmth}%` }} /></div>
+        </div>
+      ))}
+      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+        <span className="badge badge--ok">deliverability 98.2%</span>
+        <span className="badge badge--neutral">auto-pause on bounce spike</span>
+      </div>
+    </div>
+  );
+}
+
+function VisualClose() {
+  return (
+    <div className="lp-visual" style={{ padding: 14 }}>
+      <div className="lp-demo__label">REPLIES · sorted by heat</div>
+      <div style={{
+        borderLeft: '3px solid var(--coral)', background: 'var(--coral-soft)',
+        borderRadius: 'var(--r-sm)', padding: '10px 12px', marginBottom: 8,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, fontWeight: 500 }}>
+          Tara Chen <span className="badge badge--coral" style={{ marginLeft: 'auto' }}><Flame size={10} /> interested</span>
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 4 }}>
+          "Okay this is timely. What's your rate for 2 videos/week?"
+        </div>
+        <div style={{
+          marginTop: 8, padding: '8px 10px', background: 'var(--surface)', borderRadius: 'var(--r-sm)',
+          border: '1px solid var(--line)', fontSize: 11.5, color: 'var(--text-2)',
+        }}>
+          <span style={{ fontFamily: 'var(--f-mono)', fontSize: 9.5, letterSpacing: '.08em', color: 'var(--lime)', display: 'block', marginBottom: 3 }}>MARCUS SUGGESTS</span>
+          Rate anchored to her view-count math, call link, 48h window…
+        </div>
+      </div>
+      {[
+        { n: 'Dev Patel', s: 'Sent → Opened 3×', c: 'var(--lime)' },
+        { n: 'Mia Torres', s: 'Call booked · Thu 2 PM', c: 'var(--ok)' },
+      ].map(r => (
+        <div key={r.n} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 4px', fontSize: 12, borderTop: '1px solid var(--line)' }}>
+          <span className="dot" style={{ color: r.c }} />
+          <span style={{ color: 'var(--text)' }}>{r.n}</span>
+          <span style={{ marginLeft: 'auto', fontFamily: 'var(--f-mono)', fontSize: 10.5, color: 'var(--text-3)' }}>{r.s}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Count-up stat that starts when scrolled into view
+   ───────────────────────────────────────────────────────────── */
+function StatInView({ value, suffix = '', prefix = '', decimals = 0, duration = 1100 }) {
+  const ref = useRef(null);
+  const inView = useInView(ref, { once: true, amount: 0.6 });
+  const [display, setDisplay] = useState(0);
+  useEffect(() => {
+    if (!inView) return;
+    if (prefersReducedMotion()) { setDisplay(value); return; }
+    let raf, start;
+    const step = (ts) => {
+      if (!start) start = ts;
+      const p = Math.min((ts - start) / duration, 1);
+      setDisplay(value * (1 - Math.pow(1 - p, 3)));
+      if (p < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [inView, value, duration]);
+  return (
+    <span ref={ref} style={{ fontVariantNumeric: 'tabular-nums' }}>
+      {prefix}{display.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}{suffix}
+    </span>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Sections config — the page IS the user's journey
+   ───────────────────────────────────────────────────────────── */
+const JOURNEY = [
+  {
+    id: 'find', icon: Radar, eyebrow: 'FIND',
+    title: 'Only the creators who are ready to hire.',
+    body: 'Quelro scores 100,000+ YouTube channels daily — upload gaps, comment sentiment, hiring signals from Reddit and community posts. You never see the noise; only leads that clear the quality bar reach your list.',
+    points: ['Intent scoring on every channel', 'Reddit "need an editor" signals within minutes', 'Verified emails or it doesn\'t ship'],
+    Visual: VisualFind,
+  },
+  {
+    id: 'write', icon: PenLine, eyebrow: 'WRITE',
+    title: 'Marcus writes it. The gate decides if it sends.',
+    body: 'Every pitch is researched against the channel — recent uploads, tone, what they respond to. Then it\'s scored. Anything under 90 gets rewritten, not sent. Your name only ever lands on excellent email.',
+    points: ['Pitches in your voice, not a template\'s', 'Quality gate: 90+ or it never sends', 'Three subject variants, ranked'],
+    Visual: VisualWrite,
+  },
+  {
+    id: 'send', icon: Send, eyebrow: 'SEND',
+    title: 'Sent like a person, delivered like clockwork.',
+    body: 'Warmed mailboxes, human gaps between sends, recipient-local timing windows, auto-pause the moment a bounce spikes. Deliverability isn\'t a feature here — it\'s the floor.',
+    points: ['Mailbox warmup built in', 'Recipient-timezone send windows', 'Automatic follow-up sequences'],
+    Visual: VisualSend,
+  },
+  {
+    id: 'close', icon: Handshake, eyebrow: 'CLOSE',
+    title: 'Hot replies rise. Nothing slips.',
+    body: 'Replies are read and sorted by intent — interested and question replies surface first in coral, with a suggested response ready. The pipeline tracks every deal from first touch to signed retainer.',
+    points: ['Reply intelligence sorts by heat', 'Marcus drafts your response', 'Kanban pipeline to closed-won'],
+    Visual: VisualClose,
+  },
+];
+
+const TESTIMONIALS = [
+  { quote: 'Sent 20 pitches in week 1. Got 14 replies. Booked 4 calls. Closed 2 clients at $2,000/month each. The targeting is not a gimmick — it actually works.', name: 'Rohan M.', role: 'Video Editor · Mumbai', metric: '$4,000', metricLabel: 'added in week 1', color: 'var(--lime)' },
+  { quote: "Before Quelro: 100 pitches, 2 replies, 0 clients. After: 20 pitches, 13 replies, 3 calls, 1 client. I genuinely don't understand how it works but it does.", name: 'Priya S.', role: 'Thumbnail Designer · Delhi', metric: '65%', metricLabel: 'reply rate', color: 'var(--sky)' },
+  { quote: 'The Reddit signal feature paid for 6 months of subscription in one deal. Creator posted they needed a scriptwriter. I was in their inbox 3 minutes later.', name: 'Arjun K.', role: 'Scriptwriter · Bangalore', metric: '3 min', metricLabel: 'signal to pitch', color: 'var(--coral)' },
+];
+
+const PLANS = [
+  {
+    name: 'Starter', price: 29, featured: false, cta: 'Find your first client',
+    desc: 'For freelancers starting their creator outreach journey.',
+    features: ['500 emails/month', 'Unlimited AI pitches', '1 Gmail account', 'Intent scoring + quality gate', 'Reddit + Upwork signals', 'CRM pipeline', 'Follow-up sequences'],
+  },
+  {
+    name: 'Pro', price: 49, featured: true, cta: 'Find your first client',
+    desc: 'For serious freelancers closing creator clients every week.',
+    features: ['1,500 emails/month', 'Unlimited AI pitches', '3 Gmail accounts', 'Intent scoring + quality gate', 'Reddit + Upwork signals', 'CRM pipeline', 'Follow-up sequences', 'Priority support'],
+  },
+  {
+    name: 'Agency', price: 149, featured: false, cta: 'Scale your outreach',
+    desc: 'For agencies managing creator outreach at scale.',
+    features: ['5,000 emails/month', 'Unlimited AI pitches', '10 Gmail accounts', '5 team seats', 'White-label reports', 'API access', 'Dedicated support'],
+  },
+];
+
+/* ═════════════════════════════════════════════════════════════
+   PAGE
+   ═════════════════════════════════════════════════════════════ */
 export default function Landing() {
   const navigate = useNavigate();
-  const [scrollY, setScrollY] = useState(0);
-  const [mouseX, setMouseX] = useState(0);
-  const [mouseY, setMouseY] = useState(0);
+  const [navScrolled, setNavScrolled] = useState(false);
 
   useEffect(() => {
-    const onScroll = () => setScrollY(window.scrollY);
-    const onMouse = (e) => {
-      setMouseX(e.clientX / window.innerWidth);
-      setMouseY(e.clientY / window.innerHeight);
-    };
-    window.addEventListener('scroll', onScroll);
-    window.addEventListener('mousemove', onMouse);
-    return () => {
-      window.removeEventListener('scroll', onScroll);
-      window.removeEventListener('mousemove', onMouse);
-    };
+    const onScroll = () => setNavScrolled(window.scrollY > 20);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
   }, []);
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => entries.forEach(e => {
-        if (e.isIntersecting) e.target.classList.add('revealed');
-      }),
-      { threshold: 0.08, rootMargin: '0px 0px -40px 0px' }
-    );
-    document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
-    return () => observer.disconnect();
-  }, []);
-
-  const navScrolled = scrollY > 20;
 
   return (
     <div style={{
-      background: '#0a0a0c',
-      color: '#f3f3f5',
-      fontFamily: "'Geist', -apple-system, BlinkMacSystemFont, sans-serif",
-      minHeight: '100vh',
-      overflowX: 'hidden',
-      WebkitFontSmoothing: 'antialiased',
+      background: 'var(--bg)', color: 'var(--text)', fontFamily: 'var(--f-sans)',
+      minHeight: '100vh', overflowX: 'hidden', WebkitFontSmoothing: 'antialiased',
     }}>
-
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+        .lp-container { max-width: 1080px; margin: 0 auto; padding: 0 var(--sp-6); }
 
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-
-        .reveal {
-          opacity: 0;
-          transform: translateY(32px);
-          transition: opacity 700ms cubic-bezier(0.16,1,0.3,1), transform 700ms cubic-bezier(0.16,1,0.3,1);
+        /* hero mesh — the ONE spectacular moment; nowhere else on the page */
+        .lp-mesh { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+        .lp-mesh::before, .lp-mesh::after {
+          content: ''; position: absolute; border-radius: 50%;
+          filter: blur(80px); will-change: transform;
         }
-        .reveal.revealed { opacity: 1; transform: none; }
-        .reveal-d1 { transition-delay: 80ms; }
-        .reveal-d2 { transition-delay: 160ms; }
-        .reveal-d3 { transition-delay: 240ms; }
-        .reveal-d4 { transition-delay: 320ms; }
-        .reveal-d5 { transition-delay: 400ms; }
-
-        @keyframes ticker {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-50%); }
+        .lp-mesh::before {
+          width: 720px; height: 480px; left: 50%; top: -180px; margin-left: -360px;
+          background: radial-gradient(ellipse, rgba(var(--lime-rgb), 0.13) 0%, transparent 65%);
+          animation: lp-drift-a 18s ease-in-out infinite;
         }
-        @keyframes float1 {
-          0%,100% { transform: perspective(1000px) rotateX(4deg) translateY(0px); }
-          50% { transform: perspective(1000px) rotateX(4deg) translateY(-8px); }
+        .lp-mesh::after {
+          width: 480px; height: 380px; left: 12%; top: 30%;
+          background: radial-gradient(ellipse, rgba(var(--lime-rgb), 0.07) 0%, transparent 65%);
+          animation: lp-drift-b 22s ease-in-out infinite;
         }
-        @keyframes glow-pulse {
-          0%,100% { opacity: 0.5; transform: scale(1); }
-          50% { opacity: 0.8; transform: scale(1.05); }
+        @keyframes lp-drift-a {
+          0%, 100% { transform: translate(0, 0) scale(1); }
+          50% { transform: translate(40px, 24px) scale(1.08); }
         }
-        @keyframes blink {
-          0%,100% { opacity: 1; }
-          50% { opacity: 0.3; }
+        @keyframes lp-drift-b {
+          0%, 100% { transform: translate(0, 0) scale(1); }
+          50% { transform: translate(-32px, -20px) scale(1.05); }
         }
 
-        .lp-btn-primary {
-          display: inline-flex; align-items: center; gap: 8px;
-          padding: 14px 28px;
-          background: #c8f654; color: #0a0a0c;
-          border: none; border-radius: 10px;
-          font-size: 14px; font-weight: 700;
-          cursor: pointer; text-decoration: none;
-          transition: all 200ms cubic-bezier(0.16,1,0.3,1);
-          letter-spacing: -0.2px; white-space: nowrap;
-          position: relative; overflow: hidden;
+        .lp-caret {
+          display: inline-block; width: 7px; height: 14px; margin-left: 1px;
+          background: var(--lime); vertical-align: -2px;
+          animation: lp-blink 900ms step-end infinite;
         }
-        .lp-btn-primary::before {
-          content: '';
-          position: absolute; inset: 0;
-          background: linear-gradient(135deg, rgba(255,255,255,0.2) 0%, transparent 60%);
-          opacity: 0; transition: opacity 200ms;
-        }
-        .lp-btn-primary:hover {
-          background: #d6ff6e;
-          transform: translateY(-2px);
-          box-shadow: 0 8px 32px rgba(200,246,84,0.4), 0 0 0 1px rgba(200,246,84,0.5);
-        }
-        .lp-btn-primary:hover::before { opacity: 1; }
+        @keyframes lp-blink { 50% { opacity: 0; } }
 
-        .lp-btn-ghost {
-          display: inline-flex; align-items: center; gap: 8px;
-          padding: 14px 24px;
-          background: rgba(255,255,255,0.04);
-          color: rgba(243,243,245,0.7);
-          border: 1px solid rgba(255,255,255,0.08);
-          border-radius: 10px;
-          font-size: 14px; font-weight: 600;
-          cursor: pointer; text-decoration: none;
-          transition: all 200ms cubic-bezier(0.16,1,0.3,1);
+        .lp-demo {
+          width: 100%; max-width: 860px; margin: 0 auto;
+          background: var(--surface); border: 1px solid var(--line-2);
+          border-radius: var(--r-lg); overflow: hidden; text-align: left;
+          box-shadow: var(--sh-lg);
         }
-        .lp-btn-ghost:hover {
-          background: rgba(255,255,255,0.08);
-          border-color: rgba(255,255,255,0.15);
-          color: #f3f3f5;
-          transform: translateY(-1px);
+        .lp-demo__grid { display: grid; grid-template-columns: 320px 1fr; min-height: 360px; }
+        .lp-demo__label {
+          font-family: var(--f-mono); font-size: 10px; letter-spacing: .08em;
+          color: var(--text-3); text-transform: uppercase; margin-bottom: 10px;
         }
 
-        .feature-card {
-          background: rgba(19,19,24,0.8);
-          border: 1px solid rgba(255,255,255,0.06);
-          border-radius: 16px; padding: 28px;
-          transition: all 300ms cubic-bezier(0.16,1,0.3,1);
-          position: relative; overflow: hidden;
-          backdrop-filter: blur(8px);
-        }
-        .feature-card::before {
-          content: '';
-          position: absolute; top: 0; left: 0; right: 0; height: 1px;
-          background: linear-gradient(90deg, transparent, rgba(200,246,84,0.6), transparent);
-          opacity: 0; transition: opacity 300ms;
-        }
-        .feature-card:hover {
-          border-color: rgba(200,246,84,0.2);
-          box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(200,246,84,0.1), 0 0 40px rgba(200,246,84,0.05);
-          transform: translateY(-6px);
-          background: rgba(22,22,28,0.9);
-        }
-        .feature-card:hover::before { opacity: 1; }
-
-        .icon-box {
-          width: 40px; height: 40px; border-radius: 10px;
-          display: flex; align-items: center; justify-content: center;
-          margin-bottom: 16px; font-size: 18px;
-          border: 1px solid rgba(255,255,255,0.08);
+        .lp-visual {
+          background: var(--surface); border: 1px solid var(--line-2);
+          border-radius: var(--r-lg); overflow: hidden; box-shadow: var(--sh-md);
         }
 
-        .stat-number {
-          font-size: 56px; font-weight: 900;
-          letter-spacing: -3px; line-height: 1;
-          background: linear-gradient(135deg, #c8f654 0%, #d6ff6e 50%, #f3f3f5 100%);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
+        .lp-journey {
+          display: grid; grid-template-columns: 1fr 1fr;
+          gap: var(--sp-12); align-items: center; padding: var(--sp-12) 0;
+        }
+        .lp-journey--flip .lp-journey__copy { order: 2; }
+
+        .lp-cta-primary {
+          display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2);
+          height: 48px; padding: 0 var(--sp-6);
+          background: var(--lime); color: var(--bg);
+          border: none; border-radius: var(--r);
+          font-size: var(--fs-sm); font-weight: 600; font-family: var(--f-sans);
+          cursor: pointer; white-space: nowrap; letter-spacing: -0.005em;
+          transition: background var(--t-fast), box-shadow var(--t-fast), transform var(--t-fast);
+        }
+        .lp-cta-primary:hover { background: var(--lime-2); box-shadow: 0 0 32px var(--lime-glow); transform: translateY(-1px); }
+        .lp-cta-primary:active { transform: translateY(0); background: var(--lime-dim); box-shadow: none; }
+
+        .lp-cta-ghost {
+          display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2);
+          height: 48px; padding: 0 var(--sp-5);
+          background: transparent; color: var(--text-2);
+          border: 1px solid var(--line-2); border-radius: var(--r);
+          font-size: var(--fs-sm); font-weight: 500; font-family: var(--f-sans);
+          cursor: pointer; white-space: nowrap;
+          transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+        }
+        .lp-cta-ghost:hover { background: var(--surface); border-color: var(--line-3); color: var(--text); }
+
+        .lp-h2 {
+          font-size: var(--fs-2xl); font-weight: 600; letter-spacing: -0.02em;
+          line-height: 1.1; margin: 0 0 var(--sp-4); color: var(--text);
+        }
+        .lp-eyebrow {
+          display: inline-flex; align-items: center; gap: var(--sp-2);
+          font-family: var(--f-mono); font-size: 11px; font-weight: 500;
+          letter-spacing: .1em; text-transform: uppercase; color: var(--lime);
+          margin-bottom: var(--sp-4);
         }
 
-        .pricing-card {
-          background: rgba(19,19,24,0.8);
-          border: 1px solid rgba(255,255,255,0.06);
-          border-radius: 20px; padding: 36px;
-          transition: all 300ms cubic-bezier(0.16,1,0.3,1);
-          position: relative; overflow: hidden;
-        }
-        .pricing-card.featured {
-          background: linear-gradient(135deg, rgba(200,246,84,0.06) 0%, rgba(19,19,24,0.9) 60%);
-          border-color: rgba(200,246,84,0.25);
-          box-shadow: 0 0 0 1px rgba(200,246,84,0.1), 0 40px 80px rgba(0,0,0,0.5);
-        }
-        .pricing-card:hover:not(.featured) {
-          border-color: rgba(255,255,255,0.12);
-          transform: translateY(-4px);
-        }
-
-        .testimonial-card {
-          background: rgba(19,19,24,0.8);
-          border: 1px solid rgba(255,255,255,0.06);
-          border-radius: 16px; padding: 28px;
-          transition: all 300ms cubic-bezier(0.16,1,0.3,1);
+        .lp-price-card {
+          background: var(--surface); border: 1px solid var(--line);
+          border-radius: var(--r-lg); padding: var(--sp-8);
+          display: flex; flex-direction: column;
+          transition: border-color var(--t), transform var(--t), box-shadow var(--t);
           position: relative;
         }
-        .testimonial-card:hover {
-          border-color: rgba(200,246,84,0.15);
-          transform: translateY(-4px);
-          box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-        }
+        .lp-price-card:hover { border-color: var(--line-3); transform: translateY(-4px); box-shadow: var(--sh-md); }
+        .lp-price-card--featured { background: var(--surface-2); border-color: var(--lime-border); }
+        .lp-price-card--featured:hover { border-color: var(--lime-border); box-shadow: var(--sh-lime); }
 
-        .section-label {
-          display: inline-flex; align-items: center; gap: 6px;
-          font-size: 11px; font-weight: 700;
-          letter-spacing: 1.5px; text-transform: uppercase;
-          color: #c8f654;
-          font-family: 'Geist Mono', monospace;
-          margin-bottom: 20px;
-        }
+        .lp-nav-links { display: flex; align-items: center; gap: var(--sp-1); }
+        .lp-nav-cta-short { display: none; }
 
-        .gradient-text {
-          background: linear-gradient(135deg, #f3f3f5 0%, #c8f654 60%, #d6ff6e 100%);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
+        @media (max-width: 900px) {
+          .lp-journey { grid-template-columns: 1fr; gap: var(--sp-6); padding: var(--sp-10) 0; }
+          .lp-journey--flip .lp-journey__copy { order: 0; }
+          .lp-demo__grid { grid-template-columns: 1fr; }
+          .lp-demo__grid > div:first-child { border-right: none; border-bottom: 1px solid var(--line); }
+          .lp-nav-links { display: none; }
         }
-
-        .noise-bg {
-          position: fixed; inset: 0; pointer-events: none;
-          opacity: 0.025; z-index: 1000;
-          background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+        @media (max-width: 540px) {
+          .lp-container { padding: 0 var(--sp-4); }
+          .lp-h2 { font-size: var(--fs-xl); }
+          .lp-nav-signin { display: none; }
+          .lp-nav-cta-long { display: none; }
+          .lp-nav-cta-short { display: inline; }
         }
       `}</style>
 
-      <div className="noise-bg" />
-
       {/* ══ NAV ══ */}
       <nav style={{
-        position: 'fixed', top: 0, left: 0, right: 0,
-        height: 60, zIndex: 100,
+        position: 'fixed', top: 0, left: 0, right: 0, height: 60, zIndex: 100,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '0 40px',
+        padding: '0 var(--sp-6)',
         background: navScrolled ? 'rgba(10,10,12,0.85)' : 'transparent',
-        backdropFilter: navScrolled ? 'blur(20px) saturate(180%)' : 'none',
-        WebkitBackdropFilter: navScrolled ? 'blur(20px) saturate(180%)' : 'none',
-        borderBottom: navScrolled ? '1px solid rgba(255,255,255,0.06)' : '1px solid transparent',
-        transition: 'all 400ms cubic-bezier(0.16,1,0.3,1)',
+        backdropFilter: navScrolled ? 'blur(16px)' : 'none',
+        WebkitBackdropFilter: navScrolled ? 'blur(16px)' : 'none',
+        borderBottom: `1px solid ${navScrolled ? 'var(--line)' : 'transparent'}`,
+        transition: 'background 300ms ease, border-color 300ms ease',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', cursor: 'pointer' }}
           onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
           <div style={{
-            width: 30, height: 30, borderRadius: 8, background: '#c8f654',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 0 20px rgba(200,246,84,0.5)', flexShrink: 0,
-          }}>
-            <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
-              <path d="M7.5 1.5L13.5 5V10L7.5 13.5L1.5 10V5L7.5 1.5Z" fill="#0a0a0c"/>
-            </svg>
-          </div>
-          <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-0.5px', color: '#f3f3f5' }}>Quelro</span>
+            width: 28, height: 28, borderRadius: 7, flexShrink: 0,
+            background: 'linear-gradient(135deg, var(--lime) 0%, var(--lime) 50%, var(--coral) 50%, var(--coral) 100%)',
+          }} />
+          <span style={{ fontSize: 16, fontWeight: 600, letterSpacing: '-0.01em' }}>Quelro</span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {['Features', 'Pricing', 'Blog'].map(item => (
-            <a key={item} href={`#${item.toLowerCase()}`} style={{
-              padding: '6px 14px', borderRadius: 8, fontSize: 13, fontWeight: 500,
-              color: 'rgba(243,243,245,0.5)', textDecoration: 'none', transition: 'color 150ms',
+        <div className="lp-nav-links">
+          {[['How it works', '#find'], ['Pricing', '#pricing']].map(([label, href]) => (
+            <a key={label} href={href} style={{
+              padding: '6px 14px', borderRadius: 'var(--r-sm)', fontSize: 13, fontWeight: 500,
+              color: 'var(--text-3)', transition: 'color 150ms',
             }}
-            onMouseEnter={e => e.target.style.color = '#f3f3f5'}
-            onMouseLeave={e => e.target.style.color = 'rgba(243,243,245,0.5)'}
-            >{item}</a>
+              onMouseEnter={e => { e.target.style.color = 'var(--text)'; }}
+              onMouseLeave={e => { e.target.style.color = 'var(--text-3)'; }}
+            >{label}</a>
           ))}
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button onClick={() => navigate('/login')} style={{
-            background: 'none', border: 'none', color: 'rgba(243,243,245,0.5)',
-            fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: '8px 16px',
-            borderRadius: 8, transition: 'color 150ms',
-          }}
-          onMouseEnter={e => e.target.style.color = '#f3f3f5'}
-          onMouseLeave={e => e.target.style.color = 'rgba(243,243,245,0.5)'}
-          >Sign in</button>
-          <button className="lp-btn-primary" style={{ padding: '9px 18px', fontSize: 13 }}
-            onClick={() => navigate('/signup')}>
-            Get started free →
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
+          <button onClick={() => navigate('/login')} className="lp-cta-ghost lp-nav-signin" style={{ height: 34, padding: '0 14px', fontSize: 13, border: 'none' }}>
+            Sign in
+          </button>
+          <button onClick={() => navigate('/signup')} className="lp-cta-primary lp-nav-cta" style={{ height: 34, padding: '0 16px', fontSize: 13 }}>
+            <span className="lp-nav-cta-long">Find your first client</span>
+            <span className="lp-nav-cta-short">Get started</span>
           </button>
         </div>
       </nav>
 
-      {/* ══ HERO ══ */}
+      {/* ══ HERO — static first paint, demo animates after mount ══ */}
       <section style={{
-        minHeight: '100vh', display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center',
-        textAlign: 'center', padding: '100px 40px 80px',
-        position: 'relative', overflow: 'hidden',
+        position: 'relative', padding: '140px var(--sp-6) var(--sp-16)',
+        textAlign: 'center', overflow: 'hidden',
       }}>
-        <div style={{
-          position: 'absolute', inset: 0,
-          background: `radial-gradient(600px circle at ${mouseX * 100}% ${mouseY * 100}%, rgba(200,246,84,0.06) 0%, transparent 50%)`,
-          pointerEvents: 'none', transition: 'background 200ms',
-        }} />
-        <div style={{
-          position: 'absolute', inset: 0, pointerEvents: 'none',
-          background: `
-            radial-gradient(ellipse 100% 60% at 50% -10%, rgba(200,246,84,0.1) 0%, transparent 60%),
-            radial-gradient(ellipse 50% 40% at 85% 70%, rgba(110,231,168,0.04) 0%, transparent 50%),
-            radial-gradient(ellipse 50% 40% at 15% 70%, rgba(142,197,255,0.03) 0%, transparent 50%)
-          `,
-        }} />
-        <div style={{
-          position: 'absolute', inset: 0, pointerEvents: 'none',
-          backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.15) 1px, transparent 1px)',
-          backgroundSize: '24px 24px',
-          maskImage: 'radial-gradient(ellipse 90% 70% at 50% 40%, black 20%, transparent 100%)',
-          WebkitMaskImage: 'radial-gradient(ellipse 90% 70% at 50% 40%, black 20%, transparent 100%)',
-          opacity: 0.35,
-        }} />
-        <div style={{
-          position: 'absolute', top: 0, left: '10%', right: '10%', height: 1,
-          background: 'linear-gradient(90deg, transparent, rgba(200,246,84,0.5), transparent)',
-          opacity: 0.6,
-        }} />
+        <div className="lp-mesh" aria-hidden="true" />
 
-        <div className="reveal" style={{
-          display: 'inline-flex', alignItems: 'center', gap: 8,
-          background: 'rgba(200,246,84,0.08)', border: '1px solid rgba(200,246,84,0.25)',
-          borderRadius: 100, padding: '5px 14px 5px 10px', marginBottom: 28, cursor: 'default',
-        }}>
-          <div style={{ width: 18, height: 18, borderRadius: '50%', background: 'rgba(200,246,84,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#c8f654', animation: 'blink 2s infinite' }} />
+        <div style={{ position: 'relative', maxWidth: 880, margin: '0 auto' }}>
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            border: '1px solid var(--lime-border)', background: 'var(--lime-soft)',
+            borderRadius: 999, padding: '5px 14px 5px 10px', marginBottom: 'var(--sp-6)',
+          }}>
+            <span className="dot dot--lime dot--pulse" style={{ width: 6, height: 6 }} />
+            <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, fontWeight: 500, color: 'var(--lime)', letterSpacing: '.06em' }}>
+              100,000+ CREATORS INDEXED DAILY
+            </span>
           </div>
-          <span style={{ fontSize: 11, fontWeight: 700, color: '#c8f654', letterSpacing: '0.8px', textTransform: 'uppercase', fontFamily: 'monospace' }}>
-            Now in Beta · 100,000+ Creators Indexed
-          </span>
-        </div>
 
-        <h1 className="reveal reveal-d1" style={{
-          fontSize: 'clamp(48px, 8.5vw, 104px)', fontWeight: 900,
-          letterSpacing: 'clamp(-2px, -0.03em, -4px)', lineHeight: 0.92,
-          marginBottom: 28, maxWidth: 960, color: '#f3f3f5',
-        }}>
-          Your next creator
-          <br />
-          <span style={{
-            background: 'linear-gradient(135deg, #c8f654 0%, #d6ff6e 40%, #c8f654 100%)',
-            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
-            filter: 'drop-shadow(0 0 40px rgba(200,246,84,0.3))',
-          }}>client is watching</span>
-          <br />
-          <span style={{ color: 'rgba(243,243,245,0.35)', fontSize: '0.65em', letterSpacing: '-1px' }}>YouTube right now.</span>
-        </h1>
+          <h1 style={{
+            fontSize: 'clamp(var(--fs-2xl), 6.5vw, var(--fs-4xl))', fontWeight: 600,
+            letterSpacing: '-0.03em', lineHeight: 1.02, margin: '0 0 var(--sp-6)',
+          }}>
+            Your next creator<br />
+            <RotatingWord /><br />
+            <span style={{ color: 'var(--text-3)' }}>is watching YouTube right now.</span>
+          </h1>
 
-        <p className="reveal reveal-d2" style={{
-          fontSize: 'clamp(15px, 1.8vw, 19px)', color: 'rgba(243,243,245,0.45)',
-          maxWidth: 520, lineHeight: 1.65, marginBottom: 36, fontWeight: 400, letterSpacing: '-0.2px',
-        }}>
-          Quelro finds the creators actively looking to hire,
-          writes pitches in your exact voice,
-          and fills your calendar with calls.
-          <span style={{ color: 'rgba(200,246,84,0.8)', fontWeight: 600 }}> Without cold outreach.</span>
-        </p>
+          <p style={{
+            fontSize: 'clamp(var(--fs-sm), 1.6vw, 17px)', color: 'var(--text-2)',
+            maxWidth: 480, margin: '0 auto var(--sp-8)', lineHeight: 1.65,
+          }}>
+            Quelro finds the creators actively looking to hire, writes pitches that clear a
+            90-point quality gate, and fills your calendar with calls.
+          </p>
 
-        <div className="reveal reveal-d3" style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 48 }}>
-          <button className="lp-btn-primary" style={{ fontSize: 15, padding: '15px 32px' }}
-            onClick={() => navigate('/signup')}>
-            Get Your First 10 HOT Leads Free →
-          </button>
-          <button className="lp-btn-ghost" onClick={() => navigate('/login')}>Sign in</button>
-        </div>
-
-        <div className="reveal reveal-d4" style={{ display: 'flex', alignItems: 'center', gap: 24, marginBottom: 80, flexWrap: 'wrap', justifyContent: 'center' }}>
-          <span style={{ fontSize: 11, color: 'rgba(243,243,245,0.25)', letterSpacing: '1px', textTransform: 'uppercase', fontFamily: 'monospace' }}>Built for</span>
-          {['Video Editors', 'Thumbnail Designers', 'Scriptwriters', 'Content Agencies'].map((label, i) => (
-            <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'rgba(243,243,245,0.4)', fontWeight: 500 }}>
-              {i > 0 && <span style={{ color: 'rgba(255,255,255,0.1)' }}>·</span>}
-              {label}
-            </div>
-          ))}
-        </div>
-
-        {/* Dashboard Preview */}
-        <div className="reveal reveal-d5" style={{ width: '100%', maxWidth: 1040, position: 'relative' }}>
-          <div style={{ position: 'absolute', top: -40, left: '15%', right: '15%', height: 80, background: 'radial-gradient(ellipse, rgba(200,246,84,0.3) 0%, transparent 70%)', filter: 'blur(24px)', pointerEvents: 'none', animation: 'glow-pulse 4s ease-in-out infinite' }} />
-          <div style={{ position: 'absolute', bottom: -20, left: '5%', right: '5%', height: 60, background: 'radial-gradient(ellipse, rgba(200,246,84,0.1) 0%, transparent 70%)', filter: 'blur(40px)', pointerEvents: 'none' }} />
-          <div style={{ animation: 'float1 8s ease-in-out infinite', borderRadius: 16, overflow: 'hidden', boxShadow: '0 0 0 1px rgba(200,246,84,0.12), 0 0 0 1px rgba(255,255,255,0.04), 0 60px 120px rgba(0,0,0,0.9), 0 30px 60px rgba(0,0,0,0.6), 0 0 60px rgba(200,246,84,0.06)' }}>
-            <div style={{ background: '#0e0e11', borderBottom: '1px solid rgba(255,255,255,0.06)', height: 38, display: 'flex', alignItems: 'center', padding: '0 14px', gap: 7 }}>
-              {['#ff5f57','#ffbd2e','#28ca41'].map(c => (
-                <div key={c} style={{ width: 10, height: 10, borderRadius: '50%', background: c }} />
-              ))}
-              <div style={{ flex: 1, marginLeft: 10, background: 'rgba(255,255,255,0.05)', borderRadius: 5, height: 22, display: 'flex', alignItems: 'center', paddingLeft: 10, gap: 6 }}>
-                <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#c8f654', opacity: 0.8 }} />
-                <span style={{ fontSize: 10, color: 'rgba(243,243,245,0.3)', fontFamily: 'monospace' }}>app.quelro.com</span>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', minHeight: 480, background: '#0a0a0c' }}>
-              <div style={{ width: 200, background: '#0e0e11', borderRight: '1px solid rgba(255,255,255,0.05)', padding: '14px 0', flexShrink: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px 14px', borderBottom: '1px solid rgba(255,255,255,0.05)', marginBottom: 8 }}>
-                  <div style={{ width: 22, height: 22, background: '#c8f654', borderRadius: 5, flexShrink: 0, boxShadow: '0 0 8px rgba(200,246,84,0.4)' }} />
-                  <div>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: '#f3f3f5' }}>Quelro</div>
-                    <div style={{ fontSize: 8, color: 'rgba(243,243,245,0.3)', fontFamily: 'monospace', letterSpacing: '1px' }}>OUTREACH OS</div>
-                  </div>
-                </div>
-                <div style={{ fontSize: 10, color: 'rgba(243,243,245,0.2)', fontFamily: 'monospace', letterSpacing: '1.2px', textTransform: 'uppercase', padding: '6px 14px 4px' }}>Workspace</div>
-                {[
-                  { label: 'Dashboard', active: true, dot: null },
-                  { label: 'Lead Finder', active: false, dot: null },
-                  { label: 'Campaigns', active: false, dot: null },
-                  { label: 'Email Sender', active: false, dot: 'coral' },
-                  { label: 'CRM', active: false, dot: null },
-                  { label: 'Quality Leads', active: false, dot: null },
-                  { label: 'Analytics', active: false, dot: null },
-                ].map(({ label, active, dot }) => (
-                  <div key={label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', margin: '1px 6px', borderRadius: 5, fontSize: 11, fontWeight: active ? 600 : 400, color: active ? '#c8f654' : 'rgba(243,243,245,0.35)', background: active ? 'rgba(200,246,84,0.08)' : 'transparent', boxShadow: active ? 'inset 2px 0 0 #c8f654' : 'none' }}>
-                    {label}
-                    {dot && <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#ff8a73', boxShadow: '0 0 4px #ff8a73' }} />}
-                  </div>
-                ))}
-              </div>
-
-              <div style={{ flex: 1, padding: '20px 24px', overflow: 'hidden' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-                  <div style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic', fontSize: 20, color: '#f3f3f5', letterSpacing: '-0.5px' }}>
-                    Hey, Prathvi — <span style={{ color: 'rgba(243,243,245,0.4)' }}>ready to start sending.</span>
-                  </div>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <div style={{ padding: '5px 12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 6, fontSize: 10, color: 'rgba(243,243,245,0.4)' }}>+ Import leads</div>
-                    <div style={{ padding: '5px 12px', background: '#c8f654', borderRadius: 6, fontSize: 10, fontWeight: 700, color: '#0a0a0c' }}>⚡ Power Email</div>
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, marginBottom: 16 }}>
-                  {[
-                    { label: 'LEADS FOUND', value: '2,847', color: '#f3f3f5' },
-                    { label: 'PITCHES SENT', value: '124', color: '#f3f3f5' },
-                    { label: 'OPENS', value: '67%', color: '#c8f654' },
-                    { label: 'IN THE PIPE', value: '$8,400', color: '#6ee7a8' },
-                  ].map(({ label, value, color }) => (
-                    <div key={label} style={{ background: '#131318', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 8, padding: '10px 12px', position: 'relative', overflow: 'hidden' }}>
-                      <div style={{ position: 'absolute', top: 0, left: '20%', right: '20%', height: '1px', background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent)' }} />
-                      <div style={{ fontSize: 7, fontFamily: 'monospace', color: 'rgba(243,243,245,0.3)', letterSpacing: '0.8px', marginBottom: 6, textTransform: 'uppercase' }}>{label}</div>
-                      <div style={{ fontSize: 20, fontWeight: 700, color, letterSpacing: '-0.5px', fontFamily: 'monospace' }}>{value}</div>
-                    </div>
-                  ))}
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 8 }}>
-                  <div style={{ background: '#131318', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 8, padding: '12px 14px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: '#f3f3f5' }}>What's happening</span>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 3, background: 'rgba(110,231,168,0.1)', border: '1px solid rgba(110,231,168,0.2)', borderRadius: 10, padding: '1px 6px', fontSize: 8, color: '#6ee7a8', fontFamily: 'monospace', fontWeight: 700 }}>
-                        <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#6ee7a8', animation: 'blink 2s infinite' }} />
-                        LIVE
-                      </span>
-                    </div>
-                    {[
-                      { text: 'MrBeast replied to your pitch', time: '2m' },
-                      { text: 'Found 47 HOT leads in Tech niche', time: '15m' },
-                      { text: 'Email sent to PewDiePie', time: '1h' },
-                      { text: 'Call booked with TechYoutube', time: '3h' },
-                    ].map(({ text, time }) => (
-                      <div key={text} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.03)', fontSize: 10 }}>
-                        <span style={{ color: 'rgba(243,243,245,0.55)' }}>{text}</span>
-                        <span style={{ color: 'rgba(243,243,245,0.2)', fontFamily: 'monospace' }}>{time}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{ background: '#131318', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 8, padding: '12px 14px' }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: '#f3f3f5', marginBottom: 10 }}>Where deals stand</div>
-                    {[
-                      { stage: 'Replied', count: 8, color: '#6ee7a8' },
-                      { stage: 'Call booked', count: 3, color: '#ff8a73' },
-                      { stage: 'Pitch sent', count: 47, color: '#c8f654' },
-                      { stage: 'Studying', count: 12, color: '#8ec5ff' },
-                    ].map(({ stage, count, color }) => (
-                      <div key={stage} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,0.03)', fontSize: 10 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <div style={{ width: 6, height: 6, borderRadius: '50%', background: color, boxShadow: `0 0 4px ${color}` }} />
-                          <span style={{ color: 'rgba(243,243,245,0.5)' }}>{stage}</span>
-                        </div>
-                        <span style={{ color, fontFamily: 'monospace', fontWeight: 700 }}>{count}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
+          <div style={{ display: 'flex', gap: 'var(--sp-3)', justifyContent: 'center', flexWrap: 'wrap', marginBottom: 'var(--sp-4)' }}>
+            <button className="lp-cta-primary" onClick={() => navigate('/signup')}>
+              Find your first client <ArrowRight size={15} />
+            </button>
+            <button className="lp-cta-ghost" onClick={() => document.getElementById('marcus-demo')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>
+              Watch Marcus write
+            </button>
           </div>
+
+          <p style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--text-4)', marginBottom: 'var(--sp-12)' }}>
+            14-day free trial · no credit card · built for editors, designers, scriptwriters
+          </p>
+        </div>
+
+        {/* THE LIVE MARCUS MOMENT */}
+        <div id="marcus-demo" style={{ position: 'relative' }}>
+          <MarcusDemo />
         </div>
       </section>
 
-      {/* ══ TICKER ══ */}
-      <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', borderBottom: '1px solid rgba(255,255,255,0.06)', padding: '14px 0', overflow: 'hidden', background: 'rgba(255,255,255,0.02)' }}>
-        <div style={{ display: 'flex', animation: 'ticker 30s linear infinite', width: 'max-content' }}>
-          {[...Array(2)].map((_, rep) => (
-            <div key={rep} style={{ display: 'flex', alignItems: 'center', gap: 40, paddingRight: 40 }}>
-              {['⚡ Intent Prediction','🧠 Psychology Matching','📧 Voice DNA Engine','🎯 60%+ Reply Rate','🔴 Reddit Signals','📊 CRM Pipeline','🤖 AI Pitch Generation','📈 Campaign Analytics','⭐ Quality Lead Scoring','🚀 Automated Follow-ups'].map(item => (
-                <span key={item} style={{ fontSize: 12, fontWeight: 600, color: 'rgba(243,243,245,0.3)', whiteSpace: 'nowrap', letterSpacing: '0.3px' }}>{item}</span>
-              ))}
+      {/* ══ STAT BAND ══ */}
+      <div style={{ borderTop: '1px solid var(--line)', borderBottom: '1px solid var(--line)', background: 'var(--bg-2)' }}>
+        <div className="lp-container" style={{
+          display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+          gap: 'var(--sp-4)', padding: 'var(--sp-8) var(--sp-6)',
+        }}>
+          {[
+            { v: 60, suffix: '%+', label: 'average reply rate' },
+            { v: 100000, suffix: '+', label: 'creators scored daily' },
+            { v: 90, suffix: '+', label: 'quality gate minimum' },
+            { v: 3, suffix: ' min', label: 'signal to pitch' },
+          ].map(s => (
+            <div key={s.label} style={{ textAlign: 'center' }}>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 'var(--fs-2xl)', letterSpacing: '-0.02em', color: 'var(--lime)' }}>
+                <StatInView value={s.v} suffix={s.suffix} />
+              </div>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--text-3)', marginTop: 4, letterSpacing: '.04em', textTransform: 'uppercase' }}>
+                {s.label}
+              </div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* ══ HOW IT WORKS ══ */}
-      <section style={{ padding: '120px 40px', maxWidth: 1100, margin: '0 auto' }}>
-        <div className="reveal" style={{ textAlign: 'center', marginBottom: 72 }}>
-          <div className="section-label">
-            <div style={{ width: 16, height: 1, background: '#c8f654' }} />
-            How it works
-            <div style={{ width: 16, height: 1, background: '#c8f654' }} />
-          </div>
-          <h2 style={{ fontSize: 'clamp(32px, 5vw, 56px)', fontWeight: 900, letterSpacing: '-2px', lineHeight: 1.05, color: '#f3f3f5', marginBottom: 16 }}>
-            From zero to <span className="gradient-text">booked calls</span> in 3 steps
-          </h2>
-          <p style={{ fontSize: 17, color: 'rgba(243,243,245,0.4)', maxWidth: 480, margin: '0 auto', lineHeight: 1.6 }}>
-            No more mass cold pitching. No more getting ghosted. Just warm leads who are already looking for you.
+      {/* ══ THE JOURNEY: FIND → WRITE → SEND → CLOSE ══ */}
+      <div className="lp-container" style={{ padding: 'var(--sp-16) var(--sp-6)' }}>
+        <motion.div variants={fadeUp} initial="hidden" whileInView="visible" viewport={viewportOnce} style={{ textAlign: 'center', marginBottom: 'var(--sp-8)' }}>
+          <div className="lp-eyebrow" style={{ justifyContent: 'center' }}>THE SYSTEM</div>
+          <h2 className="lp-h2">Find. Write. Send. Close.</h2>
+          <p style={{ fontSize: 'var(--fs-base)', color: 'var(--text-2)', maxWidth: 460, margin: '0 auto', lineHeight: 1.6 }}>
+            The full path from "who should I pitch?" to a signed retainer — one system, no tab-switching.
           </p>
-        </div>
+        </motion.div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 2, position: 'relative' }}>
-          <div style={{ position: 'absolute', top: 36, left: '16.67%', right: '16.67%', height: 1, background: 'linear-gradient(90deg, rgba(200,246,84,0.3), rgba(200,246,84,0.1), rgba(200,246,84,0.3))', zIndex: 0 }} />
-          {[
-            { num: '01', icon: '⚡', title: 'Intent Prediction', desc: "Our AI scores 100,000+ YouTube creators daily. Posting frequency drops, comment sentiment, hiring history — every signal points to who's ready to buy right now.", metric: '0.75+', metricSub: 'intent score threshold', color: '#c8f654', bg: 'rgba(200,246,84,0.06)' },
-            { num: '02', icon: '🧠', title: 'Psychology Matching', desc: 'Every creator gets a psychological profile. Data-driven? Emotional? Creative? Your pitch adapts to speak their exact language. No generic templates.', metric: '3 min', metricSub: 'to generate your pitch', color: '#8ec5ff', bg: 'rgba(142,197,255,0.06)' },
-            { num: '03', icon: '📅', title: 'Calendar Fills Up', desc: 'Pitches go out in your voice. Follow-ups happen automatically. You only touch your phone when someone wants to talk. Your calendar fills while you sleep.', metric: '60%+', metricSub: 'average reply rate', color: '#ff8a73', bg: 'rgba(255,138,115,0.06)' },
-          ].map(({ num, icon, title, desc, metric, metricSub, color, bg }, i) => (
-            <div key={num} className={`feature-card reveal reveal-d${i+1}`} style={{ background: bg, borderColor: `${color}20`, position: 'relative', zIndex: 1, margin: '0 4px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-                <div style={{ width: 36, height: 36, borderRadius: 10, background: `${color}15`, border: `1px solid ${color}25`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>{icon}</div>
-                <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'rgba(243,243,245,0.2)', fontWeight: 700, letterSpacing: '1px' }}>{num}</span>
-              </div>
-              <div style={{ fontSize: 18, fontWeight: 800, color: '#f3f3f5', marginBottom: 10, letterSpacing: '-0.3px' }}>{title}</div>
-              <p style={{ fontSize: 13, color: 'rgba(243,243,245,0.45)', lineHeight: 1.65, marginBottom: 24 }}>{desc}</p>
-              <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 18 }}>
-                <div style={{ fontSize: 32, fontWeight: 900, color, fontFamily: 'monospace', letterSpacing: '-1px', marginBottom: 4, filter: `drop-shadow(0 0 12px ${color}60)` }}>{metric}</div>
-                <div style={{ fontSize: 11, color: 'rgba(243,243,245,0.3)' }}>{metricSub}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ══ FEATURES BENTO ══ */}
-      <section id="features" style={{ padding: '120px 40px', background: 'rgba(255,255,255,0.015)', borderTop: '1px solid rgba(255,255,255,0.05)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-          <div className="reveal" style={{ textAlign: 'center', marginBottom: 72 }}>
-            <div className="section-label">
-              <div style={{ width: 16, height: 1, background: '#c8f654' }} />
-              Features
-              <div style={{ width: 16, height: 1, background: '#c8f654' }} />
-            </div>
-            <h2 style={{ fontSize: 'clamp(32px, 5vw, 56px)', fontWeight: 900, letterSpacing: '-2px', lineHeight: 1.05, color: '#f3f3f5' }}>
-              While you sleep, <span className="gradient-text">Quelro is working</span>
-            </h2>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gridTemplateRows: 'auto auto', gap: 10 }}>
-            <div className="feature-card reveal" style={{ gridColumn: 'span 2', background: 'linear-gradient(135deg, rgba(200,246,84,0.06) 0%, rgba(19,19,24,0.9) 100%)', borderColor: 'rgba(200,246,84,0.12)', padding: 36 }}>
-              <div className="icon-box" style={{ background: 'rgba(200,246,84,0.1)', border: '1px solid rgba(200,246,84,0.2)' }}>⚡</div>
-              <div style={{ fontSize: 22, fontWeight: 800, color: '#f3f3f5', marginBottom: 10, letterSpacing: '-0.4px' }}>Intent Prediction Engine</div>
-              <p style={{ fontSize: 14, color: 'rgba(243,243,245,0.45)', lineHeight: 1.65, maxWidth: 480, marginBottom: 20 }}>
-                We scan 100,000+ creators every day. Posting frequency drops. Comment sentiment shifts. Video performance falls. These are all signals that mean "I need help." You only see the 1% who are ready to buy right now.
-              </p>
-              <div style={{ display: 'flex', gap: 24 }}>
-                {[{ value: '100K+', label: 'Creators scanned daily' }, { value: '0.75+', label: 'Intent threshold' }, { value: '1%', label: 'Top leads surfaced' }].map(({ value, label }) => (
-                  <div key={label}>
-                    <div style={{ fontSize: 22, fontWeight: 900, color: '#c8f654', fontFamily: 'monospace', letterSpacing: '-0.5px' }}>{value}</div>
-                    <div style={{ fontSize: 11, color: 'rgba(243,243,245,0.3)', marginTop: 2 }}>{label}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="feature-card reveal reveal-d1">
-              <div className="icon-box" style={{ background: 'rgba(142,197,255,0.1)', border: '1px solid rgba(142,197,255,0.2)' }}>🧠</div>
-              <div style={{ fontSize: 17, fontWeight: 800, color: '#f3f3f5', marginBottom: 8, letterSpacing: '-0.3px' }}>Psychology Profiles</div>
-              <p style={{ fontSize: 13, color: 'rgba(243,243,245,0.4)', lineHeight: 1.6 }}>MrBeast responds to data. Emma responds to authenticity. Your pitch adapts automatically.</p>
-            </div>
-
-            <div className="feature-card reveal reveal-d1">
-              <div className="icon-box" style={{ background: 'rgba(196,181,253,0.1)', border: '1px solid rgba(196,181,253,0.2)' }}>✍️</div>
-              <div style={{ fontSize: 17, fontWeight: 800, color: '#f3f3f5', marginBottom: 8, letterSpacing: '-0.3px' }}>Voice DNA Engine</div>
-              <p style={{ fontSize: 13, color: 'rgba(243,243,245,0.4)', lineHeight: 1.6 }}>Paste 5 emails. Quelro learns your writing style. Every pitch sounds like you wrote it personally.</p>
-            </div>
-
-            <div className="feature-card reveal reveal-d2" style={{ gridColumn: 'span 2', background: 'linear-gradient(135deg, rgba(255,138,115,0.04) 0%, rgba(19,19,24,0.9) 100%)', borderColor: 'rgba(255,138,115,0.1)', padding: 36 }}>
-              <div className="icon-box" style={{ background: 'rgba(255,138,115,0.1)', border: '1px solid rgba(255,138,115,0.2)' }}>🔴</div>
-              <div style={{ fontSize: 22, fontWeight: 800, color: '#f3f3f5', marginBottom: 10, letterSpacing: '-0.4px' }}>Reddit Buying Signals</div>
-              <p style={{ fontSize: 14, color: 'rgba(243,243,245,0.45)', lineHeight: 1.65, maxWidth: 480, marginBottom: 20 }}>
-                Creators post "I need a video editor" on Reddit at 11pm. Quelro sees it at 11:01pm and puts it on your radar. You pitch before anyone else even wakes up. First mover wins every single time.
-              </p>
-              <div style={{ background: 'rgba(10,10,12,0.6)', border: '1px solid rgba(255,138,115,0.2)', borderRadius: 10, padding: '14px 16px', fontFamily: 'monospace', fontSize: 12, color: '#ff8a73', display: 'inline-block' }}>
-                🔴 r/YouTubers · 11:01 PM<br/>
-                <span style={{ color: 'rgba(243,243,245,0.6)' }}>"Looking for a thumbnail designer ASAP..."</span><br/>
-                <span style={{ color: '#c8f654', marginTop: 4, display: 'block' }}>→ Signal detected · Pitch ready in 3 min</span>
-              </div>
-            </div>
-
-            <div className="feature-card reveal reveal-d2">
-              <div className="icon-box" style={{ background: 'rgba(110,231,168,0.1)', border: '1px solid rgba(110,231,168,0.2)' }}>📊</div>
-              <div style={{ fontSize: 17, fontWeight: 800, color: '#f3f3f5', marginBottom: 8, letterSpacing: '-0.3px' }}>CRM Pipeline</div>
-              <p style={{ fontSize: 13, color: 'rgba(243,243,245,0.4)', lineHeight: 1.6 }}>From first pitch to signed contract. Never lose a deal in your inbox again.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ══ TESTIMONIALS ══ */}
-      <section style={{ padding: '120px 40px', maxWidth: 1100, margin: '0 auto' }}>
-        <div className="reveal" style={{ textAlign: 'center', marginBottom: 72 }}>
-          <div className="section-label">
-            <div style={{ width: 16, height: 1, background: '#c8f654' }} />
-            Results
-            <div style={{ width: 16, height: 1, background: '#c8f654' }} />
-          </div>
-          <h2 style={{ fontSize: 'clamp(32px, 5vw, 56px)', fontWeight: 900, letterSpacing: '-2px', lineHeight: 1.05, color: '#f3f3f5', marginBottom: 16 }}>
-            Real freelancers. <span className="gradient-text">Real clients.</span>
-          </h2>
-        </div>
-
-        <div className="reveal" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 1, marginBottom: 40, background: 'rgba(255,255,255,0.04)', borderRadius: 20, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.06)' }}>
-          {[
-            { value: '60%+', label: 'Average reply rate', sub: 'vs 2% cold email' },
-            { value: '$2-5K', label: 'Avg client value', sub: 'per month per client' },
-            { value: '3 min', label: 'To generate pitch', sub: 'psychology-matched' },
-            { value: '10x', label: 'Faster outreach', sub: 'than manual pitching' },
-          ].map(({ value, label, sub }) => (
-            <div key={label} style={{ padding: '32px 24px', textAlign: 'center', background: '#0a0a0c', borderRight: '1px solid rgba(255,255,255,0.04)' }}>
-              <div className="stat-number">{value}</div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(243,243,245,0.6)', marginTop: 8, marginBottom: 4 }}>{label}</div>
-              <div style={{ fontSize: 11, color: 'rgba(243,243,245,0.25)', fontFamily: 'monospace' }}>{sub}</div>
-            </div>
-          ))}
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
-          {[
-            { quote: 'Sent 20 pitches in week 1. Got 14 replies. Booked 4 calls. Closed 2 clients at $2,000/month each. The psychology matching is not a gimmick — it actually works.', name: 'Rohan M.', role: 'Video Editor · Mumbai', metric: '$4,000', metricLabel: 'added in week 1', avatar: 'R', avatarColor: '#c8f654' },
-            { quote: "Before Quelro: 100 pitches, 2 replies, 0 clients. After: 20 pitches, 13 replies, 3 calls, 1 client. I genuinely don't understand how it works but it does.", name: 'Priya S.', role: 'Thumbnail Designer · Delhi', metric: '65%', metricLabel: 'reply rate', avatar: 'P', avatarColor: '#8ec5ff' },
-            { quote: 'The Reddit signal feature paid for 6 months of subscription in one deal. Creator posted they needed a scriptwriter. I was in their DMs 3 minutes later.', name: 'Arjun K.', role: 'Scriptwriter · Bangalore', metric: '3 min', metricLabel: 'signal to pitch', avatar: 'A', avatarColor: '#ff8a73' },
-          ].map(({ quote, name, role, metric, metricLabel, avatar, avatarColor }, i) => (
-            <div key={name} className={`testimonial-card reveal reveal-d${i+1}`}>
-              <div style={{ fontSize: 28, fontWeight: 900, fontFamily: 'monospace', color: avatarColor, letterSpacing: '-1px', marginBottom: 16, filter: `drop-shadow(0 0 8px ${avatarColor}50)` }}>
-                {metric}
-                <span style={{ fontSize: 13, fontWeight: 500, color: 'rgba(243,243,245,0.3)', display: 'block', marginTop: 2, letterSpacing: 'normal' }}>{metricLabel}</span>
-              </div>
-              <p style={{ fontSize: 13.5, color: 'rgba(243,243,245,0.55)', lineHeight: 1.7, marginBottom: 20, fontStyle: 'italic' }}>"{quote}"</p>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ width: 32, height: 32, borderRadius: '50%', background: `${avatarColor}20`, border: `1px solid ${avatarColor}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: avatarColor, flexShrink: 0 }}>{avatar}</div>
-                <div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: '#f3f3f5' }}>{name}</div>
-                  <div style={{ fontSize: 11, color: 'rgba(243,243,245,0.3)', fontFamily: 'monospace' }}>{role}</div>
+        {JOURNEY.map((sec, i) => {
+          const Icon = sec.icon;
+          return (
+            <motion.section
+              key={sec.id}
+              id={sec.id}
+              className={`lp-journey${i % 2 === 1 ? ' lp-journey--flip' : ''}`}
+              variants={stagger}
+              initial="hidden"
+              whileInView="visible"
+              viewport={viewportOnce}
+            >
+              <motion.div className="lp-journey__copy" variants={fadeUp}>
+                <div className="lp-eyebrow">
+                  <Icon size={13} /> {sec.eyebrow}
+                  <span style={{ color: 'var(--text-4)' }}>· {String(i + 1).padStart(2, '0')}/04</span>
                 </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ══ PRICING ══ */}
-      <section id="pricing" style={{ padding: '120px 40px', background: 'rgba(255,255,255,0.015)', borderTop: '1px solid rgba(255,255,255,0.05)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-        <div style={{ maxWidth: 920, margin: '0 auto' }}>
-          <div className="reveal" style={{ textAlign: 'center', marginBottom: 16 }}>
-            <div className="section-label">
-              <div style={{ width: 16, height: 1, background: '#c8f654' }} />
-              Pricing
-              <div style={{ width: 16, height: 1, background: '#c8f654' }} />
-            </div>
-            <h2 style={{ fontSize: 'clamp(32px, 5vw, 56px)', fontWeight: 900, letterSpacing: '-2px', lineHeight: 1.05, color: '#f3f3f5', marginBottom: 12 }}>
-              One client pays for <span className="gradient-text">a year of Quelro</span>
-            </h2>
-            <p style={{ fontSize: 16, color: 'rgba(243,243,245,0.4)', marginBottom: 48 }}>
-              Average creator client is worth $2,000–5,000/month. Quelro starts at $29/month. Do the math.
-            </p>
-          </div>
-
-          <div className="reveal" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
-            {[
-              {
-                name: 'Starter', price: '$29', period: '/mo', featured: false, cta: 'Start Free Trial',
-                desc: 'For freelancers starting their creator outreach journey.',
-                emails: '500 emails/month',
-                features: [
-                  '500 emails/month', 'Unlimited AI pitches', '1 Gmail account',
-                  'Intent scoring (0.75+ HOT leads)', 'Psychology profiles',
-                  'Voice DNA email writing', 'A/B subject line testing',
-                  'Reddit + Upwork signals', 'CRM pipeline',
-                  'Email tracking & analytics', 'Follow-up sequences',
-                ],
-              },
-              {
-                name: 'Pro', price: '$49', period: '/mo', featured: true, cta: 'Start Free Trial',
-                desc: 'For serious freelancers closing creator clients every week.',
-                emails: '1,500 emails/month',
-                features: [
-                  '1,500 emails/month', 'Unlimited AI pitches', '3 Gmail accounts',
-                  'Intent scoring (0.75+ HOT leads)', 'Psychology profiles',
-                  'Voice DNA email writing', 'A/B subject line testing',
-                  'Reddit + Upwork signals', 'CRM pipeline',
-                  'Email tracking & analytics', 'Follow-up sequences',
-                  'Priority support',
-                ],
-              },
-              {
-                name: 'Agency', price: '$149', period: '/mo', featured: false, cta: 'Get Started',
-                desc: 'For agencies managing creator outreach at scale.',
-                emails: '5,000 emails/month',
-                features: [
-                  '5,000 emails/month', 'Unlimited AI pitches', '10 Gmail accounts',
-                  'Intent scoring (0.75+ HOT leads)', 'Psychology profiles',
-                  'Voice DNA email writing', 'A/B subject line testing',
-                  'Reddit + Upwork signals', 'CRM pipeline',
-                  'Email tracking & analytics', 'Follow-up sequences',
-                  '5 team seats', 'White-label reports', 'API access', 'Dedicated support',
-                ],
-              },
-            ].map(({ name, price, period, desc, features, cta, featured }) => (
-              <div key={name} className={`pricing-card ${featured ? 'featured' : ''}`}>
-                {featured && (
-                  <div style={{ position: 'absolute', top: -1, left: '50%', transform: 'translateX(-50%)', background: '#c8f654', color: '#0a0a0c', fontSize: 9, fontWeight: 900, letterSpacing: '1.5px', padding: '4px 12px', borderRadius: '0 0 8px 8px', fontFamily: 'monospace', textTransform: 'uppercase' }}>
-                    MOST POPULAR
-                  </div>
-                )}
-                <div style={{ fontSize: 13, fontWeight: 700, color: 'rgba(243,243,245,0.6)', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.5px', fontFamily: 'monospace' }}>{name}</div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 3, marginBottom: 6 }}>
-                  <span style={{ fontSize: 52, fontWeight: 900, letterSpacing: '-3px', color: featured ? '#c8f654' : '#f3f3f5', fontFamily: 'monospace', filter: featured ? 'drop-shadow(0 0 20px rgba(200,246,84,0.3))' : 'none' }}>{price}</span>
-                  <span style={{ fontSize: 14, color: 'rgba(243,243,245,0.3)' }}>{period}</span>
-                </div>
-                <p style={{ fontSize: 13, color: 'rgba(243,243,245,0.4)', marginBottom: 24, lineHeight: 1.5 }}>{desc}</p>
-                <button
-                  onClick={() => navigate('/signup')}
-                  style={{ width: '100%', padding: '12px', borderRadius: 10, border: 'none', background: featured ? '#c8f654' : 'rgba(255,255,255,0.06)', color: featured ? '#0a0a0c' : 'rgba(243,243,245,0.7)', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginBottom: 24, transition: 'all 200ms' }}
-                  onMouseEnter={e => { e.currentTarget.style.background = featured ? '#d6ff6e' : 'rgba(255,255,255,0.1)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = featured ? '#c8f654' : 'rgba(255,255,255,0.06)'; e.currentTarget.style.transform = 'translateY(0)'; }}
-                >{cta}</button>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-                  {features.map(f => (
-                    <div key={f} style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 13 }}>
-                      <span style={{ color: '#c8f654', fontSize: 12, flexShrink: 0 }}>✓</span>
-                      <span style={{ color: 'rgba(243,243,245,0.5)' }}>{f}</span>
+                <h3 className="lp-h2" style={{ fontSize: 'var(--fs-xl)' }}>{sec.title}</h3>
+                <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-2)', lineHeight: 1.7, marginBottom: 'var(--sp-5)' }}>
+                  {sec.body}
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)' }}>
+                  {sec.points.map(p => (
+                    <div key={p} style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', fontSize: 13, color: 'var(--text-2)' }}>
+                      <Check size={13} style={{ color: 'var(--lime)', flexShrink: 0 }} /> {p}
                     </div>
                   ))}
                 </div>
-              </div>
+              </motion.div>
+              <motion.div variants={fadeUp}>
+                <sec.Visual />
+              </motion.div>
+            </motion.section>
+          );
+        })}
+      </div>
+
+      {/* ══ TESTIMONIALS ══ */}
+      <div style={{ borderTop: '1px solid var(--line)', background: 'var(--bg-2)' }}>
+        <div className="lp-container" style={{ padding: 'var(--sp-16) var(--sp-6)' }}>
+          <motion.div variants={fadeUp} initial="hidden" whileInView="visible" viewport={viewportOnce} style={{ textAlign: 'center', marginBottom: 'var(--sp-10)' }}>
+            <div className="lp-eyebrow" style={{ justifyContent: 'center' }}>RESULTS</div>
+            <h2 className="lp-h2">Real freelancers. Real clients.</h2>
+          </motion.div>
+
+          <motion.div
+            variants={stagger} initial="hidden" whileInView="visible" viewport={viewportOnce}
+            style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 'var(--sp-4)' }}
+          >
+            {TESTIMONIALS.map(t => (
+              <motion.div key={t.name} variants={fadeUp} className="card" style={{ padding: 'var(--sp-6)', background: 'var(--surface)' }}>
+                <div style={{ fontFamily: 'var(--f-mono)', fontSize: 'var(--fs-xl)', color: t.color, letterSpacing: '-0.02em' }}>
+                  {t.metric}
+                </div>
+                <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--text-3)', marginBottom: 'var(--sp-4)' }}>{t.metricLabel}</div>
+                <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.7, marginBottom: 'var(--sp-5)' }}>"{t.quote}"</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
+                  <span className="ava" style={{ background: 'var(--surface-3)', color: 'var(--text-2)' }}>{t.name[0]}</span>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 500 }}>{t.name}</div>
+                    <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10.5, color: 'var(--text-3)' }}>{t.role}</div>
+                  </div>
+                </div>
+              </motion.div>
             ))}
-          </div>
+          </motion.div>
         </div>
-      </section>
+      </div>
+
+      {/* ══ PRICING ══ */}
+      <div id="pricing" className="lp-container" style={{ padding: 'var(--sp-16) var(--sp-6)' }}>
+        <motion.div variants={fadeUp} initial="hidden" whileInView="visible" viewport={viewportOnce} style={{ textAlign: 'center', marginBottom: 'var(--sp-10)' }}>
+          <div className="lp-eyebrow" style={{ justifyContent: 'center' }}>PRICING</div>
+          <h2 className="lp-h2">One client pays for a year of Quelro.</h2>
+          <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-2)' }}>
+            The average creator client is worth $2,000–5,000/month. Quelro starts at $29.
+          </p>
+        </motion.div>
+
+        <motion.div
+          variants={stagger} initial="hidden" whileInView="visible" viewport={viewportOnce}
+          style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 'var(--sp-4)', alignItems: 'stretch' }}
+        >
+          {PLANS.map(plan => (
+            <motion.div key={plan.name} variants={fadeUp} className={`lp-price-card${plan.featured ? ' lp-price-card--featured' : ''}`}>
+              {plan.featured && (
+                <span className="badge badge--lime" style={{ position: 'absolute', top: -11, left: '50%', transform: 'translateX(-50%)' }}>
+                  MOST POPULAR
+                </span>
+              )}
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, letterSpacing: '.08em', color: 'var(--text-3)', textTransform: 'uppercase', marginBottom: 'var(--sp-3)' }}>
+                {plan.name}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 'var(--sp-2)' }}>
+                <span style={{ fontFamily: 'var(--f-mono)', fontSize: 'var(--fs-3xl)', letterSpacing: '-0.03em', color: plan.featured ? 'var(--lime)' : 'var(--text)' }}>
+                  ${plan.price}
+                </span>
+                <span style={{ fontSize: 13, color: 'var(--text-3)' }}>/mo</span>
+              </div>
+              <p style={{ fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.5, marginBottom: 'var(--sp-5)' }}>{plan.desc}</p>
+              <button
+                onClick={() => navigate('/signup')}
+                className={plan.featured ? 'lp-cta-primary' : 'lp-cta-ghost'}
+                style={{ width: '100%', height: 40, marginBottom: 'var(--sp-5)' }}
+              >
+                {plan.cta}
+              </button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)' }}>
+                {plan.features.map(f => (
+                  <div key={f} style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', fontSize: 12.5, color: 'var(--text-2)' }}>
+                    <Check size={12} style={{ color: 'var(--lime)', flexShrink: 0 }} /> {f}
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          ))}
+        </motion.div>
+      </div>
 
       {/* ══ FINAL CTA ══ */}
-      <section style={{ padding: '140px 40px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
-        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: 600, height: 300, background: 'radial-gradient(ellipse, rgba(200,246,84,0.08) 0%, transparent 70%)', filter: 'blur(40px)', pointerEvents: 'none' }} />
-        <div className="reveal" style={{ maxWidth: 680, margin: '0 auto', position: 'relative' }}>
-          <div className="section-label" style={{ justifyContent: 'center', marginBottom: 24 }}>
-            <div style={{ width: 16, height: 1, background: '#c8f654' }} />
-            Get started today
-            <div style={{ width: 16, height: 1, background: '#c8f654' }} />
-          </div>
-          <h2 style={{ fontSize: 'clamp(40px, 6vw, 72px)', fontWeight: 900, letterSpacing: '-2.5px', lineHeight: 1.0, marginBottom: 20, color: '#f3f3f5' }}>
-            Your next creator client
-            <br />
-            <span style={{ background: 'linear-gradient(135deg, #c8f654 0%, #d6ff6e 40%, #c8f654 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
-              is watching YouTube
+      <div style={{ borderTop: '1px solid var(--line)', background: 'var(--bg-2)' }}>
+        <motion.div
+          variants={fadeUp} initial="hidden" whileInView="visible" viewport={viewportOnce}
+          className="lp-container" style={{ padding: 'var(--sp-16) var(--sp-6)', textAlign: 'center' }}
+        >
+          <h2 style={{
+            fontSize: 'clamp(var(--fs-2xl), 5vw, var(--fs-3xl))', fontWeight: 600,
+            letterSpacing: '-0.025em', lineHeight: 1.05, margin: '0 0 var(--sp-4)',
+          }}>
+            They're posting. They're struggling.<br />
+            <span style={{ fontFamily: 'var(--f-serif)', fontStyle: 'italic', fontWeight: 400, color: 'var(--lime)' }}>
+              They need someone exactly like you.
             </span>
-            <br />
-            <span style={{ color: 'rgba(243,243,245,0.3)', fontSize: '0.7em' }}>right now.</span>
           </h2>
-          <p style={{ fontSize: 17, color: 'rgba(243,243,245,0.4)', marginBottom: 40, lineHeight: 1.6 }}>
-            They're posting. They're struggling. They need someone exactly like you.
-            <br />
+          <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-2)', marginBottom: 'var(--sp-8)', lineHeight: 1.6 }}>
             Quelro finds them before anyone else does.
           </p>
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 20 }}>
-            <button
-              onClick={() => navigate('/signup')}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '16px 36px', background: '#c8f654', color: '#0a0a0c', border: 'none', borderRadius: 10, fontSize: 16, fontWeight: 700, cursor: 'pointer', transition: 'all 200ms cubic-bezier(0.16,1,0.3,1)', boxShadow: '0 8px 32px rgba(200,246,84,0.3)' }}
-              onMouseEnter={e => { e.currentTarget.style.background = '#d6ff6e'; e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 12px 40px rgba(200,246,84,0.45)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = '#c8f654'; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 8px 32px rgba(200,246,84,0.3)'; }}
-            >
-              Find My First HOT Lead Free →
+          <div style={{ display: 'flex', gap: 'var(--sp-3)', justifyContent: 'center', flexWrap: 'wrap', marginBottom: 'var(--sp-4)' }}>
+            <button className="lp-cta-primary" onClick={() => navigate('/signup')}>
+              Find your first client <ArrowRight size={15} />
+            </button>
+            <button className="lp-cta-ghost" onClick={() => document.getElementById('marcus-demo')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>
+              Watch Marcus write
             </button>
           </div>
-          <p style={{ fontSize: 12, color: 'rgba(243,243,245,0.2)', fontFamily: 'monospace' }}>
-            14-day free trial · No credit card · Setup in 5 minutes
+          <p style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--text-4)' }}>
+            14-day free trial · no credit card · setup in 5 minutes
           </p>
-        </div>
-      </section>
+        </motion.div>
+      </div>
 
       {/* ══ FOOTER ══ */}
-      <footer style={{ borderTop: '1px solid rgba(255,255,255,0.06)', padding: '32px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ width: 22, height: 22, background: '#c8f654', borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <svg width="11" height="11" viewBox="0 0 15 15" fill="none">
-              <path d="M7.5 1.5L13.5 5V10L7.5 13.5L1.5 10V5L7.5 1.5Z" fill="#0a0a0c"/>
-            </svg>
-          </div>
-          <span style={{ fontSize: 13, fontWeight: 700, color: 'rgba(243,243,245,0.5)' }}>Quelro</span>
-          <span style={{ fontSize: 12, color: 'rgba(243,243,245,0.2)' }}>© 2026</span>
+      <footer style={{
+        borderTop: '1px solid var(--line)', padding: 'var(--sp-6)',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--sp-4)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
+          <div style={{
+            width: 20, height: 20, borderRadius: 5,
+            background: 'linear-gradient(135deg, var(--lime) 0%, var(--lime) 50%, var(--coral) 50%, var(--coral) 100%)',
+          }} />
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-2)' }}>Quelro</span>
+          <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--text-4)' }}>© 2026</span>
         </div>
-        <div style={{ display: 'flex', gap: 24 }}>
-          {['Privacy', 'Terms', 'Blog', 'Contact'].map(link => (
-            <a key={link} href={`/${link.toLowerCase()}`} style={{ fontSize: 12, color: 'rgba(243,243,245,0.25)', textDecoration: 'none', transition: 'color 150ms' }}
-              onMouseEnter={e => e.target.style.color = 'rgba(243,243,245,0.6)'}
-              onMouseLeave={e => e.target.style.color = 'rgba(243,243,245,0.25)'}
-            >{link}</a>
+        <div style={{ display: 'flex', gap: 'var(--sp-6)' }}>
+          {[['Privacy', '/privacy'], ['Terms', '/terms']].map(([label, href]) => (
+            <a key={label} href={href} style={{ fontSize: 12, color: 'var(--text-3)', transition: 'color 150ms' }}
+              onMouseEnter={e => { e.target.style.color = 'var(--text)'; }}
+              onMouseLeave={e => { e.target.style.color = 'var(--text-3)'; }}
+            >{label}</a>
           ))}
         </div>
       </footer>
-
     </div>
   );
 }

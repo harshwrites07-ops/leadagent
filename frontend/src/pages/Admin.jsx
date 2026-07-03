@@ -180,7 +180,7 @@ export default function Admin() {
       </div>
 
       {error && (
-        <div style={{ background: 'rgba(255,68,68,0.12)', border: '1px solid rgba(255,68,68,0.3)', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: '#FF4444', marginBottom: 16 }}>
+        <div style={{ background: 'rgba(255,68,68,0.12)', border: '1px solid rgba(255,68,68,0.3)', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: 'var(--bad)', marginBottom: 16 }}>
           {error}
         </div>
       )}
@@ -247,7 +247,7 @@ export default function Admin() {
                           </select>
                           <button onClick={() => resetUsage(u.id)} disabled={!!actionLoading} title="Reset usage" className="btn btn--ghost btn--sm"><RefreshCw size={12} /></button>
                           <button onClick={() => banUser(u.id, isBanned)} disabled={!!actionLoading} title={isBanned ? 'Unban' : 'Ban'}
-                            className="btn btn--ghost btn--sm" style={{ color: isBanned ? 'var(--ok)' : '#FF8C00' }}>
+                            className="btn btn--ghost btn--sm" style={{ color: isBanned ? 'var(--ok)' : 'var(--warn)' }}>
                             <Ban size={12} />
                           </button>
                           {u.id !== user.id && (

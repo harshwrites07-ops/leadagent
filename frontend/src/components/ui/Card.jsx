@@ -1,34 +1,39 @@
 import React from 'react';
 
-function CardHead({ title, actions }) {
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      paddingBottom: 14, borderBottom: '1px solid var(--line)', marginBottom: 16,
-    }}>
-      <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', fontFamily: 'var(--f-sans)' }}>
-        {title}
-      </span>
-      {actions && <div style={{ display: 'flex', gap: 6 }}>{actions}</div>}
-    </div>
-  );
-}
+/**
+ * ONE card component. Elevation is a different surface shade, never
+ * just a border. Variants: default (surface) / raised (surface-2) /
+ * hero (surface-2 + lime wash — one per screen max).
+ *
+ * <Card variant="hero" className="bento__2x2">…</Card>
+ */
+export default function Card({ variant = 'default', className = '', style, children, ...rest }) {
+  const cls = [
+    'card',
+    variant === 'raised' ? 'card--raised' : '',
+    variant === 'hero' ? 'card--hero' : '',
+    className,
+  ].filter(Boolean).join(' ');
 
-function CardBody({ children, style }) {
   return (
-    <div style={{ padding: 0, ...style }}>
+    <div className={cls} style={style} {...rest}>
       {children}
     </div>
   );
 }
 
-export default function Card({ children, style, ...rest }) {
+function CardHead({ title, actions, className = '', ...rest }) {
   return (
-    <div style={{
-      background: 'var(--surface)', border: '1px solid var(--line)',
-      borderRadius: 'var(--r-md)', padding: 16,
-      ...style,
-    }} {...rest}>
+    <div className={`card__head ${className}`.trim()} {...rest}>
+      <span className="card__title">{title}</span>
+      {actions && <div style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>{actions}</div>}
+    </div>
+  );
+}
+
+function CardBody({ children, className = '', style, ...rest }) {
+  return (
+    <div className={`card__body ${className}`.trim()} style={style} {...rest}>
       {children}
     </div>
   );
