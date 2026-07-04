@@ -15,10 +15,11 @@ function parsePitch(pitch) {
     quality_breakdown: (() => { try { return pitch.quality_breakdown ? JSON.parse(pitch.quality_breakdown) : null; } catch { return null; } })(),
     quality_regenerated: !!pitch.quality_regenerated,
     quality_warning: !!pitch.quality_warning,
+    generation_method: pitch.generation_method || 'marcus',
   };
 }
 
-async function savePitch(db, leadId, userId, { email_subject, email_body, deep_study, custom_offer, subject_variants, pitch_score, pitch_feedback, reddit_dm, quality_score, quality_breakdown, quality_regenerated, quality_warning }) {
+async function savePitch(db, leadId, userId, { email_subject, email_body, deep_study, custom_offer, subject_variants, pitch_score, pitch_feedback, reddit_dm, quality_score, quality_breakdown, quality_regenerated, quality_warning, generation_method }) {
   const existing = await db.get('SELECT id FROM pitches WHERE lead_id = ?', [leadId]);
   if (existing) {
     await db.run(`
@@ -27,6 +28,7 @@ async function savePitch(db, leadId, userId, { email_subject, email_body, deep_s
         subject_variants=?, pitch_score=COALESCE(?,pitch_score), pitch_feedback=COALESCE(?,pitch_feedback),
         quality_score=COALESCE(?,quality_score), quality_breakdown=COALESCE(?,quality_breakdown),
         quality_regenerated=COALESCE(?,quality_regenerated), quality_warning=COALESCE(?,quality_warning),
+        generation_method=COALESCE(?,generation_method),
         updated_at=CURRENT_TIMESTAMP
       WHERE lead_id=?
     `, [deep_study || null, custom_offer || null, email_body, email_subject,
@@ -36,18 +38,20 @@ async function savePitch(db, leadId, userId, { email_subject, email_body, deep_s
         quality_breakdown ? JSON.stringify(quality_breakdown) : null,
         quality_regenerated != null ? (quality_regenerated ? 1 : 0) : null,
         quality_warning != null ? (quality_warning ? 1 : 0) : null,
+        generation_method || null,
         leadId]);
   } else {
     await db.run(`
-      INSERT INTO pitches (lead_id,user_id,deep_study,custom_offer,cold_email,email_subject,reddit_dm,subject_variants,pitch_score,pitch_feedback,quality_score,quality_breakdown,quality_regenerated,quality_warning)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      INSERT INTO pitches (lead_id,user_id,deep_study,custom_offer,cold_email,email_subject,reddit_dm,subject_variants,pitch_score,pitch_feedback,quality_score,quality_breakdown,quality_regenerated,quality_warning,generation_method)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `, [leadId, userId, deep_study || null, custom_offer || null, email_body, email_subject,
         reddit_dm || null, JSON.stringify(subject_variants || []),
         pitch_score || null, pitch_feedback || null,
         quality_score != null ? quality_score : null,
         quality_breakdown ? JSON.stringify(quality_breakdown) : null,
         quality_regenerated ? 1 : 0,
-        quality_warning ? 1 : 0]);
+        quality_warning ? 1 : 0,
+        generation_method || 'marcus']);
   }
 }
 
@@ -77,7 +81,7 @@ async function logQualityAttempt(db, userId, lead, attemptNum, email, result) {
 }
 
 // SSE streaming pitch generation — sends progress events so the frontend can show
-// "Quality check N of 5" instead of a blank loading state during long gate runs.
+// "Quality check N of 3" instead of a blank loading state during long gate runs.
 router.get('/generate-stream/:leadId', aiLimiter, asyncHandler(async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -134,8 +138,8 @@ router.get('/generate-stream/:leadId', aiLimiter, asyncHandler(async (req, res) 
       creatorData, voiceDNA,
       async (attemptNum, _email, evalResult) => {
         await logQualityAttempt(db, req.user.id, lead, attemptNum, _email, evalResult);
-        send({ type: 'progress', attempt: attemptNum, max: 5, score: evalResult.score,
-               message: `Quality check ${attemptNum} of 5 — score ${evalResult.score}/100` });
+        send({ type: 'progress', attempt: attemptNum, max: 3, score: evalResult.score,
+               message: `Quality check ${attemptNum} of 3 — score ${evalResult.score}/100` });
       },
       result.intelligence_pack,
       result.angle_result,
@@ -157,10 +161,14 @@ router.get('/generate-stream/:leadId', aiLimiter, asyncHandler(async (req, res) 
     quality_breakdown:   gateResult?.quality?.breakdown ?? null,
     quality_regenerated: gateResult?.regenerated ?? false,
     quality_warning:     gateResult?.warning ?? false,
+    generation_method:   result.generation_method || 'marcus',
   });
 
   await db.run(`UPDATE leads SET crm_stage='pitch_ready', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [lead.id]);
   logActivity('pitch_generated', `Pitch generated for ${lead.channel_name}`, lead.id, {}, req.user.id);
+  if (result.generation_method === 'fallback') {
+    console.error(`[Marcus/SSE] Saved a FALLBACK pitch for lead=${lead.id} channel="${lead.channel_name}" — reason:`, JSON.stringify(result.fallback_reason || []));
+  }
 
   const pitch = parsePitch(await db.get('SELECT * FROM pitches WHERE lead_id = ?', [lead.id]));
   const qualityScore = gateResult?.quality?.score ?? null;
@@ -179,6 +187,7 @@ router.get('/generate-stream/:leadId', aiLimiter, asyncHandler(async (req, res) 
     qualityStatus:      gateResult?.qualityStatus ?? getQualityStatus(qualityScore ?? 0),
     angleUsed:          result.angle_used || result.signal_used || null,
     personalizationElements: result.personalization_elements || [],
+    generationMethod:   result.generation_method || 'marcus',
   });
   res.end();
 }));
@@ -251,10 +260,14 @@ router.post('/generate/:leadId', aiLimiter, asyncHandler(async (req, res) => {
     quality_breakdown:   gateResult?.quality?.breakdown ?? null,
     quality_regenerated: gateResult?.regenerated ?? false,
     quality_warning:     gateResult?.warning ?? false,
+    generation_method:   result.generation_method || 'marcus',
   });
 
   await db.run(`UPDATE leads SET crm_stage='pitch_ready', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [lead.id]);
   logActivity('pitch_generated', `Pitch generated for ${lead.channel_name}`, lead.id, {}, req.user.id);
+  if (result.generation_method === 'fallback') {
+    console.error(`[Marcus] Saved a FALLBACK pitch for lead=${lead.id} channel="${lead.channel_name}" — reason:`, JSON.stringify(result.fallback_reason || []));
+  }
 
   const pitch = parsePitch(await db.get('SELECT * FROM pitches WHERE lead_id = ?', [lead.id]));
   const qualityScore = gateResult?.quality?.score ?? null;
@@ -270,6 +283,7 @@ router.post('/generate/:leadId', aiLimiter, asyncHandler(async (req, res) => {
     qualityRegenerated: gateResult?.regenerated ?? false,
     qualityWarning:     gateResult?.warning ?? false,
     qualityStatus:      gateResult?.qualityStatus ?? getQualityStatus(qualityScore ?? 0),
+    generationMethod:   result.generation_method || 'marcus',
     angleUsed:          result.angle_used || result.signal_used || null,
     personalizationElements: result.personalization_elements || [],
   });
@@ -369,9 +383,13 @@ router.post('/bulk-generate', aiLimiter, asyncHandler(async (req, res) => {
           quality_breakdown:   gateResult?.quality?.breakdown ?? null,
           quality_regenerated: gateResult?.regenerated ?? false,
           quality_warning:     gateResult?.warning ?? false,
+          generation_method:   result.generation_method || 'marcus',
         });
         await db.run(`UPDATE leads SET crm_stage='pitch_ready', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [id]);
-        return { id, success: true, qualityScore: gateResult?.quality?.score ?? null };
+        if (result.generation_method === 'fallback') {
+          console.error(`[BulkGenerate] Saved a FALLBACK pitch for lead=${id} channel="${lead.channel_name}" — reason:`, JSON.stringify(result.fallback_reason || []));
+        }
+        return { id, success: true, qualityScore: gateResult?.quality?.score ?? null, generationMethod: result.generation_method || 'marcus' };
       })
     );
     for (let ri = 0; ri < batchResults.length; ri++) {
@@ -448,6 +466,7 @@ router.post('/generate-and-send', aiLimiter, asyncHandler(async (req, res) => {
             quality_breakdown:   gate.quality?.breakdown ?? null,
             quality_regenerated: gate.regenerated ?? false,
             quality_warning:     gate.warning ?? false,
+            generation_method:   result.generation_method || 'marcus',
           });
         } catch (err) {
           console.error('[QualityGate] generate-and-send gate failed:', err.message);
@@ -457,7 +476,19 @@ router.post('/generate-and-send', aiLimiter, asyncHandler(async (req, res) => {
             deep_study:       result.key_insight,
             custom_offer:     result.custom_offer,
             subject_variants: result.subject_variants || result.alt_subjects || [],
+            generation_method: result.generation_method || 'marcus',
           });
+        }
+        if (result.generation_method === 'fallback') {
+          console.error(`[GenerateAndSend] FALLBACK pitch for lead=${id} channel="${lead.channel_name}" — reason:`, JSON.stringify(result.fallback_reason || []));
+        }
+
+        // Hard block: refuse to send a fallback template — it's unpersonalized
+        // boilerplate by construction, never a real Marcus draft, regardless
+        // of what it happens to score.
+        if (result.generation_method === 'fallback') {
+          await db.run(`UPDATE leads SET crm_stage='pitch_ready', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [id]);
+          return { id, success: false, quality_blocked: true, channel_name: lead.channel_name, error: 'AI generation failed — a fallback template was produced instead of a real pitch. Refusing to send it.' };
         }
 
         // Hard block: refuse to send if quality < 70
@@ -630,6 +661,7 @@ async function runPowerSendJob(jobId, { lead_ids, max_leads = 100, per_account_l
               quality_breakdown:   gate.quality?.breakdown ?? null,
               quality_regenerated: gate.regenerated ?? false,
               quality_warning:     gate.warning ?? false,
+              generation_method:   result.generation_method || 'marcus',
             });
           } catch (err) {
             console.error('[QualityGate] power-send gate failed:', err.message);
@@ -639,10 +671,24 @@ async function runPowerSendJob(jobId, { lead_ids, max_leads = 100, per_account_l
               deep_study:       result.key_insight,
               custom_offer:     result.custom_offer,
               subject_variants: result.subject_variants || result.alt_subjects || [],
+              generation_method: result.generation_method || 'marcus',
             });
           }
 
           await jobLog(db, jobId, 'generated', `Pitch ready for ${lead.channel_name}${gateScore ? ` (quality: ${gateScore}/100)` : ''}`);
+          if (result.generation_method === 'fallback') {
+            console.error(`[PowerSend] FALLBACK pitch for lead=${lead.id} channel="${lead.channel_name}" — reason:`, JSON.stringify(result.fallback_reason || []));
+          }
+
+          // Hard block: refuse to send a fallback template — unpersonalized
+          // boilerplate by construction, regardless of what it scores.
+          if (result.generation_method === 'fallback') {
+            stats.failed++;
+            await jobUpdate(db, jobId, { failed: stats.failed });
+            await jobLog(db, jobId, 'blocked', `Blocked ${lead.channel_name} — AI generation failed, fallback template produced instead of a real pitch`);
+            try { await db.run(`UPDATE leads SET crm_stage='pitch_ready', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [lead.id]); } catch {}
+            return;
+          }
 
           // Hard block: skip send if quality < 70
           if (gateScore !== null && gateScore < 70) {

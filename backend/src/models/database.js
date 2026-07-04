@@ -313,6 +313,12 @@ function _initSqliteSchema(db) {
   alterTry(`ALTER TABLE users ADD COLUMN voice_confidence_register TEXT`);
   alterTry(`ALTER TABLE users ADD COLUMN voice_sentence_style TEXT`);
   alterTry(`ALTER TABLE users ADD COLUMN voice_dna_version INTEGER DEFAULT 1`);
+  // Distinguishes a real Marcus/AI-generated pitch from buildFallback()'s
+  // canned template — the July 3 incident shipped 3 fallback emails that were
+  // indistinguishable from real output in the DB and UI. Existing rows predate
+  // this column and are assumed 'marcus' (the only path that wrote pitches
+  // before this column existed).
+  alterTry(`ALTER TABLE pitches ADD COLUMN generation_method TEXT DEFAULT 'marcus'`);
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS quality_log (

@@ -787,6 +787,9 @@ async function initPostgres() {
     await pgAlter(`ALTER TABLE emails ADD COLUMN user_id INTEGER REFERENCES users(id)`);
     await pgAlter(`ALTER TABLE pitches ADD COLUMN signal_type TEXT`);
     await pgAlter(`ALTER TABLE pitches ADD COLUMN user_id INTEGER REFERENCES users(id)`);
+    // Distinguishes a real Marcus/AI-generated pitch from buildFallback()'s
+    // canned template — see database.js for the incident this was added for.
+    await pgAlter(`ALTER TABLE pitches ADD COLUMN generation_method TEXT DEFAULT 'marcus'`);
     // token_expiry is ms-epoch from Google — exceeds INTEGER max, must be BIGINT
     try { await query(`ALTER TABLE gmail_accounts ALTER COLUMN token_expiry TYPE BIGINT`); } catch {}
     console.log('[PG] ✅ migrations applied');

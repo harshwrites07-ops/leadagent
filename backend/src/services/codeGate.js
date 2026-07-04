@@ -29,6 +29,21 @@ function formatCompact(n) {
   return String(Math.round(num));
 }
 
+// Deterministic last-resort fix for the rawNumberDump hard check: rewrites any
+// raw 4+ digit number left in a body (a subscriber/view count the model failed
+// to reformat across all attempts) into rounded human form — "59,595" or
+// "59595" -> "around 60K". Skips 4-digit numbers that read as a plausible
+// calendar year (1900-2099, no comma grouping) — rounding "in 2026" into
+// "around 2K" would be actively wrong, not safer.
+function roundHumanNumbers(text) {
+  return (text || '').replace(/\b\d{1,3}(?:,\d{3})+\b|\b\d{4,}\b/g, (match) => {
+    const num = Number(match.replace(/,/g, ''));
+    if (!Number.isFinite(num)) return match;
+    if (!match.includes(',') && match.length === 4 && num >= 1900 && num <= 2099) return match;
+    return `around ${formatCompact(num)}`;
+  });
+}
+
 // Rough syllable counter — good enough for a Flesch-Kincaid estimate. Not
 // linguistically perfect, but consistent, which is all a regen-trigger needs.
 function countSyllables(word) {
@@ -268,6 +283,7 @@ module.exports = {
   fleschKincaidGrade,
   wordCount,
   formatCompact,
+  roundHumanNumbers,
   BANNED_PHRASES,
   HARD_CHECKS,
   SOFT_CHECKS,

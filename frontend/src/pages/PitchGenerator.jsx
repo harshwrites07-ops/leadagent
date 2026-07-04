@@ -33,6 +33,7 @@ function normalizePitch(raw) {
     quality_breakdown: qualityBreakdown,
     quality_regenerated: !!raw.quality_regenerated,
     quality_warning: !!raw.quality_warning,
+    generation_method: raw.generation_method || 'marcus',
   };
 }
 
@@ -227,7 +228,9 @@ export default function PitchGenerator() {
       if (selectedLead?.id) loadChecklist(selectedLead.id);
       setLeads(prev => prev.map(l => l.id === selectedLead.id ? { ...l, pitch_id: data.pitch?.id ?? true } : l));
       if (data.warning) toast(data.warning, { icon: '⚠️', duration: 6000 });
-      if (data.qualityWarning) {
+      if (p.generation_method === 'fallback') {
+        toast.error('AI generation failed — this is a fallback template, not a real Marcus draft. Do not send it as-is.', { duration: 8000 });
+      } else if (data.qualityWarning) {
         toast('Quality gate could not fully improve this pitch — review carefully.', { icon: '⚠️', duration: 5000 });
       } else if (data.qualityRegenerated) {
         toast.success(`Quality enhanced to ${data.qualityScore}/100`);
@@ -1143,6 +1146,18 @@ export default function PitchGenerator() {
                           </div>
                         );
                       })()}
+
+                      {/* Fallback-template banner — AI generation failed and this is boilerplate,
+                          never rendered the same as a real Marcus draft */}
+                      {pitch.generation_method === 'fallback' && (
+                        <div style={{
+                          marginBottom: 14, padding: '10px 14px', borderRadius: 6,
+                          background: 'var(--coral)', color: 'var(--bg)',
+                          fontSize: 12, fontWeight: 700, fontFamily: 'var(--f-mono)',
+                        }}>
+                          ⚠ FALLBACK TEMPLATE — AI generation failed for this lead. This is not a real Marcus draft. Regenerate before sending.
+                        </div>
+                      )}
 
                       {/* Quality Gate Badge — label only, no raw number shown to users */}
                       {pitch.quality_score != null && (

@@ -815,9 +815,13 @@ async function buildFallback(lead, userId) {
     if (u?.service_type) service = u.service_type.toLowerCase();
   } catch {}
   const uploadAgo = daysAgoText(lead.last_upload_date);
+  // This template hardcodes a raw comma-formatted view count via toLocaleString()
+  // — it never went through codeGate, so it always tripped rawNumberDump. Round
+  // it the same way a real Marcus draft gets force-rounded on its last attempt.
+  const { roundHumanNumbers } = require('./codeGate');
   return {
     email_subject: `your ${lead.niche || 'channel'} views`,
-    email_body: `Your last few uploads have been getting around ${(lead.avg_views||0).toLocaleString()} views — there's a gap between your best video and your most recent ones worth looking at.\n\nHelped a ${lead.niche||'similar'} creator fix exactly this. Would a quick breakdown of what's holding back your views be useful?\n\n${name}`,
+    email_body: roundHumanNumbers(`Your last few uploads have been getting ${(lead.avg_views||0).toLocaleString()} views — there's a gap between your best video and your most recent ones worth looking at.\n\nHelped a ${lead.niche||'similar'} creator fix exactly this. Would a quick breakdown of what's holding back your views be useful?\n\n${name}`),
     subject_variants: [`your ${lead.channel_name?.split(' ')[0]} view pattern`, 'something I noticed', `${lead.niche || 'your'} retention angle`],
     key_insight: 'View-to-sub ratio and upload pattern',
     custom_offer: 'Retention-optimized editing for consistent growth',
@@ -1633,50 +1637,131 @@ async function testKey() {
 // ════════════════════════════════════════════════════════════════════════════
 
 // Section D.2 — Service-specific angle libraries (injected into MARCUS prompt)
-// Marcus V2 — Part 3: 4 embedded gold examples. These carry the voice and
-// quality bar; the prompt itself only needs to state the guardrails.
-// Marcus v2 email-engine rebuild spec, section 4 — few-shot exemplars.
-// A and B are structural references (embedded per spec) — they teach lesson,
-// not voice: A shows proof-before-ask but its proof line is vague ("I have
-// generated X views") and its ask is needy; B shows the Josh Braun shape
-// (specific observation → curiosity question → named proof → warm non-sequitur
-// close) in a non-creator context. C is the actual quality bar. The two niche
-// rewrites after C show the same skeleton with a real proof point and with a
-// null-proof soft-variable framing, per the input contract's proof:null rule.
-const MARCUS_V2_EXAMPLES = `═══ REFERENCE A — real DM that worked, but don't copy the voice ═══
-"Hey [Name], I would love to edit and revive a reel for you for free to show you how I can improve the retention and style. I have generated [X] amount of views, so I'm confident I can help. Are you interested? Best, [Name]"
-LESSON: offer-before-ask works. WEAKNESS: "[X] amount of views" is unverifiable filler and "Are you interested?" is a weak, generic CTA — never copy either.
+// Marcus V2 — 6 embedded gold examples, one per service/angle combination
+// (editing x2, diagnosis/strategy, shorts, thumbnail, scriptwriting). These
+// carry the voice and quality bar; the prompt itself only needs to state the
+// guardrails. Each is a real full email, not a structural reference — study
+// what they share beneath the surface: a specific watched-it observation,
+// a named number turned into a story (never a raw stat dump), a free-value
+// offer before the ask, one soft question as the CTA, and a P.S. tied to a
+// genuine detail. The service and the numbers change; that shape doesn't.
+const MARCUS_V2_EXAMPLES = `═══ GOLD 1 — burnout gap, editing service ═══
+Subject: 58 days — noticed something
 
-═══ REFERENCE B — Josh Braun structure, adapt the shape only ═══
-"Lisa — Noticed in Cranes that your building on Eastman isn't at full capacity since most employees are working from home. Curious, what are you doing to avoid overpaying property taxes? Asking because Beth Smith the CFO at ACME Inc. (235,000 square-feet) used a lesser-known approach to reduce property taxes by 5.2%. It involves external obsolescence. Open to learning how she did it? Either way, smart move picking a location next to Karen's Cafe. Best walnut chocolate chip cookies ever."
-LESSON: specific-observation → curiosity-question → named-proof → warm unrelated close (peak-end P.S. energy). This is where the P.S. habit comes from.
+Hey Matty,
 
-═══ EXEMPLAR C — the actual quality bar ═══
-Subject: your carbonara intro
+"Beloved Musicians Who Were Horrible People" pulled nearly 900K. Your last three have been sitting around 100K, and it's been almost two months since the last upload.
 
-Emma — watched your last three uploads back to back. The cold open on the credit-card video is the best thing on the channel, but the newer intros take almost 40 seconds to get to the point, and I'd bet that's where the dip starts.
+That combination usually isn't a content problem. Channels posting every 5-6 days don't go quiet unless the production side became the ceiling — ideas pile up, editing doesn't.
 
-I re-cut 30 seconds of your latest intro to show what I mean — tightened the hook, killed the dead air. Want me to send it over? No worries either way.
-— [name]
-P.S. the deadpan look at 4:12 killed me.
+I do full post-production for music essay channels. Took one from a video every 3 weeks to weekly — their views tripled inside 6 months.
 
-═══ NICHE REWRITE — fitness, real proof ═══
-Subject: the 6am video's drop-off
+Worth a conversation, or is the break intentional?
 
-Watched your last three lift videos back to back this morning. Form breakdowns are the best thing on the channel — clearer than most channels your size bother to be.
+Arjun
 
-But the intros run long before the set actually starts, and that's usually where people bail before the good part even loads. I cut a tighter open on your squat video — same footage, 15 seconds faster to the first rep. Worth a look?
-— [name]
-P.S. the deadlift PR reaction alone is worth the upload.
+P.S. The chapter structure on the Musicians video was genuinely clever — the cold open into the timeline flip. That's the kind of thing I'd protect, not change.
+LESSON: the observation (view spike vs. recent average, upload gap) does the work before any pitch appears. Proof is a named before/after with a real ratio, not "amazing results." P.S. compliments something structurally specific, not generic praise.
 
-═══ NICHE REWRITE — finance, no proof on file (soft-variable framing) ═══
-Subject: your last three uploads
+═══ GOLD 2 — declining views, strategy/diagnosis ═══
+Subject: your channel drop — a theory
 
-Hey — the budgeting video from a few weeks back is the strongest thing you've posted. Clear, specific, no fluff. Everything since feels rushed in the edit, like the ideas are there but the pacing's fighting them.
+Hey Alex,
 
-When I work with channels around your size, it's almost always the first 20 seconds that need tightening before the hook lands. Cut a free version of your latest open to show it side by side — want me to send it?
-— [name]
-P.S. the whiteboard bit was a nice touch. More of that.`;
+Good CTR, solid retention, views still sliding — that's a specific pattern, and honestly it's not the one most people think it is.
+
+It's usually audience saturation: single-topic niche, the algorithm's run out of new people to show you. Your existing fans have seen the back catalogue. New viewers have no entry point.
+
+I work with channels on exactly this kind of turnaround — the last one went from an 8-month plateau to 40% view growth in a quarter by building two "new viewer" formats alongside the main one.
+
+Want me to send over what I'd try first? Free either way.
+
+Sam
+LESSON: names the counter-intuitive diagnosis ("not the one most people think") to earn a read, then backs it with a mechanism, not a vague claim. No P.S. here — not every gold example needs one; skip it when nothing genuine is left to say.
+
+═══ GOLD 3 — job post detected, editing ═══
+Subject: your yt jobs post — thoughts
+
+Hey Jordan,
+
+Came across your post and watched a few recent videos before writing this — the bodycam pacing on the Samurai Sword case is the kind of thing most editors never figure out. You're not just uploading, you're building something.
+
+Your post mentioned MrBeast-level standards. That's not a casual reference — that's hook fast, hold attention, pay off every beat.
+
+I run a small team that only does long-form narrative — true crime, docs, investigative. Last channel we picked up went from 45K to 120K subs in 8 months once uploads got consistent.
+
+Not going to dump a portfolio on you. What's the actual bottleneck — volume, consistency, or finding someone who gets the genre?
+
+Dev
+LESSON: when the lead signal is a job post, the email should reference it directly and answer it on its own terms (their stated bar), not pivot to a generic pitch. Closing with a direct question about their bottleneck beats a soft "want me to send something?" when they've already signaled buying intent.
+
+═══ GOLD 4 — small breakout, shorts service ═══
+Subject: your tiktok vs your youtube
+
+Hey Soul,
+
+655K on TikTok, 66K on YouTube — that gap is the whole opportunity. Your clips already prove the short-form instinct is there. The pipeline from those clips back to the channel is what's missing.
+
+Every long reaction you post has 3-5 Shorts sitting inside it that nobody's cutting. That's free reach you're leaving on the table weekly.
+
+I cut short-form for reaction channels specifically — one client went from 2K to 30K Shorts views average in two months, same content, just cut for the format.
+
+Happy to cut one sample from an existing video so you can judge the quality yourself. Want it?
+
+Priya
+LESSON: cross-platform numbers (TikTok vs. YouTube) are a personalization source most competitors never touch — use them when available instead of defaulting to single-platform stats. The offer is a free sample cut from THEIR existing footage, not a generic "free trial."
+
+═══ GOLD 5 — plateau, thumbnail service ═══
+Subject: something about your last 6 thumbnails
+
+Hey Emma,
+
+Your best video did close to 2M. The last six have averaged around 620K — and honestly, looking at them side by side, the content isn't the difference. The packaging is.
+
+The 2M one has a single emotional focal point. The recent ones are carrying 3-4 competing elements each — at feed size they blur into noise before anyone decides to click.
+
+Thumbnails are all I do, and finance channels are most of my client list. Average CTR lift across the last five: about 1.8 points, which at your size is roughly 300K extra views a month.
+
+Want me to mock up two directions for your next upload? No charge — you'd just get to see it on your actual content.
+
+Rohan
+LESSON: rules out the obvious explanation ("the content isn't the difference") before naming the real one — that's what makes the diagnosis land instead of reading as a generic pitch. Proof point is a rate ("1.8 points") converted into what it means at their size, not a bare percentage.
+
+═══ GOLD 6 — perfectionist, scriptwriting ═══
+Subject: 6 weeks between uploads
+
+Hey Marcus,
+
+Your videos are genuinely over-produced for your size — that Detroit documentary had better structure than most channels 10x bigger. But one video every 6 weeks means the algorithm forgets you between uploads.
+
+My guess: the bottleneck isn't the edit. It's the front end — research and script eating three of those six weeks.
+
+Scripts are what I do. Long-form documentary structure, 4-6K words, research-first. My current client cut their cycle from 5 weeks to 2 and their AVD actually went UP — 52% to 61% — because the structure got tighter, not looser.
+
+Open to seeing a one-page treatment for your next topic? Free, no strings — worst case you steal the outline.
+
+Nina
+LESSON: opens with a genuine compliment before the poke — "over-produced for your size" is a real strength, not flattery — which earns the room to name the actual bottleneck. Proof point is a specific before/after metric (AVD 52%→61%) tied directly to the service being pitched (scripts), not a generic result.`;
+
+// There is no contact_first_name column anywhere in the schema (SQLite or
+// Postgres) — it was referenced here but never collected, so it was always
+// null. Rather than add a new scrape/DB field, guess conservatively from the
+// channel name's first word: only when it reads as an actual personal name
+// (Title Case, alphabetic, not a common channel-name lead word like "The" or
+// "Official"). Returns null — never a bad guess — for brand/business/non-name
+// channels ("PageFly", "Fort Bend Tutoring", "AI와 No-Code 가이드").
+const NON_NAME_LEAD_WORDS = new Set([
+  'the', 'official', 'team', 'dr', 'mr', 'mrs', 'ms', 'prof', 'coach', 'chef',
+  'captain', 'king', 'queen', 'master', 'big', 'real', 'simply', 'just', 'ask',
+  'talk', 'learn', 'get', 'making', 'studio', 'media', 'digital', 'tech', 'app',
+  'shop', 'life', 'daily', 'living', 'author', 'credit', 'living', 'ai',
+]);
+function guessFirstNameFromChannel(channelName) {
+  const firstWord = (channelName || '').trim().split(/\s+/)[0] || '';
+  if (!/^[A-Z][a-z]{1,15}$/.test(firstWord)) return null;
+  if (NON_NAME_LEAD_WORDS.has(firstWord.toLowerCase())) return null;
+  return firstWord;
+}
 
 // Section 1 of the spec — input contract. The model may ONLY reference facts
 // present in this object; anything not in here cannot appear in the email.
@@ -1723,7 +1808,7 @@ function buildVerifiedSignalPack(lead, user, voiceDNA, intelligencePack, angleRe
 
   return {
     creator: {
-      first_name:   lead.contact_first_name || null,
+      first_name:   lead.contact_first_name || guessFirstNameFromChannel(p.channel_name || lead.channel_name),
       channel_name: p.channel_name || lead.channel_name,
       niche:        p.niche || lead.niche || 'general',
       subs:         p.subscribers || lead.subscriber_count || 0,
@@ -1898,10 +1983,11 @@ async function generateWithMarcus(lead, userId, onProgress) {
   // Generate with MARCUS V2 prompt — up to 3 attempts. Every draft runs
   // through the code gate (Part 4) before being accepted: instant,
   // deterministic checks, max 2 code-gate retries within this budget.
-  const { runCodeGate, describeViolation } = require('./codeGate');
+  const { runCodeGate, describeViolation, roundHumanNumbers } = require('./codeGate');
   let generated = null;
   let previousFeedback = null;
   let codeGateAttempts = 0;
+  const attemptFailures = [];
 
   for (let attempt = 1; attempt <= 3; attempt++) {
     const prompt = buildMARCUSPrompt(lead, user, voiceDNA, intelligencePack, angleResult, previousFeedback);
@@ -1923,24 +2009,48 @@ async function generateWithMarcus(lead, userId, onProgress) {
       codeGateAttempts++;
       console.log(`[Marcus] Attempt ${attempt} code-gate violation for ${lead.channel_name}: ${gate.violations.map(v => v.type).join(', ')}`);
       if (attempt === 3) {
-        // Out of attempts — ship the best draft we have rather than fall to the generic fallback.
+        // Out of attempts — rather than ship a raw-number violation verbatim,
+        // force-round any remaining raw stat before shipping. Other soft/hard
+        // violations still ship as-is (no safe deterministic fix exists for
+        // them), but a raw exact number is the one thing we can always repair.
+        const hasRawNumber = gate.violations.some(v => v.type === 'rawNumberDump');
+        if (hasRawNumber) {
+          const before = parsed.body;
+          parsed.body = roundHumanNumbers(parsed.body);
+          if (parsed.body !== before) {
+            console.warn(`[Marcus] Force-rounded raw number(s) in final draft for ${lead.channel_name}`);
+          }
+        }
         generated = parsed;
         console.warn(`[Marcus] Shipping code-gate-violating draft after 3 attempts for ${lead.channel_name}`);
         break;
       }
       previousFeedback = describeViolation(gate.violations[0]);
     } catch (e) {
-      console.error(`[Marcus] Attempt ${attempt} failed:`, e.message);
+      // Distinguish a real AI-call failure (network/auth/quota/timeout — thrown
+      // by completeSmart itself) from a parse failure (the model responded but
+      // not with valid JSON) — they need different next steps to debug, and
+      // collapsing them into one generic message is what made the July 3
+      // fallback incident silent instead of loud.
+      const isAiCallFailure = /AI unavailable|ECONNABORTED|ECONNRESET|ETIMEDOUT|timeout|401|403|rate.?limit|quota/i.test(e.message || '');
+      attemptFailures.push({ attempt, reason: e.message, kind: isAiCallFailure ? 'ai_call_failure' : 'parse_failure' });
+      console.error(`[Marcus] Attempt ${attempt} failed for lead=${lead.id} channel="${lead.channel_name}" kind=${isAiCallFailure ? 'ai_call_failure' : 'parse_failure'}:`, e.message);
       previousFeedback = 'the response could not be parsed as valid JSON with "subject" and "body" fields.';
     }
   }
 
   // Fallback if all attempts fail
   if (!generated) {
-    console.warn('[Marcus] All attempts failed, using signal-based fallback for', lead.channel_name);
+    // Loud, structured, grep-able — this is the one log line that tells you
+    // *why* a lead got the unpersonalized fallback template instead of a real
+    // Marcus draft. Silent-fallback is what let 3 identical fallback emails
+    // ship to real leads undetected on 2026-07-03.
+    console.error(`[Marcus] FALLBACK TRIGGERED for lead=${lead.id} channel="${lead.channel_name}" user=${userId} — all 3 AI attempts failed:`, JSON.stringify(attemptFailures));
     const fallback = await buildFallback(lead, userId);
     return {
       ...fallback,
+      generation_method: 'fallback',
+      fallback_reason: attemptFailures,
       intelligence_pack: intelligencePack,
       angle_result: angleResult,
       name_warning: nameWarning,
@@ -1969,10 +2079,10 @@ async function generateWithMarcus(lead, userId, onProgress) {
   // Save to database
   try {
     await db.run(
-      `INSERT INTO pitches (lead_id, user_id, email_subject, cold_email, subject_variants, pitch_score, signal_type, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-       ON CONFLICT (lead_id) DO UPDATE SET email_subject=EXCLUDED.email_subject, cold_email=EXCLUDED.cold_email, subject_variants=EXCLUDED.subject_variants, pitch_score=EXCLUDED.pitch_score, signal_type=EXCLUDED.signal_type, updated_at=EXCLUDED.updated_at`,
+      `INSERT INTO pitches (lead_id, user_id, email_subject, cold_email, subject_variants, pitch_score, signal_type, generation_method, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+       ON CONFLICT (lead_id) DO UPDATE SET email_subject=EXCLUDED.email_subject, cold_email=EXCLUDED.cold_email, subject_variants=EXCLUDED.subject_variants, pitch_score=EXCLUDED.pitch_score, signal_type=EXCLUDED.signal_type, generation_method=EXCLUDED.generation_method, updated_at=EXCLUDED.updated_at`,
       [lead.id, userId, generated.subject, generated.body,
-       JSON.stringify(subjectVariants), 75, angleResult.selected_angle]
+       JSON.stringify(subjectVariants), 75, angleResult.selected_angle, 'marcus']
     );
   } catch (e) {
     console.error('[Marcus] Error saving pitch:', e.message);
@@ -1995,6 +2105,7 @@ async function generateWithMarcus(lead, userId, onProgress) {
     name_warning:     nameWarning,
     voice_warning:    voiceWarning,
     follow_ups:       [],
+    generation_method: 'marcus',
     // Backward compat
     key_insight:      angleResult.hook_data?.opening_observation || '',
     custom_offer:     angleResult.hook_data?.connection_to_service || '',
