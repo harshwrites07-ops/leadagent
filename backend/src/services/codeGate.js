@@ -44,6 +44,24 @@ function roundHumanNumbers(text) {
   });
 }
 
+// The prompt mandates an exact skeleton — CTA question, then a sign-off line
+// ("— [name]" or bare first name), then optionally a P.S. — see buildMARCUSPrompt's
+// OUTPUT SKELETON and every MARCUS_V2_EXAMPLES entry. Two checks below need to
+// look PAST that sign-off line (the CTA-ends-in-"?" check, and the em-dash
+// count — the sign-off's own dash isn't a "real" em-dash use). The sign-off
+// sits BEFORE the P.S., not at the very end of the raw text, so the P.S. must
+// be stripped first or the sign-off line is never the "last line" to check.
+function stripTrailingSignOff(text) {
+  const noPs = (text || '').replace(/\s*(?:^|\n)\s*P\.?\s?S\.?[:\s][\s\S]*$/i, '');
+  const lines = noPs.split('\n');
+  while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+  if (lines.length) {
+    const last = lines[lines.length - 1].trim();
+    if (/^—?\s*[A-Za-z][a-zA-Z']{0,20}$/.test(last)) lines.pop();
+  }
+  return lines.join('\n').trimEnd();
+}
+
 // Rough syllable counter — good enough for a Flesch-Kincaid estimate. Not
 // linguistically perfect, but consistent, which is all a regen-trigger needs.
 function countSyllables(word) {
@@ -100,7 +118,8 @@ const HARD_CHECKS = {
   ruleOfThree: (body) => /\b(\w+),\s*(\w+),\s*and\s+(\w+)\b/.test(body || ''),
   ingSentenceOpener: (body) => /(^|[.!?]\s+)[A-Z][a-z]*ing\b/.test(body || ''),
   // More than one em-dash anywhere in the email — global count, not per-sentence.
-  tooManyEmDashes: (body) => ((body || '').match(/—|--/g) || []).length > 1,
+  // Excludes the mandated "— [name]" sign-off's own dash, which isn't prose.
+  tooManyEmDashes: (body) => ((stripTrailingSignOff(body) || '').match(/—|--/g) || []).length > 1,
   mentionsPricing: (body) => /\$\d|₹\d|\d+ ?(per|\/) ?(month|video|hour)/i.test(body || ''),
 };
 
@@ -130,7 +149,7 @@ const SOFT_CHECKS = {
     }
     return false;
   },
-  noQuestionCTA: (body) => !/\?\s*$/.test((body || '').replace(/\s*(P\.?S\.?[\s\S]*)$/i, '').trim()),
+  noQuestionCTA: (body) => !/\?\s*$/.test(stripTrailingSignOff(body)),
   tooManyQuestions: (body) => (body.match(/\?/g) || []).length > 3,
   noContractions: (body) => !/\b\w+'(t|re|ll|ve|d|m)\b/i.test(body || ''),
   psAbsent: (body) => !/(^|\n)\s*p\.?\s?s\.?[:\s]/i.test(body || ''),
