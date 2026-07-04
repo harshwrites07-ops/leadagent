@@ -150,6 +150,55 @@ async function completeSmart(prompt, systemPrompt = '', maxTokens = 2000) {
   throw new Error('AI unavailable — all keys exhausted.');
 }
 
+// One-time production diagnostic (2026-07-04 fallback incident) — tests
+// Claude and Gemini independently with a trivial prompt and returns the raw
+// result/error for each, so a live key/auth/quota failure can be isolated
+// from a lead-data or prompt-complexity problem. Never echoes key values —
+// only whether each is configured and what the provider actually said back.
+async function debugAiCheck() {
+  const result = {
+    anthropicKeyConfigured: !!process.env.ANTHROPIC_API_KEY,
+    geminiKeysConfigured: getGeminiKeys().length,
+    claude: null,
+    gemini: null,
+  };
+
+  if (result.anthropicKeyConfigured) {
+    try {
+      const text = await completeWithClaude('Reply with the single word: OK', '', 10, CLAUDE_FAST);
+      result.claude = { ok: true, model: CLAUDE_FAST, response: text };
+    } catch (e) {
+      result.claude = {
+        ok: false, model: CLAUDE_FAST,
+        error: e.message,
+        status: e.response?.status ?? null,
+        apiError: e.response?.data ?? null,
+      };
+    }
+  } else {
+    result.claude = { ok: false, error: 'ANTHROPIC_API_KEY not set' };
+  }
+
+  const geminiKey = getGeminiKey();
+  if (geminiKey) {
+    try {
+      const text = await completeWithGemini('Reply with the single word: OK', '', 10, geminiKey, FAST_MODEL);
+      result.gemini = { ok: true, model: FAST_MODEL, response: text };
+    } catch (e) {
+      result.gemini = {
+        ok: false, model: FAST_MODEL,
+        error: e.message,
+        status: e.response?.status ?? null,
+        apiError: e.response?.data ?? null,
+      };
+    }
+  } else {
+    result.gemini = { ok: false, error: 'No GEMINI_API_KEY_* configured' };
+  }
+
+  return result;
+}
+
 // Quick check: returns which AI provider is currently available
 async function checkAiAvailability() {
   if (process.env.ANTHROPIC_API_KEY) {
@@ -2119,6 +2168,7 @@ module.exports = {
   complete,
   completeSmart,
   checkAiAvailability,
+  debugAiCheck,
   generateFullPitch,
   generateWithMarcus,
   buildMARCUSPrompt,

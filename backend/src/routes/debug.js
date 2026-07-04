@@ -3,6 +3,21 @@ const router = express.Router();
 const fs = require('fs');
 const { requireAdmin } = require('../middleware/requireAuth');
 
+// TEMPORARY — one-time diagnostic for the 2026-07-04 live fallback incident
+// (buildFallback firing on every generation attempt in production). Isolates
+// whether ANTHROPIC_API_KEY / GEMINI_API_KEY_* are valid and reachable from
+// Railway's actual production environment, independent of lead data or
+// prompt complexity. Remove this route once the incident is resolved.
+router.get('/debug/ai-check', requireAdmin, async (req, res) => {
+  const { debugAiCheck } = require('../services/claudeService');
+  try {
+    const result = await debugAiCheck();
+    res.json({ success: true, ...result, timestamp: new Date().toISOString() });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 router.get('/debug/system', requireAdmin, async (req, res) => {
   const dbPath = '/app/backend/data/outreach.db';
   const dataDir = '/app/backend/data';
