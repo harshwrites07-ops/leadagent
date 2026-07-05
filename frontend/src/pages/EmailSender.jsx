@@ -452,7 +452,7 @@ export default function EmailSender() {
                   <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em' }}>Power send · about to launch</div>
                 </div>
                 <h2 className="page__title" style={{ fontSize: 28 }}>
-                  Send <em style={{ fontStyle: 'italic', color: 'var(--lime)' }}>{queueCount} emails</em> across <em style={{ fontStyle: 'italic' }}>your mailboxes?</em>
+                  Send <em style={{ fontStyle: 'normal', color: 'var(--lime)' }}>{queueCount} emails</em> across <em style={{ fontStyle: 'normal' }}>your mailboxes?</em>
                 </h2>
               </div>
               <div style={{ padding: '20px 32px 24px' }}>
@@ -576,7 +576,7 @@ export default function EmailSender() {
                   <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--coral)' }}>Auto Follow-up</div>
                 </div>
                 <h2 className="page__title" style={{ fontSize: 22, marginBottom: 8 }}>
-                  Set up <em style={{ fontStyle: 'italic', color: 'var(--coral)' }}>automatic follow-ups</em>
+                  Set up <em style={{ fontStyle: 'normal', color: 'var(--coral)' }}>automatic follow-ups</em>
                 </h2>
                 <p className="muted" style={{ fontSize: 13, lineHeight: 1.6, marginBottom: 0 }}>
                   Marcus AI will send a personalised follow-up to everyone who hasn't replied — automatically, at your chosen interval — until they respond or opt out.

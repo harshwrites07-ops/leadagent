@@ -443,7 +443,7 @@ export default function LeadFinder() {
                   disabled={pmRunning}
                 >
                   {pmRunning
-                    ? <><span className="dot dot--pulse" style={{ background: 'var(--bg)', width: 8, height: 8 }} /> Finding leads with emails...</>
+                    ? <><span className="dot dot--pulse" style={{ background: 'var(--on-accent)', width: 8, height: 8 }} /> Finding leads with emails...</>
                     : <>
                         <Icon name="bolt" size={16} />
                         Find {pmTargetCount} {selectedNiches.size === 1 ? [...selectedNiches].map(id => NICHES.find(n => n.id === id)?.name || id)[0] : `${selectedNiches.size}-niche`} Leads
@@ -677,7 +677,7 @@ export default function LeadFinder() {
                       disabled={csvImporting}
                     >
                       {csvImporting
-                        ? <><span className="dot dot--pulse" style={{ background: 'var(--bg)', width: 8, height: 8 }} /> Importing...</>
+                        ? <><span className="dot dot--pulse" style={{ background: 'var(--on-accent)', width: 8, height: 8 }} /> Importing...</>
                         : <><Icon name="upload" size={16} />Import {csvRows.length} leads to CRM</>
                       }
                     </motion.button>

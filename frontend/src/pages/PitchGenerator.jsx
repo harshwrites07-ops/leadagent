@@ -765,7 +765,7 @@ export default function PitchGenerator() {
                         <div className="muted" style={{ fontSize: 11 }}>{formatNumber(lead.subscriber_count ?? 0)} subs</div>
                       </div>
                       {qs !== null && badgeColor && (
-                        <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--f-mono)', padding: '3px 8px', borderRadius: 5, background: badgeColor, color: 'var(--bg)', flexShrink: 0 }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--f-mono)', padding: '3px 8px', borderRadius: 5, background: badgeColor, color: 'var(--on-accent)', flexShrink: 0 }}>
                           {blocked ? `⚠ ${qs}/100` : `✓ ${qs}/100`}
                         </span>
                       )}
@@ -968,8 +968,8 @@ export default function PitchGenerator() {
                   animate={{ opacity: 1, y: 0 }}
                   style={{
                     padding: '12px 16px',
-                    background: 'rgba(255,209,102,0.08)',
-                    border: '1px solid rgba(255,209,102,0.25)',
+                    background: 'rgba(245, 166, 35,0.08)',
+                    border: '1px solid rgba(245, 166, 35,0.25)',
                     borderRadius: 10, marginBottom: 16,
                     display: 'flex', alignItems: 'center', gap: 10,
                   }}
@@ -1152,7 +1152,7 @@ export default function PitchGenerator() {
                       {pitch.generation_method === 'fallback' && (
                         <div style={{
                           marginBottom: 14, padding: '10px 14px', borderRadius: 6,
-                          background: 'var(--coral)', color: 'var(--bg)',
+                          background: 'var(--coral)', color: 'var(--on-accent)',
                           fontSize: 12, fontWeight: 700, fontFamily: 'var(--f-mono)',
                         }}>
                           ⚠ FALLBACK TEMPLATE — AI generation failed for this lead. This is not a real Marcus draft. Regenerate before sending.
@@ -1182,7 +1182,7 @@ export default function PitchGenerator() {
                                     display: 'inline-flex', alignItems: 'center', gap: 6,
                                     padding: '5px 12px', borderRadius: 6,
                                     fontSize: 11, fontWeight: 700, fontFamily: 'var(--f-mono)',
-                                    background: bg, color: 'var(--bg)',
+                                    background: bg, color: 'var(--on-accent)',
                                   }}
                                 >
                                   {label}
@@ -1317,7 +1317,7 @@ export default function PitchGenerator() {
                               padding: '14px 16px',
                               background: 'var(--coral)',
                               borderRadius: 8,
-                              color: 'var(--bg)',
+                              color: 'var(--on-accent)',
                             }}
                           >
                             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
@@ -1342,7 +1342,7 @@ export default function PitchGenerator() {
                                 padding: '6px 14px', fontSize: 12, fontWeight: 600,
                                 background: 'transparent',
                                 border: '1px solid var(--bg)',
-                                borderRadius: 6, cursor: 'pointer', color: 'var(--bg)',
+                                borderRadius: 6, cursor: 'pointer', color: 'var(--on-accent)',
                                 transition: 'background 150ms',
                               }}
                               onMouseEnter={e => e.currentTarget.style.background = 'rgba(10,10,12,0.12)'}
@@ -1468,7 +1468,7 @@ export default function PitchGenerator() {
 
                   {/* Pre-send checklist */}
                   {checklist && (
-                    <div style={{ padding: '12px 14px', background: checklist.canSend ? 'rgba(200,246,84,0.04)' : 'rgba(255,138,115,0.06)', border: `1px solid ${checklist.canSend ? 'var(--lime-border)' : 'rgba(255,138,115,0.25)'}`, borderRadius: 8, marginBottom: 4 }}>
+                    <div style={{ padding: '12px 14px', background: checklist.canSend ? 'rgba(0, 112, 243,0.04)' : 'rgba(0, 112, 243,0.06)', border: `1px solid ${checklist.canSend ? 'var(--lime-border)' : 'rgba(0, 112, 243,0.25)'}`, borderRadius: 8, marginBottom: 4 }}>
                       <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: checklist.canSend ? 'var(--lime)' : 'var(--coral)', marginBottom: 8 }}>
                         {checklist.canSend ? '✓ Ready to send' : '⚠ Issues found'}
                       </div>

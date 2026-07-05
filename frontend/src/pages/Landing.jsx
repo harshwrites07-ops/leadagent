@@ -29,7 +29,7 @@ function RotatingWord() {
           transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
           style={{
             gridArea: '1 / 1',
-            fontFamily: 'var(--f-serif)', fontStyle: 'italic', fontWeight: 400,
+            fontFamily: 'var(--f-heading)', fontWeight: 600,
             color: 'var(--lime)', whiteSpace: 'nowrap',
           }}
         >
@@ -240,7 +240,7 @@ function VisualFind() {
           display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
           borderTop: i === 0 ? 'none' : '1px solid var(--line)', fontSize: 12.5,
         }}>
-          <span className="ava" style={{ background: i === 0 ? 'var(--lime)' : 'var(--surface-3)', color: i === 0 ? 'var(--bg)' : 'var(--text-2)' }}>
+          <span className="ava" style={{ background: i === 0 ? 'var(--lime)' : 'var(--surface-3)', color: i === 0 ? 'var(--on-accent)' : 'var(--text-2)' }}>
             {r.name.split(' ').map(p => p[0]).join('')}
           </span>
           <div style={{ minWidth: 0 }}>
@@ -833,7 +833,7 @@ export default function Landing() {
             letterSpacing: '-0.025em', lineHeight: 1.05, margin: '0 0 var(--sp-4)',
           }}>
             They're posting. They're struggling.<br />
-            <span style={{ fontFamily: 'var(--f-serif)', fontStyle: 'italic', fontWeight: 400, color: 'var(--lime)' }}>
+            <span style={{ fontFamily: 'var(--f-heading)', fontWeight: 600, color: 'var(--lime)' }}>
               They need someone exactly like you.
             </span>
           </h2>

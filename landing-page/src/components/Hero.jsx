@@ -52,7 +52,7 @@ export default function Hero() {
         >
           The operating system for
           <br />
-          <span className="font-serif italic font-normal text-primary">creator outreach</span>
+          <span className="font-heading font-semibold text-primary">creator outreach</span>
         </motion.h1>
 
         <motion.p
@@ -66,7 +66,7 @@ export default function Hero() {
         <motion.div variants={fadeUp} className="mt-8 flex flex-col gap-3 sm:flex-row">
           <a
             href="#pricing"
-            className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg bg-primary px-6 py-3.5 text-sm font-semibold text-primary-foreground shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_0_24px_rgba(200,246,84,0.35)]"
+            className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg bg-primary px-6 py-3.5 text-sm font-semibold text-primary-foreground shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_0_24px_rgba(0, 112, 243,0.35)]"
           >
             Start free
             <ArrowRight size={18} weight="bold" />
@@ -95,7 +95,7 @@ export default function Hero() {
         {/* Product moment: a recreation of the Pitch Gen flow, not a stock screenshot */}
         <motion.div
           variants={fadeUp}
-          className="mt-14 w-full overflow-hidden rounded-2xl border border-border bg-card text-left shadow-2xl"
+          className="mt-14 w-full overflow-hidden rounded-xl border border-border bg-card text-left shadow-2xl"
         >
           <div className="flex items-center gap-1.5 border-b border-border bg-background/60 px-4 py-3">
             <span className="h-2.5 w-2.5 rounded-full bg-secondary/60" />

@@ -536,7 +536,7 @@ export default function ChannelAnalyzer() {
               disabled={processing || urlCount === 0}
             >
               {processing
-                ? <><span className="dot dot--pulse" style={{ background: 'var(--bg)', width: 8, height: 8 }} /> Analyzing {progress.current}/{progress.total}...</>
+                ? <><span className="dot dot--pulse" style={{ background: 'var(--on-accent)', width: 8, height: 8 }} /> Analyzing {progress.current}/{progress.total}...</>
                 : <><Icon name="bolt" size={16} />Analyze {urlCount > 1 ? `${urlCount} Channels` : 'Channel'}</>
               }
             </motion.button>

@@ -238,7 +238,7 @@ export default function CRM() {
                             opacity: draggingId === lead.id ? 0.35 : 1,
                             scale: draggingId === lead.id ? 0.97 : 1,
                             rotate: draggingId === lead.id ? -2 : 0,
-                            boxShadow: isDropped ? '0 0 0 2px var(--lime), 0 8px 24px rgba(200,246,84,0.25)' : '0 0 0 0 transparent',
+                            boxShadow: isDropped ? '0 0 0 2px var(--lime), 0 8px 24px rgba(0, 112, 243,0.25)' : '0 0 0 0 transparent',
                           }}
                           transition={{
                             delay: colIdx * 0.04 + i * 0.03, duration: 0.3, boxShadow: { duration: 0.5 },
@@ -272,7 +272,7 @@ export default function CRM() {
                               }}
                             >
                               {isChecked && (
-                                <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke="var(--bg)" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round">
+                                <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke="var(--on-accent)" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round">
                                   <path d="m5 12 5 5 9-11"/>
                                 </svg>
                               )}
@@ -281,7 +281,7 @@ export default function CRM() {
                             {lead.thumbnail_url ? (
                               <img src={lead.thumbnail_url} alt="" style={{ width: 26, height: 26, minWidth: 26, borderRadius: '50%', objectFit: 'cover' }} onError={e => { e.target.style.display='none'; e.target.nextSibling.style.display='flex'; }} />
                             ) : null}
-                            <span className="ava" style={{ fontSize: 10, width: 26, height: 26, minWidth: 26, borderRadius: '50%', display: lead.thumbnail_url ? 'none' : 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-3)', color: 'var(--bg)' }}>
+                            <span className="ava" style={{ fontSize: 10, width: 26, height: 26, minWidth: 26, borderRadius: '50%', display: lead.thumbnail_url ? 'none' : 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-3)', color: 'var(--on-accent)' }}>
                               {(lead.channel_name || '?')[0].toUpperCase()}
                             </span>
                             <div style={{ flex: 1, minWidth: 0 }}>
@@ -364,7 +364,7 @@ export default function CRM() {
               style={{
                 display: 'flex', alignItems: 'center', gap: 6,
                 padding: '7px 14px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                background: 'var(--lime)', color: 'var(--bg)',
+                background: 'var(--lime)', color: 'var(--on-accent)',
                 fontSize: 13, fontWeight: 700,
                 boxShadow: '0 0 16px rgba(var(--lime-rgb),0.3)',
               }}
@@ -399,7 +399,7 @@ export default function CRM() {
               className="modal"
               style={{ maxWidth: 400, padding: 28 }}
             >
-              <h2 style={{ fontFamily: 'var(--f-serif)', fontStyle: 'italic', fontSize: 20, fontWeight: 400, color: 'var(--text)', margin: '0 0 12px' }}>Add to Pipeline</h2>
+              <h2 style={{ fontFamily: 'var(--f-heading)', fontSize: 20, fontWeight: 600, letterSpacing: '-0.04em', color: 'var(--text)', margin: '0 0 12px' }}>Add to Pipeline</h2>
               <p style={{ fontSize: 13, color: 'var(--text-3)', margin: '0 0 20px' }}>Find a lead in your leads database and add them to the CRM pipeline.</p>
               <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
                 <button className="btn btn--ghost" onClick={() => setShowAddModal(false)}>Cancel</button>
@@ -452,7 +452,7 @@ export default function CRM() {
               {selected.thumbnail_url ? (
                 <img src={selected.thumbnail_url} alt="" style={{ width: 44, height: 44, minWidth: 44, borderRadius: '50%', objectFit: 'cover' }} />
               ) : (
-                <span className="ava" style={{ fontSize: 14, width: 44, height: 44, minWidth: 44, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-3)', color: 'var(--bg)' }}>
+                <span className="ava" style={{ fontSize: 14, width: 44, height: 44, minWidth: 44, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-3)', color: 'var(--on-accent)' }}>
                   {(selected.channel_name || '?')[0].toUpperCase()}
                 </span>
               )}

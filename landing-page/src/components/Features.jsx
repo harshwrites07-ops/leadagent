@@ -90,7 +90,7 @@ export default function Features() {
           <motion.div
             key={title}
             variants={fadeUp}
-            className="rounded-2xl border border-border bg-card p-6 transition-colors duration-200 hover:border-border/150"
+            className="rounded-xl border border-border bg-card p-6 transition-colors duration-200 hover:border-border/150"
           >
             <div className="flex items-center justify-between">
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-muted text-foreground">

@@ -23,8 +23,8 @@ export default function Footer() {
           <div className="col-span-2">
             <a href="#top" className="flex items-center gap-2.5 font-heading text-lg font-semibold text-foreground">
               <span
-                className="grid h-6 w-6 place-items-center rounded-[7px] font-mono text-xs font-bold text-background"
-                style={{ background: 'linear-gradient(135deg, #c8f654 0%, #c8f654 50%, #ff8a73 50%, #ff8a73 100%)' }}
+                className="grid h-6 w-6 place-items-center rounded-[7px] font-mono text-xs font-bold text-white"
+                style={{ background: '#0070f3' }}
               >
                 Q
               </span>

@@ -56,7 +56,7 @@ export default function Signup() {
         <div style={styles.logo}>
           <div style={styles.logoIcon}>
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M8.5 1L3 7.5H7L5.5 13L11 6.5H7L8.5 1Z" fill="var(--bg)" strokeLinejoin="round"/>
+              <path d="M8.5 1L3 7.5H7L5.5 13L11 6.5H7L8.5 1Z" fill="var(--on-accent)" strokeLinejoin="round"/>
             </svg>
           </div>
           <div>
@@ -151,7 +151,7 @@ const styles = {
   inputIcon: { position: 'absolute', left: 11, color: 'var(--text-muted)', pointerEvents: 'none' },
   input: { width: '100%', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '9px 12px 9px 34px', fontSize: 13, color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box', fontFamily: 'var(--font-body)' },
   eyeBtn: { position: 'absolute', right: 10, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 2 },
-  btn: { marginTop: 16, padding: '11px', background: 'var(--lime)', border: 'none', borderRadius: 8, color: 'var(--bg)', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font-body)' },
+  btn: { marginTop: 16, padding: '11px', background: 'var(--lime)', border: 'none', borderRadius: 8, color: 'var(--on-accent)', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font-body)' },
   divider: { display: 'flex', alignItems: 'center', margin: '20px 0', gap: 12 },
   dividerText: { fontSize: 11, color: 'var(--text-muted)', background: 'var(--bg-surface)', padding: '0 8px', whiteSpace: 'nowrap' },
   googleBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px', border: '1px solid var(--border-strong)', borderRadius: 8, background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, textDecoration: 'none', cursor: 'pointer', marginBottom: 20, fontFamily: 'var(--font-body)' },

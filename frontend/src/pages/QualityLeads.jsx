@@ -577,7 +577,7 @@ export default function QualityLeads() {
                 {['all', 'hot', 'warm'].map(t => (
                   <button key={t} onClick={() => { setTierFilter(t); setLeadsPage(1); }}
                     className={`btn btn--sm ${tierFilter === t ? (t === 'hot' ? 'btn--coral' : t === 'warm' ? '' : 'btn--primary') : 'btn--ghost'}`}
-                    style={tierFilter === t && t === 'warm' ? { background: 'var(--warn)', color: 'var(--bg)', borderColor: 'var(--warn)', fontWeight: 700 } : undefined}
+                    style={tierFilter === t && t === 'warm' ? { background: 'var(--warn)', color: 'var(--on-accent)', borderColor: 'var(--warn)', fontWeight: 700 } : undefined}
                   >
                     {t.toUpperCase()}
                   </button>
@@ -719,7 +719,7 @@ export default function QualityLeads() {
                             <div key={name} className="t-mono" style={{
                               display: 'grid', gridTemplateColumns: '140px 1fr 80px 80px 80px', gap: 12,
                               padding: '10px 14px', borderRadius: 6, alignItems: 'center', fontSize: 11,
-                              background: name === calibResult.recommended ? 'rgba(200,246,84,0.08)' : 'transparent',
+                              background: name === calibResult.recommended ? 'rgba(0, 112, 243,0.08)' : 'transparent',
                               border: name === calibResult.recommended ? '1px solid var(--lime)' : '1px solid var(--line)',
                             }}>
                               <span style={{ color: name === calibResult.recommended ? 'var(--lime)' : 'var(--text-2)', fontWeight: name === calibResult.recommended ? 700 : 400 }}>

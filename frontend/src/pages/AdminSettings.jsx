@@ -324,7 +324,7 @@ export default function AdminSettings() {
               </div>
               <div><label style={labelSt}>App Password</label><PasswordInput value={newInbox.pass} onChange={e => setNewInbox(p => ({ ...p, pass: e.target.value }))} /></div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={addInbox} disabled={addingInbox} style={{ flex: 1, padding: '8px', borderRadius: 6, background: 'var(--lime)', border: 'none', color: 'var(--bg)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                <button onClick={addInbox} disabled={addingInbox} style={{ flex: 1, padding: '8px', borderRadius: 6, background: 'var(--lime)', border: 'none', color: 'var(--on-accent)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                   {addingInbox ? 'Testing & Saving...' : 'Add Inbox'}
                 </button>
                 <button onClick={() => setShowAddInbox(false)} style={{ padding: '8px 14px', borderRadius: 6, background: 'transparent', border: '1px solid var(--border-default)', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer' }}>
@@ -433,7 +433,7 @@ export default function AdminSettings() {
           display: 'flex', alignItems: 'center', gap: 8, padding: '10px 24px', borderRadius: 8,
           cursor: (!dirty || saving) ? 'not-allowed' : 'pointer',
           background: dirty ? 'var(--lime)' : 'var(--bg-elevated)',
-          color: dirty ? 'var(--bg)' : 'var(--text-muted)',
+          color: dirty ? 'var(--on-accent)' : 'var(--text-muted)',
           border: dirty ? 'none' : '1px solid var(--border-default)',
           fontSize: 13, fontWeight: 600, boxShadow: dirty ? '0 4px 16px rgba(var(--lime-rgb),0.3)' : 'none',
           transition: 'all 0.2s',

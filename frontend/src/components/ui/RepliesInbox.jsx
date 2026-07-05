@@ -221,7 +221,7 @@ function ConversationView({ reply, onBack, onReplySent }) {
             disabled={loadingSuggestion}
             title="AI suggested response"
             className="flex-shrink-0 p-3 rounded-xl transition-colors"
-            style={{ background: showSuggestion ? 'var(--lime)' : 'var(--surface-2)', border: '1px solid var(--lime-border)', color: showSuggestion ? 'var(--bg)' : 'var(--lime)', opacity: loadingSuggestion ? 0.5 : 1 }}
+            style={{ background: showSuggestion ? 'var(--lime)' : 'var(--surface-2)', border: '1px solid var(--lime-border)', color: showSuggestion ? 'var(--on-accent)' : 'var(--lime)', opacity: loadingSuggestion ? 0.5 : 1 }}
           >
             <span style={{ fontSize: 14 }}>{loadingSuggestion ? '…' : '✦'}</span>
           </button>
@@ -229,7 +229,7 @@ function ConversationView({ reply, onBack, onReplySent }) {
             onClick={sendReply}
             disabled={sending || !replyBody.trim()}
             className="flex-shrink-0 p-3 rounded-xl transition-colors disabled:opacity-40"
-            style={{ background: replyBody.trim() ? 'var(--lime)' : 'rgba(var(--lime-rgb),0.2)', color: 'var(--bg)' }}
+            style={{ background: replyBody.trim() ? 'var(--lime)' : 'rgba(var(--lime-rgb),0.2)', color: 'var(--on-accent)' }}
             title="Send reply (Ctrl+Enter)"
           >
             <Send size={18} className={sending ? 'animate-pulse' : ''} />
@@ -360,7 +360,7 @@ export default function RepliesInbox({ onClose }) {
           exit={{ scale: 0.95, opacity: 0 }}
           transition={{ type: 'spring', damping: 28, stiffness: 300 }}
           className="w-full max-w-2xl rounded-xl flex flex-col overflow-hidden"
-          style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', height: '82vh', boxShadow: '0 0 60px rgba(200,246,84,0.08)' }}
+          style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', height: '82vh', boxShadow: '0 0 60px rgba(0, 112, 243,0.08)' }}
           onClick={e => e.stopPropagation()}
         >
           <AnimatePresence mode="wait">

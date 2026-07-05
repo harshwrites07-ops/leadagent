@@ -8,6 +8,9 @@ export default {
         surface: 'var(--surface)',
         line:    'var(--line)',
         text:    'var(--text)',
+        heading: 'var(--heading)',
+        muted:   'var(--text-2)',
+        accent:  'var(--lime)',
         lime:    'var(--lime)',
         coral:   'var(--coral)',
         ok:      'var(--ok)',
@@ -15,9 +18,10 @@ export default {
         bad:     'var(--bad)',
       },
       fontFamily: {
-        sans:  ['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        mono:  ['Geist Mono', 'ui-monospace', 'monospace'],
-        serif: ['Instrument Serif', 'serif'],
+        sans:    ['Inter Variable', 'Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        heading: ['General Sans', 'Inter Variable', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        mono:    ['JetBrains Mono', 'ui-monospace', 'monospace'],
+        serif:   ['General Sans', 'Inter Variable', 'ui-sans-serif', 'system-ui', 'sans-serif'],
       },
       borderRadius: {
         sm:      'var(--r-sm)',

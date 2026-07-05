@@ -10,7 +10,7 @@ export default function CTA() {
         whileInView="visible"
         viewport={viewportOnce}
         variants={fadeUp}
-        className="flex flex-col items-center rounded-3xl border border-border bg-card px-6 py-16 text-center sm:px-12"
+        className="flex flex-col items-center rounded-xl border border-border bg-card px-6 py-16 text-center sm:px-12"
       >
         <h2 className="max-w-xl text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
           Start pitching creators today
@@ -20,7 +20,7 @@ export default function CTA() {
         </p>
         <a
           href="#pricing"
-          className="mt-8 inline-flex cursor-pointer items-center gap-2 rounded-lg bg-primary px-6 py-3.5 text-sm font-semibold text-primary-foreground shadow-lg transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_0_32px_rgba(200,246,84,0.35)]"
+          className="mt-8 inline-flex cursor-pointer items-center gap-2 rounded-lg bg-primary px-6 py-3.5 text-sm font-semibold text-primary-foreground shadow-lg transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_0_32px_rgba(0, 112, 243,0.35)]"
         >
           Start free
           <ArrowRight size={18} weight="bold" />

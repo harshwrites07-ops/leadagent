@@ -25,7 +25,7 @@ export default class ErrorBoundary extends Component {
             </p>
             <button
               onClick={() => { this.setState({ hasError: false, error: null }); window.location.reload(); }}
-              style={{ background: 'var(--lime)', color: 'var(--bg)', border: 'none', padding: '0.6rem 1.5rem', borderRadius: '8px', cursor: 'pointer', fontSize: '1rem', fontWeight: 700 }}
+              style={{ background: 'var(--lime)', color: 'var(--on-accent)', border: 'none', padding: '0.6rem 1.5rem', borderRadius: '8px', cursor: 'pointer', fontSize: '1rem', fontWeight: 700 }}
             >
               Reload App
             </button>

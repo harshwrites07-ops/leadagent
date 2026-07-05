@@ -192,7 +192,7 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid var(--border-subtle)', background: 'rgba(var(--lime-rgb),0.04)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--lime)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 20px rgba(var(--lime-rgb),0.4)', flexShrink: 0 }}>
-              <Zap size={20} color="var(--bg)" />
+              <Zap size={20} color="var(--on-accent)" />
             </div>
             <div>
               <h2 style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: 18, color: 'var(--text-primary)', margin: 0 }}>Power Email Mode</h2>
@@ -244,7 +244,7 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
                 <p style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.14em', marginBottom: 10 }}>HOW MANY EMAILS TO SEND?</p>
                 <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
                   {[10, 25, 50, 100, 200, 500].map(n => (
-                    <button key={n} onClick={() => setCount(n)} style={{ flex: 1, padding: '7px 0', borderRadius: 7, fontSize: 13, fontWeight: 700, cursor: 'pointer', background: count === n ? 'var(--lime)' : 'var(--bg-elevated)', border: count === n ? 'none' : '1px solid var(--border-default)', color: count === n ? 'var(--bg)' : 'var(--text-secondary)', boxShadow: count === n ? '0 0 14px rgba(var(--lime-rgb),0.3)' : 'none', transition: 'all 0.15s' }}>
+                    <button key={n} onClick={() => setCount(n)} style={{ flex: 1, padding: '7px 0', borderRadius: 7, fontSize: 13, fontWeight: 700, cursor: 'pointer', background: count === n ? 'var(--lime)' : 'var(--bg-elevated)', border: count === n ? 'none' : '1px solid var(--border-default)', color: count === n ? 'var(--on-accent)' : 'var(--text-secondary)', boxShadow: count === n ? '0 0 14px rgba(var(--lime-rgb),0.3)' : 'none', transition: 'all 0.15s' }}>
                       {n}
                     </button>
                   ))}
@@ -262,7 +262,7 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
               <p style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.12em', marginBottom: 10 }}>EMAIL DELAY TIMER</p>
               <div style={{ display: 'flex', gap: 8 }}>
                 {QUICK_DELAYS.map(({ label, secs }) => (
-                  <button key={secs} onClick={() => setGapSeconds(secs)} style={{ flex: 1, padding: '8px 0', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer', background: gapSeconds === secs ? 'var(--lime)' : 'var(--bg-elevated)', border: gapSeconds === secs ? 'none' : '1px solid var(--border-default)', color: gapSeconds === secs ? 'var(--bg)' : 'var(--text-secondary)', boxShadow: gapSeconds === secs ? '0 0 10px rgba(var(--lime-rgb),0.25)' : 'none' }}>
+                  <button key={secs} onClick={() => setGapSeconds(secs)} style={{ flex: 1, padding: '8px 0', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer', background: gapSeconds === secs ? 'var(--lime)' : 'var(--bg-elevated)', border: gapSeconds === secs ? 'none' : '1px solid var(--border-default)', color: gapSeconds === secs ? 'var(--on-accent)' : 'var(--text-secondary)', boxShadow: gapSeconds === secs ? '0 0 10px rgba(var(--lime-rgb),0.25)' : 'none' }}>
                     {label}
                   </button>
                 ))}
@@ -293,7 +293,7 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
                     <p style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.12em', marginBottom: 8 }}>GAP BETWEEN EMAILS</p>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                       {GAP_PRESETS.map(({ label, secs }) => (
-                        <button key={secs} onClick={() => setGapSeconds(secs)} style={{ padding: '6px 12px', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer', background: gapSeconds === secs ? 'var(--lime)' : 'var(--bg-elevated)', border: gapSeconds === secs ? 'none' : '1px solid var(--border-default)', color: gapSeconds === secs ? 'var(--bg)' : 'var(--text-secondary)', boxShadow: gapSeconds === secs ? '0 0 10px rgba(var(--lime-rgb),0.25)' : 'none' }}>
+                        <button key={secs} onClick={() => setGapSeconds(secs)} style={{ padding: '6px 12px', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer', background: gapSeconds === secs ? 'var(--lime)' : 'var(--bg-elevated)', border: gapSeconds === secs ? 'none' : '1px solid var(--border-default)', color: gapSeconds === secs ? 'var(--on-accent)' : 'var(--text-secondary)', boxShadow: gapSeconds === secs ? '0 0 10px rgba(var(--lime-rgb),0.25)' : 'none' }}>
                           {label}
                         </button>
                       ))}
@@ -312,7 +312,7 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
                           return (
                             <div key={inbox.email} onClick={toggle} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 7, cursor: 'pointer', background: skipped ? 'rgba(255,68,68,0.06)' : 'var(--bg-elevated)', border: `1px solid ${skipped ? 'rgba(255,68,68,0.25)' : 'var(--border-default)'}`, opacity: skipped ? 0.6 : 1, transition: 'all 0.15s' }}>
                               <div style={{ width: 16, height: 16, borderRadius: 4, border: `2px solid ${skipped ? 'var(--text-4)' : 'var(--accent-primary)'}`, background: skipped ? 'transparent' : 'var(--accent-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                {!skipped && <span style={{ color: 'var(--bg)', fontSize: 10, lineHeight: 1 }}>✓</span>}
+                                {!skipped && <span style={{ color: 'var(--on-accent)', fontSize: 10, lineHeight: 1 }}>✓</span>}
                               </div>
                               <span style={{ flex: 1, fontSize: 12, color: skipped ? 'var(--text-muted)' : 'var(--text-primary)', fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inbox.email}</span>
                               {inbox.sentCount > 0 && (
@@ -351,7 +351,7 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
             <button onClick={onClose} style={{ flex: 1, padding: '11px', borderRadius: 8, cursor: 'pointer', background: 'transparent', border: '1px solid var(--border-default)', color: 'var(--text-secondary)', fontSize: 13 }}>
               Cancel
             </button>
-            <button onClick={startPowerSend} style={{ flex: 2, padding: '11px', borderRadius: 8, cursor: 'pointer', background: 'var(--lime)', color: 'var(--bg)', border: 'none', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 0 24px rgba(var(--lime-rgb),0.3)' }}>
+            <button onClick={startPowerSend} style={{ flex: 2, padding: '11px', borderRadius: 8, cursor: 'pointer', background: 'var(--lime)', color: 'var(--on-accent)', border: 'none', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 0 24px rgba(var(--lime-rgb),0.3)' }}>
               <Zap size={16} /> Fire {effectiveCount} Emails
             </button>
           </div>
@@ -371,7 +371,7 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
             </div>
             <div style={{ display: 'flex', gap: 10, width: '100%' }}>
               <button onClick={dismissInterrupted} style={{ flex: 1, padding: '12px', borderRadius: 8, cursor: 'pointer', background: 'transparent', border: '1px solid var(--border-default)', color: 'var(--text-secondary)', fontSize: 13 }}>Close</button>
-              <button onClick={resumeJob} style={{ flex: 2, padding: '12px', borderRadius: 8, cursor: 'pointer', background: 'var(--lime)', color: 'var(--bg)', border: 'none', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 0 20px rgba(var(--lime-rgb),0.25)' }}>
+              <button onClick={resumeJob} style={{ flex: 2, padding: '12px', borderRadius: 8, cursor: 'pointer', background: 'var(--lime)', color: 'var(--on-accent)', border: 'none', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 0 20px rgba(var(--lime-rgb),0.25)' }}>
                 <Zap size={16} /> Resume Remaining
               </button>
             </div>
@@ -429,7 +429,7 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
             )}
 
             {phase === 'done' && (
-              <button onClick={onClose} style={{ padding: '12px', borderRadius: 8, cursor: 'pointer', background: 'var(--lime)', color: 'var(--bg)', border: 'none', fontSize: 14, fontWeight: 700, boxShadow: '0 0 20px rgba(var(--lime-rgb),0.25)' }}>
+              <button onClick={onClose} style={{ padding: '12px', borderRadius: 8, cursor: 'pointer', background: 'var(--lime)', color: 'var(--on-accent)', border: 'none', fontSize: 14, fontWeight: 700, boxShadow: '0 0 20px rgba(var(--lime-rgb),0.25)' }}>
                 Done — Close
               </button>
             )}

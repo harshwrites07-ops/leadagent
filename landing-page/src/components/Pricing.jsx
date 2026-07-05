@@ -71,7 +71,7 @@ export default function Pricing() {
           <motion.div
             key={plan.key}
             variants={fadeUp}
-            className={`relative flex flex-col rounded-2xl border p-8 ${
+            className={`relative flex flex-col rounded-xl border p-8 ${
               plan.highlighted
                 ? 'border-primary bg-card shadow-xl shadow-primary/5'
                 : 'border-border bg-card'
@@ -87,7 +87,7 @@ export default function Pricing() {
             <p className="mt-2 text-sm text-muted-foreground">{plan.description}</p>
 
             <div className="mt-6 flex items-baseline gap-1">
-              <span className="font-serif text-4xl font-normal italic text-foreground">{plan.price}</span>
+              <span className="font-heading text-4xl font-semibold text-foreground">{plan.price}</span>
               <span className="text-sm text-muted-foreground">/ mo</span>
             </div>
 
@@ -104,7 +104,7 @@ export default function Pricing() {
               href="#"
               className={`mt-8 cursor-pointer rounded-lg px-5 py-3 text-center text-sm font-semibold transition-all duration-200 hover:-translate-y-0.5 ${
                 plan.highlighted
-                  ? 'bg-primary text-primary-foreground shadow-[0_0_24px_rgba(200,246,84,0.25)]'
+                  ? 'bg-primary text-primary-foreground shadow-[0_0_24px_rgba(0, 112, 243,0.25)]'
                   : 'border border-border bg-muted text-foreground'
               }`}
             >

@@ -64,5 +64,5 @@ const styles = {
   spinner: { width: 40, height: 40, border: '3px solid var(--border-subtle)', borderTopColor: 'var(--accent-primary)', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 20px' },
   title: { fontFamily: 'var(--font-heading)', fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 8px', letterSpacing: '-0.02em' },
   subtitle: { fontSize: 13, color: 'var(--text-muted)', margin: '0 0 20px' },
-  btn: { display: 'inline-block', padding: '10px 24px', background: 'var(--lime)', borderRadius: 8, color: 'var(--bg)', fontSize: 14, fontWeight: 700, textDecoration: 'none' },
+  btn: { display: 'inline-block', padding: '10px 24px', background: 'var(--lime)', borderRadius: 8, color: 'var(--on-accent)', fontSize: 14, fontWeight: 700, textDecoration: 'none' },
 };

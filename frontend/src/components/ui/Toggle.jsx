@@ -18,7 +18,7 @@ export default function Toggle({ checked, onChange, disabled }) {
         position: 'absolute',
         top: 2, left: checked ? 17 : 2,
         width: 14, height: 14, borderRadius: '50%',
-        background: checked ? 'var(--bg)' : 'var(--text-3)',
+        background: checked ? 'var(--on-accent)' : 'var(--text-3)',
         transition: 'left .12s',
       }} />
     </div>

@@ -27,7 +27,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           success: {
             iconTheme: {
               primary: 'var(--lime)',
-              secondary: 'var(--bg)',
+              secondary: 'var(--on-accent)',
             },
             style: {
               border: '1px solid var(--lime-border)',
@@ -36,7 +36,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           error: {
             iconTheme: {
               primary: 'var(--bad)',
-              secondary: 'var(--bg)',
+              secondary: 'var(--on-accent)',
             },
             style: {
               border: '1px solid var(--coral-border)',

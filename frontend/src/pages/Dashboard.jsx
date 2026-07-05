@@ -18,7 +18,7 @@ function Avatar({ name, color }) {
   const init = (name || '?').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase();
   const palette = ['var(--lime)', 'var(--coral)', 'var(--sky)', 'var(--violet)', 'var(--cream)', 'var(--ok)', 'var(--warn)'];
   const bg = color || palette[(name?.charCodeAt(0) ?? 0) % palette.length];
-  return <span className="ava" style={{ background: bg, color: 'var(--bg)' }}>{init}</span>;
+  return <span className="ava" style={{ background: bg, color: 'var(--on-accent)' }}>{init}</span>;
 }
 
 function Badge({ children, kind = '' }) {
@@ -140,12 +140,11 @@ export default function Dashboard() {
       >
         <div>
           <h1 style={{
-            fontFamily: 'var(--f-serif)',
-            fontStyle: 'italic',
+            fontFamily: 'var(--f-heading)',
             fontSize: isMobile ? 22 : 30,
-            fontWeight: 400,
+            fontWeight: 600,
             color: 'var(--text)',
-            letterSpacing: '-0.5px',
+            letterSpacing: '-0.04em',
             lineHeight: 1.15,
             margin: 0,
           }}>
@@ -287,8 +286,8 @@ export default function Dashboard() {
               </span>
               <span style={{
                 display: 'flex', alignItems: 'center', gap: 4,
-                background: 'rgba(110,231,168,0.08)',
-                border: '1px solid rgba(110,231,168,0.2)',
+                background: 'rgba(34, 197, 94,0.08)',
+                border: '1px solid rgba(34, 197, 94,0.2)',
                 borderRadius: 20, padding: '2px 8px',
                 fontSize: 9, fontWeight: 700,
                 color: 'var(--ok)', fontFamily: 'var(--f-mono)',

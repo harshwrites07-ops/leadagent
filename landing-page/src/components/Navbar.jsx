@@ -16,8 +16,8 @@ export default function Navbar() {
       <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
         <a href="#top" className="flex items-center gap-2.5 font-heading text-lg font-semibold tracking-tight text-foreground">
           <span
-            className="grid h-6 w-6 place-items-center rounded-[7px] font-mono text-xs font-bold text-background"
-            style={{ background: 'linear-gradient(135deg, #c8f654 0%, #c8f654 50%, #ff8a73 50%, #ff8a73 100%)' }}
+            className="grid h-6 w-6 place-items-center rounded-[7px] font-mono text-xs font-bold text-white"
+            style={{ background: '#0070f3' }}
           >
             Q
           </span>
@@ -46,7 +46,7 @@ export default function Navbar() {
           </a>
           <a
             href="#pricing"
-            className="cursor-pointer rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_0_24px_rgba(200,246,84,0.35)]"
+            className="cursor-pointer rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_0_24px_rgba(0, 112, 243,0.35)]"
           >
             Start free
           </a>

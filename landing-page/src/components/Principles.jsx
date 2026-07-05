@@ -54,7 +54,7 @@ export default function Principles() {
           <motion.div
             key={title}
             variants={fadeUp}
-            className="flex gap-4 rounded-2xl border border-border bg-card p-6"
+            className="flex gap-4 rounded-xl border border-border bg-card p-6"
           >
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-muted text-primary">
               <Icon size={22} weight="bold" aria-hidden="true" />

@@ -63,7 +63,7 @@ function AngleCard({ angle, selected, onSelect }) {
       style={{
         border: `1px solid ${isSelected ? 'var(--lime)' : 'var(--line)'}`,
         borderRadius: 'var(--r)', padding: 14, cursor: 'pointer',
-        background: isSelected ? 'rgba(200,246,84,0.06)' : 'var(--bg)',
+        background: isSelected ? 'rgba(0, 112, 243,0.06)' : 'var(--bg)',
         transition: 'all 0.15s',
       }}
     >
@@ -234,14 +234,14 @@ function LeadRow({ cl, campaignId, onUpdate }) {
                 <button
                   onClick={() => { setCallBooked(v => !v); trackEvent({ call_booked: !callBooked }); }}
                   className="btn btn--ghost"
-                  style={{ background: callBooked ? 'rgba(200,246,84,0.1)' : 'transparent', borderColor: callBooked ? 'var(--lime)' : 'var(--line)', color: callBooked ? 'var(--lime)' : 'var(--text-3)' }}
+                  style={{ background: callBooked ? 'rgba(0, 112, 243,0.1)' : 'transparent', borderColor: callBooked ? 'var(--lime)' : 'var(--line)', color: callBooked ? 'var(--lime)' : 'var(--text-3)' }}
                 >
                   <Phone size={11} /> Call Booked
                 </button>
                 <button
                   onClick={() => { setClient(v => !v); trackEvent({ client_closed: !clientClosed }); }}
                   className="btn btn--ghost"
-                  style={{ background: clientClosed ? 'rgba(255,138,115,0.1)' : 'transparent', borderColor: clientClosed ? 'var(--coral)' : 'var(--line)', color: clientClosed ? 'var(--coral)' : 'var(--text-3)' }}
+                  style={{ background: clientClosed ? 'rgba(0, 112, 243,0.1)' : 'transparent', borderColor: clientClosed ? 'var(--coral)' : 'var(--line)', color: clientClosed ? 'var(--coral)' : 'var(--text-3)' }}
                 >
                   <CheckCircle size={11} /> Client Closed
                 </button>
@@ -289,7 +289,7 @@ function CreateModal({ onClose, onCreate }) {
         style={{ maxWidth: 520, padding: 32 }}
         onClick={e => e.stopPropagation()}
       >
-        <h2 style={{ fontFamily: 'var(--f-serif)', fontStyle: 'italic', fontSize: 22, fontWeight: 400, color: 'var(--text)', margin: '0 0 24px' }}>
+        <h2 style={{ fontFamily: 'var(--f-heading)', fontSize: 22, fontWeight: 600, letterSpacing: '-0.04em', color: 'var(--text)', margin: '0 0 24px' }}>
           New Campaign
         </h2>
         <label className="field__label">CAMPAIGN NAME</label>
@@ -376,7 +376,7 @@ function AddLeadsModal({ campaign, onClose, onDone }) {
         style={{ maxWidth: 520, padding: 32 }}
         onClick={e => e.stopPropagation()}
       >
-        <h2 style={{ fontFamily: 'var(--f-serif)', fontStyle: 'italic', fontSize: 20, fontWeight: 400, color: 'var(--text)', margin: '0 0 20px' }}>
+        <h2 style={{ fontFamily: 'var(--f-heading)', fontSize: 20, fontWeight: 600, letterSpacing: '-0.04em', color: 'var(--text)', margin: '0 0 20px' }}>
           Add Leads → Intent Score
         </h2>
         {result ? (
@@ -515,7 +515,7 @@ function CampaignDetail({ campaign: initialCampaign, onBack }) {
       >
         <button onClick={onBack} className="btn btn--ghost btn--sm">← Back</button>
         <div>
-          <h2 style={{ fontFamily: 'var(--f-serif)', fontStyle: 'italic', fontSize: 22, fontWeight: 400, color: 'var(--text)', margin: 0 }}>{campaign.name}</h2>
+          <h2 style={{ fontFamily: 'var(--f-heading)', fontSize: 22, fontWeight: 600, letterSpacing: '-0.04em', color: 'var(--text)', margin: 0 }}>{campaign.name}</h2>
           <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--text-3)', marginTop: 4 }}>{campaign.niche ? `#${campaign.niche}` : ''} {campaign.service_type}</div>
         </div>
       </motion.div>
@@ -583,7 +583,7 @@ function CampaignDetail({ campaign: initialCampaign, onBack }) {
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           className="card"
-          style={{ marginBottom: 16, padding: 16, background: accuracy.overall_passing ? 'rgba(200,246,84,0.05)' : 'rgba(255,138,115,0.05)', borderColor: accuracy.overall_passing ? 'var(--lime)' : 'var(--coral)' }}
+          style={{ marginBottom: 16, padding: 16, background: accuracy.overall_passing ? 'rgba(0, 112, 243,0.05)' : 'rgba(0, 112, 243,0.05)', borderColor: accuracy.overall_passing ? 'var(--lime)' : 'var(--coral)' }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             {accuracy.overall_passing ? <CheckCircle size={14} style={{ color: 'var(--lime)' }} /> : <AlertCircle size={14} style={{ color: 'var(--coral)' }} />}

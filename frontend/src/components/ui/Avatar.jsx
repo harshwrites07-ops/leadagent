@@ -26,7 +26,7 @@ export default function Avatar({ name = '', size = 'md', src, style }) {
       width: px, height: px, borderRadius: '50%', flexShrink: 0,
       background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontSize: px * 0.38, fontWeight: 600, fontFamily: 'var(--f-sans)',
-      color: isLight ? 'var(--bg)' : 'var(--text)',
+      color: isLight ? 'var(--on-accent)' : 'var(--text)',
       ...style,
     }}>
       {initials}

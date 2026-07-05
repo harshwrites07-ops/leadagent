@@ -1,38 +1,42 @@
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap');
+@import url('https://api.fontshare.com/v2/css?f[]=general-sans@500,600&display=swap');
 @import "tailwindcss";
 
-/* Quelro brand tokens — mirrors frontend/src/index.css (DESIGN_SYSTEM.md).
-   Duotone rule: lime = the machine acting, coral = a human/attention moment.
-   Never both on the same element. */
+/* Quelro brand tokens — mirrors frontend/src/index.css.
+   Single accent rule: #0070f3 for every action / link / focus / live state. */
 @theme {
-  --color-background:        #0a0a0c;
-  --color-foreground:        #f3f3f5;
+  --color-background:        #000000;
+  --color-foreground:        #ffffff;
+  --color-heading:            rgba(255, 255, 255, 0.6);
 
-  --color-card:               #131318;
-  --color-card-foreground:    #f3f3f5;
+  --color-card:               #111111;
+  --color-card-foreground:    #ffffff;
 
-  --color-muted:              #181820;
-  --color-muted-foreground:   #a8a8b3;
+  --color-muted:              #111111;
+  --color-muted-foreground:   #999999;
 
-  --color-border:             #23232c;
-  --color-ring:                #c8f654;
+  --color-border:             #2e2e2e;
+  --color-ring:                #0070f3;
 
-  --color-primary:             #c8f654;
-  --color-primary-foreground:  #0a0a0c;
+  --color-primary:             #0070f3;
+  --color-primary-foreground:  #ffffff;
 
-  --color-secondary:           #ff8a73;
-  --color-secondary-foreground: #0a0a0c;
+  --color-secondary:           #0070f3;
+  --color-secondary-foreground: #ffffff;
 
-  --color-accent:               #f4e9b2;
-  --color-accent-foreground:    #0a0a0c;
+  --color-accent:               #0070f3;
+  --color-accent-foreground:    #ffffff;
 
-  --color-destructive:          #ff8a73;
-  --color-destructive-foreground: #0a0a0c;
+  --color-destructive:          #ef4444;
+  --color-destructive-foreground: #ffffff;
 
-  --font-heading: "Geist", ui-sans-serif, system-ui, sans-serif;
-  --font-body:    "Geist", ui-sans-serif, system-ui, sans-serif;
-  --font-serif:   "Instrument Serif", serif;
-  --font-mono:    "Geist Mono", ui-monospace, monospace;
+  --font-heading: "General Sans", "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-body:    "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif:   "General Sans", "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono:    "JetBrains Mono", ui-monospace, monospace;
+
+  --radius-md: 12px;
+  --radius-btn: 8px;
 }
 
 @layer base {
@@ -44,11 +48,14 @@
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-body);
+    letter-spacing: -0.01px;
     -webkit-font-smoothing: antialiased;
   }
 
   h1, h2, h3, h4 {
     font-family: var(--font-heading);
+    font-weight: 600;
+    letter-spacing: -0.04em;
   }
 
   :focus-visible {

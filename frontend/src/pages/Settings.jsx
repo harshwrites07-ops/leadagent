@@ -268,7 +268,7 @@ export default function Settings() {
         name: 'LeadAgent',
         description: plan_name,
         prefill: { name: user_name, email: user_email, contact: user_contact },
-        theme: { color: '#c8f654' },
+        theme: { color: '#0070f3' },
         handler: async (response) => {
           try {
             await api.post('/razorpay/verify-payment', {
@@ -341,7 +341,7 @@ export default function Settings() {
             const pct    = Math.round((filled / total) * 100);
             if (pct === 100) return null;
             return (
-              <div style={{ padding: '12px 16px', background: 'rgba(200,246,84,0.06)', border: '1px solid var(--lime-border)', borderRadius: 'var(--r)', display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div style={{ padding: '12px 16px', background: 'rgba(0, 112, 243,0.06)', border: '1px solid var(--lime-border)', borderRadius: 'var(--r)', display: 'flex', alignItems: 'center', gap: 14 }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
                     Your email system is {pct}% configured
@@ -542,7 +542,7 @@ export default function Settings() {
                   />
                 </div>
               ))}
-              <div className="muted" style={{ fontSize: 11, padding: '8px 12px', background: 'rgba(200,246,84,0.04)', border: '1px solid var(--lime-border)', borderRadius: 8 }}>
+              <div className="muted" style={{ fontSize: 11, padding: '8px 12px', background: 'rgba(0, 112, 243,0.04)', border: '1px solid var(--lime-border)', borderRadius: 8 }}>
                 Your samples are only used to build your Voice DNA. They are never sent or shared.
               </div>
             </div>
@@ -869,7 +869,7 @@ export default function Settings() {
           <div className="card__body" style={{ padding: 0 }}>
             <div className="row" style={{ padding: 14, borderBottom: '1px solid var(--line)', gap: 14 }}>
               <div style={{ position: 'relative' }}>
-                <span className="ava" style={{ width: 32, height: 32, fontSize: 12, minWidth: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-3)', color: 'var(--bg)' }}>
+                <span className="ava" style={{ width: 32, height: 32, fontSize: 12, minWidth: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-3)', color: 'var(--on-accent)' }}>
                   {(user?.email || 'Y')[0].toUpperCase()}
                 </span>
                 <span style={{ position: 'absolute', bottom: -1, right: -1, width: 8, height: 8, borderRadius: '50%', background: 'var(--lime)', border: '2px solid var(--surface)' }} />
@@ -898,7 +898,7 @@ export default function Settings() {
                 {billing?.price ? `$${billing.price} / month` : ''}{billing?.reset_date ? ` · renews ${billing.reset_date}` : ''}
               </span>
             </div>
-            <div style={{ fontSize: 28, fontFamily: 'var(--f-serif)', fontStyle: 'italic', letterSpacing: '-0.02em', lineHeight: 1.1, marginBottom: 16 }}>
+            <div style={{ fontSize: 28, fontFamily: 'var(--f-heading)', fontWeight: 600, letterSpacing: '-0.04em', lineHeight: 1.1, marginBottom: 16 }}>
               {planName === 'agency'
                 ? '5,000 emails/month · 10 Gmail accounts · 5 team seats · all features.'
                 : planName === 'pro'

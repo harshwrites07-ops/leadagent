@@ -359,7 +359,7 @@ export default function Analytics() {
                   <div className="card__body">
                     <div className="row" style={{ gap: 12 }}>
                       {top3.map((t, i) => (
-                        <div key={i} style={{ flex: 1, padding: '14px 16px', background: i === 0 ? 'rgba(200,246,84,0.06)' : 'var(--bg-2)', border: `1px solid ${i === 0 ? 'var(--lime-border)' : 'var(--line)'}`, borderRadius: 10, textAlign: 'center' }}>
+                        <div key={i} style={{ flex: 1, padding: '14px 16px', background: i === 0 ? 'rgba(0, 112, 243,0.06)' : 'var(--bg-2)', border: `1px solid ${i === 0 ? 'var(--lime-border)' : 'var(--line)'}`, borderRadius: 10, textAlign: 'center' }}>
                           <div style={{ fontSize: 22, fontWeight: 800, fontFamily: 'var(--f-mono)', color: i === 0 ? 'var(--lime)' : 'var(--text)', marginBottom: 4 }}>{fmt(Number(t.hour))}</div>
                           <div className="muted" style={{ fontSize: 11 }}>{t.sent} sent · {t.open_rate?.toFixed(0) || '—'}% open</div>
                           {i === 0 && <div style={{ fontSize: 10, color: 'var(--lime)', fontWeight: 600, marginTop: 4 }}>Best window</div>}
