@@ -171,7 +171,7 @@ function ConversationView({ reply, onBack, onReplySent }) {
       {/* Compose area */}
       <div className="flex-shrink-0" style={{ borderTop: '1px solid var(--line)', background: 'var(--surface-2)' }}>
         {sendError && (
-          <div className="px-4 pt-2 text-xs text-red-400">{sendError}</div>
+          <div className="px-4 pt-2 text-xs" style={{ color: 'var(--app-danger)' }}>{sendError}</div>
         )}
 
         {/* AI-suggested reply — a considered suggestion, not a raw text dump */}
@@ -360,7 +360,7 @@ export default function RepliesInbox({ onClose }) {
           exit={{ scale: 0.95, opacity: 0 }}
           transition={{ type: 'spring', damping: 28, stiffness: 300 }}
           className="w-full max-w-2xl rounded-xl flex flex-col overflow-hidden"
-          style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', height: '82vh', boxShadow: '0 0 60px rgba(0, 112, 243,0.08)' }}
+          style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', height: '82vh', boxShadow: '0 0 60px rgba(var(--lime-rgb),0.08)' }}
           onClick={e => e.stopPropagation()}
         >
           <AnimatePresence mode="wait">

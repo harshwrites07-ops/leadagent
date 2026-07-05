@@ -371,7 +371,7 @@ export default function AssistantChat() {
           width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
           background: 'var(--lime)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: speaking ? '0 0 12px rgba(0, 112, 243,0.7)' : 'none',
+          boxShadow: speaking ? '0 0 12px rgba(var(--lime-rgb),0.7)' : 'none',
           transition: 'box-shadow 0.3s',
         }}>
           {speaking ? <Radio size={16} color="var(--on-accent)" /> : <Bot size={17} color="var(--on-accent)" />}
@@ -380,7 +380,7 @@ export default function AssistantChat() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', margin: 0 }}>Marcus</p>
             {speaking
-              ? <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 20, fontWeight: 700, background: 'rgba(0, 112, 243,0.15)', color: 'var(--lime)', border: '1px solid rgba(0, 112, 243,0.3)' }}>SPEAKING</span>
+              ? <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 20, fontWeight: 700, background: 'rgba(var(--lime-rgb),0.15)', color: 'var(--lime)', border: '1px solid rgba(var(--lime-rgb),0.3)' }}>SPEAKING</span>
               : listening
               ? <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 20, fontWeight: 700, background: 'rgba(var(--ok-rgb),0.15)', color: 'var(--ok)', border: '1px solid rgba(var(--ok-rgb),0.3)' }}>LISTENING</span>
               : <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 20, fontWeight: 700, background: 'rgba(var(--ok-rgb),0.15)', color: 'var(--ok)', border: '1px solid rgba(var(--ok-rgb),0.3)' }}>LIVE</span>
@@ -429,7 +429,7 @@ export default function AssistantChat() {
 
             {/* Speaking indicator */}
             {speaking && !listening && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: 'rgba(0, 112, 243,0.06)', border: '1px solid rgba(0, 112, 243,0.2)', borderRadius: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: 'rgba(var(--lime-rgb),0.06)', border: '1px solid rgba(var(--lime-rgb),0.2)', borderRadius: 12 }}>
                 <VoiceWave color="var(--lime)" bars={6} />
                 <span style={{ fontSize: 11, color: 'var(--lime)' }}>Marcus is speaking</span>
                 <button onClick={stopSpeaking} style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer' }}>stop</button>
@@ -458,7 +458,7 @@ export default function AssistantChat() {
                   fontSize: 10, padding: '4px 10px', borderRadius: 20, cursor: 'pointer',
                   background: 'transparent', border: '1px solid var(--line-2)', color: 'var(--text-3)', transition: 'all 0.15s',
                 }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(0, 112, 243,0.4)'; e.currentTarget.style.color = 'var(--lime)'; }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(var(--lime-rgb),0.4)'; e.currentTarget.style.color = 'var(--lime)'; }}
                   onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--line-2)'; e.currentTarget.style.color = 'var(--text-3)'; }}
                 >{s}</button>
               ))}

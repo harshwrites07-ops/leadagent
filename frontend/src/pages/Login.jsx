@@ -127,15 +127,15 @@ export default function Login() {
 
 const styles = {
   page: { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-base)', padding: 16 },
-  card: { width: '100%', maxWidth: 400, background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 16, padding: '36px 32px' },
+  card: { width: '100%', maxWidth: 400, background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-lg)', padding: '36px 32px' },
   logo: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 28 },
-  logoIcon: { width: 36, height: 36, borderRadius: 9, background: 'linear-gradient(135deg, var(--lime), var(--coral))', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  logoIcon: { width: 36, height: 36, borderRadius: 'var(--r-md)', background: 'linear-gradient(135deg, var(--lime), var(--coral))', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   logoText: { fontFamily: 'var(--f-sans)', fontSize: 14, fontWeight: 700, color: 'var(--on-accent)', letterSpacing: '-0.03em' },
   logoName: { fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 800, color: 'var(--text-primary)', margin: 0, lineHeight: 1.2 },
   logoSub: { fontFamily: 'var(--font-mono)', fontSize: 8, fontWeight: 600, letterSpacing: '0.14em', color: 'var(--text-muted)', margin: 0 },
   title: { fontFamily: 'var(--font-heading)', fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 4px', letterSpacing: '-0.02em' },
   subtitle: { fontSize: 13, color: 'var(--text-muted)', margin: '0 0 20px' },
-  errorBox: { background: 'rgba(255,68,68,0.12)', border: '1px solid rgba(255,68,68,0.3)', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: 'var(--bad)', marginBottom: 16 },
+  errorBox: { background: 'rgba(var(--app-danger-rgb),0.12)', border: '1px solid rgba(var(--app-danger-rgb),0.3)', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: 'var(--bad)', marginBottom: 16 },
   form: { display: 'flex', flexDirection: 'column', gap: 4 },
   label: { fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginTop: 12, marginBottom: 4 },
   inputWrap: { position: 'relative', display: 'flex', alignItems: 'center' },

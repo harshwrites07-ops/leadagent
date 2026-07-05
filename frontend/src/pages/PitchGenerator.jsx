@@ -968,8 +968,8 @@ export default function PitchGenerator() {
                   animate={{ opacity: 1, y: 0 }}
                   style={{
                     padding: '12px 16px',
-                    background: 'rgba(245, 166, 35,0.08)',
-                    border: '1px solid rgba(245, 166, 35,0.25)',
+                    background: 'rgba(var(--warn-rgb),0.08)',
+                    border: '1px solid rgba(var(--warn-rgb),0.25)',
                     borderRadius: 10, marginBottom: 16,
                     display: 'flex', alignItems: 'center', gap: 10,
                   }}
@@ -1468,7 +1468,7 @@ export default function PitchGenerator() {
 
                   {/* Pre-send checklist */}
                   {checklist && (
-                    <div style={{ padding: '12px 14px', background: checklist.canSend ? 'rgba(0, 112, 243,0.04)' : 'rgba(0, 112, 243,0.06)', border: `1px solid ${checklist.canSend ? 'var(--lime-border)' : 'rgba(0, 112, 243,0.25)'}`, borderRadius: 8, marginBottom: 4 }}>
+                    <div style={{ padding: '12px 14px', background: checklist.canSend ? 'rgba(var(--lime-rgb),0.04)' : 'rgba(var(--lime-rgb),0.06)', border: `1px solid ${checklist.canSend ? 'var(--lime-border)' : 'rgba(var(--lime-rgb),0.25)'}`, borderRadius: 8, marginBottom: 4 }}>
                       <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: checklist.canSend ? 'var(--lime)' : 'var(--coral)', marginBottom: 8 }}>
                         {checklist.canSend ? '✓ Ready to send' : '⚠ Issues found'}
                       </div>

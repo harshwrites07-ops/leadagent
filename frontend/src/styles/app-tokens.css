@@ -1,0 +1,138 @@
+/* ═══════════════════════════════════════════════════════════
+   QUELRO APP TOKENS — Clay.com-derived design system
+   Source of truth for the app interior (Dashboard/CRM/etc).
+   Namespaced --app-* so it never collides with landing-page tokens.
+   Every raw hex value in the app should trace back to one of these.
+   ═══════════════════════════════════════════════════════════ */
+:root {
+  /* ── Backgrounds ── */
+  --app-bg:         #16181f;
+  --app-surface-1:  #282c35;
+  --app-surface-2:  #3c414d;
+  --app-danger:     #9f3e15;
+
+  /* ── Text ── */
+  --app-text-primary:   #ffffff;
+  --app-text-secondary: #e6e8ec;
+  --app-text-soft:      #eff1f3;
+  /* No tertiary/muted text token was specified in the source system.
+     Derived from text-secondary at reduced opacity rather than a new hex
+     (decision confirmed with product owner). Used for timestamps, meta
+     labels, and de-emphasized text. */
+  --app-text-muted:     rgba(230, 232, 236, 0.55);
+
+  /* ── Accent — the only chromatic color for interactive/meaningful elements ── */
+  --app-accent:         #3ea2fd;
+  --app-accent-hover:   #b8ddff;
+  --app-accent-pressed: #001e4b;
+  --app-warning:        #b37601;
+
+  /* Alpha tints derived from --app-accent / --app-warning / --app-danger for
+     soft fills, borders, and glows (badges, focus glows, hero gradients).
+     Not new base colors — computed tints of the sanctioned tokens above. */
+  --app-accent-soft:    rgba(62, 162, 253, 0.12);
+  --app-accent-border:  rgba(62, 162, 253, 0.32);
+  --app-accent-glow:    rgba(62, 162, 253, 0.35);
+  --app-accent-rgb:     62, 162, 253;
+  --app-warning-soft:   rgba(179, 118, 1, 0.14);
+  --app-warning-border: rgba(179, 118, 1, 0.38);
+  --app-warning-rgb:    179, 118, 1;
+  --app-danger-soft:    rgba(159, 62, 21, 0.14);
+  --app-danger-border:  rgba(159, 62, 21, 0.38);
+  --app-danger-rgb:     159, 62, 21;
+
+  /* No dedicated border/divider token was specified. Decision: reuse the
+     highest elevation surface as the border color (confirmed). */
+  --app-border:      var(--app-surface-2);
+  --app-border-soft: rgba(60, 65, 77, 0.6);
+
+  /* ── Border radius ── */
+  --app-radius-sm:   4px;
+  --app-radius-md:   6px;
+  --app-radius-lg:   8px;    /* default card/input radius */
+  --app-radius-pill: 9999px; /* buttons, badges, pills only */
+
+  /* ── Spacing (8px base grid) ── */
+  --app-space-tight: 6px;  /* icon gaps, tight badge padding only */
+  --app-space-1:     8px;  /* base unit — default */
+  --app-space-2:     16px;
+  --app-space-3:     24px;
+  --app-space-4:     32px;
+
+  /* ── Shadows (real computed values — used exactly) ── */
+  --app-shadow-card: rgba(126, 140, 168, 0.2) 0px 4px 12px;
+  --app-shadow-modal:
+    rgba(22, 24, 31, 0.4) 0px 2px 5px 0px,
+    rgba(255, 255, 255, 0.1) 0px 2px 1px -1px inset,
+    rgba(255, 255, 255, 0.05) 0px 0px 0px 0.5px inset;
+  --app-shadow-focus: rgb(87, 197, 247) 0px 0px 5px;
+
+  /* ── Typography ── */
+  /* 'Inter var' and 'Inter' currently resolve to the same loaded family —
+     kept as two token names for a future variable-font-file upgrade path,
+     without introducing a third family. */
+  --app-font-heading: 'Inter var', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --app-font-body:    'Inter', ui-sans-serif, system-ui, sans-serif;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TYPE SCALE — the only 9 text styles used in the app.
+   Every heading/label/button should use one of these classes.
+   ═══════════════════════════════════════════════════════════ */
+.type-h1 {
+  font-family: var(--app-font-heading);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.27;
+  letter-spacing: -0.55px;
+}
+.type-h4 {
+  font-family: var(--app-font-heading);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.40;
+  letter-spacing: -0.5px;
+}
+.type-h5 {
+  font-family: var(--app-font-heading);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.50;
+  letter-spacing: -0.4px;
+}
+.type-body {
+  font-family: var(--app-font-body);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.50;
+}
+.type-body-sm {
+  font-family: var(--app-font-body);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.43;
+}
+.type-body-14 {
+  font-family: var(--app-font-heading);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.43;
+}
+.type-button {
+  font-family: var(--app-font-body);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.33;
+}
+.type-button-12 {
+  font-family: var(--app-font-body);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.67;
+}
+.type-body-12 {
+  font-family: var(--app-font-heading);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.33;
+}

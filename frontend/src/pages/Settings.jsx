@@ -268,7 +268,7 @@ export default function Settings() {
         name: 'LeadAgent',
         description: plan_name,
         prefill: { name: user_name, email: user_email, contact: user_contact },
-        theme: { color: '#0070f3' },
+        theme: { color: '#3ea2fd' }, // Razorpay widget needs a literal hex; keep in sync with --app-accent
         handler: async (response) => {
           try {
             await api.post('/razorpay/verify-payment', {
@@ -341,7 +341,7 @@ export default function Settings() {
             const pct    = Math.round((filled / total) * 100);
             if (pct === 100) return null;
             return (
-              <div style={{ padding: '12px 16px', background: 'rgba(0, 112, 243,0.06)', border: '1px solid var(--lime-border)', borderRadius: 'var(--r)', display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div style={{ padding: '12px 16px', background: 'rgba(var(--lime-rgb),0.06)', border: '1px solid var(--lime-border)', borderRadius: 'var(--r)', display: 'flex', alignItems: 'center', gap: 14 }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
                     Your email system is {pct}% configured
@@ -542,7 +542,7 @@ export default function Settings() {
                   />
                 </div>
               ))}
-              <div className="muted" style={{ fontSize: 11, padding: '8px 12px', background: 'rgba(0, 112, 243,0.04)', border: '1px solid var(--lime-border)', borderRadius: 8 }}>
+              <div className="muted" style={{ fontSize: 11, padding: '8px 12px', background: 'rgba(var(--lime-rgb),0.04)', border: '1px solid var(--lime-border)', borderRadius: 8 }}>
                 Your samples are only used to build your Voice DNA. They are never sent or shared.
               </div>
             </div>

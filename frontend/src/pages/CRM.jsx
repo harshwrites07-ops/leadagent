@@ -238,7 +238,7 @@ export default function CRM() {
                             opacity: draggingId === lead.id ? 0.35 : 1,
                             scale: draggingId === lead.id ? 0.97 : 1,
                             rotate: draggingId === lead.id ? -2 : 0,
-                            boxShadow: isDropped ? '0 0 0 2px var(--lime), 0 8px 24px rgba(0, 112, 243,0.25)' : '0 0 0 0 transparent',
+                            boxShadow: isDropped ? '0 0 0 2px var(--lime), 0 8px 24px rgba(var(--lime-rgb),0.25)' : '0 0 0 0 transparent',
                           }}
                           transition={{
                             delay: colIdx * 0.04 + i * 0.03, duration: 0.3, boxShadow: { duration: 0.5 },

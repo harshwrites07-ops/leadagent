@@ -286,8 +286,8 @@ export default function Dashboard() {
               </span>
               <span style={{
                 display: 'flex', alignItems: 'center', gap: 4,
-                background: 'rgba(34, 197, 94,0.08)',
-                border: '1px solid rgba(34, 197, 94,0.2)',
+                background: 'rgba(var(--ok-rgb),0.08)',
+                border: '1px solid rgba(var(--ok-rgb),0.2)',
                 borderRadius: 20, padding: '2px 8px',
                 fontSize: 9, fontWeight: 700,
                 color: 'var(--ok)', fontFamily: 'var(--f-mono)',

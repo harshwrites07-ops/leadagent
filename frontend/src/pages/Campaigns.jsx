@@ -63,7 +63,7 @@ function AngleCard({ angle, selected, onSelect }) {
       style={{
         border: `1px solid ${isSelected ? 'var(--lime)' : 'var(--line)'}`,
         borderRadius: 'var(--r)', padding: 14, cursor: 'pointer',
-        background: isSelected ? 'rgba(0, 112, 243,0.06)' : 'var(--bg)',
+        background: isSelected ? 'rgba(var(--lime-rgb),0.06)' : 'var(--bg)',
         transition: 'all 0.15s',
       }}
     >
@@ -234,14 +234,14 @@ function LeadRow({ cl, campaignId, onUpdate }) {
                 <button
                   onClick={() => { setCallBooked(v => !v); trackEvent({ call_booked: !callBooked }); }}
                   className="btn btn--ghost"
-                  style={{ background: callBooked ? 'rgba(0, 112, 243,0.1)' : 'transparent', borderColor: callBooked ? 'var(--lime)' : 'var(--line)', color: callBooked ? 'var(--lime)' : 'var(--text-3)' }}
+                  style={{ background: callBooked ? 'rgba(var(--lime-rgb),0.1)' : 'transparent', borderColor: callBooked ? 'var(--lime)' : 'var(--line)', color: callBooked ? 'var(--lime)' : 'var(--text-3)' }}
                 >
                   <Phone size={11} /> Call Booked
                 </button>
                 <button
                   onClick={() => { setClient(v => !v); trackEvent({ client_closed: !clientClosed }); }}
                   className="btn btn--ghost"
-                  style={{ background: clientClosed ? 'rgba(0, 112, 243,0.1)' : 'transparent', borderColor: clientClosed ? 'var(--coral)' : 'var(--line)', color: clientClosed ? 'var(--coral)' : 'var(--text-3)' }}
+                  style={{ background: clientClosed ? 'rgba(var(--lime-rgb),0.1)' : 'transparent', borderColor: clientClosed ? 'var(--coral)' : 'var(--line)', color: clientClosed ? 'var(--coral)' : 'var(--text-3)' }}
                 >
                   <CheckCircle size={11} /> Client Closed
                 </button>
@@ -583,7 +583,7 @@ function CampaignDetail({ campaign: initialCampaign, onBack }) {
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           className="card"
-          style={{ marginBottom: 16, padding: 16, background: accuracy.overall_passing ? 'rgba(0, 112, 243,0.05)' : 'rgba(0, 112, 243,0.05)', borderColor: accuracy.overall_passing ? 'var(--lime)' : 'var(--coral)' }}
+          style={{ marginBottom: 16, padding: 16, background: accuracy.overall_passing ? 'rgba(var(--lime-rgb),0.05)' : 'rgba(var(--lime-rgb),0.05)', borderColor: accuracy.overall_passing ? 'var(--lime)' : 'var(--coral)' }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             {accuracy.overall_passing ? <CheckCircle size={14} style={{ color: 'var(--lime)' }} /> : <AlertCircle size={14} style={{ color: 'var(--coral)' }} />}

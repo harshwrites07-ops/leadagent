@@ -180,7 +180,7 @@ export default function Admin() {
       </div>
 
       {error && (
-        <div style={{ background: 'rgba(255,68,68,0.12)', border: '1px solid rgba(255,68,68,0.3)', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: 'var(--bad)', marginBottom: 16 }}>
+        <div style={{ background: 'rgba(var(--app-danger-rgb),0.12)', border: '1px solid rgba(var(--app-danger-rgb),0.3)', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: 'var(--bad)', marginBottom: 16 }}>
           {error}
         </div>
       )}

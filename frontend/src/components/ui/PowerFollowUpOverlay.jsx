@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Zap, CheckCircle } from 'lucide-react';
+import { motion } from 'framer-motion';
 import api from '../../utils/api';
 
+const EASE = [0.16, 1, 0.3, 1];
 const STEP_LABELS = ['', 'Fresh Insight', 'Social Proof', 'Check-In', 'Last Try', 'Close Loop'];
 
 export default function PowerFollowUpOverlay({ onClose }) {
@@ -88,20 +90,32 @@ export default function PowerFollowUpOverlay({ onClose }) {
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}>
-      <div style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', width: '100%', maxWidth: 580, padding: 32, position: 'relative' }}>
-        <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)' }}>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.15, ease: EASE }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 8 }}
+        transition={{ duration: 0.18, ease: EASE }}
+        style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', boxShadow: 'var(--app-shadow-modal)', width: '100%', maxWidth: 580, padding: 'var(--app-space-4)', position: 'relative' }}
+      >
+        <button onClick={onClose} style={{ position: 'absolute', top: 'var(--app-space-2)', right: 'var(--app-space-2)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)' }}>
           <X size={18} />
         </button>
 
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-          <div style={{ padding: 8, background: 'var(--lime-soft)', border: '1px solid var(--lime-border)', borderRadius: 'var(--r)', color: 'var(--lime)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--app-space-2)', marginBottom: 'var(--app-space-3)' }}>
+          <div style={{ padding: 'var(--app-space-1)', background: 'var(--lime-soft)', border: '1px solid var(--lime-border)', borderRadius: 'var(--r)', color: 'var(--lime)' }}>
             <Zap size={18} />
           </div>
           <div>
-            <h2 style={{ color: 'var(--text)', fontSize: 18, fontWeight: 600, margin: 0, fontFamily: 'var(--f-sans)' }}>Power Follow Up</h2>
-            <p style={{ color: 'var(--text-3)', fontSize: 12, margin: 0, fontFamily: 'var(--f-mono)' }}>5-step automated follow-up system</p>
+            <h2 className="type-h5" style={{ color: 'var(--text)', margin: 0 }}>Power Follow Up</h2>
+            <p className="type-body-12" style={{ color: 'var(--text-3)', margin: 0, fontFamily: 'var(--f-mono)' }}>5-step automated follow-up system</p>
           </div>
         </div>
 
@@ -111,18 +125,18 @@ export default function PowerFollowUpOverlay({ onClose }) {
             <div style={{ fontFamily: 'var(--f-mono)', fontSize: 48, fontWeight: 500, color: 'var(--lime)', marginBottom: 8 }}>
               {pending === null ? '–' : pending}
             </div>
-            <p style={{ color: 'var(--text-2)', marginBottom: 4, fontFamily: 'var(--f-sans)', fontSize: 13 }}>leads due for follow-up</p>
-            <p style={{ color: 'var(--text-3)', fontSize: 11, marginBottom: 24, fontFamily: 'var(--f-mono)' }}>
+            <p style={{ color: 'var(--text-2)', marginBottom: 4, fontFamily: 'var(--f-sans)', fontSize: 14 }}>leads due for follow-up</p>
+            <p style={{ color: 'var(--text-3)', fontSize: 12, marginBottom: 24, fontFamily: 'var(--f-mono)' }}>
               FU1 Day 3 · FU2 Day 6 · FU3 Day 9 · FU4 Day 12 · FU5 Day 15 → no_response
             </p>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-              <button onClick={onClose} style={{ padding: '8px 20px', background: 'var(--surface-2)', border: '1px solid var(--line)', borderRadius: 'var(--r)', color: 'var(--text-2)', cursor: 'pointer', fontFamily: 'var(--f-sans)', fontSize: 13 }}>
+              <button onClick={onClose} style={{ padding: '8px 20px', background: 'var(--surface-2)', border: '1px solid var(--line)', borderRadius: 'var(--app-radius-pill)', color: 'var(--text-2)', cursor: 'pointer', fontFamily: 'var(--f-sans)', fontSize: 14 }}>
                 Cancel
               </button>
               <button
                 onClick={start}
                 disabled={pending === 0}
-                style={{ padding: '8px 20px', background: 'var(--lime)', border: 'none', borderRadius: 'var(--r)', color: 'var(--on-accent)', cursor: pending === 0 ? 'not-allowed' : 'pointer', fontWeight: 600, fontFamily: 'var(--f-sans)', fontSize: 13, opacity: pending === 0 ? 0.4 : 1 }}
+                style={{ padding: '8px 20px', background: 'var(--lime)', border: 'none', borderRadius: 'var(--app-radius-pill)', color: 'var(--on-accent)', cursor: pending === 0 ? 'not-allowed' : 'pointer', fontWeight: 600, fontFamily: 'var(--f-sans)', fontSize: 14, opacity: pending === 0 ? 0.4 : 1 }}
               >
                 Send Follow-Ups
               </button>
@@ -140,14 +154,14 @@ export default function PowerFollowUpOverlay({ onClose }) {
               ].map(({ label, value, color }) => (
                 <div key={label} style={{ background: 'var(--surface-2)', borderRadius: 'var(--r)', padding: 16, textAlign: 'center', border: '1px solid var(--line)' }}>
                   <div style={{ color, fontFamily: 'var(--f-mono)', fontSize: 32, fontWeight: 500 }}>{value}</div>
-                  <div style={{ color: 'var(--text-3)', fontSize: 10, fontFamily: 'var(--f-mono)', letterSpacing: '0.1em' }}>{label}</div>
+                  <div style={{ color: 'var(--text-3)', fontSize: 12, fontFamily: 'var(--f-mono)', letterSpacing: '0.1em' }}>{label}</div>
                 </div>
               ))}
             </div>
 
             {phase === 'running' && total > 0 && (
               <div style={{ marginBottom: 12 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-3)', fontSize: 10, fontFamily: 'var(--f-mono)', marginBottom: 4 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-3)', fontSize: 12, fontFamily: 'var(--f-mono)', marginBottom: 4 }}>
                   <span>Progress</span>
                   <span>{stats.sent + stats.failed}/{total}</span>
                 </div>
@@ -157,7 +171,7 @@ export default function PowerFollowUpOverlay({ onClose }) {
               </div>
             )}
 
-            <div ref={feedRef} style={{ height: 180, overflowY: 'auto', background: 'var(--bg)', borderRadius: 'var(--r)', padding: 12, fontSize: 11, fontFamily: 'var(--f-mono)' }}>
+            <div ref={feedRef} style={{ height: 180, overflowY: 'auto', background: 'var(--bg)', borderRadius: 'var(--r)', padding: 12, fontSize: 12, fontFamily: 'var(--f-mono)' }}>
               {feed.map((f, i) => (
                 <div key={i} style={{ color: f.type === 'success' ? 'var(--ok)' : f.type === 'error' ? 'var(--bad)' : 'var(--text-3)', marginBottom: 2 }}>
                   <span style={{ color: 'var(--text-4)' }}>[{f.time}]</span> {f.msg}
@@ -170,16 +184,16 @@ export default function PowerFollowUpOverlay({ onClose }) {
               <div style={{ textAlign: 'center', marginTop: 16 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--ok)', marginBottom: 12 }}>
                   <CheckCircle size={16} />
-                  <span style={{ fontWeight: 600, fontSize: 13, fontFamily: 'var(--f-sans)' }}>Done — {stats.sent} follow-ups sent</span>
+                  <span style={{ fontWeight: 600, fontSize: 14, fontFamily: 'var(--f-sans)' }}>Done — {stats.sent} follow-ups sent</span>
                 </div>
-                <button onClick={onClose} style={{ padding: '8px 24px', background: 'var(--surface-2)', border: '1px solid var(--line)', borderRadius: 'var(--r)', color: 'var(--text)', cursor: 'pointer', fontFamily: 'var(--f-sans)', fontSize: 13 }}>
+                <button onClick={onClose} style={{ padding: '8px 24px', background: 'var(--surface-2)', border: '1px solid var(--line)', borderRadius: 'var(--app-radius-pill)', color: 'var(--text)', cursor: 'pointer', fontFamily: 'var(--f-sans)', fontSize: 14 }}>
                   Close
                 </button>
               </div>
             )}
           </>
         )}
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

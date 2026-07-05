@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { Zap, X, Loader, ChevronDown, ChevronUp, Square } from 'lucide-react';
+import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import api from '../../utils/api';
+
+const EASE = [0.16, 1, 0.3, 1];
 
 const GAP_PRESETS = [
   { label: '10 sec', secs: 10 },
@@ -185,8 +188,20 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
   const pct = stats.total > 0 ? Math.round(((stats.sent + stats.failed) / stats.total) * 100) : 0;
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.88)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div style={{ width: '100%', maxWidth: 560, maxHeight: 'calc(100vh - 32px)', background: 'var(--bg-surface)', borderRadius: 14, border: '1px solid rgba(var(--lime-rgb),0.2)', boxShadow: '0 0 60px rgba(var(--lime-rgb),0.1)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.15, ease: EASE }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.88)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--app-space-2)' }}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 8 }}
+        transition={{ duration: 0.18, ease: EASE }}
+        style={{ width: '100%', maxWidth: 560, maxHeight: 'calc(100vh - 32px)', background: 'var(--bg-surface)', borderRadius: 'var(--app-radius-lg)', border: '1px solid rgba(var(--lime-rgb),0.2)', boxShadow: 'var(--app-shadow-modal)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+      >
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid var(--border-subtle)', background: 'rgba(var(--lime-rgb),0.04)' }}>
@@ -310,7 +325,7 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
                             prev.includes(inbox.email) ? prev.filter(e => e !== inbox.email) : [...prev, inbox.email]
                           );
                           return (
-                            <div key={inbox.email} onClick={toggle} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 7, cursor: 'pointer', background: skipped ? 'rgba(255,68,68,0.06)' : 'var(--bg-elevated)', border: `1px solid ${skipped ? 'rgba(255,68,68,0.25)' : 'var(--border-default)'}`, opacity: skipped ? 0.6 : 1, transition: 'all 0.15s' }}>
+                            <div key={inbox.email} onClick={toggle} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 7, cursor: 'pointer', background: skipped ? 'var(--app-danger-soft)' : 'var(--bg-elevated)', border: `1px solid ${skipped ? 'var(--app-danger-border)' : 'var(--border-default)'}`, opacity: skipped ? 0.6 : 1, transition: 'all 0.15s' }}>
                               <div style={{ width: 16, height: 16, borderRadius: 4, border: `2px solid ${skipped ? 'var(--text-4)' : 'var(--accent-primary)'}`, background: skipped ? 'transparent' : 'var(--accent-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                                 {!skipped && <span style={{ color: 'var(--on-accent)', fontSize: 10, lineHeight: 1 }}>✓</span>}
                               </div>
@@ -422,7 +437,7 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
                 <button onClick={onClose} style={{ flex: 1, padding: '12px', borderRadius: 8, cursor: 'pointer', background: 'rgba(var(--ok-rgb),0.1)', border: '1px solid rgba(var(--ok-rgb),0.3)', color: 'var(--ok)', fontSize: 13, fontWeight: 600 }}>
                   Close Window (job keeps running)
                 </button>
-                <button onClick={stopJob} style={{ flex: 1, padding: '12px', borderRadius: 8, cursor: 'pointer', background: 'rgba(255,68,68,0.1)', border: '1px solid rgba(255,68,68,0.3)', color: 'var(--bad)', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                <button onClick={stopJob} style={{ flex: 1, padding: '12px', borderRadius: 8, cursor: 'pointer', background: 'var(--app-danger-soft)', border: '1px solid var(--app-danger-border)', color: 'var(--bad)', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                   <Square size={13} /> Stop Job
                 </button>
               </div>
@@ -435,7 +450,7 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
             )}
           </div>
         )}
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

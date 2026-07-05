@@ -719,7 +719,7 @@ export default function QualityLeads() {
                             <div key={name} className="t-mono" style={{
                               display: 'grid', gridTemplateColumns: '140px 1fr 80px 80px 80px', gap: 12,
                               padding: '10px 14px', borderRadius: 6, alignItems: 'center', fontSize: 11,
-                              background: name === calibResult.recommended ? 'rgba(0, 112, 243,0.08)' : 'transparent',
+                              background: name === calibResult.recommended ? 'rgba(var(--lime-rgb),0.08)' : 'transparent',
                               border: name === calibResult.recommended ? '1px solid var(--lime)' : '1px solid var(--line)',
                             }}>
                               <span style={{ color: name === calibResult.recommended ? 'var(--lime)' : 'var(--text-2)', fontWeight: name === calibResult.recommended ? 700 : 400 }}>

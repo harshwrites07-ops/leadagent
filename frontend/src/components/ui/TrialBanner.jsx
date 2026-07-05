@@ -21,8 +21,8 @@ export default function TrialBanner() {
 
   return (
     <div style={{
-      background: urgent ? 'rgba(0, 112, 243,0.13)' : 'rgba(0, 112, 243,0.08)',
-      borderBottom: `1px solid ${urgent ? 'rgba(0, 112, 243,0.32)' : 'rgba(0, 112, 243,0.22)'}`,
+      background: urgent ? 'rgba(var(--lime-rgb),0.13)' : 'rgba(var(--lime-rgb),0.08)',
+      borderBottom: `1px solid ${urgent ? 'rgba(var(--lime-rgb),0.32)' : 'rgba(var(--lime-rgb),0.22)'}`,
       padding: '9px 20px',
       display: 'flex',
       alignItems: 'center',

@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import api from '../../utils/api';
+
+const EASE = [0.16, 1, 0.3, 1];
 
 const PLANS = [
   {
@@ -49,73 +52,83 @@ export default function UpgradeWall() {
   };
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 9999,
-      background: 'rgba(10,10,12,0.92)',
-      backdropFilter: 'blur(12px)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: 24,
-    }}>
-      <div style={{ textAlign: 'center', maxWidth: 760, width: '100%' }}>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.15, ease: EASE }}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9999,
+        background: 'rgba(10,10,12,0.92)',
+        backdropFilter: 'blur(12px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 'var(--app-space-3)',
+      }}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.97, y: 8 }}
+        transition={{ duration: 0.18, ease: EASE }}
+        style={{ textAlign: 'center', maxWidth: 760, width: '100%' }}
+      >
         {/* Logo */}
         <div style={{
-          width: 48, height: 48, borderRadius: 12,
-          background: 'var(--lime)', display: 'flex',
+          width: 48, height: 48, borderRadius: 'var(--app-radius-lg)',
+          background: 'var(--app-accent)', display: 'flex',
           alignItems: 'center', justifyContent: 'center',
-          margin: '0 auto 20px',
+          margin: '0 auto var(--app-space-2)',
         }}>
-          <svg width="16" height="16" viewBox="0 0 14 14" fill="none"><path d="M8.5 1L3 7.5H7L5.5 13L11 6.5H7L8.5 1Z" fill="var(--on-accent)" strokeLinejoin="round"/></svg>
+          <svg width="16" height="16" viewBox="0 0 14 14" fill="none"><path d="M8.5 1L3 7.5H7L5.5 13L11 6.5H7L8.5 1Z" fill="#ffffff" strokeLinejoin="round"/></svg>
         </div>
 
-        <h2 style={{ fontFamily: 'var(--f-heading)', fontWeight: 600, fontSize: 32, letterSpacing: '-0.04em', color: 'var(--text)', margin: '0 0 8px' }}>
+        <h2 className="type-h1" style={{ color: 'var(--app-text-primary)', margin: '0 0 var(--app-space-1)' }}>
           Your free trial has ended.
         </h2>
-        <p style={{ color: 'var(--text-2)', fontSize: 15, margin: '0 0 36px' }}>
+        <p className="type-body-14" style={{ color: 'var(--app-text-secondary)', margin: '0 0 var(--app-space-4)' }}>
           Pick a plan to keep finding leads, generating pitches, and sending emails.
         </p>
 
         {/* Plans */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16, marginBottom: 28 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 'var(--app-space-2)', marginBottom: 'var(--app-space-3)' }}>
           {PLANS.map(plan => (
             <div key={plan.id} style={{
-              background: plan.highlight ? 'var(--surface-2)' : 'var(--surface)',
-              border: `1px solid ${plan.highlight ? 'var(--lime-border)' : 'var(--line)'}`,
-              borderRadius: 14,
-              padding: '28px 24px',
+              background: plan.highlight ? 'var(--app-surface-2)' : 'var(--app-surface-1)',
+              border: `1px solid ${plan.highlight ? 'var(--app-accent-border)' : 'var(--app-border)'}`,
+              borderRadius: 'var(--app-radius-lg)',
+              boxShadow: 'var(--app-shadow-card)',
+              padding: 'var(--app-space-3) var(--app-space-2)',
               position: 'relative',
               textAlign: 'left',
             }}>
               {plan.highlight && (
-                <div style={{
+                <div className="type-body-12" style={{
                   position: 'absolute', top: -11, left: '50%', transform: 'translateX(-50%)',
-                  background: 'var(--lime)', color: 'var(--on-accent)',
-                  fontSize: 10, fontWeight: 800, letterSpacing: '0.1em',
-                  padding: '3px 12px', borderRadius: 99,
-                  fontFamily: 'var(--f-mono)',
-                }}>MOST POPULAR</div>
+                  background: 'var(--app-accent)', color: '#ffffff',
+                  letterSpacing: '0.1em', textTransform: 'uppercase',
+                  padding: '3px var(--app-space-2)', borderRadius: 'var(--app-radius-pill)',
+                }}>Most popular</div>
               )}
-              <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text)', marginBottom: 4 }}>{plan.name}</div>
-              <div style={{ marginBottom: 20 }}>
-                <span style={{ fontSize: 32, fontWeight: 800, color: plan.highlight ? 'var(--lime)' : 'var(--text)', fontFamily: 'var(--f-sans)' }}>{plan.price}</span>
-                <span style={{ color: 'var(--text-3)', fontSize: 13 }}>{plan.period}</span>
+              <div className="type-h5" style={{ color: 'var(--app-text-primary)', marginBottom: 'var(--app-space-tight)' }}>{plan.name}</div>
+              <div style={{ marginBottom: 'var(--app-space-2)' }}>
+                <span style={{ fontFamily: 'var(--app-font-heading)', fontSize: 32, fontWeight: 700, color: plan.highlight ? 'var(--app-accent)' : 'var(--app-text-primary)' }}>{plan.price}</span>
+                <span className="type-body-14" style={{ color: 'var(--app-text-muted)' }}>{plan.period}</span>
               </div>
-              <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 6 }}>✓ {plan.leads}</div>
-              <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 24 }}>✓ {plan.emails}</div>
+              <div className="type-body-14" style={{ color: 'var(--app-text-secondary)', marginBottom: 'var(--app-space-tight)' }}>✓ {plan.leads}</div>
+              <div className="type-body-14" style={{ color: 'var(--app-text-secondary)', marginBottom: 'var(--app-space-3)' }}>✓ {plan.emails}</div>
               <button
                 onClick={() => handleUpgrade(plan.id)}
                 disabled={!!loading}
+                className="type-button"
                 style={{
                   width: '100%',
-                  background: plan.highlight ? 'var(--lime)' : 'var(--surface-3)',
-                  color: plan.highlight ? 'var(--on-accent)' : 'var(--text)',
-                  border: `1px solid ${plan.highlight ? 'transparent' : 'var(--line-2)'}`,
-                  borderRadius: 8,
+                  background: plan.highlight ? 'var(--app-accent)' : 'var(--app-surface-2)',
+                  color: plan.highlight ? '#ffffff' : 'var(--app-text-primary)',
+                  border: `1px solid ${plan.highlight ? 'transparent' : 'var(--app-border)'}`,
+                  borderRadius: 'var(--app-radius-pill)',
                   padding: '10px 0',
-                  fontWeight: 700,
-                  fontSize: 13,
                   cursor: loading ? 'not-allowed' : 'pointer',
                   opacity: loading && loading !== plan.id ? 0.5 : 1,
-                  fontFamily: 'var(--f-sans)',
                   transition: 'opacity 0.15s',
                 }}
               >
@@ -125,10 +138,10 @@ export default function UpgradeWall() {
           ))}
         </div>
 
-        <p style={{ color: 'var(--text-4)', fontSize: 12 }}>
-          Cancel anytime · Secure checkout via Stripe · <a href="/terms" target="_blank" style={{ color: 'var(--text-3)' }}>Terms</a> · <a href="/privacy" target="_blank" style={{ color: 'var(--text-3)' }}>Privacy</a>
+        <p className="type-body-12" style={{ color: 'var(--app-text-muted)' }}>
+          Cancel anytime · Secure checkout via Stripe · <a href="/terms" target="_blank" style={{ color: 'var(--app-text-secondary)' }}>Terms</a> · <a href="/privacy" target="_blank" style={{ color: 'var(--app-text-secondary)' }}>Privacy</a>
         </p>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
