@@ -703,6 +703,9 @@ function _initSqliteSchema(db) {
   alterTry(`ALTER TABLE quality_leads ADD COLUMN tier TEXT`);
   alterTry(`ALTER TABLE users ADD COLUMN hot_alert_digest_enabled INTEGER DEFAULT 1`);
 
+  // Per-service fit v1 (Session 2.4) — { editor, thumbnail, shorts, scriptwriter }, each 0-1.
+  alterTry(`ALTER TABLE quality_leads ADD COLUMN service_fit TEXT DEFAULT '{}'`);
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS quota_usage (
       api_key_hash TEXT NOT NULL,
@@ -726,6 +729,13 @@ function _initSqliteSchema(db) {
       digested_at DATETIME,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS sub_count_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      channel_id TEXT NOT NULL,
+      count INTEGER NOT NULL,
+      recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_sub_count_history_channel ON sub_count_history(channel_id);
     CREATE TABLE IF NOT EXISTS video_description_snapshots (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       channel_id TEXT NOT NULL,

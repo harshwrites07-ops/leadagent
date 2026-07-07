@@ -6,6 +6,19 @@ const { detectPainPoints } = require('../utils/painPoints');
 const YT_BASE = 'https://www.googleapis.com/youtube/v3';
 const ENV_PATH = path.join(__dirname, '../../../.env');
 
+// Parses YouTube's ISO 8601 video duration format ("PT1H2M3S", "PT45S") into
+// whole seconds. Returns null (never 0) when the field is absent — 0 seconds
+// would look like a real, suspiciously-short video rather than missing data.
+function parseISO8601Duration(iso) {
+  if (!iso) return null;
+  const m = iso.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/);
+  if (!m) return null;
+  const hours = parseInt(m[1] || '0', 10);
+  const minutes = parseInt(m[2] || '0', 10);
+  const seconds = parseInt(m[3] || '0', 10);
+  return hours * 3600 + minutes * 60 + seconds;
+}
+
 // ─── Key rotation pool ─────────────────────────────────────────────────────────
 const exhaustedKeys = new Set();
 let resetTimer = null;
@@ -548,7 +561,7 @@ async function fetchVideoData(channelId, maxResults = 10) {
     const videoIds = plRes.data.items.map(v => v.contentDetails.videoId).filter(Boolean);
     if (!videoIds.length) return { status: 'ok', recentVideos: [], totalVideos, subscriberCount, avgViews: 0, avgLikes: 0, avgComments: 0, uploadFreqDays: 0, lastUploadDate: null };
 
-    const videoStats = await ytGet('/videos', { part: 'statistics,snippet', id: videoIds.join(',') });
+    const videoStats = await ytGet('/videos', { part: 'statistics,snippet,contentDetails', id: videoIds.join(',') });
     const recentVideos = videoStats.data.items.map(v => ({
       id: v.id, title: v.snippet.title,
       views: parseInt(v.statistics.viewCount || '0'),
@@ -558,6 +571,9 @@ async function fetchVideoData(channelId, maxResults = 10) {
       // Needed for creditDiffService.js (Session 2.3) — not previously mapped,
       // so credit extraction would always have seen an empty description.
       description: v.snippet.description || '',
+      // ISO 8601 duration (e.g. "PT45S", "PT12M3S") — needed for capacityDetectors.js
+      // (Session 2.4) shorts/scriptwriter heuristics. parseISO8601Duration() below.
+      durationSeconds: parseISO8601Duration(v.contentDetails?.duration),
     }));
 
     let avgViews = 0, avgLikes = 0, avgComments = 0, uploadFreqDays = 0, lastUploadDate = null;
@@ -619,4 +635,4 @@ async function applyVideoDataToLead(db, leadId, result) {
   }
 }
 
-module.exports = { searchChannels, searchChannelsMulti, buildChannelProfile, testApiKey, detectViralChannels, resolveChannelUrl, getChannelByUrl, getAllKeys, getKeyPoolStatus, isQuotaExhausted, getNextKey: getKey, fetchVideoData, applyVideoDataToLead, markExhausted };
+module.exports = { searchChannels, searchChannelsMulti, buildChannelProfile, testApiKey, detectViralChannels, resolveChannelUrl, getChannelByUrl, getAllKeys, getKeyPoolStatus, isQuotaExhausted, getNextKey: getKey, fetchVideoData, applyVideoDataToLead, markExhausted, parseISO8601Duration };

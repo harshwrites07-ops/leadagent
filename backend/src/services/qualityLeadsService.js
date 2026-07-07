@@ -38,8 +38,9 @@ async function createHotAlert(db, ml) {
   }
 }
 
-async function scoreBatch(batch, weights) {
+async function scoreBatch(batch, weights, videos = []) {
   const db = getDb();
+  const { computeServiceFit } = require('./capacityDetectors');
   let hot = 0, warm = 0, cold = 0, errors = 0;
 
   for (const ml of batch) {
@@ -58,6 +59,17 @@ async function scoreBatch(batch, weights) {
         try { await createHotAlert(db, ml); } catch (e) { console.error(`[HotAlert] Failed for ${ml.channel_id}:`, e.message); }
       }
 
+      // Session 2.4 — per-service fit. `videos` is only populated when
+      // scoreBatch is called from a live refresh (it's the just-fetched
+      // recentVideos, not something master_leads persists); without it, the
+      // heuristics that need duration/title data honestly score 0 rather
+      // than guessing.
+      let serviceFit = { editor: 0, thumbnail: 0, shorts: 0, scriptwriter: 0 };
+      try {
+        const vacancySignal = await db.get(`SELECT id FROM platform_signals WHERE creator_id = ? AND platform = 'credit_diff' AND signal_type = 'vacancy' LIMIT 1`, [ml.channel_id]);
+        serviceFit = await computeServiceFit({ lead: ml, videos, meta_channel, schedule_break, break_severity, hasVacancy: !!vacancySignal });
+      } catch {}
+
       // meta_channel rows (editing-tutorial/coaching channels) never get
       // promoted to quality_leads regardless of score — they teach/sell the
       // service, they don't buy it. See classifyMetaChannel() (Session 0.4).
@@ -66,15 +78,15 @@ async function scoreBatch(batch, weights) {
         await db.run(`
           INSERT OR REPLACE INTO quality_leads
             (creator_id, channel_url, channel_name, channel_handle, subscriber_count, niche, email,
-             intent_score, intent_tier, meta_channel, lead_type, schedule_break, break_severity, tier, last_refreshed_at,
+             intent_score, intent_tier, meta_channel, lead_type, schedule_break, break_severity, tier, last_refreshed_at, service_fit,
              sig_upload_frequency, sig_view_growth, sig_title_keywords,
              sig_description_keywords, sig_engagement, sig_consistency,
              source, updated_at)
-          VALUES (?,?,?,?,?,?,?,?,?,0,?,?,?,?,CURRENT_TIMESTAMP,?,?,?,?,?,?,'master_pool',CURRENT_TIMESTAMP)
+          VALUES (?,?,?,?,?,?,?,?,?,0,?,?,?,?,CURRENT_TIMESTAMP,?,?,?,?,?,?,?,'master_pool',CURRENT_TIMESTAMP)
         `, [
           ml.channel_id, channelUrl, ml.channel_name, ml.channel_handle,
           ml.subscriber_count, ml.niche, ml.email, intent_score, qualTier,
-          lead_type, schedule_break ? 1 : 0, break_severity, tier,
+          lead_type, schedule_break ? 1 : 0, break_severity, tier, JSON.stringify(serviceFit),
           signals?.niche_score || 0,
           signals?.views_score || 0,
           0,
@@ -320,8 +332,17 @@ async function runTieredRefresh() {
           await diffAndRecordSignals(ml.channel_id);
         } catch {}
 
+        // Capacity detectors (Session 2.4) — subscriber-milestone history and
+        // sponsor/revenue detection, on every tier's refresh.
+        try {
+          const { recordSubCount, detectAndRecordMilestone } = require('./capacityDetectors');
+          const currentSubs = result.subscriberCount || ml.subscriber_count;
+          await recordSubCount(ml.channel_id, currentSubs);
+          await detectAndRecordMilestone(ml.channel_id, currentSubs);
+        } catch {}
+
         const updated = await db.get('SELECT * FROM master_leads WHERE channel_id = ?', [ml.channel_id]);
-        await scoreBatch([updated]);
+        await scoreBatch([updated], undefined, result.recentVideos || []);
         refreshed++;
       } catch (e) {
         failed++;

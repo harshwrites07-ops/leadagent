@@ -74,7 +74,7 @@ function normalizeSql(sql) {
         subscriber_count=EXCLUDED.subscriber_count, niche=EXCLUDED.niche, email=EXCLUDED.email,
         intent_score=EXCLUDED.intent_score, intent_tier=EXCLUDED.intent_tier, meta_channel=EXCLUDED.meta_channel,
         lead_type=EXCLUDED.lead_type, schedule_break=EXCLUDED.schedule_break, break_severity=EXCLUDED.break_severity,
-        tier=EXCLUDED.tier, last_refreshed_at=EXCLUDED.last_refreshed_at,
+        tier=EXCLUDED.tier, last_refreshed_at=EXCLUDED.last_refreshed_at, service_fit=EXCLUDED.service_fit,
         sig_upload_frequency=EXCLUDED.sig_upload_frequency, sig_view_growth=EXCLUDED.sig_view_growth,
         sig_title_keywords=EXCLUDED.sig_title_keywords, sig_description_keywords=EXCLUDED.sig_description_keywords,
         sig_engagement=EXCLUDED.sig_engagement, sig_consistency=EXCLUDED.sig_consistency,
@@ -796,6 +796,7 @@ async function initPostgres() {
     try { await query(`ALTER TABLE quality_leads ADD COLUMN IF NOT EXISTS last_refreshed_at TIMESTAMP`); } catch {}
     try { await query(`ALTER TABLE quality_leads ADD COLUMN IF NOT EXISTS tier TEXT`); } catch {}
     try { await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS hot_alert_digest_enabled INTEGER DEFAULT 1`); } catch {}
+    try { await query(`ALTER TABLE quality_leads ADD COLUMN IF NOT EXISTS service_fit TEXT DEFAULT '{}'`); } catch {}
 
     await query(`
       CREATE TABLE IF NOT EXISTS quota_usage (
@@ -830,6 +831,17 @@ async function initPostgres() {
       )
     `);
     console.log('[PG] ✅ hot_alert_notifications');
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS sub_count_history (
+        id SERIAL PRIMARY KEY,
+        channel_id TEXT NOT NULL,
+        count INTEGER NOT NULL,
+        recorded_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('[PG] ✅ sub_count_history');
+    try { await query(`CREATE INDEX IF NOT EXISTS idx_sub_count_history_channel ON sub_count_history(channel_id)`); } catch {}
 
     await query(`
       CREATE TABLE IF NOT EXISTS video_description_snapshots (

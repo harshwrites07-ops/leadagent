@@ -22,7 +22,7 @@ async function buildSnapshot(lead) {
   for (const key of SIGNAL_KEYS) signals[key] = signalsRaw[key] ?? null;
 
   let confirmedSignals = [];
-  let tier = null, lead_type = null, provenance = null;
+  let tier = null, lead_type = null, provenance = null, service_fit = null;
   if (lead.channel_id) {
     try {
       const rows = await db.all(
@@ -45,6 +45,13 @@ async function buildSnapshot(lead) {
       if (ml) { tier = ml.tier ?? null; lead_type = ml.lead_type ?? null; }
     } catch {}
 
+    // service_fit (Session 2.4) — logged for future outcome learning
+    // (Session 3.1), not just served live.
+    try {
+      const ql = await db.get('SELECT service_fit FROM quality_leads WHERE creator_id = ?', [lead.channel_id]);
+      if (ql?.service_fit) service_fit = parseJSON(ql.service_fit, null);
+    } catch {}
+
     // Provenance (Session 2.1 graph crawler) — logged as metadata only, never
     // used to inject a fabricated boost into intent_score or the signals
     // above; this is what "never fabricate signals the lead doesn't have"
@@ -61,7 +68,7 @@ async function buildSnapshot(lead) {
   const email_verified = lead.email_status === 'valid' ? true : lead.email_status === 'invalid' ? false : null;
 
   return JSON.stringify({
-    tier, lead_type,
+    tier, lead_type, service_fit,
     intent_score: lead.intent_score ?? null,
     temperature: lead.temperature ?? null,
     signals,

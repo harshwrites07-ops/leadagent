@@ -41,6 +41,25 @@ router.post('/populate/incremental', async (req, res) => {
   try { res.json(await scoreNewMasterLeads()); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Maps a user's free-text service_type onboarding field to one of the four
+// service_fit keys (Session 2.4) via keyword matching. Returns null for
+// anything unrecognized — callers must fall back to default ordering rather
+// than guessing a fit that isn't there.
+const SERVICE_TYPE_KEYWORDS = {
+  editor: ['edit', 'editing', 'editor'],
+  thumbnail: ['thumbnail', 'thumbnails'],
+  shorts: ['shorts', 'short-form', 'short form'],
+  scriptwriter: ['script', 'scriptwriting', 'scriptwriter', 'writing'],
+};
+function matchServiceFitKey(serviceType) {
+  if (!serviceType) return null;
+  const lower = serviceType.toLowerCase();
+  for (const [key, keywords] of Object.entries(SERVICE_TYPE_KEYWORDS)) {
+    if (keywords.some(kw => lower.includes(kw))) return key;
+  }
+  return null;
+}
+
 router.get('/leads', async (req, res) => {
   const { page = 1, limit = 50, niche, min_subs, max_subs, source, outreached, tier = 'all' } = req.query;
   const db = getDb();
@@ -56,6 +75,27 @@ router.get('/leads', async (req, res) => {
   try {
     const totalRow = await db.get(`SELECT COUNT(*) as n FROM quality_leads ${where}`, params);
     const total = totalRow.n;
+
+    // Service-fit reordering (Session 2.4): only applies when the user has a
+    // recognized service_type AND we're not already paginating past what a
+    // single-page re-sort could correctly order — pull a bounded working set,
+    // re-sort by service_fit, then paginate in memory. Users with no
+    // recognized service fall back to the plain DB-level ordering untouched.
+    const fitKey = matchServiceFitKey(req.user?.service_type);
+    if (fitKey && parseInt(page) === 1) {
+      const workingSetSize = Math.max(parseInt(limit) * 4, 200);
+      const candidates = await db.all(`SELECT * FROM quality_leads ${where} ORDER BY intent_score DESC, subscriber_count DESC LIMIT ?`, [...params, workingSetSize]);
+      candidates.sort((a, b) => {
+        let fitA = 0, fitB = 0;
+        try { fitA = JSON.parse(a.service_fit || '{}')[fitKey] || 0; } catch {}
+        try { fitB = JSON.parse(b.service_fit || '{}')[fitKey] || 0; } catch {}
+        if (fitA !== fitB) return fitB - fitA;
+        return (b.intent_score || 0) - (a.intent_score || 0);
+      });
+      const leads = candidates.slice(0, parseInt(limit));
+      return res.json({ leads, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)), ordered_by_service_fit: fitKey });
+    }
+
     const leads = await db.all(`SELECT * FROM quality_leads ${where} ORDER BY intent_score DESC, subscriber_count DESC LIMIT ? OFFSET ?`, [...params, parseInt(limit), offset]);
     res.json({ leads, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) });
   } catch (e) { res.status(500).json({ error: e.message }); }
