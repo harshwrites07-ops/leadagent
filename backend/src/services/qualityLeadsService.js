@@ -309,6 +309,17 @@ async function runTieredRefresh() {
           try { await scanCommunityPosts(ml); } catch {}
         }
 
+        // Credit diffing (Session 2.3) — capture this refresh's video
+        // descriptions and diff against the last capture round for every tier,
+        // not just S/A: a vacancy/proven_buyer signal is itself what promotes
+        // a D/C-tier lead upward, so gating it to S/A would make it unable to
+        // ever discover a new opportunity outside the leads already flagged.
+        try {
+          const { captureVideoSnapshots, diffAndRecordSignals } = require('./creditDiffService');
+          await captureVideoSnapshots(ml.channel_id, result.recentVideos || []);
+          await diffAndRecordSignals(ml.channel_id);
+        } catch {}
+
         const updated = await db.get('SELECT * FROM master_leads WHERE channel_id = ?', [ml.channel_id]);
         await scoreBatch([updated]);
         refreshed++;

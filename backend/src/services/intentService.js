@@ -216,12 +216,13 @@ function classifyLeadType(lead, videos, signals) {
 // (>14d) at scoring time, B = STRAINED, C = SCALING, D = everything else.
 // Team-change signals (Phase 2 — credit diffing) will extend the A tier
 // later; not available yet, so not fabricated here.
-function computeTier({ meta_channel, is_confirmed, confirmedSignalAgeDays, lead_type }) {
+function computeTier({ meta_channel, is_confirmed, confirmedSignalAgeDays, lead_type, hasTeamChangeSignal = false }) {
   if (meta_channel) return 'D';
   if (is_confirmed) {
     if (confirmedSignalAgeDays === null || confirmedSignalAgeDays <= 14) return 'S';
     return 'A';
   }
+  if (hasTeamChangeSignal) return 'A'; // credit-diff vacancy/proven_buyer (Session 2.3)
   if (lead_type === 'STRAINED') return 'B';
   if (lead_type === 'SCALING') return 'C';
   return 'D';
@@ -551,7 +552,17 @@ async function scoreMasterLead(ml) {
     }
   } catch (e) {}
 
-  const tier = computeTier({ meta_channel, is_confirmed, confirmedSignalAgeDays, lead_type: effective_lead_type });
+  // Team-change signal (Session 2.3 credit diffing — "vacancy" or
+  // "proven_buyer") is exactly the A-tier evidence computeTier's own comment
+  // said would arrive in Phase 2.
+  let hasTeamChangeSignal = false;
+  try {
+    const db = getDb();
+    const teamChangeSignal = await db.get(`SELECT id FROM platform_signals WHERE creator_id = ? AND platform = 'credit_diff' AND signal_type IN ('vacancy', 'proven_buyer') LIMIT 1`, [ml.channel_id]);
+    hasTeamChangeSignal = !!teamChangeSignal;
+  } catch (e) {}
+
+  const tier = computeTier({ meta_channel, is_confirmed, confirmedSignalAgeDays, lead_type: effective_lead_type, hasTeamChangeSignal });
 
   return {
     intent_score, confidence: is_confirmed ? 'High' : 'Low', temperature, meta_channel,

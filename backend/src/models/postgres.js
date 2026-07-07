@@ -832,6 +832,19 @@ async function initPostgres() {
     console.log('[PG] ✅ hot_alert_notifications');
 
     await query(`
+      CREATE TABLE IF NOT EXISTS video_description_snapshots (
+        id SERIAL PRIMARY KEY,
+        channel_id TEXT NOT NULL,
+        video_id TEXT NOT NULL,
+        description_hash TEXT NOT NULL,
+        credits_json TEXT DEFAULT '{}',
+        captured_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('[PG] ✅ video_description_snapshots');
+    try { await query(`CREATE INDEX IF NOT EXISTS idx_video_snapshots_channel ON video_description_snapshots(channel_id)`); } catch {}
+
+    await query(`
       CREATE TABLE IF NOT EXISTS job_board_listings (
         id SERIAL PRIMARY KEY,
         board TEXT NOT NULL,

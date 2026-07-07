@@ -793,9 +793,9 @@ async function generateFollowUpSequence(lead, initialEmail, psychology) {
   const latestVideo  = recentVideos[0]?.title || null;
 
   // Resolve sender name from the lead's owner — never hardcode
-  let senderFirst = 'Alex';
+  let senderFirst = 'there';
   try {
-    const u = getDb().prepare('SELECT full_name FROM users WHERE id=?').get(lead.user_id);
+    const u = await getDb().get('SELECT full_name FROM users WHERE id=?', [lead.user_id]);
     if (u?.full_name) senderFirst = u.full_name.split(' ')[0];
   } catch {}
 
@@ -1261,7 +1261,7 @@ Return ONLY valid JSON (no markdown, no backticks):
       // All Gemini keys exhausted — return fallback template, never throw
       let userName = 'Prahvi';
       try {
-        const user = getDb().prepare('SELECT full_name FROM users WHERE id = ?').get(userId || lead.user_id);
+        const user = await getDb().get('SELECT full_name FROM users WHERE id = ?', [userId || lead.user_id]);
         if (user?.full_name) userName = user.full_name;
       } catch {}
       console.warn('[Email] Using fallback template for:', lead.channel_name);
@@ -1292,7 +1292,7 @@ Return ONLY valid JSON (no markdown, no backticks):
 
   let userName = 'Prahvi';
   try {
-    const user = getDb().prepare('SELECT full_name FROM users WHERE id = ?').get(userId || lead.user_id);
+    const user = await getDb().get('SELECT full_name FROM users WHERE id = ?', [userId || lead.user_id]);
     if (user?.full_name) userName = user.full_name;
   } catch {}
   console.warn('[Email] Using fallback template for:', lead.channel_name);
@@ -1979,7 +1979,9 @@ async function generateWithMarcus(lead, userId, onProgress) {
 
   // Build creator intelligence pack
   const { buildCreatorIntelligencePack } = require('./channelAnalyzer');
+  const { getCreditDiffFacts } = require('./creditDiffService');
   let intelligencePack = buildCreatorIntelligencePack(lead);
+  intelligencePack.credit_diff_facts = await getCreditDiffFacts(lead.channel_id);
   console.log(`[Marcus] Intelligence pack built for ${lead.channel_name} — archetype: ${intelligencePack.archetype}`);
 
   // Input contract, section 1: a specific video title is the strongest
@@ -1998,6 +2000,7 @@ async function generateWithMarcus(lead, userId, onProgress) {
         lead.recent_videos = JSON.stringify(videoFetchResult.recentVideos || []);
         lead.recent_video_title = videoFetchResult.recentVideos?.[0]?.title || null;
         intelligencePack = buildCreatorIntelligencePack(lead);
+        intelligencePack.credit_diff_facts = await getCreditDiffFacts(lead.channel_id);
         console.log(`[Marcus] Live-enriched video data for ${lead.channel_name} — ${videoFetchResult.recentVideos?.length || 0} videos`);
       } else {
         console.warn(`[Marcus] Live video enrichment for ${lead.channel_name} came back "${videoFetchResult.status}"`);

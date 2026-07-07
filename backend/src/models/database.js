@@ -726,6 +726,15 @@ function _initSqliteSchema(db) {
       digested_at DATETIME,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS video_description_snapshots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      channel_id TEXT NOT NULL,
+      video_id TEXT NOT NULL,
+      description_hash TEXT NOT NULL,
+      credits_json TEXT DEFAULT '{}',
+      captured_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_video_snapshots_channel ON video_description_snapshots(channel_id);
     CREATE TABLE IF NOT EXISTS job_board_listings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       board TEXT NOT NULL,

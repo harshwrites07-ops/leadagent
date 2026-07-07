@@ -267,6 +267,13 @@ async function buildChannelProfile(ch, earlyEmail = null) {
   }
 
   const email = resolvedEmail || null;
+  let emailMxValid = false;
+  if (email) {
+    try {
+      const { hasMxRecord } = require('./emailService');
+      emailMxValid = await hasMxRecord(email.split('@')[1]);
+    } catch {}
+  }
   const engagementRate = subs > 0 ? ((avgLikes + avgComments) / subs) * 100 : 0;
   const mostViewed = recentVideos.length ? recentVideos.reduce((a, b) => a.views > b.views ? a : b) : {};
   const description = ch.snippet?.description || '';
@@ -291,6 +298,7 @@ async function buildChannelProfile(ch, earlyEmail = null) {
     most_viewed_video: JSON.stringify({ title: mostViewed.title, views: mostViewed.views }),
     country: ch.snippet?.country || null,
     email: email,
+    email_mx_valid: emailMxValid,
     website: website || null,
     social_links: JSON.stringify({}),
     thumbnail_url: ch.snippet?.thumbnails?.medium?.url || null,
@@ -312,10 +320,26 @@ async function buildChannelProfile(ch, earlyEmail = null) {
 const SKIP_EMAIL_DOMAINS = new Set([
   'youtube.com', 'google.com', 'googlemail.com', 'googleapis.com',
   'gstatic.com', 'ggpht.com', 'ytimg.com', 'sentry.io', 'example.com',
+  // Disposable/temp-mail domains — these often have valid MX records, so an MX
+  // check alone wouldn't catch them; a real send would just bounce or vanish.
+  'mailinator.com', '10minutemail.com', 'guerrillamail.com', 'tempmail.com',
+  'temp-mail.org', 'throwawaymail.com', 'yopmail.com', 'trashmail.com',
+  'getnada.com', 'fakeinbox.com', 'sharklasers.com', 'dispostable.com',
+  'maildrop.cc', 'mintemail.com', 'mailnesia.com',
 ]);
 
+// Asset-filename "TLDs" that the email regex mistakes for a real domain suffix
+// — e.g. "logo@2x.png" (a retina image filename) parses as user=logo, domain=2x, tld=png.
+const NON_EMAIL_TLDS = new Set(['png','jpg','jpeg','gif','webp','svg','bmp','ico','pdf','css','js','mp4','mov','avi','woff','woff2','ttf']);
+
 function extractEmail(text) {
-  const all = [...text.matchAll(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g)].map(m => m[0]);
+  // Normalize obfuscated formats: [at], (at), {at}, " at ", [dot], (dot), " dot "
+  const normalized = String(text || '')
+    .replace(/\[at\]/gi, '@').replace(/\(at\)/gi, '@').replace(/\{at\}/gi, '@')
+    .replace(/\s+at\s+/gi, '@')
+    .replace(/\[dot\]/gi, '.').replace(/\(dot\)/gi, '.').replace(/\{dot\}/gi, '.')
+    .replace(/\s+dot\s+/gi, '.');
+  const all = [...normalized.matchAll(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g)].map(m => m[0]);
   for (const raw of all) {
     let email = raw;
     email = email.replace(/^[^a-zA-Z0-9]+/, '');
@@ -324,12 +348,21 @@ function extractEmail(text) {
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._%+\-]{1,}@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/.test(email)) continue;
     const domain = email.split('@')[1]?.toLowerCase();
     if (domain && SKIP_EMAIL_DOMAINS.has(domain)) continue;
+    const tld = email.split('.').pop().toLowerCase();
+    if (NON_EMAIL_TLDS.has(tld)) continue;
     return email.toLowerCase();
   }
   return null;
 }
 
 const SYSTEM_DOMAINS = [...SKIP_EMAIL_DOMAINS];
+
+// Shared guard against retina/asset-filename false positives like "logo@2x.png"
+// (see NON_EMAIL_TLDS above) when scraping raw HTML with the plain regex.
+function isRealEmail(e) {
+  const tld = e.split('.').pop()?.toLowerCase();
+  return !!tld && !NON_EMAIL_TLDS.has(tld);
+}
 
 async function scrapeEmailFromPage(handle, channelId) {
   const urls = [];
@@ -346,7 +379,7 @@ async function scrapeEmailFromPage(handle, channelId) {
         timeout: 8000,
       });
       const all = html.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g) || [];
-      const valid = [...new Set(all)].find(e => !SKIP_EMAIL_DOMAINS.has(e.toLowerCase().split('@')[1]));
+      const valid = [...new Set(all)].find(e => !SKIP_EMAIL_DOMAINS.has(e.toLowerCase().split('@')[1]) && isRealEmail(e));
       if (valid) return valid;
     } catch {}
   }
@@ -373,7 +406,7 @@ async function scrapeEmailFromWebsite(websiteUrl) {
     }
     // Extract emails from page text
     const all = html.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g) || [];
-    return [...new Set(all)].find(e => !SYSTEM_DOMAINS.some(d => e.toLowerCase().endsWith('@' + d))) || null;
+    return [...new Set(all)].find(e => !SYSTEM_DOMAINS.some(d => e.toLowerCase().endsWith('@' + d)) && isRealEmail(e)) || null;
   } catch {
     return null;
   }
@@ -502,17 +535,18 @@ function isQuotaExhausted() {
 async function fetchVideoData(channelId, maxResults = 10) {
   if (!channelId) return { status: 'fetch_failed', error: 'no channel_id' };
   try {
-    const chRes = await ytGet('/channels', { part: 'contentDetails,statistics', id: channelId });
+    const chRes = await ytGet('/channels', { part: 'contentDetails,statistics,snippet', id: channelId });
     const ch = chRes.data.items?.[0];
     if (!ch) return { status: 'channel_gone' };
 
     const totalVideos = parseInt(ch.statistics?.videoCount || '0');
+    const subscriberCount = parseInt(ch.statistics?.subscriberCount || '0');
     const uploadsPlaylistId = ch.contentDetails?.relatedPlaylists?.uploads;
-    if (!uploadsPlaylistId) return { status: 'ok', recentVideos: [], totalVideos, avgViews: 0, avgLikes: 0, avgComments: 0, uploadFreqDays: 0, lastUploadDate: null };
+    if (!uploadsPlaylistId) return { status: 'ok', recentVideos: [], totalVideos, subscriberCount, avgViews: 0, avgLikes: 0, avgComments: 0, uploadFreqDays: 0, lastUploadDate: null };
 
     const plRes = await ytGet('/playlistItems', { part: 'contentDetails', playlistId: uploadsPlaylistId, maxResults });
     const videoIds = plRes.data.items.map(v => v.contentDetails.videoId).filter(Boolean);
-    if (!videoIds.length) return { status: 'ok', recentVideos: [], totalVideos, avgViews: 0, avgLikes: 0, avgComments: 0, uploadFreqDays: 0, lastUploadDate: null };
+    if (!videoIds.length) return { status: 'ok', recentVideos: [], totalVideos, subscriberCount, avgViews: 0, avgLikes: 0, avgComments: 0, uploadFreqDays: 0, lastUploadDate: null };
 
     const videoStats = await ytGet('/videos', { part: 'statistics,snippet', id: videoIds.join(',') });
     const recentVideos = videoStats.data.items.map(v => ({
@@ -521,6 +555,9 @@ async function fetchVideoData(channelId, maxResults = 10) {
       likes: parseInt(v.statistics.likeCount || '0'),
       comments: parseInt(v.statistics.commentCount || '0'),
       date: v.snippet.publishedAt,
+      // Needed for creditDiffService.js (Session 2.3) — not previously mapped,
+      // so credit extraction would always have seen an empty description.
+      description: v.snippet.description || '',
     }));
 
     let avgViews = 0, avgLikes = 0, avgComments = 0, uploadFreqDays = 0, lastUploadDate = null;
@@ -535,7 +572,7 @@ async function fetchVideoData(channelId, maxResults = 10) {
       }
     }
 
-    return { status: 'ok', recentVideos, totalVideos, avgViews, avgLikes, avgComments, uploadFreqDays, lastUploadDate };
+    return { status: 'ok', recentVideos, totalVideos, subscriberCount, avgViews, avgLikes, avgComments, uploadFreqDays, lastUploadDate };
   } catch (e) {
     if (e.response?.status === 404) return { status: 'channel_gone' };
     const reason = e.response?.data?.error?.errors?.[0]?.reason;
@@ -548,13 +585,19 @@ async function fetchVideoData(channelId, maxResults = 10) {
 // Shared write-back for fetchVideoData()'s result — used by all three
 // enrichment call sites (master-pool copy, pre-generation safety net, and
 // the backfill script) so the column list and status semantics stay in sync.
+// A channel that deterministically errors (e.g. a malformed id that 400s
+// instead of 404ing) would otherwise be re-selected and re-fetched forever,
+// burning quota every backfill run. After this many consecutive fetch_failed
+// results, flip to a terminal status excluded from re-selection.
+const MAX_FETCH_ATTEMPTS = 5;
+
 async function applyVideoDataToLead(db, leadId, result) {
   if (result.status === 'ok') {
     await db.run(
       `UPDATE leads SET recent_videos=?, recent_video_title=?, total_videos=COALESCE(?,total_videos),
         avg_views=CASE WHEN ? > 0 THEN ? ELSE avg_views END,
         upload_frequency_days=CASE WHEN ? > 0 THEN ? ELSE upload_frequency_days END,
-        last_upload_date=COALESCE(?,last_upload_date), video_data_status='ok', updated_at=CURRENT_TIMESTAMP
+        last_upload_date=COALESCE(?,last_upload_date), video_data_status='ok', video_fetch_attempts=0, updated_at=CURRENT_TIMESTAMP
        WHERE id=?`,
       [
         JSON.stringify(result.recentVideos || []),
@@ -566,9 +609,14 @@ async function applyVideoDataToLead(db, leadId, result) {
         leadId,
       ]
     );
+  } else if (result.status === 'fetch_failed') {
+    const row = await db.get('SELECT video_fetch_attempts FROM leads WHERE id=?', [leadId]);
+    const attempts = (row?.video_fetch_attempts || 0) + 1;
+    const status = attempts >= MAX_FETCH_ATTEMPTS ? 'fetch_abandoned' : 'fetch_failed';
+    await db.run(`UPDATE leads SET video_data_status=?, video_fetch_attempts=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`, [status, attempts, leadId]);
   } else {
     await db.run(`UPDATE leads SET video_data_status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`, [result.status, leadId]);
   }
 }
 
-module.exports = { searchChannels, searchChannelsMulti, buildChannelProfile, testApiKey, detectViralChannels, resolveChannelUrl, getChannelByUrl, getAllKeys, getKeyPoolStatus, isQuotaExhausted, getNextKey: getKey, fetchVideoData, applyVideoDataToLead };
+module.exports = { searchChannels, searchChannelsMulti, buildChannelProfile, testApiKey, detectViralChannels, resolveChannelUrl, getChannelByUrl, getAllKeys, getKeyPoolStatus, isQuotaExhausted, getNextKey: getKey, fetchVideoData, applyVideoDataToLead, markExhausted };
