@@ -831,6 +831,24 @@ async function initPostgres() {
     `);
     console.log('[PG] ✅ hot_alert_notifications');
 
+    await query(`
+      CREATE TABLE IF NOT EXISTS discovery_queue (
+        id SERIAL PRIMARY KEY,
+        channel_ref TEXT NOT NULL,
+        resolved_channel_id TEXT,
+        seed_channel_id TEXT NOT NULL,
+        discovery_method TEXT NOT NULL,
+        niche TEXT,
+        priority INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'pending',
+        reject_reason TEXT,
+        discovered_at TIMESTAMP DEFAULT NOW(),
+        enriched_at TIMESTAMP,
+        UNIQUE(channel_ref, seed_channel_id, discovery_method)
+      )
+    `);
+    console.log('[PG] ✅ discovery_queue');
+
     // Per-user unique indexes
     try { await query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_channel_id_user ON leads(channel_id, user_id) WHERE channel_id IS NOT NULL AND channel_id != ''`); } catch {}
     try { await query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_handle_user ON leads(channel_handle, user_id) WHERE channel_handle IS NOT NULL AND channel_handle != ''`); } catch {}

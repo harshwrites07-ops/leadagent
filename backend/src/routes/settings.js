@@ -75,6 +75,8 @@ const ADMIN_SETTING_KEYS = [
   'smtp_host', 'smtp_port', 'smtp_user', 'smtp_from_name', 'smtp_inboxes',
   'youtube_api_key', 'gemini_api_key', 'reddit_client_id', 'reddit_client_secret',
   'queue_paused',
+  'daily_verify_limit', 'youtube_quota_budget_per_key',
+  'graph_crawl_enabled', 'graph_crawl_daily_cap', 'graph_crawl_min_subs', 'graph_crawl_max_subs', 'graph_crawl_niche_caps',
 ];
 
 router.get('/', requireAdmin, asyncHandler(async (req, res) => {
@@ -114,6 +116,12 @@ router.put('/', requireAdmin, asyncHandler(async (req, res) => {
     }
   }
   res.json({ success: true, message: 'Settings saved.' });
+}));
+
+router.get('/graph-crawl-stats', requireAdmin, asyncHandler(async (req, res) => {
+  const { getGraphCrawlStats } = require('../services/graphCrawler');
+  const stats = await getGraphCrawlStats(7);
+  res.json({ success: true, ...stats, enabled: getSetting('graph_crawl_enabled') === 'true' });
 }));
 
 router.get('/gemini-status', requireAuth, asyncHandler(async (req, res) => {

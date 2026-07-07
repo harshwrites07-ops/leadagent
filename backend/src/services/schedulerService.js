@@ -331,6 +331,26 @@ cron.schedule('*/30 * * * *', async () => {
   } catch (e) { console.error('[Scheduler] Tiered refresh error:', e.message); }
 });
 
+// Graph-walk niche crawler — every 6h (discover) + every 30 min offset
+// (drain), both off by default (graph_crawl_enabled admin setting).
+cron.schedule('15 */6 * * *', async () => {
+  try {
+    const { runGraphCrawl } = require('./graphCrawler');
+    const result = await runGraphCrawl();
+    if (!result.skipped) console.log(`[Scheduler] Graph crawl — ${result.seeds} seeds, ${result.queued} discoveries queued`);
+  } catch (e) { console.error('[Scheduler] Graph crawl error:', e.message); }
+});
+
+cron.schedule('15,45 * * * *', async () => {
+  try {
+    const { getSetting } = require('../models/database');
+    if (getSetting('graph_crawl_enabled') !== 'true') return;
+    const { drainDiscoveryQueue } = require('./graphCrawler');
+    const result = await drainDiscoveryQueue();
+    if (result.total > 0) console.log(`[Scheduler] Discovery drain — enriched=${result.enriched} rejected=${result.rejected} duplicate=${result.duplicate}`);
+  } catch (e) { console.error('[Scheduler] Discovery drain error:', e.message); }
+});
+
 // Mailbox verification batch — off-peak daily at 2am. Verifies 'unchecked'
 // emails in priority order (HOT quality_leads first), budget-capped by the
 // admin `daily_verify_limit` setting (default 500/day). No-op cost when no

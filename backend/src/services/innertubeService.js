@@ -407,6 +407,73 @@ async function fetchCommunityPosts(channelId, limit = 10) {
   }
 }
 
+// Featured/related channels shown on a channel's "Channels" tab (graph-walk
+// crawler, Session 2.1). Same resilience pattern as getChannelVideos()/
+// fetchCommunityPosts() — an undocumented API param can drift without
+// notice, so any parse failure degrades to [] rather than throwing or
+// fabricating a match.
+async function discoverFeaturedChannels(channelId, limit = 10) {
+  try {
+    const data = await itPost('browse', {
+      browseId: channelId,
+      params: 'EgxjaGFubmVsc5oBBQoDggEA', // channels tab
+    });
+    const found = [];
+    const renderers = walkForType(data, ['channelRenderer', 'gridChannelRenderer']);
+    for (const r of renderers) {
+      const id = r.channelId;
+      if (!id) continue;
+      const title = r.title?.simpleText || r.title?.runs?.[0]?.text || '';
+      found.push({ channelId: id, title });
+      if (found.length >= limit) break;
+    }
+    return found;
+  } catch (e) {
+    console.error(`[InnerTube] featured channels error ${channelId}: ${e.message}`);
+    return [];
+  }
+}
+
+// Channel links (usually posted in the About tab) — social/collab links can
+// reference another creator's channel directly.
+async function discoverAboutLinks(channelId) {
+  try {
+    const data = await itPost('browse', { browseId: channelId });
+    const found = [];
+    const linkNodes = walkForType(data, ['channelExternalLinkViewModel']);
+    for (const node of linkNodes) {
+      const url = node.link?.content || node.link?.url || '';
+      const channelMatch = url.match(/youtube\.com\/(channel\/UC[\w-]{22}|@[\w.-]+)/);
+      if (channelMatch) found.push({ url, ref: channelMatch[1] });
+    }
+    return found;
+  } catch (e) {
+    console.error(`[InnerTube] about links error ${channelId}: ${e.message}`);
+    return [];
+  }
+}
+
+// Collab partners mentioned in video titles — "ft. X", "feat. X", "w/ X",
+// or a bare "@handle" mention. Pure text parsing, no network call.
+function extractCollabMentions(videos) {
+  const patterns = [
+    /\bft\.?\s+([A-Z][\w. ]{2,30})/i,
+    /\bfeat\.?\s+([A-Z][\w. ]{2,30})/i,
+    /\bw\/\s+([A-Z][\w. ]{2,30})/i,
+  ];
+  const mentions = new Set();
+  for (const v of (videos || [])) {
+    const title = v.title || '';
+    for (const p of patterns) {
+      const m = title.match(p);
+      if (m) mentions.add(m[1].trim().replace(/[.,!?]+$/, ''));
+    }
+    const handleMatches = title.match(/@[\w.-]{3,30}/g) || [];
+    for (const h of handleMatches) mentions.add(h);
+  }
+  return [...mentions];
+}
+
 async function buildChannelProfile(basic, options = {}) {
   const { emailOnly = false } = options;
 
@@ -614,4 +681,7 @@ async function fastSeedSearch(keyword, maxChannels = 30) {
   return results;
 }
 
-module.exports = { searchChannels, searchChannelsMulti, buildChannelProfile, fastSeedSearch, extractEmail, isImageBugCorruptedEmail, fetchCommunityPosts };
+module.exports = {
+  searchChannels, searchChannelsMulti, buildChannelProfile, fastSeedSearch, extractEmail, isImageBugCorruptedEmail,
+  fetchCommunityPosts, discoverFeaturedChannels, discoverAboutLinks, extractCollabMentions, getChannelVideos, getChannelMeta,
+};

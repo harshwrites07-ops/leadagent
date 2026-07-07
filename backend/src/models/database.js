@@ -726,6 +726,20 @@ function _initSqliteSchema(db) {
       digested_at DATETIME,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS discovery_queue (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      channel_ref TEXT NOT NULL,
+      resolved_channel_id TEXT,
+      seed_channel_id TEXT NOT NULL,
+      discovery_method TEXT NOT NULL,
+      niche TEXT,
+      priority INTEGER DEFAULT 0,
+      status TEXT DEFAULT 'pending',
+      reject_reason TEXT,
+      discovered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      enriched_at DATETIME,
+      UNIQUE(channel_ref, seed_channel_id, discovery_method)
+    );
   `);
 
   db.exec(`CREATE TABLE IF NOT EXISTS user_followup_settings (
@@ -783,6 +797,11 @@ async function _seedDefaultSettings() {
     average_deal_value: '1000',
     daily_verify_limit: '500',
     youtube_quota_budget_per_key: '10000',
+    graph_crawl_enabled: 'false',
+    graph_crawl_daily_cap: '200',
+    graph_crawl_min_subs: '1000',
+    graph_crawl_max_subs: '500000',
+    graph_crawl_niche_caps: '{}',
     smtp_host: process.env.SMTP_HOST || '',
     smtp_port: process.env.SMTP_PORT || '587',
     smtp_user: process.env.SMTP_USER || '',
