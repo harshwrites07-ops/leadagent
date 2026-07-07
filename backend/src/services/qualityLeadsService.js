@@ -20,13 +20,14 @@ async function scoreBatch(batch, weights) {
 
   for (const ml of batch) {
     try {
-      const { intent_score, temperature, signals, meta_channel } = await scoreMasterLead(ml);
+      const { intent_score, temperature, signals, meta_channel, lead_type, schedule_break, break_severity } = await scoreMasterLead(ml);
       const handle = (ml.channel_handle || '').replace(/^@+/, '');
       const channelUrl = handle
         ? `https://youtube.com/@${handle}`
         : `https://youtube.com/channel/${ml.channel_id}`;
 
-      await db.run('UPDATE master_leads SET meta_channel=? WHERE channel_id=?', [meta_channel ? 1 : 0, ml.channel_id]);
+      await db.run('UPDATE master_leads SET meta_channel=?, lead_type=?, schedule_break=?, break_severity=? WHERE channel_id=?',
+        [meta_channel ? 1 : 0, lead_type, schedule_break ? 1 : 0, break_severity, ml.channel_id]);
 
       // meta_channel rows (editing-tutorial/coaching channels) never get
       // promoted to quality_leads regardless of score — they teach/sell the
@@ -36,14 +37,15 @@ async function scoreBatch(batch, weights) {
         await db.run(`
           INSERT OR REPLACE INTO quality_leads
             (creator_id, channel_url, channel_name, channel_handle, subscriber_count, niche, email,
-             intent_score, intent_tier, meta_channel,
+             intent_score, intent_tier, meta_channel, lead_type, schedule_break, break_severity,
              sig_upload_frequency, sig_view_growth, sig_title_keywords,
              sig_description_keywords, sig_engagement, sig_consistency,
              source, updated_at)
-          VALUES (?,?,?,?,?,?,?,?,?,0,?,?,?,?,?,?,'master_pool',CURRENT_TIMESTAMP)
+          VALUES (?,?,?,?,?,?,?,?,?,0,?,?,?,?,?,?,?,?,?,'master_pool',CURRENT_TIMESTAMP)
         `, [
           ml.channel_id, channelUrl, ml.channel_name, ml.channel_handle,
           ml.subscriber_count, ml.niche, ml.email, intent_score, qualTier,
+          lead_type, schedule_break ? 1 : 0, break_severity,
           signals?.niche_score || 0,
           signals?.views_score || 0,
           0,

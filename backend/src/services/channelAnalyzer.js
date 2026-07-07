@@ -1,6 +1,8 @@
 // Section B — Creator Intelligence Pack
 // Builds a rich, structured profile of a creator from existing lead data.
 
+const { classifyLeadType, signalViewGrowth, signalUploadFrequency } = require('./intentService');
+
 function daysSince(dateStr) {
   if (!dateStr) return null;
   return Math.floor((Date.now() - new Date(dateStr)) / 86400000);
@@ -173,6 +175,15 @@ function buildCreatorIntelligencePack(lead) {
   const freqDropped    = isFrequencyDropped(lead);
   const plateaued      = isGrowthPlateaued(lead);
 
+  // STRAINED/SCALING classification (Session 1.1) — drives which Marcus
+  // angle gets selected (see angleEngine.js). Computed fresh here rather than
+  // read from a persisted column since this lead's recent_videos are already
+  // in memory and a per-user leads row has no lead_type column of its own.
+  const leadTypeResult = classifyLeadType(lead, recentVids, {
+    view_growth: signalViewGrowth(recentVids),
+    upload_frequency: signalUploadFrequency(lead),
+  });
+
   // View decline percentage
   let viewsDeclinePct = null;
   if (viewsDeclining && recentVids.length >= 4) {
@@ -227,6 +238,12 @@ function buildCreatorIntelligencePack(lead) {
     // TEAM & ARCHETYPE
     team_size: detectTeamSize(lead),
     archetype: detectArchetype(lead),
+
+    // LEAD TYPE (Session 1.1) — STRAINED (schedule broke / views declining) vs
+    // SCALING (growing steadily, needs help keeping up) vs NEUTRAL
+    lead_type:        leadTypeResult.lead_type,
+    schedule_break:   leadTypeResult.schedule_break,
+    break_severity:   leadTypeResult.break_severity,
 
     // HOOK DATA — most specific facts for the email opener
     hook_data: {

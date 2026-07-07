@@ -675,6 +675,17 @@ function _initSqliteSchema(db) {
   alterTry(`ALTER TABLE master_leads ADD COLUMN meta_channel INTEGER DEFAULT 0`);
   alterTry(`ALTER TABLE quality_leads ADD COLUMN meta_channel INTEGER DEFAULT 0`);
 
+  // lead_type/schedule_break/break_severity (Session 1.1) — master_leads has
+  // no recent_videos, so detectScheduleBreak() honestly returns
+  // schedule_break=false there; these are meaningful once quality_leads/
+  // leads get enriched with video history (videoBackfillService / refresh).
+  alterTry(`ALTER TABLE master_leads ADD COLUMN lead_type TEXT`);
+  alterTry(`ALTER TABLE master_leads ADD COLUMN schedule_break INTEGER DEFAULT 0`);
+  alterTry(`ALTER TABLE master_leads ADD COLUMN break_severity REAL`);
+  alterTry(`ALTER TABLE quality_leads ADD COLUMN lead_type TEXT`);
+  alterTry(`ALTER TABLE quality_leads ADD COLUMN schedule_break INTEGER DEFAULT 0`);
+  alterTry(`ALTER TABLE quality_leads ADD COLUMN break_severity REAL`);
+
   db.exec(`CREATE TABLE IF NOT EXISTS user_followup_settings (
     user_id INTEGER PRIMARY KEY,
     interval_days INTEGER DEFAULT 3,

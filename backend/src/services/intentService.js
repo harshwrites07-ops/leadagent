@@ -117,9 +117,14 @@ function signalEngagement(lead) {
 }
 
 // ── Signal 6: Upload consistency (coefficient of variation of gaps) ───────────
+// Video objects in recent_videos are stored with a `date` field (see
+// youtubeService.js/innertubeService.js), not `publishedAt` — this was
+// reading a field that never existed, so this signal always fell through to
+// the neutral 0.5 default rather than actually being computed. `publishedAt`
+// is still checked as a fallback in case any other producer uses that name.
 function signalConsistency(videos) {
   const dates = videos
-    .map(v => v.publishedAt ? new Date(v.publishedAt).getTime() : null)
+    .map(v => (v.date || v.publishedAt) ? new Date(v.date || v.publishedAt).getTime() : null)
     .filter(Boolean)
     .sort((a, b) => b - a);
 
@@ -137,6 +142,73 @@ function signalConsistency(videos) {
   if (cv < 0.8) return 0.7;
   if (cv < 1.3) return 0.4;
   return 0.2;
+}
+
+function median(arr) {
+  if (!arr.length) return null;
+  const sorted = [...arr].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+// Detects a break in an otherwise-consistent upload schedule: computes the
+// median historical gap (deliberately excluding the most recent gap — that's
+// the window we're checking for a break in), and flags a break when the
+// channel was historically consistent (cv < 0.8) but the current silence is
+// at least 2x the historical median and the channel isn't simply dormant
+// (< 90 days silent — a dormant channel is a different, colder signal).
+function detectScheduleBreak(videos) {
+  const dates = (videos || [])
+    .map(v => (v.date || v.publishedAt) ? new Date(v.date || v.publishedAt).getTime() : null)
+    .filter(Boolean)
+    .sort((a, b) => b - a);
+
+  if (dates.length < 5) return { schedule_break: false, median_gap: null, current_gap: null, severity: null };
+
+  const historicalGaps = [];
+  for (let i = 1; i < dates.length - 1; i++) {
+    historicalGaps.push((dates[i] - dates[i + 1]) / 86400000);
+  }
+  if (historicalGaps.length < 3) return { schedule_break: false, median_gap: null, current_gap: null, severity: null };
+
+  const medianGap = median(historicalGaps);
+  const currentGap = (Date.now() - dates[0]) / 86400000;
+  if (!medianGap || medianGap <= 0) return { schedule_break: false, median_gap: medianGap, current_gap: currentGap, severity: null };
+
+  const avg = historicalGaps.reduce((s, g) => s + g, 0) / historicalGaps.length;
+  const variance = historicalGaps.reduce((s, g) => s + Math.abs(g - avg), 0) / historicalGaps.length;
+  const cv = avg > 0 ? variance / avg : Infinity;
+
+  const dormant = currentGap >= 90;
+  const wasConsistent = cv < 0.8;
+  const currentGapExceeds = currentGap >= 2 * medianGap;
+  const schedule_break = !dormant && wasConsistent && currentGapExceeds;
+
+  return {
+    schedule_break,
+    median_gap: Math.round(medianGap * 10) / 10,
+    current_gap: Math.round(currentGap * 10) / 10,
+    severity: Math.round((currentGap / medianGap) * 100) / 100,
+  };
+}
+
+// Classifies a lead as STRAINED (upload schedule broke, or views declining —
+// likely needs help NOW) or SCALING (growing steadily with real upload
+// volume — needs help to keep up, not rescue) to drive different Marcus
+// angles (see angleEngine.js). `signals` is the six-signal object from
+// calculateIntentScore/calculateIntentScoreWithWeights.
+function classifyLeadType(lead, videos, signals) {
+  const breakInfo = detectScheduleBreak(videos);
+  if (breakInfo.schedule_break) {
+    return { lead_type: 'STRAINED', schedule_break: true, break_severity: breakInfo.severity };
+  }
+  if (signals && signals.view_growth < 0.3) {
+    return { lead_type: 'STRAINED', schedule_break: false, break_severity: null };
+  }
+  if (signals && signals.view_growth >= 0.7 && signals.upload_frequency >= 0.5) {
+    return { lead_type: 'SCALING', schedule_break: false, break_severity: null };
+  }
+  return { lead_type: 'NEUTRAL', schedule_break: breakInfo.schedule_break, break_severity: breakInfo.severity };
 }
 
 // ── Human-readable reason ─────────────────────────────────────────────────────
@@ -349,6 +421,7 @@ async function scoreMasterLead(ml) {
   if (isExcluded || (ml.subscriber_count || 0) > 500000) {
     return {
       intent_score: 0.10, confidence: 'Low', temperature: 'cold', excluded: true, meta_channel: false,
+      lead_type: 'NEUTRAL', schedule_break: false, break_severity: null,
       base_score: 0.10, signal_boost: 0, is_confirmed: false, signal_source: null,
       signals: {
         niche_score: 0, subs_score: 0, views_score: 0, desc_score: 0,
@@ -406,6 +479,11 @@ async function scoreMasterLead(ml) {
   // half of the classifier applies here.
   const meta_channel = classifyMetaChannel(ml, []);
 
+  // lead_type/schedule_break: master_leads has no recent_videos, so this
+  // honestly comes back NEUTRAL/no-break here — meaningful once a row is
+  // enriched with video history (videoBackfillService / refresh worker).
+  const { lead_type, schedule_break, break_severity } = classifyLeadType(ml, [], null);
+
   // Niche + subs are co-equal proxy signals; views as tiebreaker
   const score = (0.40 * niche_score) + (0.40 * subs_score) + (0.15 * views_score) + (0.05 * desc_score);
   const base_score   = Math.min(Math.round(score * 100) / 100, 1.0);
@@ -423,6 +501,7 @@ async function scoreMasterLead(ml) {
 
   return {
     intent_score, confidence: is_confirmed ? 'High' : 'Low', temperature, meta_channel,
+    lead_type, schedule_break, break_severity,
     is_confirmed, signal_source, base_score, signal_boost: Math.round((intent_score - base_score) * 100) / 100,
     signals: {
       niche_score, subs_score, views_score, desc_score,
@@ -558,5 +637,6 @@ module.exports = {
   calculateIntentScore, calculateIntentScoreWithWeights,
   scoreAndRankLeads, classifyLeads, assessAlgorithmAccuracy,
   scoreMasterLead, calibrateWeights, DEFAULT_WEIGHTS, scoreWithPlatformSignals,
-  classifyMetaChannel,
+  classifyMetaChannel, detectScheduleBreak, classifyLeadType,
+  signalViewGrowth, signalUploadFrequency,
 };

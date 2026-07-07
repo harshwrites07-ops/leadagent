@@ -52,6 +52,12 @@ const MARCUS_ANGLES = {
     description: 'Pure value — no pitch, no CTA (follow-ups only)',
     follow_up_only: true,
   },
+  scale_enabler: {
+    id: 'scale_enabler',
+    name: 'The Scale Enabler',
+    description: 'Free up their time so they can keep scaling what\'s already working',
+    psychology: ['ambition', 'opportunity_cost'],
+  },
 };
 
 function formatNum(n) {
@@ -82,6 +88,19 @@ function buildAngleCandidates(intelligencePack, user) {
       painAddressed: 'actively searching for a service provider',
       angleReasoning: 'Creator is explicitly looking — highest purchase intent signal available',
       ctaDirection: 'sample_offer',
+    },
+    // ── Priority 1.5: STRAINED (Session 1.1) — a detected schedule break is a
+    // stronger, better-evidenced version of the generic upload-gap heuristic
+    // below, so it's checked first. ──────────────────────────────────────────
+    {
+      matches: () => intelligencePack.lead_type === 'STRAINED' && intelligencePack.schedule_break,
+      selectedAngle: 'bottleneck_removal',
+      openingObservation: hook.most_recent_video_title
+        ? `"${hook.most_recent_video_title}" — ${hook.days_since_upload} days since your last upload, after a much more consistent run before that`
+        : `${hook.days_since_upload} days since your last upload, after a much more consistent run before that`,
+      painAddressed: 'a consistent upload schedule that recently broke',
+      angleReasoning: `Detected schedule break (severity ${intelligencePack.break_severity}x historical gap) — consistency angle addresses the specific, recent disruption`,
+      ctaDirection: 'interest_check',
     },
     // ── Priority 2: Long upload gap + solo creator ──────────────────────────
     {
@@ -145,6 +164,18 @@ function buildAngleCandidates(intelligencePack, user) {
       painAddressed: 'channel stuck at the same performance level',
       angleReasoning: 'Plateau is relatable — social proof mirror shows what breakthrough looks like for similar channels',
       ctaDirection: 'sample_offer',
+    },
+    // ── Priority 7.5: SCALING (Session 1.1) — growing steadily with real
+    // upload volume, no schedule break; needs help keeping up, not rescue. ──
+    {
+      matches: () => intelligencePack.lead_type === 'SCALING',
+      selectedAngle: 'scale_enabler',
+      openingObservation: hook.most_recent_video_title
+        ? `"${hook.most_recent_video_title}" — ${formatNum(hook.recent_avg_views)} average views on ${formatNum(subs)} subscribers and still climbing`
+        : `${formatNum(subs)} subscribers and views still climbing — real momentum`,
+      painAddressed: 'time constraints limiting how much of that momentum can be capitalized on',
+      angleReasoning: 'Growing steadily with real upload volume, no break — the pitch is freeing up time to scale further, not fixing something broken',
+      ctaDirection: 'interest_check',
     },
     // ── Default: honest observation with most recent video ──────────────────
     {
