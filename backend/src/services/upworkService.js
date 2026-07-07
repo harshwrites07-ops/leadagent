@@ -6,6 +6,21 @@
 
 const https = require('https');
 const { getDb, USE_PG } = require('../models/database');
+const { extractChannelUrl } = require('./redditSignalService');
+
+// Resolve a job posting to a real master_leads.channel_id — writing a
+// synthetic "upwork_<jobId>" as creator_id (the old behavior) can never match
+// a real channel_id, so those signals could never affect a score.
+async function resolveMasterChannelId(db, text) {
+  const url = extractChannelUrl(text);
+  if (!url) return null;
+  const directId = url.match(/\/channel\/([\w-]+)/)?.[1];
+  if (directId) return directId;
+  const handle = url.match(/\/@([\w-]+)/)?.[1] || url.match(/\/c\/([\w-]+)/)?.[1];
+  if (!handle) return null;
+  const row = await db.get('SELECT channel_id FROM master_leads WHERE channel_handle = ? OR channel_handle = ?', [handle, `@${handle}`]);
+  return row?.channel_id || null;
+}
 
 const UPWORK_QUERIES = [
   'youtube+video+editor','youtube+thumbnail+designer','youtube+scriptwriter',
@@ -56,7 +71,7 @@ function calculateJobConfidence(text) {
 
 async function scanUpworkJobs() {
   const db = getDb();
-  let totalFound = 0, totalNew = 0;
+  let totalFound = 0, totalNew = 0, queryErrors = 0, lastError = null;
   console.log('[Upwork] Starting RSS scan...');
 
   for (const query of UPWORK_QUERIES) {
@@ -65,14 +80,20 @@ async function scanUpworkJobs() {
       const items = parseRSSItems(xml);
       for (const item of items) {
         try {
+          const channelId = await resolveMasterChannelId(db, `${item.title} ${item.description}`);
           const result = await db.run(
-            `INSERT OR IGNORE INTO upwork_signals (job_id, title, description, budget, job_url, email, posted_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [item.jobId, item.title, item.description, item.budget, item.jobUrl, item.email, item.postedAt]
+            `INSERT OR IGNORE INTO upwork_signals (job_id, title, description, budget, job_url, email, posted_at, matched_channel_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [item.jobId, item.title, item.description, item.budget, item.jobUrl, item.email, item.postedAt, channelId]
           );
           if (result.changes > 0) {
             totalNew++;
-            await db.run(`INSERT OR IGNORE INTO platform_signals (creator_id, platform, signal_type, signal_text, signal_url, confidence, budget_mentioned) VALUES (?, 'upwork', 'confirmed_hiring', ?, ?, ?, ?)`,
-              [`upwork_${item.jobId}`, item.title, item.jobUrl, item.confidence, item.budget ? 1 : 0]);
+            // Only write a platform_signals row when we can attribute it to a real
+            // channel_id — a synthetic "upwork_<jobId>" id can never match master_leads
+            // and would sit dead in the table forever (see AUDIT_REPORT.md §2.3).
+            if (channelId) {
+              await db.run(`INSERT OR IGNORE INTO platform_signals (creator_id, platform, signal_type, signal_text, signal_url, confidence, budget_mentioned) VALUES (?, 'upwork', 'confirmed_hiring', ?, ?, ?, ?)`,
+                [channelId, item.title, item.jobUrl, item.confidence, item.budget ? 1 : 0]);
+            }
             await db.run(`INSERT OR IGNORE INTO buying_signals (source, post_id, subreddit, keywords_matched, intent_classification) VALUES ('upwork', ?, 'upwork_jobs', ?, 'CONFIRMED_HIRING')`,
               [item.jobId, item.title.substring(0, 200)]);
           }
@@ -80,10 +101,20 @@ async function scanUpworkJobs() {
         } catch {}
       }
       await new Promise(r => setTimeout(r, 1000));
-    } catch (e) { console.error(`[Upwork] Error fetching query "${query}":`, e.message); }
+    } catch (e) {
+      console.error(`[Upwork] Error fetching query "${query}":`, e.message);
+      queryErrors++; lastError = e.message;
+    }
   }
 
   console.log(`[Upwork] Scan complete: ${totalFound} found, ${totalNew} new jobs`);
+  try {
+    const { recordScraperHealth } = require('./scraperHealth');
+    await recordScraperHealth('upwork', {
+      attempted: UPWORK_QUERIES.length, succeeded: UPWORK_QUERIES.length - queryErrors,
+      failed: queryErrors, sampleError: lastError,
+    });
+  } catch {}
   return { total_found: totalFound, new_jobs: totalNew, queries_scanned: UPWORK_QUERIES.length };
 }
 

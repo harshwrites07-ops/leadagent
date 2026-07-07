@@ -6,6 +6,21 @@
 
 const https = require('https');
 const { getDb } = require('../models/database');
+const { extractChannelUrl } = require('./redditSignalService');
+
+// Resolve a scraped mention to a real master_leads.channel_id — writing a
+// synthetic "twitter_<id>" as creator_id (the old behavior) can never match a
+// real channel_id, so those signals could never affect a score.
+async function resolveMasterChannelId(db, text) {
+  const url = extractChannelUrl(text);
+  if (!url) return null;
+  const directId = url.match(/\/channel\/([\w-]+)/)?.[1];
+  if (directId) return directId;
+  const handle = url.match(/\/@([\w-]+)/)?.[1] || url.match(/\/c\/([\w-]+)/)?.[1];
+  if (!handle) return null;
+  const row = await db.get('SELECT channel_id FROM master_leads WHERE channel_handle = ? OR channel_handle = ?', [handle, `@${handle}`]);
+  return row?.channel_id || null;
+}
 
 const BEARER_TOKEN = process.env.TWITTER_BEARER_TOKEN;
 
@@ -86,6 +101,8 @@ async function scanTwitterSignals() {
 
   let totalNew = 0;
   let totalFound = 0;
+  let queryErrors = 0;
+  let lastError = null;
 
   console.log('[Twitter] Starting signal scan...');
 
@@ -111,10 +128,13 @@ async function scanTwitterSignals() {
         const tweetUrl = `https://twitter.com/${user.username}/status/${tweet.id}`;
         const confidence = calculateTwitterConfidence(tweet);
 
+        const channelId = await resolveMasterChannelId(db, `${tweet.text} ${user.description || ''}`);
+        if (!channelId) continue; // can't attribute this to a known channel_id — skip rather than write a dead signal
+
         try {
           const result = await db.run(
             `INSERT OR IGNORE INTO platform_signals (creator_id, platform, signal_type, signal_text, signal_url, confidence) VALUES (?, 'twitter', 'confirmed_hiring', ?, ?, ?)`,
-            [`twitter_${tweet.author_id}`, tweet.text.substring(0, 500), tweetUrl, confidence]
+            [channelId, tweet.text.substring(0, 500), tweetUrl, confidence]
           );
           if (result.changes > 0) {
             totalNew++;
@@ -132,10 +152,20 @@ async function scanTwitterSignals() {
 
     } catch (e) {
       console.error(`[Twitter] Error for query "${query}":`, e.message);
+      queryErrors++;
+      lastError = e.message;
     }
   }
 
   console.log(`[Twitter] Scan complete: ${totalFound} found, ${totalNew} new signals`);
+
+  try {
+    const { recordScraperHealth } = require('./scraperHealth');
+    await recordScraperHealth('twitter', {
+      attempted: SEARCH_QUERIES.length, succeeded: SEARCH_QUERIES.length - queryErrors,
+      failed: queryErrors, sampleError: lastError,
+    });
+  } catch {}
 
   return { total_found: totalFound, new_signals: totalNew };
 }

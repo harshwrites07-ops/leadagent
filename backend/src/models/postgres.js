@@ -597,6 +597,31 @@ async function initPostgres() {
     console.log('[PG] ✅ scraper_logs');
 
     await query(`
+      CREATE TABLE IF NOT EXISTS scraper_health (
+        id SERIAL PRIMARY KEY,
+        scraper TEXT NOT NULL,
+        run_at TIMESTAMP DEFAULT NOW(),
+        attempted INTEGER DEFAULT 0,
+        succeeded INTEGER DEFAULT 0,
+        failed INTEGER DEFAULT 0,
+        sample_error TEXT
+      )
+    `);
+    console.log('[PG] ✅ scraper_health');
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS scraper_health_alerts (
+        id SERIAL PRIMARY KEY,
+        scraper TEXT NOT NULL,
+        detected_at TIMESTAMP DEFAULT NOW(),
+        success_rate REAL,
+        attempted INTEGER,
+        resolved INTEGER DEFAULT 0
+      )
+    `);
+    console.log('[PG] ✅ scraper_health_alerts');
+
+    await query(`
       CREATE TABLE IF NOT EXISTS buying_signals (
         id SERIAL PRIMARY KEY,
         source TEXT NOT NULL DEFAULT 'reddit',

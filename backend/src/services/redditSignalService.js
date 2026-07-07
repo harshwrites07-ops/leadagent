@@ -133,6 +133,14 @@ async function scanSubreddits() {
     await new Promise(r => setTimeout(r, 1500));
   }
 
+  try {
+    const { recordScraperHealth } = require('./scraperHealth');
+    await recordScraperHealth('reddit', {
+      attempted: SUBREDDITS.length, succeeded: SUBREDDITS.length - results.errors.length,
+      failed: results.errors.length, sampleError: results.errors[0] || null,
+    });
+  } catch {}
+
   return results;
 }
 

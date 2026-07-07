@@ -575,6 +575,7 @@ async function runInnerTubeCycle(db, keywords) {
   const { fastSeedSearch } = require('./innertubeService');
   let totalSaved = 0;
   const PARALLEL = 3;
+  let attempted = 0, failed = 0, lastError = null;
 
   for (let i = 0; i < keywords.length; i += PARALLEL) {
     const kwBatch = keywords.slice(i, i + PARALLEL);
@@ -582,10 +583,11 @@ async function runInnerTubeCycle(db, keywords) {
 
     try {
       const batchResults = await Promise.allSettled(kwBatch.map(kw => fastSeedSearch(kw, 30)));
+      attempted += batchResults.length;
 
       for (let j = 0; j < kwBatch.length; j++) {
         const r = batchResults[j];
-        if (r.status !== 'fulfilled') continue;
+        if (r.status !== 'fulfilled') { failed++; lastError = r.reason?.message || String(r.reason); continue; }
         const niche = kwNicheMap[kwBatch[j]] || kwBatch[j].split(' ')[0].toLowerCase();
 
         for (const ch of r.value) {
@@ -606,10 +608,17 @@ async function runInnerTubeCycle(db, keywords) {
       }
     } catch (e) {
       console.log(`[Seeder/IT] Batch error: ${e.message?.substring(0, 80)}`);
+      failed++; lastError = e.message;
     }
 
     await new Promise(r => setTimeout(r, 500));
   }
+
+  try {
+    const { recordScraperHealth } = require('./scraperHealth');
+    await recordScraperHealth('innertube', { attempted, succeeded: attempted - failed, failed, sampleError: lastError });
+  } catch {}
+
   return totalSaved;
 }
 
@@ -631,11 +640,19 @@ async function runSeedCycle() {
     const chunks = API_KEYS.map((_, i) => shuffled.slice(i * chunkSize, (i + 1) * chunkSize));
 
     const results = await Promise.allSettled(API_KEYS.map((key, i) => runKeyBatch(key, chunks[i] || [], db)));
-    let exhaustedCount = 0;
+    let exhaustedCount = 0, rejectedCount = 0, lastRejectReason = null;
     for (const r of results) {
       if (r.status === 'fulfilled') { totalSaved += r.value.saved; if (r.value.exhausted) exhaustedCount++; }
+      else { rejectedCount++; lastRejectReason = r.reason?.message || String(r.reason); }
     }
     seederStatus.keysActive = API_KEYS.length - exhaustedCount;
+    try {
+      const { recordScraperHealth } = require('./scraperHealth');
+      await recordScraperHealth('ytapi', {
+        attempted: API_KEYS.length, succeeded: API_KEYS.length - rejectedCount,
+        failed: rejectedCount, sampleError: lastRejectReason,
+      });
+    } catch {}
 
     if (exhaustedCount >= API_KEYS.length) {
       console.log('[Seeder] All YouTube API keys exhausted — switching to InnerTube fallback');

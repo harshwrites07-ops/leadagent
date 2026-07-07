@@ -503,6 +503,22 @@ router.post('/admin/seed-master-leads', requireAdmin, asyncHandler(async (req, r
   res.json({ success: true, inserted, total, withEmail });
 }));
 
+router.get('/admin/scraper-health', requireAdmin, asyncHandler(async (req, res) => {
+  const { getScraperHealthSummary } = require('../services/scraperHealth');
+  const db = getDb();
+  const summary = await getScraperHealthSummary(24);
+  const openAlerts = await db.all(
+    `SELECT scraper, detected_at, success_rate, attempted FROM scraper_health_alerts WHERE resolved=0 ORDER BY detected_at DESC`
+  );
+  res.json({
+    success: true,
+    scrapers: summary,
+    degraded: summary.filter(s => s.degraded).map(s => s.scraper),
+    alerts: openAlerts,
+    healthy: openAlerts.length === 0,
+  });
+}));
+
 router.get('/admin/debug-db', requireAdmin, asyncHandler(async (req, res) => {
   const db = getDb();
   const results = {};

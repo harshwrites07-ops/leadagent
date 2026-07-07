@@ -316,4 +316,37 @@ cron.schedule('0 4 * * 0', async () => {
   } catch (e) { console.error('[Scheduler] Staleness refresh error:', e.message); }
 });
 
+// Scraper health check — hourly. Scrapers can silently start returning
+// nothing (dead selectors, revoked tokens, IP blocks) with zero operator
+// visibility — see AUDIT_REPORT.md §1.3 / roadmap Session 0.5. Alerts once
+// per degraded scraper rather than spamming a new row every hour it stays down.
+cron.schedule('5 * * * *', async () => {
+  try {
+    const { getScraperHealthSummary } = require('./scraperHealth');
+    const db = getDb();
+    const summary = await getScraperHealthSummary(24);
+    for (const s of summary) {
+      if (!s.degraded) continue;
+      const existing = await db.get(
+        `SELECT id FROM scraper_health_alerts WHERE scraper=? AND resolved=0 ORDER BY detected_at DESC LIMIT 1`,
+        [s.scraper]
+      );
+      if (existing) continue; // already alerted and not yet resolved
+      console.log(`[ScraperHealth] ALERT — ${s.scraper} success rate ${s.success_rate}% over last 24h (${s.attempted} attempted)`);
+      await db.run(
+        `INSERT INTO scraper_health_alerts (scraper, success_rate, attempted) VALUES (?, ?, ?)`,
+        [s.scraper, s.success_rate, s.attempted]
+      );
+    }
+    // Auto-resolve: a scraper that's no longer degraded clears its open alert.
+    const degradedNow = new Set(summary.filter(s => s.degraded).map(s => s.scraper));
+    const openAlerts = await db.all('SELECT DISTINCT scraper FROM scraper_health_alerts WHERE resolved=0');
+    for (const row of openAlerts) {
+      if (!degradedNow.has(row.scraper)) {
+        await db.run('UPDATE scraper_health_alerts SET resolved=1 WHERE scraper=? AND resolved=0', [row.scraper]);
+      }
+    }
+  } catch (e) { console.error('[Scheduler] Scraper health check error:', e.message); }
+});
+
 module.exports = { startQueueProcessor, stopQueueProcessor };

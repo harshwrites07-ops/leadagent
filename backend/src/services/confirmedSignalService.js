@@ -7,8 +7,29 @@ const CONFIRMED_HIRING = [
   'looking for thumbnail designer','need thumbnail designer','hiring thumbnail designer','thumbnail designer wanted','looking for a designer',
   'looking for scriptwriter','need a scriptwriter','hiring scriptwriter','looking for a writer','need a writer for youtube',
   'join my team','joining my team','looking for team members','hiring for my channel','looking to hire','want to hire',
-  'paid collab','paid collaboration','paid opportunity','paid position','compensated',
 ];
+
+// Generic phrases that also show up in unrelated contexts (sponsorship disclaimers,
+// "not compensated for this video", casual collab mentions) — only count these as a
+// hiring signal when a role noun appears nearby and the phrase isn't negated.
+const CONFIRMED_HIRING_AMBIGUOUS = ['paid collab', 'paid collaboration', 'paid opportunity', 'paid position', 'compensated'];
+const ROLE_NOUN_NEAR = ['editor', 'designer', 'writer', 'scriptwriter', 'videographer', 'team member', 'assistant', 'manager', 'thumbnail'];
+const NEGATION_NEAR = ['not', "n't", 'no longer', 'never', 'without'];
+
+function findConfirmedHiringMatch(text) {
+  const explicit = CONFIRMED_HIRING.find(kw => text.includes(kw));
+  if (explicit) return explicit;
+  for (const kw of CONFIRMED_HIRING_AMBIGUOUS) {
+    const idx = text.indexOf(kw);
+    if (idx === -1) continue;
+    const before = text.slice(Math.max(0, idx - 40), idx);
+    const around = text.slice(Math.max(0, idx - 40), idx + kw.length + 40);
+    const negated = NEGATION_NEAR.some(neg => before.includes(neg));
+    const hasRoleNoun = ROLE_NOUN_NEAR.some(rn => around.includes(rn));
+    if (!negated && hasRoleNoun) return kw;
+  }
+  return null;
+}
 
 const BEHAVIORAL_SIGNALS = [
   'doing everything myself','solo creator','one man channel','one person team','running this alone','by myself',
@@ -29,7 +50,7 @@ async function deepScanDescriptions() {
   let confirmedCount = 0, behavioralCount = 0;
   for (const lead of leads) {
     const text = (lead.channel_description || '').toLowerCase();
-    const confirmedMatch = CONFIRMED_HIRING.find(kw => text.includes(kw));
+    const confirmedMatch = findConfirmedHiringMatch(text);
     const behavioralMatch = BEHAVIORAL_SIGNALS.find(kw => text.includes(kw));
     if (confirmedMatch) {
       try {
@@ -90,12 +111,12 @@ function extractFromGoogleHTML(html, query) {
 
 async function scanGoogleSignals() {
   const db = getDb();
-  let totalNew = 0;
+  let totalNew = 0, queryErrors = 0, lastError = null;
   console.log('[ConfirmedSignal] Scanning Google for hiring posts...');
   for (const query of GOOGLE_QUERIES) {
     try {
       const html = await scrapeGoogleResults(query);
-      if (!html) continue;
+      if (!html) { queryErrors++; lastError = `empty response for "${query}"`; continue; }
       for (const result of extractFromGoogleHTML(html, query)) {
         try {
           if (result.type === 'youtube' && result.channelId) {
@@ -111,9 +132,19 @@ async function scanGoogleSignals() {
         } catch {}
       }
       await new Promise(r => setTimeout(r, 2000));
-    } catch (e) { console.error(`[Google] Error for query "${query}":`, e.message); }
+    } catch (e) {
+      console.error(`[Google] Error for query "${query}":`, e.message);
+      queryErrors++; lastError = e.message;
+    }
   }
   console.log(`[ConfirmedSignal] Google scan: ${totalNew} new signals`);
+  try {
+    const { recordScraperHealth } = require('./scraperHealth');
+    await recordScraperHealth('serp_signals', {
+      attempted: GOOGLE_QUERIES.length, succeeded: GOOGLE_QUERIES.length - queryErrors,
+      failed: queryErrors, sampleError: lastError,
+    });
+  } catch {}
   return { new_signals: totalNew };
 }
 

@@ -568,6 +568,23 @@ function _initSqliteSchema(db) {
       started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       completed_at DATETIME
     );
+    CREATE TABLE IF NOT EXISTS scraper_health (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      scraper TEXT NOT NULL,
+      run_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      attempted INTEGER DEFAULT 0,
+      succeeded INTEGER DEFAULT 0,
+      failed INTEGER DEFAULT 0,
+      sample_error TEXT
+    );
+    CREATE TABLE IF NOT EXISTS scraper_health_alerts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      scraper TEXT NOT NULL,
+      detected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      success_rate REAL,
+      attempted INTEGER,
+      resolved INTEGER DEFAULT 0
+    );
     CREATE TABLE IF NOT EXISTS buying_signals (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       source TEXT NOT NULL DEFAULT 'reddit',

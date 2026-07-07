@@ -26,12 +26,14 @@ export default function Admin() {
   const [limitEdits, setLimitEdits] = useState({});
   const [seederInfo, setSeederInfo] = useState(null);
   const [scraping, setScraping]     = useState(false);
+  const [scraperHealth, setScraperHealth] = useState(null);
   const pollRef = useRef(null);
 
   useEffect(() => {
     if (!user?.is_admin) { navigate('/'); return; }
     load();
     loadSeeder();
+    loadScraperHealth();
   }, [user]);
 
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
@@ -50,6 +52,11 @@ export default function Admin() {
 
   const loadSeeder = async () => {
     try { const { data } = await api.get('/auth/admin/seeder-status'); setSeederInfo(data); }
+    catch {}
+  };
+
+  const loadScraperHealth = async () => {
+    try { const { data } = await api.get('/auth/admin/scraper-health'); setScraperHealth(data); }
     catch {}
   };
 
@@ -128,6 +135,20 @@ export default function Admin() {
         <h1 className="page__title">Admin Panel</h1>
         <button onClick={load} className="btn btn--ghost btn--sm" title="Refresh"><RefreshCw size={13} /></button>
       </div>
+
+      {scraperHealth?.degraded?.length > 0 && (
+        <div className="card" style={{
+          marginBottom: 16, padding: '12px 18px', background: 'var(--coral)', color: 'var(--on-accent)',
+          display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+        }}>
+          <span style={{ fontWeight: 700, fontSize: 13 }}>⚠ Scraper(s) degraded (last 24h):</span>
+          {scraperHealth.scrapers.filter(s => s.degraded).map(s => (
+            <span key={s.scraper} className="mono" style={{ fontSize: 12 }}>
+              {s.scraper} ({s.success_rate}% success, {s.attempted} attempted)
+            </span>
+          ))}
+        </div>
+      )}
 
       {stats && (
         <div className="grid g-4" style={{ marginBottom: 20 }}>
