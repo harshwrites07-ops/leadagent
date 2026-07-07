@@ -69,11 +69,32 @@ function normalizeSql(sql) {
     } else if (/\bsettings\b/i.test(sql)) {
       out = out.trimEnd() + ' ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=EXCLUDED.updated_at';
     } else if (/\bquality_leads\b/i.test(sql)) {
-      out = out.trimEnd() + ' ON CONFLICT (creator_id) DO UPDATE SET channel_name=EXCLUDED.channel_name, intent_score=EXCLUDED.intent_score, intent_tier=EXCLUDED.intent_tier, updated_at=EXCLUDED.updated_at';
+      out = out.trimEnd() + ` ON CONFLICT (creator_id) DO UPDATE SET
+        channel_url=EXCLUDED.channel_url, channel_name=EXCLUDED.channel_name, channel_handle=EXCLUDED.channel_handle,
+        subscriber_count=EXCLUDED.subscriber_count, niche=EXCLUDED.niche, email=EXCLUDED.email,
+        intent_score=EXCLUDED.intent_score, intent_tier=EXCLUDED.intent_tier,
+        sig_upload_frequency=EXCLUDED.sig_upload_frequency, sig_view_growth=EXCLUDED.sig_view_growth,
+        sig_title_keywords=EXCLUDED.sig_title_keywords, sig_description_keywords=EXCLUDED.sig_description_keywords,
+        sig_engagement=EXCLUDED.sig_engagement, sig_consistency=EXCLUDED.sig_consistency,
+        source=EXCLUDED.source, updated_at=EXCLUDED.updated_at`;
     } else if (/\barchived_leads\b/i.test(sql)) {
-      out = out.trimEnd() + ' ON CONFLICT (creator_id) DO UPDATE SET intent_score=EXCLUDED.intent_score, archived_at=EXCLUDED.archived_at';
+      out = out.trimEnd() + ` ON CONFLICT (creator_id) DO UPDATE SET
+        channel_name=EXCLUDED.channel_name, subscriber_count=EXCLUDED.subscriber_count, niche=EXCLUDED.niche,
+        email=EXCLUDED.email, intent_score=EXCLUDED.intent_score, intent_tier=EXCLUDED.intent_tier,
+        archived_reason=EXCLUDED.archived_reason, archived_at=EXCLUDED.archived_at`;
     } else if (/\buser_followup_settings\b/i.test(sql)) {
       out = out.trimEnd() + ' ON CONFLICT (user_id) DO UPDATE SET interval_days=EXCLUDED.interval_days, max_count=EXCLUDED.max_count, enabled=EXCLUDED.enabled, updated_at=EXCLUDED.updated_at';
+    } else if (/\bpitches\b/i.test(sql)) {
+      // Call sites write different column subsets — only SET the columns this
+      // specific INSERT provides. EXCLUDED.col for an unlisted column would
+      // resolve to that column's default (usually NULL), clobbering existing
+      // data on conflict instead of leaving it alone.
+      const colMatch = sql.match(/INSERT\s+OR\s+REPLACE\s+INTO\s+pitches\s*\(([^)]+)\)/i);
+      const cols = colMatch ? colMatch[1].split(',').map(c => c.trim()).filter(Boolean) : [];
+      const updateCols = cols.filter(c => c.toLowerCase() !== 'lead_id');
+      const setParts = updateCols.map(c => `${c}=EXCLUDED.${c}`);
+      if (!cols.some(c => c.toLowerCase() === 'updated_at')) setParts.push('updated_at=CURRENT_TIMESTAMP');
+      out = out.trimEnd() + ` ON CONFLICT (lead_id) DO UPDATE SET ${setParts.join(', ')}`;
     } else {
       out = out.trimEnd() + ' ON CONFLICT DO NOTHING';
     }
@@ -670,10 +691,12 @@ async function initPostgres() {
         api_key_hash TEXT NOT NULL,
         next_page_token TEXT,
         pages_done INTEGER DEFAULT 0,
+        zero_result_streak INTEGER DEFAULT 0,
         last_used TIMESTAMP DEFAULT NOW(),
         PRIMARY KEY (keyword, api_key_hash)
       )
     `);
+    try { await query(`ALTER TABLE seeder_keyword_tokens ADD COLUMN IF NOT EXISTS zero_result_streak INTEGER DEFAULT 0`); } catch {}
     console.log('[PG] ✅ seeder_keyword_tokens');
 
     await query(`
@@ -719,6 +742,14 @@ async function initPostgres() {
     // ('channel_gone' — deleted/private, should not be retried).
     try { await query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS video_data_status TEXT`); } catch {}
     try { await query(`CREATE INDEX IF NOT EXISTS idx_leads_video_data_status ON leads(video_data_status)`); } catch {}
+    try { await query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS video_fetch_attempts INTEGER DEFAULT 0`); } catch {}
+
+    // email_corrupt flags a row whose email column is an image/asset-filename
+    // false positive from the old extractEmail() regex bug — see purgeCorruptEmails.js.
+    try { await query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS email_corrupt INTEGER DEFAULT 0`); } catch {}
+    try { await query(`ALTER TABLE master_leads ADD COLUMN IF NOT EXISTS email_corrupt INTEGER DEFAULT 0`); } catch {}
+    try { await query(`ALTER TABLE quality_leads ADD COLUMN IF NOT EXISTS email_corrupt INTEGER DEFAULT 0`); } catch {}
+    try { await query(`ALTER TABLE archived_leads ADD COLUMN IF NOT EXISTS email_corrupt INTEGER DEFAULT 0`); } catch {}
 
     // Per-user unique indexes
     try { await query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_channel_id_user ON leads(channel_id, user_id) WHERE channel_id IS NOT NULL AND channel_id != ''`); } catch {}

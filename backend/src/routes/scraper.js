@@ -111,30 +111,35 @@ router.get('/hunt/status', asyncHandler(async (req, res) => { res.json(getHuntSt
 const POWERMODE_COUNTRIES = ['US','GB','CA','AU','IN','SG','AE','ZA',null];
 let pmCountryIdx = 0;
 
-router.post('/powermode/start', asyncHandler(async (req, res) => {
-  const userId = req.user.id;
+// Shared PowerMode implementation — used by both the direct route below and
+// the AI-assistant's trigger_powermode tool, so filtering/thresholds/usage
+// limits can't silently diverge between the two UI surfaces (see
+// AUDIT_REPORT.md §1.1: these used to be two incompatible implementations).
+async function runPowerMode(user, opts = {}) {
+  const userId = user.id;
   const ps = getPowermodeState(userId);
-  if (ps.running) return res.json({ status: 'already_running', ...ps });
+  if (ps.running) return { httpStatus: 200, body: { status: 'already_running', ...ps } };
 
-  const runLimit = getRunLimit(req.user);
-  const usageCheck = await checkUsageLimit(req.user, 'leads');
+  const runLimit = getRunLimit(user);
+  const usageCheck = await checkUsageLimit(user, 'leads');
   const remaining = usageCheck.allowed ? (usageCheck.limit < 0 ? Infinity : usageCheck.limit - usageCheck.used) : 0;
 
-  let targetCount = parseInt(req.body?.targetCount) || 100;
-  if (targetCount > runLimit) return res.status(400).json({ success: false, error: `Your ${req.user.plan || 'free'} plan allows up to ${runLimit} leads per run. Upgrade to get more.`, runLimit, upgradeRequired: targetCount > runLimit });
-  if (remaining === 0) return res.status(429).json({ success: false, error: `Monthly lead limit reached (${usageCheck.used}/${usageCheck.limit}). Upgrade your plan.`, upgradeRequired: true });
+  let targetCount = parseInt(opts.targetCount) || 100;
+  if (targetCount > runLimit) return { httpStatus: 400, body: { success: false, error: `Your ${user.plan || 'free'} plan allows up to ${runLimit} leads per run. Upgrade to get more.`, runLimit, upgradeRequired: true } };
+  if (remaining === 0) return { httpStatus: 429, body: { success: false, error: `Monthly lead limit reached (${usageCheck.used}/${usageCheck.limit}). Upgrade your plan.`, upgradeRequired: true } };
   targetCount = Math.min(targetCount, remaining);
 
   pmCountryIdx++;
-  const requestedNiches = Array.isArray(req.body?.niches) && req.body.niches.length > 0 ? req.body.niches : POWERMODE_DEFAULT_NICHES;
-  const pmMinSubs = parseInt(req.body?.minSubs) || 0;
-  const pmMaxSubs = parseInt(req.body?.maxSubs) || 0;
-  const pmCountry = (req.body?.country || '').trim().toUpperCase();
+  const requestedNiches = Array.isArray(opts.niches) && opts.niches.length > 0 ? opts.niches : POWERMODE_DEFAULT_NICHES;
+  const pmMinSubs = parseInt(opts.minSubs) || 0;
+  const pmMaxSubs = parseInt(opts.maxSubs) || 0;
+  const pmCountry = (opts.country || '').trim().toUpperCase();
 
   const db = getDb();
   const nicheConditions = requestedNiches.map(() => 'niche LIKE ?').join(' OR ');
   const nicheParams = requestedNiches.map(n => `%${n}%`);
-  let baseWhere = nicheConditions ? `(${nicheConditions}) AND email IS NOT NULL AND email != ''` : `email IS NOT NULL AND email != ''`;
+  const emailFilter = "email IS NOT NULL AND email != '' AND (email_corrupt IS NULL OR email_corrupt = 0)";
+  let baseWhere = nicheConditions ? `(${nicheConditions}) AND ${emailFilter}` : emailFilter;
   const baseParams = [...nicheParams];
 
   if (pmMinSubs > 0) { baseWhere += ' AND subscriber_count >= ?'; baseParams.push(pmMinSubs); }
@@ -155,7 +160,7 @@ router.post('/powermode/start', asyncHandler(async (req, res) => {
 
   let fallbackNiche = false, activewhere = fullWhere, activeParams = fullParams;
   if (available === 0) {
-    let fbWhere = `email IS NOT NULL AND email != ''`;
+    let fbWhere = emailFilter;
     const fbParams = [];
     if (pmMinSubs > 0) { fbWhere += ' AND subscriber_count >= ?'; fbParams.push(pmMinSubs); }
     if (pmMaxSubs > 0) { fbWhere += ' AND subscriber_count <= ?'; fbParams.push(pmMaxSubs); }
@@ -186,11 +191,16 @@ router.post('/powermode/start', asyncHandler(async (req, res) => {
 
     const targetReached = totalSaved >= targetCount;
     Object.assign(ps, { running: false, total: masterLeads.length, saved: totalSaved, keywordsTotal: 0, keywordsDone: 0, currentKeywords: [], recentLeads: masterLeads.slice(0, 10).map(l => ({ channel_name: l.channel_name, subscriber_count: l.subscriber_count, hasEmail: true, email: l.email })), stats: { hot: 0, warm: totalSaved, cold: 0, withEmail: totalSaved }, stopped: false, error: null, quotaExhausted: false, niches: requestedNiches, targetCount, targetReached, fallbackNiche });
-    return res.json({ status: 'instant', source: 'master_leads', saved: totalSaved, targetCount, niches: requestedNiches, keywordsTotal: 0, targetReached, fallbackNiche });
+    return { httpStatus: 200, body: { status: 'instant', source: 'master_leads', saved: totalSaved, targetCount, niches: requestedNiches, keywordsTotal: 0, targetReached, fallbackNiche } };
   }
 
   Object.assign(ps, { running: false, total: 0, saved: 0, keywordsTotal: 0, keywordsDone: 0, stats: { hot: 0, warm: 0, cold: 0, withEmail: 0 }, stopped: false, error: 'No leads in the database yet. The admin is seeding it — check back soon.', quotaExhausted: false, niches: requestedNiches, targetCount, targetReached: false });
-  return res.json({ status: 'empty', source: 'master_leads', saved: 0, targetCount, message: 'No leads in the database yet — check back soon.' });
+  return { httpStatus: 200, body: { status: 'empty', source: 'master_leads', saved: 0, targetCount, message: 'No leads in the database yet — check back soon.' } };
+}
+
+router.post('/powermode/start', asyncHandler(async (req, res) => {
+  const result = await runPowerMode(req.user, req.body || {});
+  res.status(result.httpStatus).json(result.body);
 }));
 
 router.post('/powermode/stop', asyncHandler(async (req, res) => {
@@ -267,3 +277,4 @@ router.get('/activities', asyncHandler(async (req, res) => {
 }));
 
 module.exports = router;
+module.exports.runPowerMode = runPowerMode;

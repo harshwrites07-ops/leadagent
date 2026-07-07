@@ -444,9 +444,11 @@ function _initSqliteSchema(db) {
     api_key_hash TEXT NOT NULL,
     next_page_token TEXT,
     pages_done INTEGER DEFAULT 0,
+    zero_result_streak INTEGER DEFAULT 0,
     last_used DATETIME DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (keyword, api_key_hash)
   )`);
+  alterTry(`ALTER TABLE seeder_keyword_tokens ADD COLUMN zero_result_streak INTEGER DEFAULT 0`);
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS campaigns (
@@ -632,6 +634,19 @@ function _initSqliteSchema(db) {
   // deleted/private, should not be retried).
   alterTry(`ALTER TABLE leads ADD COLUMN video_data_status TEXT`);
   alterTry(`CREATE INDEX IF NOT EXISTS idx_leads_video_data_status ON leads(video_data_status)`);
+  alterTry(`ALTER TABLE leads ADD COLUMN video_fetch_attempts INTEGER DEFAULT 0`);
+
+  // email_corrupt flags a row whose email column is an image/asset-filename
+  // false positive from the old extractEmail() regex bug (e.g. "logo@2x.png",
+  // "hash.png@1f.png" emoji sprite filenames) — see purgeCorruptEmails.js.
+  // master_leads intentionally does NOT get its email nulled by that script,
+  // since `DELETE FROM master_leads WHERE email IS NULL OR email = ''` below
+  // runs on every boot and would silently wipe the row on the next restart;
+  // the flag alone is enough to exclude it everywhere emails are surfaced.
+  alterTry(`ALTER TABLE leads ADD COLUMN email_corrupt INTEGER DEFAULT 0`);
+  alterTry(`ALTER TABLE master_leads ADD COLUMN email_corrupt INTEGER DEFAULT 0`);
+  alterTry(`ALTER TABLE quality_leads ADD COLUMN email_corrupt INTEGER DEFAULT 0`);
+  alterTry(`ALTER TABLE archived_leads ADD COLUMN email_corrupt INTEGER DEFAULT 0`);
 
   db.exec(`CREATE TABLE IF NOT EXISTS user_followup_settings (
     user_id INTEGER PRIMARY KEY,

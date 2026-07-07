@@ -222,15 +222,29 @@ router.post('/import', asyncHandler(async (req, res) => {
   for (const row of rows.slice(0, 1000)) {
     const name = (row.channel_name || '').trim();
     if (!name) { skipped++; continue; }
-    const exists = await db.get('SELECT id FROM leads WHERE channel_name = ? AND user_id = ?', [name, req.user.id]);
-    if (exists) { skipped++; continue; }
+    // Prefer channel_id when we can derive one — two distinct channels can share a
+    // display name (false dedup match), and a genuine duplicate imported under a
+    // slightly different name string wouldn't be caught by a name-only check.
+    let channelId = (row.channel_id || '').trim() || null;
     let handle = row.channel_url || row.channel_handle || null;
     if (handle) {
-      try { const u = new URL(handle); const parts = u.pathname.split('/').filter(Boolean); handle = parts.find(p => p.startsWith('@')) || parts[parts.length - 1] || handle; } catch {}
+      try {
+        const u = new URL(handle);
+        const parts = u.pathname.split('/').filter(Boolean);
+        if (!channelId) {
+          const channelIdx = parts.indexOf('channel');
+          if (channelIdx !== -1 && parts[channelIdx + 1]) channelId = parts[channelIdx + 1];
+        }
+        handle = parts.find(p => p.startsWith('@')) || parts[parts.length - 1] || handle;
+      } catch {}
     }
+    const exists = channelId
+      ? await db.get('SELECT id FROM leads WHERE channel_id = ? AND user_id = ?', [channelId, req.user.id])
+      : await db.get('SELECT id FROM leads WHERE channel_name = ? AND user_id = ?', [name, req.user.id]);
+    if (exists) { skipped++; continue; }
     try {
-      await db.run(`INSERT INTO leads (user_id, platform, channel_name, email, subscriber_count, channel_handle, niche, lead_score, temperature, crm_stage) VALUES (?, 'youtube', ?, ?, ?, ?, ?, 50, 'cold', 'new_lead') ${USE_PG ? 'ON CONFLICT DO NOTHING' : ''}`,
-        [req.user.id, name, row.email || null, parseInt(row.subscriber_count) || 0, handle, row.niche || null]);
+      await db.run(`INSERT INTO leads (user_id, platform, channel_id, channel_name, email, subscriber_count, channel_handle, niche, lead_score, temperature, crm_stage) VALUES (?, 'youtube', ?, ?, ?, ?, ?, ?, 50, 'cold', 'new_lead') ${USE_PG ? 'ON CONFLICT DO NOTHING' : ''}`,
+        [req.user.id, channelId, name, row.email || null, parseInt(row.subscriber_count) || 0, handle, row.niche || null]);
       added++;
     } catch { skipped++; }
   }
@@ -254,7 +268,7 @@ router.post('/scrape/youtube/stream', scrapeLimiter, asyncHandler(async (req, re
     if (!usageCheck.allowed) { send({ type: 'error', message: `Monthly lead limit reached (${usageCheck.used}/${usageCheck.limit}).`, upgradeRequired: true }); return res.end(); }
 
     const db = getDb();
-    const conditions = ["email IS NOT NULL AND email != ''"]; const mParams = [];
+    const conditions = ["email IS NOT NULL AND email != '' AND (email_corrupt IS NULL OR email_corrupt = 0)"]; const mParams = [];
     if (keyword) { conditions.push('(channel_name LIKE ? OR channel_description LIKE ? OR niche LIKE ?)'); mParams.push(`%${keyword}%`,`%${keyword}%`,`%${keyword}%`); }
     if (minSubs) { conditions.push('subscriber_count >= ?'); mParams.push(Number(minSubs)); }
     if (maxSubs) { conditions.push('subscriber_count <= ?'); mParams.push(Number(maxSubs)); }
@@ -289,7 +303,7 @@ router.post('/scrape/youtube/stream', scrapeLimiter, asyncHandler(async (req, re
 
     // Broadened search
     {
-      const bConds = ["email IS NOT NULL AND email != ''"]; const bParams = [];
+      const bConds = ["email IS NOT NULL AND email != '' AND (email_corrupt IS NULL OR email_corrupt = 0)"]; const bParams = [];
       if (keyword) { bConds.push('(channel_name LIKE ? OR channel_description LIKE ? OR niche LIKE ?)'); bParams.push(`%${keyword}%`,`%${keyword}%`,`%${keyword}%`); }
       const bExclude = (await db.all(`SELECT channel_id FROM leads WHERE user_id=? AND channel_id IS NOT NULL`, [req.user.id])).map(r => r.channel_id);
       let bWhere = bConds.join(' AND '); const bAll = [...bParams];
@@ -488,7 +502,14 @@ router.get('/master', asyncHandler(async (req, res) => {
   const total = await db.get('SELECT COUNT(*) as c FROM master_leads');
   if (!total.c) return res.json({ success: true, leads: [], total: 0, master_total: 0, message: 'Master database is still being built.' });
 
-  const conditions = ['1=1']; const params = [];
+  const usageCheck = await checkUsageLimit(req.user, 'leads');
+  if (!usageCheck.allowed) {
+    return res.status(403).json({ success: false, error: `Monthly lead limit reached (${usageCheck.used}/${usageCheck.limit}).`, upgradeRequired: true });
+  }
+
+  // Never copy a row whose email is flagged as an image/asset-filename artifact
+  // (see purgeCorruptEmails.js) — rows with no email at all are still fine to serve.
+  const conditions = ['(email_corrupt IS NULL OR email_corrupt = 0)']; const params = [];
   if (niche)     { conditions.push('niche LIKE ?'); params.push(`%${niche}%`); }
   if (min_subs)  { conditions.push('subscriber_count >= ?'); params.push(Number(min_subs)); }
   if (max_subs)  { conditions.push('subscriber_count <= ?'); params.push(Number(max_subs)); }
@@ -515,6 +536,7 @@ router.get('/master', asyncHandler(async (req, res) => {
   const masterCount = (await db.get(`SELECT COUNT(*) as c FROM master_leads WHERE ${where}`, params)).c;
   res.json({ success: true, leads: userLeads, total: masterCount, master_total: total.c, copied });
 
+  if (copied > 0) incrementUsage(req.user.id, 'leads', copied).catch(() => {});
   if (newlyAdded.length) enrichNewLeadsInBackground(db, newlyAdded).catch(() => {});
 }));
 

@@ -497,6 +497,11 @@ const UPSERT_TOKEN_SQL = `
     last_used=CURRENT_TIMESTAMP
 `;
 
+// A keyword that has returned 0 qualifying leads for this many consecutive
+// cycles keeps consuming the same search.list quota share as a high-yield one
+// forever — deprioritize it instead of searching it every single cycle.
+const ZERO_RESULT_SKIP_THRESHOLD = 10;
+
 // Returns { saved, exhausted }
 async function runKeyBatch(apiKey, keywords, db) {
   let saved = 0;
@@ -507,9 +512,12 @@ async function runKeyBatch(apiKey, keywords, db) {
     if (exhausted) return 0;
     seederStatus.currentKeyword = keyword;
 
-    const stored = await db.get('SELECT next_page_token, pages_done FROM seeder_keyword_tokens WHERE keyword=? AND api_key_hash=?', [keyword, kh]);
+    const stored = await db.get('SELECT next_page_token, pages_done, zero_result_streak FROM seeder_keyword_tokens WHERE keyword=? AND api_key_hash=?', [keyword, kh]);
     const pageToken = stored?.next_page_token || null;
     const pagesDone = stored?.pages_done || 0;
+    const zeroStreak = stored?.zero_result_streak || 0;
+
+    if (zeroStreak >= ZERO_RESULT_SKIP_THRESHOLD) return 0;
 
     try {
       const params = {
@@ -523,23 +531,31 @@ async function runKeyBatch(apiKey, keywords, db) {
       const nextToken = searchRes.data.nextPageToken || null;
       await db.run(UPSERT_TOKEN_SQL, [keyword, kh, nextToken, pagesDone + 1]);
 
-      if (!channelIds.length) return 0;
-
-      const detailRes = await axios.get('https://www.googleapis.com/youtube/v3/channels', {
-        params: { part: 'snippet,statistics,brandingSettings', id: channelIds.join(','), key: apiKey },
-        timeout: 10000,
-      });
-
-      const channels = detailRes.data.items || [];
       let kwSaved = 0;
-      for (let i = 0; i < channels.length; i += CONCURRENCY) {
-        kwSaved += await processChannelBatch(db, channels.slice(i, i + CONCURRENCY), keyword);
+      if (channelIds.length) {
+        const detailRes = await axios.get('https://www.googleapis.com/youtube/v3/channels', {
+          params: { part: 'snippet,statistics,brandingSettings', id: channelIds.join(','), key: apiKey },
+          timeout: 10000,
+        });
+
+        const channels = detailRes.data.items || [];
+        for (let i = 0; i < channels.length; i += CONCURRENCY) {
+          kwSaved += await processChannelBatch(db, channels.slice(i, i + CONCURRENCY), keyword);
+        }
       }
+
+      await db.run(
+        'UPDATE seeder_keyword_tokens SET zero_result_streak = ? WHERE keyword=? AND api_key_hash=?',
+        [kwSaved > 0 ? 0 : zeroStreak + 1, keyword, kh]
+      );
       return kwSaved;
     } catch (e) {
-      if (e.response?.status === 403 || e.response?.status === 429) {
+      const reason = e.response?.data?.error?.errors?.[0]?.reason;
+      if (reason === 'quotaExceeded' || reason === 'dailyLimitExceeded' || reason === 'rateLimitExceeded' || e.response?.status === 429) {
         exhausted = true;
-        console.log(`[Seeder] Key exhausted: ${apiKey.slice(-6)}`);
+        console.log(`[Seeder] Key exhausted (${reason || e.response?.status}): ${apiKey.slice(-6)}`);
+      } else {
+        console.log(`[Seeder] Key error (not quota, reason=${reason || 'none'}, status=${e.response?.status || 'n/a'}): ${apiKey.slice(-6)} — ${e.message}`);
       }
       return 0;
     }
@@ -585,7 +601,7 @@ async function runInnerTubeCycle(db, keywords) {
               ch.country || null, niche
             ]);
             if (res.changes > 0) totalSaved++;
-          } catch {}
+          } catch (e) { console.warn(`[Seeder] InnerTube insert failed for ${ch.channelId}: ${e.message}`); }
         }
       }
     } catch (e) {
@@ -645,7 +661,7 @@ async function runSeedCycle() {
   if (totalSaved > 0) {
     try {
       const { pushToTurso } = require('./tursoSync');
-      const newLeads = await db.all(`SELECT * FROM master_leads WHERE email IS NOT NULL ORDER BY id DESC LIMIT ?`, [Math.min(totalSaved * 2, 500)]);
+      const newLeads = await db.all(`SELECT * FROM master_leads WHERE email IS NOT NULL AND (email_corrupt IS NULL OR email_corrupt = 0) ORDER BY id DESC LIMIT ?`, [Math.min(totalSaved * 2, 500)]);
       pushToTurso(newLeads).catch(() => {});
     } catch {}
   }
