@@ -331,6 +331,16 @@ cron.schedule('*/30 * * * *', async () => {
   } catch (e) { console.error('[Scheduler] Tiered refresh error:', e.message); }
 });
 
+// Lead-claim expiry rotation — hourly. A claim past its 48h window frees the
+// lead up for the next matched user rather than reserving it forever.
+cron.schedule('20 * * * *', async () => {
+  try {
+    const { expireStaleClaims } = require('./allocationEngine');
+    const expired = await expireStaleClaims();
+    if (expired > 0) console.log(`[Scheduler] Expired ${expired} stale lead claims`);
+  } catch (e) { console.error('[Scheduler] Claim expiry error:', e.message); }
+});
+
 // Outcome-learning weekly analysis — Sunday 5am. Proposes weights, never
 // applies them — an admin reviews and applies via the analytics routes.
 cron.schedule('0 5 * * 0', async () => {

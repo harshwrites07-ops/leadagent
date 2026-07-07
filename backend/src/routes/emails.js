@@ -142,10 +142,29 @@ router.post('/queue', asyncHandler(async (req, res) => {
       action: 'Click "Rewrite" to regenerate this pitch and improve its score above 70.',
     });
   }
+  // Contact throttle (Session 3.2) — a first-touch email (never contacted
+  // this lead before) counts against the pool-wide per-creator cap;
+  // follow-ups to an existing thread are exempt, never blocked or counted.
+  const isFirstTouch = !lead.last_contacted_date;
+  if (isFirstTouch && lead.channel_id) {
+    const { checkContactThrottle } = require('../services/allocationEngine');
+    const throttle = await checkContactThrottle(lead.channel_id);
+    if (!throttle.allowed) {
+      return res.status(409).json({
+        code: 'CREATOR_THROTTLED',
+        error: 'This creator was recently contacted through Quelro. Protecting reply rates for everyone.',
+      });
+    }
+  }
+
   const snapshot = await buildSnapshot(lead);
   const result = await db.run(`INSERT INTO email_queue (user_id, lead_id, subject, body, status, scheduled_at, priority, signal_snapshot) VALUES (?, ?, ?, ?, 'pending', ?, ?, ?) ${USE_PG ? 'RETURNING id' : ''}`, [req.user.id, lead.id, finalSubject, finalBody, scheduled_at || null, priority, snapshot]);
   await incrementUsage(req.user.id, 'emails', 1);
   logActivity('queued', `Email queued for ${lead.channel_name}`, lead.id, {}, req.user.id);
+  if (lead.channel_id) {
+    const { recordContact } = require('../services/allocationEngine');
+    await recordContact(lead.channel_id, req.user.id, isFirstTouch);
+  }
   const item = await db.get('SELECT * FROM email_queue WHERE id = ?', [result.lastID]);
   res.status(201).json({ success: true, item });
 }));
@@ -215,10 +234,26 @@ router.post('/queue/:leadId', asyncHandler(async (req, res) => {
       error: 'This email is a fallback template, not a Marcus draft. Regenerate it or explicitly override.',
     });
   }
+  const isFirstTouch2 = !lead.last_contacted_date;
+  if (isFirstTouch2 && lead.channel_id) {
+    const { checkContactThrottle } = require('../services/allocationEngine');
+    const throttle = await checkContactThrottle(lead.channel_id);
+    if (!throttle.allowed) {
+      return res.status(409).json({
+        code: 'CREATOR_THROTTLED',
+        error: 'This creator was recently contacted through Quelro. Protecting reply rates for everyone.',
+      });
+    }
+  }
+
   const snapshot2 = await buildSnapshot(lead);
   const result = await db.run(`INSERT INTO email_queue (user_id, lead_id, subject, body, status, scheduled_at, priority, signal_snapshot) VALUES (?, ?, ?, ?, 'pending', ?, ?, ?) ${USE_PG ? 'RETURNING id' : ''}`, [req.user.id, lead.id, finalSubject, finalBody, scheduled_at || null, priority, snapshot2]);
   await incrementUsage(req.user.id, 'emails', 1);
   logActivity('queued', `Email queued for ${lead.channel_name}`, lead.id, {}, req.user.id);
+  if (lead.channel_id) {
+    const { recordContact } = require('../services/allocationEngine');
+    await recordContact(lead.channel_id, req.user.id, isFirstTouch2);
+  }
   const item = await db.get('SELECT * FROM email_queue WHERE id = ?', [result.lastID]);
   res.status(201).json({ success: true, item });
 }));

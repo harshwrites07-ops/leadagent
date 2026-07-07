@@ -200,6 +200,13 @@ router.post('/generate/:leadId', aiLimiter, asyncHandler(async (req, res) => {
   await db.run(`UPDATE leads SET crm_stage='studying', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [lead.id]);
   logActivity('pitch_generating', `Generating pitch for ${lead.channel_name}`, lead.id, {}, req.user.id);
 
+  // Claim the lead (Session 3.2 allocation engine) — best-effort, never
+  // blocks generation itself; the listing layer is what keeps a 4th matched
+  // user from ever finding an already-fully-claimed lead in the first place.
+  if (lead.channel_id) {
+    try { const { claimLead } = require('../services/allocationEngine'); await claimLead(req.user.id, lead.channel_id); } catch {}
+  }
+
   // ── MARCUS integrated pipeline (Section D) ───────────────────────────────────
   let result;
   try {

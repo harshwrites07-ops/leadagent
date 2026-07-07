@@ -810,6 +810,32 @@ async function initPostgres() {
     console.log('[PG] ✅ scoring_weights');
 
     await query(`
+      CREATE TABLE IF NOT EXISTS lead_claims (
+        id SERIAL PRIMARY KEY,
+        creator_id TEXT NOT NULL,
+        user_id INTEGER NOT NULL,
+        claimed_at TIMESTAMP DEFAULT NOW(),
+        expires_at TIMESTAMP NOT NULL,
+        status TEXT DEFAULT 'claimed',
+        UNIQUE(creator_id, user_id)
+      )
+    `);
+    console.log('[PG] ✅ lead_claims');
+    try { await query(`CREATE INDEX IF NOT EXISTS idx_lead_claims_creator ON lead_claims(creator_id, status, expires_at)`); } catch {}
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS creator_contact_log (
+        id SERIAL PRIMARY KEY,
+        channel_id TEXT NOT NULL,
+        user_id INTEGER NOT NULL,
+        is_first_touch INTEGER DEFAULT 1,
+        sent_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('[PG] ✅ creator_contact_log');
+    try { await query(`CREATE INDEX IF NOT EXISTS idx_creator_contact_log_channel ON creator_contact_log(channel_id, is_first_touch, sent_at)`); } catch {}
+
+    await query(`
       CREATE TABLE IF NOT EXISTS weight_analysis_runs (
         id SERIAL PRIMARY KEY,
         run_at TIMESTAMP DEFAULT NOW(),

@@ -717,6 +717,24 @@ function _initSqliteSchema(db) {
       is_active INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS lead_claims (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      creator_id TEXT NOT NULL,
+      user_id INTEGER NOT NULL,
+      claimed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      expires_at DATETIME NOT NULL,
+      status TEXT DEFAULT 'claimed',
+      UNIQUE(creator_id, user_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_lead_claims_creator ON lead_claims(creator_id, status, expires_at);
+    CREATE TABLE IF NOT EXISTS creator_contact_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      channel_id TEXT NOT NULL,
+      user_id INTEGER NOT NULL,
+      is_first_touch INTEGER DEFAULT 1,
+      sent_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_creator_contact_log_channel ON creator_contact_log(channel_id, is_first_touch, sent_at);
     CREATE TABLE IF NOT EXISTS weight_analysis_runs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       run_at DATETIME DEFAULT CURRENT_TIMESTAMP,

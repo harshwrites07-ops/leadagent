@@ -72,6 +72,31 @@ router.get('/leads', async (req, res) => {
   if (outreached !== undefined) { conditions.push('outreached = ?'); params.push(outreached === 'true' ? 1 : 0); }
   const where = `WHERE ${conditions.join(' AND ')}`;
   const offset = (parseInt(page) - 1) * parseInt(limit);
+  // Attaches claim-status (Session 3.2) to a page of leads — "reserved for
+  // you" when the requesting user holds an active claim, "reserved" (no
+  // other user identified, per privacy) when someone else does.
+  async function attachClaimStatus(leads) {
+    if (!leads.length) return leads;
+    const creatorIds = leads.map(l => l.creator_id);
+    const placeholders = creatorIds.map(() => '?').join(',');
+    const claims = await db.all(
+      `SELECT creator_id, user_id, expires_at FROM lead_claims WHERE creator_id IN (${placeholders}) AND status != 'expired' AND expires_at > CURRENT_TIMESTAMP`,
+      creatorIds
+    );
+    const byCreator = {};
+    for (const c of claims) { (byCreator[c.creator_id] = byCreator[c.creator_id] || []).push(c); }
+    return leads.map(l => {
+      const claimsForLead = byCreator[l.creator_id] || [];
+      const mine = claimsForLead.find(c => c.user_id === req.user.id);
+      return {
+        ...l,
+        reserved_for_me: !!mine,
+        reserved_expires_at: mine?.expires_at || null,
+        reserved_by_others: !mine && claimsForLead.length > 0,
+      };
+    });
+  }
+
   try {
     const totalRow = await db.get(`SELECT COUNT(*) as n FROM quality_leads ${where}`, params);
     const total = totalRow.n;
@@ -92,11 +117,12 @@ router.get('/leads', async (req, res) => {
         if (fitA !== fitB) return fitB - fitA;
         return (b.intent_score || 0) - (a.intent_score || 0);
       });
-      const leads = candidates.slice(0, parseInt(limit));
+      const leads = await attachClaimStatus(candidates.slice(0, parseInt(limit)));
       return res.json({ leads, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)), ordered_by_service_fit: fitKey });
     }
 
-    const leads = await db.all(`SELECT * FROM quality_leads ${where} ORDER BY intent_score DESC, subscriber_count DESC LIMIT ? OFFSET ?`, [...params, parseInt(limit), offset]);
+    const rawLeads = await db.all(`SELECT * FROM quality_leads ${where} ORDER BY intent_score DESC, subscriber_count DESC LIMIT ? OFFSET ?`, [...params, parseInt(limit), offset]);
+    const leads = await attachClaimStatus(rawLeads);
     res.json({ leads, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
