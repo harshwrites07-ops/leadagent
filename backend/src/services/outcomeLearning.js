@@ -67,7 +67,7 @@ async function runOutcomeAnalysis() {
   const db = getDb();
   const rows = await db.all(`SELECT signal_snapshot, status, replied_at FROM emails WHERE signal_snapshot IS NOT NULL`);
 
-  const byTier = {}, byLeadType = {}, byIntentBand = {}, bySignalBand = {};
+  const byTier = {}, byLeadType = {}, byIntentBand = {}, bySignalBand = {}, byTierAndLeadType = {};
   for (const key of CORE_SIGNAL_KEYS) bySignalBand[key] = {};
 
   let totalReplies = 0;
@@ -84,6 +84,11 @@ async function runOutcomeAnalysis() {
 
     const ltKey = snap.lead_type || 'unknown';
     const g2 = bump(byLeadType, ltKey); g2.total++; if (replied) g2.replies++;
+
+    // (tier, lead_type) cross-tab — what the predicted reply-rate UI
+    // (Session 3.3) reads from, keyed to match a lead's own tier/lead_type.
+    const cellKey = `${tierKey}|${ltKey}`;
+    const g5 = bump(byTierAndLeadType, cellKey); g5.total++; if (replied) g5.replies++;
 
     const scoreBand = snap.intent_score === null || snap.intent_score === undefined ? 'unknown' : bucketOf(snap.intent_score);
     const g3 = bump(byIntentBand, scoreBand); g3.total++; if (replied) g3.replies++;
@@ -105,6 +110,7 @@ async function runOutcomeAnalysis() {
     by_lead_type: finalizeGroup(byLeadType),
     by_intent_band: finalizeGroup(byIntentBand),
     by_signal_band: Object.fromEntries(Object.entries(bySignalBand).map(([k, v]) => [k, finalizeGroup(v)])),
+    by_tier_and_lead_type: finalizeGroup(byTierAndLeadType),
   };
 
   // Propose weights: for each of the 5 core signals, lift = high-bucket reply
@@ -173,4 +179,44 @@ async function rollbackToWeights(weightsId) {
   return { success: true, engine_version: target.engine_version, weights_id: target.id };
 }
 
-module.exports = { getActiveWeights, runOutcomeAnalysis, applyProposedWeights, rollbackToWeights, MIN_SAMPLE_SIZE, wilsonInterval };
+// Predicted reply rate (Session 3.3) — the moat made visible. Reads the
+// (tier, lead_type) cell from the latest analysis run and shrinks its
+// empirical reply rate toward the global baseline by sample size (simple
+// Bayesian/Laplace shrinkage: more samples = trust the cell's own rate more;
+// few samples = pull toward the population mean). No ML dependencies, no
+// invented numbers.
+//
+// GATE (non-negotiable): returns null unless the cell has >= MIN_PREDICTION_SAMPLE_SIZE
+// real sends — a shrunk estimate on a tiny cell still LOOKS precise, which is
+// exactly the fabricated-looking-precision problem this gate exists to prevent.
+const MIN_PREDICTION_SAMPLE_SIZE = 50;
+const SHRINKAGE_STRENGTH = MIN_PREDICTION_SAMPLE_SIZE; // k in (n*p + k*baseline) / (n+k)
+
+async function getPredictedReplyRate(tier, leadType) {
+  const db = getDb();
+  const run = await db.get(`SELECT * FROM weight_analysis_runs ORDER BY run_at DESC LIMIT 1`);
+  if (!run) return null;
+
+  let results;
+  try { results = JSON.parse(run.results_json); } catch { return null; }
+
+  const cellKey = `${tier || 'unknown'}|${leadType || 'unknown'}`;
+  const cell = results.by_tier_and_lead_type?.[cellKey];
+  if (!cell || cell.sample_size < MIN_PREDICTION_SAMPLE_SIZE) return null; // the gate
+
+  const n = cell.sample_size;
+  const p = cell.reply_rate / 100;
+  const baseline = results.baseline_reply_rate / 100;
+  const shrunk = (n * p + SHRINKAGE_STRENGTH * baseline) / (n + SHRINKAGE_STRENGTH);
+
+  return {
+    predicted_reply_rate: Math.round(shrunk * 1000) / 10, // e.g. 14.3 (%)
+    sample_size: n,
+    run_at: run.run_at,
+  };
+}
+
+module.exports = {
+  getActiveWeights, runOutcomeAnalysis, applyProposedWeights, rollbackToWeights, getPredictedReplyRate,
+  MIN_SAMPLE_SIZE, MIN_PREDICTION_SAMPLE_SIZE, wilsonInterval,
+};

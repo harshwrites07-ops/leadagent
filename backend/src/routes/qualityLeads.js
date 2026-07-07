@@ -97,6 +97,28 @@ router.get('/leads', async (req, res) => {
     });
   }
 
+  // Attaches a predicted reply rate (Session 3.3) — gated to only render
+  // when the lead's (tier, lead_type) cell has >=50 real sends (the
+  // non-negotiable gate in getPredictedReplyRate); cached per unique
+  // (tier, lead_type) pair on the page rather than once per lead, since the
+  // prediction only depends on that pair, not the individual lead.
+  async function attachPredictedReply(leads) {
+    if (!leads.length) return leads;
+    const { getPredictedReplyRate } = require('../services/outcomeLearning');
+    const cache = {};
+    for (const l of leads) {
+      const key = `${l.tier || 'unknown'}|${l.lead_type || 'unknown'}`;
+      if (!(key in cache)) cache[key] = await getPredictedReplyRate(l.tier, l.lead_type);
+    }
+    return leads.map(l => {
+      const key = `${l.tier || 'unknown'}|${l.lead_type || 'unknown'}`;
+      const prediction = cache[key];
+      return prediction
+        ? { ...l, predicted_reply_rate: prediction.predicted_reply_rate, predicted_reply_sample_size: prediction.sample_size }
+        : { ...l, predicted_reply_rate: null, predicted_reply_sample_size: null };
+    });
+  }
+
   try {
     const totalRow = await db.get(`SELECT COUNT(*) as n FROM quality_leads ${where}`, params);
     const total = totalRow.n;
@@ -117,12 +139,12 @@ router.get('/leads', async (req, res) => {
         if (fitA !== fitB) return fitB - fitA;
         return (b.intent_score || 0) - (a.intent_score || 0);
       });
-      const leads = await attachClaimStatus(candidates.slice(0, parseInt(limit)));
+      const leads = await attachPredictedReply(await attachClaimStatus(candidates.slice(0, parseInt(limit))));
       return res.json({ leads, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)), ordered_by_service_fit: fitKey });
     }
 
     const rawLeads = await db.all(`SELECT * FROM quality_leads ${where} ORDER BY intent_score DESC, subscriber_count DESC LIMIT ? OFFSET ?`, [...params, parseInt(limit), offset]);
-    const leads = await attachClaimStatus(rawLeads);
+    const leads = await attachPredictedReply(await attachClaimStatus(rawLeads));
     res.json({ leads, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

@@ -96,8 +96,30 @@ function LeadRow({ lead, index = 0 }) {
       transition={{ delay: Math.min(index * 0.03, 0.4), duration: 0.3 }}
     >
       <td>
-        <div style={{ fontWeight: 600, color: 'var(--text)' }}>{lead.channel_name}</div>
-        <div className="t-xs t-muted">{lead.niche || '—'} · {lead.email || 'no email'}</div>
+        <div style={{ fontWeight: 600, color: 'var(--text)' }}>
+          {lead.channel_name}
+          {lead.reserved_for_me && (
+            <span className="badge badge--lime t-xs" style={{ marginLeft: 6 }} title={`Reserved for you until ${lead.reserved_expires_at ? new Date(lead.reserved_expires_at).toLocaleString() : ''}`}>
+              reserved for you · 48h
+            </span>
+          )}
+        </div>
+        <div className="t-xs t-muted">
+          {lead.niche || '—'} · {lead.email || 'no email'}
+          {/* Predicted reply rate (Session 3.3) — only ever rendered when the
+              backend's non-negotiable n>=50 gate has already passed; below
+              that threshold predicted_reply_rate is null and only the tier
+              badge (elsewhere in this row) shows. */}
+          {lead.predicted_reply_rate != null && (
+            <span
+              className="t-lime"
+              style={{ marginLeft: 6 }}
+              title={`Based on ${lead.predicted_reply_sample_size} similar sends (tier + lead type), shrunk toward the overall baseline`}
+            >
+              · ≈{lead.predicted_reply_rate}% predicted reply · based on {lead.predicted_reply_sample_size} similar sends
+            </span>
+          )}
+        </div>
       </td>
       <td className="mono">{fmt(lead.subscriber_count)}</td>
       <td className="mono t-lime" style={{ fontWeight: 700 }}>{score(lead.intent_score)}</td>
