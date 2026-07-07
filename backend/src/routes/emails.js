@@ -96,8 +96,10 @@ router.post('/test-send', requireAdmin, asyncHandler(async (req, res) => {
 router.get('/queue', asyncHandler(async (req, res) => {
   const db = getDb();
   const queue = await db.all(`
-    SELECT eq.*, l.channel_name as lead_name, l.email as lead_email, l.thumbnail_url as thumbnail
+    SELECT eq.*, l.channel_name as lead_name, l.email as lead_email, l.thumbnail_url as thumbnail,
+           p.generation_method as pitch_generation_method
     FROM email_queue eq JOIN leads l ON l.id = eq.lead_id
+    LEFT JOIN pitches p ON p.lead_id = eq.lead_id
     WHERE eq.status IN ('pending', 'sending') AND eq.user_id = ?
     ORDER BY eq.priority DESC, eq.created_at ASC
   `, [req.user.id]);
@@ -107,7 +109,7 @@ router.get('/queue', asyncHandler(async (req, res) => {
 
 router.post('/queue', asyncHandler(async (req, res) => {
   const db = getDb();
-  const { lead_id, subject, body, scheduled_at, priority = 0 } = req.body;
+  const { lead_id, subject, body, scheduled_at, priority = 0, allowFallback = false } = req.body;
   if (!lead_id) return res.status(400).json({ success: false, error: 'lead_id required' });
   const usageCheck = await checkUsageLimit(req.user, 'emails');
   if (!usageCheck.allowed) return res.status(429).json({ success: false, upgradeRequired: true, error: `Monthly email limit reached (${usageCheck.used}/${usageCheck.limit}). Upgrade your plan to send more emails.` });
@@ -119,6 +121,14 @@ router.post('/queue', asyncHandler(async (req, res) => {
     if (!pitch) return res.status(400).json({ success: false, error: 'No pitch found. Generate a pitch first.' });
     finalSubject = finalSubject || pitch.email_subject;
     finalBody = finalBody || pitch.cold_email;
+  }
+  // Hard block: a fallback template (Marcus generation failed) must never
+  // reach a real prospect without the user consciously overriding.
+  if (pitch && pitch.generation_method === 'fallback' && !allowFallback) {
+    return res.status(409).json({
+      code: 'FALLBACK_PITCH',
+      error: 'This email is a fallback template, not a Marcus draft. Regenerate it or explicitly override.',
+    });
   }
   // Hard block: refuse to queue if quality score < 70
   if (pitch && pitch.quality_score !== null && pitch.quality_score < 70) {
@@ -151,24 +161,25 @@ router.post('/queue/resume', asyncHandler(async (req, res) => {
 }));
 
 router.post('/queue/bulk', asyncHandler(async (req, res) => {
-  const { lead_ids } = req.body;
+  const { lead_ids, allowFallback = false } = req.body;
   if (!lead_ids?.length) return res.status(400).json({ success: false, error: 'lead_ids required' });
   const usageCheck = await checkUsageLimit(req.user, 'emails');
   if (!usageCheck.allowed) return res.status(429).json({ success: false, upgradeRequired: true, error: `Monthly email limit reached (${usageCheck.used}/${usageCheck.limit}). Upgrade your plan to send more emails.` });
   const db = getDb();
-  let added = 0, skipped = 0;
+  let added = 0, skipped = 0, fallbackBlocked = 0;
   for (const id of lead_ids) {
     const lead  = await db.get('SELECT * FROM leads WHERE id = ? AND user_id = ?', [id, req.user.id]);
     if (!lead) { skipped++; continue; }
     const pitch = await db.get('SELECT * FROM pitches WHERE lead_id = ?', [id]);
     if (!pitch) { skipped++; continue; }
+    if (pitch.generation_method === 'fallback' && !allowFallback) { fallbackBlocked++; continue; }
     const existing = await db.get(`SELECT id FROM email_queue WHERE lead_id = ? AND status = 'pending'`, [id]);
     if (existing) { skipped++; continue; }
     await db.run(`INSERT INTO email_queue (user_id, lead_id, subject, body, status) VALUES (?, ?, ?, ?, 'pending')`, [req.user.id, id, pitch.email_subject, pitch.cold_email]);
     added++;
   }
   if (added > 0) await incrementUsage(req.user.id, 'emails', added);
-  res.json({ success: true, added, skipped });
+  res.json({ success: true, added, skipped, fallback_blocked: fallbackBlocked });
 }));
 
 router.post('/queue/reorder', asyncHandler(async (req, res) => {
@@ -187,13 +198,19 @@ router.post('/queue/:leadId', asyncHandler(async (req, res) => {
   if (!lead) return res.status(404).json({ success: false, error: 'Lead not found' });
   const usageCheck = await checkUsageLimit(req.user, 'emails');
   if (!usageCheck.allowed) return res.status(429).json({ success: false, upgradeRequired: true, error: `Monthly email limit reached (${usageCheck.used}/${usageCheck.limit}). Upgrade your plan to send more emails.` });
-  const { subject, body, scheduled_at, priority = 0 } = req.body;
+  const { subject, body, scheduled_at, priority = 0, allowFallback = false } = req.body;
   let finalSubject = subject, finalBody = body;
+  const pitch = await db.get('SELECT * FROM pitches WHERE lead_id = ?', [lead.id]);
   if (!finalSubject || !finalBody) {
-    const pitch = await db.get('SELECT * FROM pitches WHERE lead_id = ?', [lead.id]);
     if (!pitch) return res.status(400).json({ success: false, error: 'No pitch found. Generate pitch first.' });
     finalSubject = finalSubject || pitch.email_subject;
     finalBody = finalBody || pitch.cold_email;
+  }
+  if (pitch && pitch.generation_method === 'fallback' && !allowFallback) {
+    return res.status(409).json({
+      code: 'FALLBACK_PITCH',
+      error: 'This email is a fallback template, not a Marcus draft. Regenerate it or explicitly override.',
+    });
   }
   const result = await db.run(`INSERT INTO email_queue (user_id, lead_id, subject, body, status, scheduled_at, priority) VALUES (?, ?, ?, ?, 'pending', ?, ?) ${USE_PG ? 'RETURNING id' : ''}`, [req.user.id, lead.id, finalSubject, finalBody, scheduled_at || null, priority]);
   await incrementUsage(req.user.id, 'emails', 1);

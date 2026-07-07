@@ -131,7 +131,7 @@ cron.schedule('0 * * * *', async () => {
     : `julianday('now') - julianday(l.last_contacted_date) >= 3`;
 
   const leads = await db.all(`
-    SELECT l.*, p.cold_email as original_email
+    SELECT l.*, p.cold_email as original_email, p.generation_method as pitch_generation_method
     FROM leads l
     LEFT JOIN pitches p ON p.lead_id = l.id
     WHERE l.crm_stage = 'emailed'
@@ -151,6 +151,13 @@ cron.schedule('0 * * * *', async () => {
 
   for (const lead of leads) {
     try {
+      // A fallback pitch (Marcus generation failed) must never be auto-queued
+      // or built on top of by the scheduler — the scheduler never overrides.
+      if (lead.pitch_generation_method === 'fallback') {
+        console.log(`[Scheduler] Skipped fallback pitch for ${lead.channel_name}`);
+        continue;
+      }
+
       const nextStep = (lead.follow_up_count || 0) + 1;
 
       if (nextStep > 5) {
@@ -279,6 +286,32 @@ cron.schedule('0 9 * * *', async () => {
       console.log(`[Scheduler] Resurrected ${r.changes} leads`);
     }
   } catch (e) { console.error('[Scheduler] Resurrection error:', e.message); }
+});
+
+// Video data backfill — daily at 3am (off-peak), for leads whose recent_videos
+// never got fetched. Previously only reachable via a manual admin-route click,
+// so the backlog only shrank when a human remembered to trigger it.
+cron.schedule('0 3 * * *', async () => {
+  try {
+    const { runVideoBackfill, getBackfillStatus } = require('./videoBackfillService');
+    if (getBackfillStatus().running) return;
+    console.log('[Scheduler] Starting nightly video backfill...');
+    const result = await runVideoBackfill();
+    console.log(`[Scheduler] Video backfill done — ok=${result.ok} fetch_failed=${result.fetchFailed} channel_gone=${result.channelGone} of ${result.total}`);
+  } catch (e) { console.error('[Scheduler] Video backfill error:', e.message); }
+});
+
+// Quality-lead staleness refresh — weekly, Sunday 4am. quality_leads/master_leads
+// never update after first scrape (INSERT OR IGNORE everywhere), so a lead scored
+// HOT months ago stays HOT forever even if the channel's gone dormant since. This
+// re-fetches a bounded sample of the oldest-scraped rows and re-scores them.
+cron.schedule('0 4 * * 0', async () => {
+  try {
+    const { refreshStaleMasterLeads } = require('./qualityLeadsService');
+    console.log('[Scheduler] Starting weekly staleness refresh...');
+    const result = await refreshStaleMasterLeads();
+    console.log(`[Scheduler] Staleness refresh done — checked=${result.checked} refreshed=${result.refreshed} gone=${result.gone} failed=${result.failed}`);
+  } catch (e) { console.error('[Scheduler] Staleness refresh error:', e.message); }
 });
 
 module.exports = { startQueueProcessor, stopQueueProcessor };

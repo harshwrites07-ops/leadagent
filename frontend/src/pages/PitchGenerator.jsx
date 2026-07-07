@@ -281,6 +281,8 @@ export default function PitchGenerator() {
         setQualityBlocked(true);
         setBlockDetails({ score: errData.score, feedback: errData.feedback, message: errData.message });
         toast.error(`Blocked — pitch scored ${errData.score}/100 (minimum 70 required)`);
+      } else if (errData?.code === 'FALLBACK_PITCH') {
+        toast.error('This is a fallback template, not a Marcus draft — regenerate it before sending.', { duration: 6000 });
       } else {
         toast.error(err.message || 'Failed to add to queue');
       }
@@ -1154,8 +1156,17 @@ export default function PitchGenerator() {
                           marginBottom: 14, padding: '10px 14px', borderRadius: 6,
                           background: 'var(--coral)', color: 'var(--on-accent)',
                           fontSize: 12, fontWeight: 700, fontFamily: 'var(--f-mono)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
                         }}>
-                          ⚠ FALLBACK TEMPLATE — AI generation failed for this lead. This is not a real Marcus draft. Regenerate before sending.
+                          <span>⚠ FALLBACK TEMPLATE — AI generation failed for this lead. This is not a real Marcus draft.</span>
+                          <button
+                            className="btn btn--sm"
+                            style={{ background: 'var(--on-accent)', color: 'var(--coral)', flexShrink: 0 }}
+                            onClick={handleGenerate}
+                            disabled={generating}
+                          >
+                            <Icon name="refresh" size={11} />Regenerate now
+                          </button>
                         </div>
                       )}
 

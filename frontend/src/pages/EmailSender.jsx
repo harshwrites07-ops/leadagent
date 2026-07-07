@@ -274,6 +274,15 @@ export default function EmailSender() {
                             </td>
                             <td style={{ fontSize: 12.5, color: 'var(--text-2)', maxWidth: 280 }}>
                               <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.subject}</div>
+                              {item.pitch_generation_method === 'fallback' && (
+                                <div style={{
+                                  marginTop: 4, display: 'inline-block', padding: '2px 6px', borderRadius: 4,
+                                  background: 'var(--coral)', color: 'var(--on-accent)',
+                                  fontSize: 9.5, fontWeight: 700, fontFamily: 'var(--f-mono)',
+                                }} title="This item was explicitly overridden past the fallback-template block.">
+                                  ⚠ FALLBACK TEMPLATE
+                                </div>
+                              )}
                             </td>
                             <td className="mono" style={{ fontSize: 11.5 }}>{item.mailbox || item.from_email || '—'}</td>
                             <td>
