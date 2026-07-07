@@ -10,6 +10,46 @@ const SERVICE_KEYWORDS = [
   'agency', 'freelance', 'content strategy', 'repurpose',
 ];
 
+// Genuine buying-intent phrases — a channel talking about ITS OWN commerce
+// activity (sponsorships, business contact, merch) is a real demand signal.
+// This is deliberately NOT the same list as SERVICE_KEYWORDS: a channel
+// whose own titles/description are full of "editor"/"thumbnail"/"design"
+// is an editing-tutorial or competitor channel teaching those skills, not a
+// buyer of them — that's exactly the poisoned-signal bias this replaces.
+const COMMERCE_KEYWORDS = [
+  'business inquiries', 'business inquiry', 'contact for business', 'inquiries:',
+  'sponsorship', 'sponsorships', 'brand deals', 'brand partnership', 'partnership inquiries',
+  'collab inquiries', 'collaboration inquiries', 'merch', 'shop my', 'affiliate',
+];
+const BUSINESS_EMAIL_PATTERNS = [/business@/i, /sponsor@/i, /partnerships@/i, /brand@/i, /management@/i, /contact@/i, /press@/i];
+const PERSONAL_EMAIL_DOMAINS = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com'];
+const MERCH_AFFILIATE_LINK_PATTERNS = [/linktr\.ee/i, /beacons\.ai/i, /amzn\.to/i, /shop\.[a-z]/i, /merch\.[a-z]/i, /bit\.ly/i];
+
+// Teaching/coaching patterns in a channel's own description — a strong tell
+// this channel teaches the service rather than needs to buy it.
+const META_CHANNEL_DESC_PATTERNS = [
+  'learn editing', 'editing tutorial', 'how to edit', 'for editors', 'editing course',
+  'grow your channel', 'grow your youtube', 'youtube growth tips', 'channel growth coaching',
+  'thumbnail tutorial', 'how to design thumbnails', 'video editing tips',
+];
+
+// Classifies whether a channel is itself teaching/selling the service (an
+// editing-tutorial or "grow your channel" coaching channel) rather than a
+// creator who might need to buy it — these were previously misidentified as
+// HIGH intent because SERVICE_KEYWORDS matched their own content, which is
+// exactly backwards (see AUDIT_REPORT.md §2 / roadmap Session 0.4).
+function classifyMetaChannel(lead, videos) {
+  const titles = (videos || []).slice(0, 20).map(v => (v.title || '').toLowerCase());
+  const matchingTitles = titles.filter(t => SERVICE_KEYWORDS.some(kw => t.includes(kw)));
+  const titleRatio = titles.length > 0 ? matchingTitles.length / titles.length : 0;
+  if (titleRatio > 0.30) return true;
+
+  const desc = (lead.channel_description || '').toLowerCase();
+  if (META_CHANNEL_DESC_PATTERNS.some(p => desc.includes(p))) return true;
+
+  return false;
+}
+
 function parseVideos(json) {
   try { return JSON.parse(json || '[]'); } catch { return []; }
 }
@@ -50,14 +90,25 @@ function signalTitleKeywords(videos) {
   return Math.min(count / 5, 1.0);
 }
 
-// ── Signal 4: Service keywords in channel description + tags ─────────────────
+// ── Signal 4: Commerce/demand signals in description + tags + email ──────────
+// Rewritten (Session 0.4) to count only genuine buying-intent phrases — see
+// COMMERCE_KEYWORDS above — instead of SERVICE_KEYWORDS, which rewarded
+// channels for talking about the service in their own content (editing
+// tutorials, growth-coaching channels) rather than needing to buy it.
 function signalDescriptionKeywords(lead) {
   const text = [
     (lead.channel_description || '').toLowerCase(),
     parseTags(lead.channel_tags).join(' ').toLowerCase(),
   ].join(' ');
-  const count = SERVICE_KEYWORDS.filter(kw => text.includes(kw)).length;
-  return Math.min(count / 8, 1.0);
+  let count = COMMERCE_KEYWORDS.filter(kw => text.includes(kw)).length;
+  if (MERCH_AFFILIATE_LINK_PATTERNS.some(p => p.test(text))) count += 1;
+
+  const email = (lead.email || '').toLowerCase();
+  const domain = email.split('@')[1];
+  if (email && BUSINESS_EMAIL_PATTERNS.some(p => p.test(email))) count += 1;
+  else if (domain && !PERSONAL_EMAIL_DOMAINS.includes(domain)) count += 0.5; // custom domain — weak business signal
+
+  return Math.min(count / 3, 1.0);
 }
 
 // ── Signal 5: Engagement rate (avg % → 0-1) ───────────────────────────────────
@@ -121,7 +172,9 @@ function calculateIntentScore(lead) {
     signals: { upload_frequency: 0, view_growth: 0, title_keywords: 0, description_keywords: 0, engagement_rate: 0, upload_consistency: 0 },
   });
 
-  if (daysSince > 180) return zero('Dormant — no uploads in 6+ months');
+  // A malformed last_upload_date parses to NaN, and `NaN > 180` is false — that
+  // would silently skip the dormancy check instead of zeroing the lead.
+  if (Number.isNaN(daysSince) || daysSince > 180) return zero('Dormant — no uploads in 6+ months');
 
   const videos = parseVideos(lead.recent_videos);
   if (!videos.length)  return zero('No video data available');
@@ -135,13 +188,16 @@ function calculateIntentScore(lead) {
     upload_consistency:   Math.round(signalConsistency(videos)             * 100) / 100,
   };
 
+  // title_keywords is intentionally excluded from the score (Session 0.4) —
+  // it rewarded a channel for talking about the service in its own titles,
+  // which selects editing-tutorial/competitor channels, not buyers. It's
+  // still computed and reported in `signals` for visibility/debugging.
   let score = (
-    0.20 * s.upload_frequency +
-    0.20 * s.view_growth +
-    0.25 * s.title_keywords +
+    0.25 * s.upload_frequency +
+    0.25 * s.view_growth +
     0.20 * s.description_keywords +
-    0.10 * s.engagement_rate +
-    0.05 * s.upload_consistency
+    0.15 * s.engagement_rate +
+    0.15 * s.upload_consistency
   );
 
   if ((lead.total_videos || 0) < 100) score *= 0.85; // new channel penalty
@@ -205,12 +261,12 @@ function assessAlgorithmAccuracy(emailsWithIntent) {
 
 // ── Default weights (publicly exported for calibration) ───────────────────────
 const DEFAULT_WEIGHTS = {
-  upload_frequency:     0.20,
-  view_growth:          0.20,
-  title_keywords:       0.25,
+  upload_frequency:     0.25,
+  view_growth:          0.25,
+  title_keywords:       0,    // poisoned signal — never scored, see Session 0.4
   description_keywords: 0.20,
-  engagement_rate:      0.10,
-  upload_consistency:   0.05,
+  engagement_rate:      0.15,
+  upload_consistency:   0.15,
 };
 
 // Score with custom weights (for calibration testing)
@@ -225,8 +281,11 @@ function calculateIntentScoreWithWeights(lead, weights = DEFAULT_WEIGHTS) {
     signals: { upload_frequency: 0, view_growth: 0, title_keywords: 0, description_keywords: 0, engagement_rate: 0, upload_consistency: 0 },
   });
 
-  if (daysSince > 180) return zero();
-  if (!videos.length && !lead.upload_frequency_days) return zero();
+  if (Number.isNaN(daysSince) || daysSince > 180) return zero();
+  // Match calculateIntentScore's stricter empty-video handling — scoring off
+  // neutral defaults alone (no real video data) let a zero-video lead full-score
+  // in this function while calculateIntentScore zeroed the same lead.
+  if (!videos.length) return zero();
 
   const s = {
     upload_frequency:     Math.round(signalUploadFrequency(lead)         * 100) / 100,
@@ -237,11 +296,12 @@ function calculateIntentScoreWithWeights(lead, weights = DEFAULT_WEIGHTS) {
     upload_consistency:   videos.length >= 4 ? Math.round(signalConsistency(videos) * 100) / 100 : 0.5,
   };
 
+  // title_keywords is never scored (Session 0.4 — poisoned signal), regardless
+  // of what a caller passes for that weight in `weights`.
   const w = weights;
   let score = (
     w.upload_frequency     * s.upload_frequency +
     w.view_growth          * s.view_growth +
-    w.title_keywords       * s.title_keywords +
     w.description_keywords * s.description_keywords +
     w.engagement_rate      * s.engagement_rate +
     w.upload_consistency   * s.upload_consistency
@@ -282,13 +342,13 @@ const EXCLUDED_CHANNEL_KEYWORDS = [
 
 // Score a master_leads row using proxy signals (niche + subscriber count + views ratio + description keywords)
 // master_leads doesn't have recent_videos, upload_frequency_days, or engagement_rate
-function scoreMasterLead(ml) {
+async function scoreMasterLead(ml) {
   // Hard exclude: media companies, brand channels, and mega-channels (>500K subs)
   const channelNameLower = (ml.channel_name || '').toLowerCase();
   const isExcluded = EXCLUDED_CHANNEL_KEYWORDS.some(kw => channelNameLower.includes(kw));
   if (isExcluded || (ml.subscriber_count || 0) > 500000) {
     return {
-      intent_score: 0.10, confidence: 'Low', temperature: 'cold', excluded: true,
+      intent_score: 0.10, confidence: 'Low', temperature: 'cold', excluded: true, meta_channel: false,
       base_score: 0.10, signal_boost: 0, is_confirmed: false, signal_source: null,
       signals: {
         niche_score: 0, subs_score: 0, views_score: 0, desc_score: 0,
@@ -329,18 +389,27 @@ function scoreMasterLead(ml) {
     else                    views_score = 0.20;
   }
 
-  // Signal 4: Description keywords (10% weight) — looser threshold for master_leads
+  // Signal 4: Commerce/demand keywords (10% weight) — rewritten Session 0.4 to
+  // count only genuine buying-intent phrases (COMMERCE_KEYWORDS), not
+  // SERVICE_KEYWORDS — a channel's own description mentioning "editor"/
+  // "design" measures what it teaches or does, not what it wants to buy.
   const descText = [
     (ml.channel_description || '').toLowerCase(),
     (ml.niche || '').toLowerCase(),
   ].join(' ');
-  const descKwCount = SERVICE_KEYWORDS.filter(kw => descText.includes(kw)).length;
+  const descKwCount = COMMERCE_KEYWORDS.filter(kw => descText.includes(kw)).length;
   const desc_score = Math.min(descKwCount / 2, 1.0); // 2 keywords = perfect
+
+  // meta_channel: this row is itself teaching/selling the service (editing
+  // tutorial, "grow your channel" coaching) rather than a potential buyer of
+  // it. master_leads has no recent_videos, so only the description-pattern
+  // half of the classifier applies here.
+  const meta_channel = classifyMetaChannel(ml, []);
 
   // Niche + subs are co-equal proxy signals; views as tiebreaker
   const score = (0.40 * niche_score) + (0.40 * subs_score) + (0.15 * views_score) + (0.05 * desc_score);
   const base_score   = Math.min(Math.round(score * 100) / 100, 1.0);
-  const intent_score = scoreWithPlatformSignals(ml.channel_id, base_score);
+  const intent_score = await scoreWithPlatformSignals(ml.channel_id, base_score);
   const temperature  = intent_score >= 0.75 ? 'hot' : intent_score >= 0.50 ? 'warm' : 'cold';
 
   // Determine if a confirmed hiring signal exists (for downstream enrichment)
@@ -348,14 +417,12 @@ function scoreMasterLead(ml) {
   let signal_source = null;
   try {
     const db = getDb();
-    if (typeof db.prepare === 'function') {
-      const confirmedSignal = db.prepare(`SELECT platform FROM platform_signals WHERE creator_id = ? AND signal_type = 'confirmed_hiring' ORDER BY confidence DESC LIMIT 1`).get(ml.channel_id);
-      if (confirmedSignal) { is_confirmed = true; signal_source = confirmedSignal.platform; }
-    }
+    const confirmedSignal = await db.get(`SELECT platform FROM platform_signals WHERE creator_id = ? AND signal_type = 'confirmed_hiring' ORDER BY confidence DESC LIMIT 1`, [ml.channel_id]);
+    if (confirmedSignal) { is_confirmed = true; signal_source = confirmedSignal.platform; }
   } catch (e) {}
 
   return {
-    intent_score, confidence: is_confirmed ? 'High' : 'Low', temperature,
+    intent_score, confidence: is_confirmed ? 'High' : 'Low', temperature, meta_channel,
     is_confirmed, signal_source, base_score, signal_boost: Math.round((intent_score - base_score) * 100) / 100,
     signals: {
       niche_score, subs_score, views_score, desc_score,
@@ -370,62 +437,57 @@ function scoreMasterLead(ml) {
  * Combines YouTube signals with cross-platform signals
  * Makes 0.75+ actually mean something real
  */
-function scoreWithPlatformSignals(creatorId, baseScore) {
+async function scoreWithPlatformSignals(creatorId, baseScore) {
   const db = getDb();
 
-  if (typeof db.prepare !== 'function') return baseScore;
+  let signals;
+  try {
+    signals = await db.all(`
+      SELECT platform, signal_type, confidence, budget_mentioned
+      FROM platform_signals
+      WHERE creator_id = ?
+      ORDER BY confidence DESC
+    `, [creatorId]);
+  } catch (e) {
+    return baseScore;
+  }
 
-  const signals = db.prepare(`
-    SELECT platform, signal_type, confidence, budget_mentioned
-    FROM platform_signals
-    WHERE creator_id = ?
-    ORDER BY confidence DESC
-  `).all(creatorId);
-
-  if (signals.length === 0) return baseScore;
+  if (!signals || signals.length === 0) return baseScore;
 
   let platformBoost = 0;
-  let hasConfirmedHiring = false;
+  // Only a genuine confirmed_hiring signal_type trips the ≥0.80 floor below —
+  // softer 'behavioral' matches on the same platform must not.
+  let hasConfirmedHiring = signals.some(s => s.signal_type === 'confirmed_hiring');
 
   for (const signal of signals) {
-    if (signal.signal_type === 'confirmed_hiring') {
-      hasConfirmedHiring = true;
-    }
     switch (signal.platform) {
       case 'upwork':
         platformBoost = Math.max(platformBoost, 0.35);
-        hasConfirmedHiring = true;
         if (signal.budget_mentioned) platformBoost = Math.max(platformBoost, 0.38);
         break;
 
       case 'youtube_description':
         platformBoost = Math.max(platformBoost, 0.30);
-        hasConfirmedHiring = true;
         break;
 
       case 'google_search':
         platformBoost = Math.max(platformBoost, 0.28);
-        hasConfirmedHiring = true;
         break;
 
       case 'linkedin':
         platformBoost = Math.max(platformBoost, 0.25);
-        hasConfirmedHiring = true;
         break;
 
       case 'twitter':
         platformBoost = Math.max(platformBoost, 0.25);
-        hasConfirmedHiring = true;
         break;
 
       case 'youtube_community':
         platformBoost = Math.max(platformBoost, 0.28);
-        hasConfirmedHiring = true;
         break;
 
       case 'reddit':
         platformBoost = Math.max(platformBoost, 0.20);
-        hasConfirmedHiring = true;
         break;
 
       case 'youtube_comments':
@@ -451,12 +513,16 @@ function scoreWithPlatformSignals(creatorId, baseScore) {
 
 // Calibrate: test 4 weight options against an array of leads, return distribution for each
 function calibrateWeights(leads) {
+  // title_keywords is fixed at 0 in every option — it's a poisoned signal
+  // (Session 0.4) and calculateIntentScoreWithWeights ignores it regardless,
+  // but keeping it present and zero here avoids surprising anyone reading
+  // these option sets into thinking it still does something.
   const OPTIONS = {
-    current: { upload_frequency: 0.20, view_growth: 0.20, title_keywords: 0.25, description_keywords: 0.20, engagement_rate: 0.10, upload_consistency: 0.05 },
-    option_a: { upload_frequency: 0.20, view_growth: 0.15, title_keywords: 0.30, description_keywords: 0.25, engagement_rate: 0.05, upload_consistency: 0.05 }, // Keywords heavy
-    option_b: { upload_frequency: 0.25, view_growth: 0.25, title_keywords: 0.20, description_keywords: 0.15, engagement_rate: 0.10, upload_consistency: 0.05 }, // Upload-growth heavy
-    option_c: { upload_frequency: 0.20, view_growth: 0.20, title_keywords: 0.20, description_keywords: 0.15, engagement_rate: 0.20, upload_consistency: 0.05 }, // Engagement heavy
-    option_d: { upload_frequency: 0.22, view_growth: 0.22, title_keywords: 0.22, description_keywords: 0.18, engagement_rate: 0.12, upload_consistency: 0.04 }, // Balanced
+    current:  { upload_frequency: 0.25, view_growth: 0.25, title_keywords: 0, description_keywords: 0.20, engagement_rate: 0.15, upload_consistency: 0.15 },
+    option_a: { upload_frequency: 0.20, view_growth: 0.20, title_keywords: 0, description_keywords: 0.35, engagement_rate: 0.15, upload_consistency: 0.10 }, // Commerce-signal heavy
+    option_b: { upload_frequency: 0.30, view_growth: 0.30, title_keywords: 0, description_keywords: 0.15, engagement_rate: 0.15, upload_consistency: 0.10 }, // Upload-growth heavy
+    option_c: { upload_frequency: 0.20, view_growth: 0.20, title_keywords: 0, description_keywords: 0.15, engagement_rate: 0.30, upload_consistency: 0.15 }, // Engagement heavy
+    option_d: { upload_frequency: 0.24, view_growth: 0.24, title_keywords: 0, description_keywords: 0.22, engagement_rate: 0.15, upload_consistency: 0.15 }, // Balanced
   };
 
   const results = {};
@@ -492,4 +558,5 @@ module.exports = {
   calculateIntentScore, calculateIntentScoreWithWeights,
   scoreAndRankLeads, classifyLeads, assessAlgorithmAccuracy,
   scoreMasterLead, calibrateWeights, DEFAULT_WEIGHTS, scoreWithPlatformSignals,
+  classifyMetaChannel,
 };

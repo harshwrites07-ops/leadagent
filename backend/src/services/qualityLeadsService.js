@@ -1,7 +1,9 @@
-const { getDb } = require('../models/database');
+const { getDb, USE_PG } = require('../models/database');
 const { scoreMasterLead, calculateIntentScoreWithWeights, calibrateWeights, DEFAULT_WEIGHTS } = require('./intentService');
 
 const BATCH_SIZE = 500;
+const STALE_REFRESH_LIMIT = 200; // bounded quota spend per weekly run
+const STALE_AFTER_DAYS = 60;
 
 async function calibrate() {
   const db = getDb();
@@ -18,22 +20,27 @@ async function scoreBatch(batch, weights) {
 
   for (const ml of batch) {
     try {
-      const { intent_score, temperature, signals } = scoreMasterLead(ml);
+      const { intent_score, temperature, signals, meta_channel } = await scoreMasterLead(ml);
       const handle = (ml.channel_handle || '').replace(/^@+/, '');
       const channelUrl = handle
         ? `https://youtube.com/@${handle}`
         : `https://youtube.com/channel/${ml.channel_id}`;
 
-      if (intent_score >= 0.50) {
+      await db.run('UPDATE master_leads SET meta_channel=? WHERE channel_id=?', [meta_channel ? 1 : 0, ml.channel_id]);
+
+      // meta_channel rows (editing-tutorial/coaching channels) never get
+      // promoted to quality_leads regardless of score — they teach/sell the
+      // service, they don't buy it. See classifyMetaChannel() (Session 0.4).
+      if (intent_score >= 0.50 && !meta_channel) {
         const qualTier = intent_score >= 0.75 ? 'HOT' : 'WARM';
         await db.run(`
           INSERT OR REPLACE INTO quality_leads
             (creator_id, channel_url, channel_name, channel_handle, subscriber_count, niche, email,
-             intent_score, intent_tier,
+             intent_score, intent_tier, meta_channel,
              sig_upload_frequency, sig_view_growth, sig_title_keywords,
              sig_description_keywords, sig_engagement, sig_consistency,
              source, updated_at)
-          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'master_pool',CURRENT_TIMESTAMP)
+          VALUES (?,?,?,?,?,?,?,?,?,0,?,?,?,?,?,?,'master_pool',CURRENT_TIMESTAMP)
         `, [
           ml.channel_id, channelUrl, ml.channel_name, ml.channel_handle,
           ml.subscriber_count, ml.niche, ml.email, intent_score, qualTier,
@@ -44,14 +51,16 @@ async function scoreBatch(batch, weights) {
           signals?.subs_score || 0,
           0,
         ]);
+        await db.run('DELETE FROM archived_leads WHERE creator_id=?', [ml.channel_id]);
         if (qualTier === 'HOT') hot++; else warm++;
       } else {
         await db.run(`
           INSERT OR REPLACE INTO archived_leads
             (creator_id, channel_name, subscriber_count, niche, email,
              intent_score, intent_tier, archived_reason, archived_at)
-          VALUES (?,?,?,?,?,?,?,'below_threshold',CURRENT_TIMESTAMP)
-        `, [ml.channel_id, ml.channel_name, ml.subscriber_count, ml.niche, ml.email, intent_score, 'COLD']);
+          VALUES (?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+        `, [ml.channel_id, ml.channel_name, ml.subscriber_count, ml.niche, ml.email, intent_score, 'COLD', meta_channel ? 'meta_channel' : 'below_threshold']);
+        await db.run('DELETE FROM quality_leads WHERE creator_id=?', [ml.channel_id]);
         cold++;
       }
     } catch { errors++; }
@@ -81,8 +90,9 @@ async function scoreAndPopulate(weights = DEFAULT_WEIGHTS, dryRun = false) {
 
     if (dryRun) {
       for (const ml of batch) {
-        const { intent_score, temperature } = scoreMasterLead(ml);
-        if (intent_score >= 0.75) hot++;
+        const { intent_score, meta_channel } = await scoreMasterLead(ml);
+        if (meta_channel) cold++; // meta_channel never promotes, regardless of score
+        else if (intent_score >= 0.75) hot++;
         else if (intent_score >= 0.50) warm++;
         else cold++;
       }
@@ -160,4 +170,53 @@ async function getDistribution() {
   };
 }
 
-module.exports = { calibrate, scoreAndPopulate, scoreNewMasterLeads, getStats, getDistribution };
+// A lead's tier is otherwise frozen forever at first-scrape values — a channel
+// scored HOT in April because it was uploading weekly stays HOT even if it goes
+// dormant by July, since no other code path ever re-fetches or re-scores it.
+// This samples the oldest-scraped rows, re-fetches live YouTube stats, and
+// re-runs the scorer so tiers can move (including back down to COLD).
+async function refreshStaleMasterLeads(limit = STALE_REFRESH_LIMIT) {
+  const db = getDb();
+  const { fetchVideoData, isQuotaExhausted } = require('./youtubeService');
+
+  const staleCutoff = USE_PG ? `NOW() - INTERVAL '${STALE_AFTER_DAYS} days'` : `datetime('now', '-${STALE_AFTER_DAYS} days')`;
+  const stale = await db.all(`SELECT * FROM master_leads WHERE scraped_at < ${staleCutoff} ORDER BY scraped_at ASC LIMIT ?`, [limit]);
+
+  let refreshed = 0, goneChannels = 0, failed = 0;
+  for (const ml of stale) {
+    if (isQuotaExhausted()) { console.log('[Staleness] Quota exhausted — stopping refresh for this run'); break; }
+    try {
+      const result = await fetchVideoData(ml.channel_id);
+      if (result.status === 'channel_gone') {
+        goneChannels++;
+        continue;
+      }
+      if (result.status !== 'ok') { failed++; continue; }
+
+      await db.run(`
+        UPDATE master_leads SET
+          subscriber_count = ?, avg_views = ?, upload_frequency_days = ?,
+          last_upload_date = COALESCE(?, last_upload_date), scraped_at = CURRENT_TIMESTAMP
+        WHERE channel_id = ?
+      `, [
+        result.subscriberCount || ml.subscriber_count,
+        Math.round(result.avgViews || 0),
+        parseFloat((result.uploadFreqDays || 0).toFixed(1)),
+        result.lastUploadDate, ml.channel_id,
+      ]);
+
+      const updated = await db.get('SELECT * FROM master_leads WHERE channel_id = ?', [ml.channel_id]);
+      await scoreBatch([updated]);
+      refreshed++;
+    } catch (e) {
+      failed++;
+      console.warn(`[Staleness] Refresh failed for ${ml.channel_id}: ${e.message}`);
+    }
+    await new Promise(r => setImmediate(r));
+  }
+
+  console.log(`[Staleness] Refreshed ${refreshed}/${stale.length} stale leads (gone=${goneChannels}, failed=${failed})`);
+  return { checked: stale.length, refreshed, gone: goneChannels, failed };
+}
+
+module.exports = { calibrate, scoreAndPopulate, scoreNewMasterLeads, getStats, getDistribution, refreshStaleMasterLeads };

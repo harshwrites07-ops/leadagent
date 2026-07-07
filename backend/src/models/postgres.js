@@ -72,7 +72,7 @@ function normalizeSql(sql) {
       out = out.trimEnd() + ` ON CONFLICT (creator_id) DO UPDATE SET
         channel_url=EXCLUDED.channel_url, channel_name=EXCLUDED.channel_name, channel_handle=EXCLUDED.channel_handle,
         subscriber_count=EXCLUDED.subscriber_count, niche=EXCLUDED.niche, email=EXCLUDED.email,
-        intent_score=EXCLUDED.intent_score, intent_tier=EXCLUDED.intent_tier,
+        intent_score=EXCLUDED.intent_score, intent_tier=EXCLUDED.intent_tier, meta_channel=EXCLUDED.meta_channel,
         sig_upload_frequency=EXCLUDED.sig_upload_frequency, sig_view_growth=EXCLUDED.sig_view_growth,
         sig_title_keywords=EXCLUDED.sig_title_keywords, sig_description_keywords=EXCLUDED.sig_description_keywords,
         sig_engagement=EXCLUDED.sig_engagement, sig_consistency=EXCLUDED.sig_consistency,
@@ -750,6 +750,8 @@ async function initPostgres() {
     try { await query(`ALTER TABLE master_leads ADD COLUMN IF NOT EXISTS email_corrupt INTEGER DEFAULT 0`); } catch {}
     try { await query(`ALTER TABLE quality_leads ADD COLUMN IF NOT EXISTS email_corrupt INTEGER DEFAULT 0`); } catch {}
     try { await query(`ALTER TABLE archived_leads ADD COLUMN IF NOT EXISTS email_corrupt INTEGER DEFAULT 0`); } catch {}
+    try { await query(`ALTER TABLE master_leads ADD COLUMN IF NOT EXISTS meta_channel INTEGER DEFAULT 0`); } catch {}
+    try { await query(`ALTER TABLE quality_leads ADD COLUMN IF NOT EXISTS meta_channel INTEGER DEFAULT 0`); } catch {}
 
     // Per-user unique indexes
     try { await query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_channel_id_user ON leads(channel_id, user_id) WHERE channel_id IS NOT NULL AND channel_id != ''`); } catch {}

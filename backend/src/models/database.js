@@ -652,6 +652,12 @@ function _initSqliteSchema(db) {
   alterTry(`ALTER TABLE quality_leads ADD COLUMN email_corrupt INTEGER DEFAULT 0`);
   alterTry(`ALTER TABLE archived_leads ADD COLUMN email_corrupt INTEGER DEFAULT 0`);
 
+  // meta_channel flags a row that teaches/sells the service (editing tutorial,
+  // "grow your channel" coaching) rather than a potential buyer of it — see
+  // classifyMetaChannel() in intentService.js.
+  alterTry(`ALTER TABLE master_leads ADD COLUMN meta_channel INTEGER DEFAULT 0`);
+  alterTry(`ALTER TABLE quality_leads ADD COLUMN meta_channel INTEGER DEFAULT 0`);
+
   db.exec(`CREATE TABLE IF NOT EXISTS user_followup_settings (
     user_id INTEGER PRIMARY KEY,
     interval_days INTEGER DEFAULT 3,
