@@ -371,6 +371,42 @@ async function getChannelVideos(channelId) {
   }
 }
 
+// Community tab post text — for hiring/apology-language scanning (Session
+// 1.3). Follows the same resilience pattern as getChannelVideos(): degrades
+// to [] on any failure rather than throwing, since InnerTube is an
+// unofficial, undocumented API that can change shape without notice.
+async function fetchCommunityPosts(channelId, limit = 10) {
+  try {
+    const data = await itPost('browse', {
+      browseId: channelId,
+      params: 'Egljb21tdW5pdHnyBgQKAkoA', // community tab
+    });
+
+    const posts = [];
+    const renderers = walkForType(data, ['backstagePostThreadRenderer', 'postRenderer', 'backstagePostRenderer']);
+    for (const r of renderers) {
+      const post = r.post || r.backstagePostRenderer || r;
+      const postId = post.postId || post.contentId || null;
+      const text = (post.contentText?.runs || []).map(run => run.text || '').join('') || post.contentText?.simpleText || '';
+      if (!text) continue;
+      posts.push({
+        postId,
+        text,
+        url: postId ? `https://www.youtube.com/post/${postId}` : null,
+      });
+      if (posts.length >= limit) break;
+    }
+    return posts;
+  } catch (e) {
+    console.error(`[InnerTube] community posts error ${channelId}: ${e.message}`);
+    try {
+      const { recordScraperHealth } = require('./scraperHealth');
+      await recordScraperHealth('innertube_community', { attempted: 1, succeeded: 0, failed: 1, sampleError: e.message });
+    } catch {}
+    return [];
+  }
+}
+
 async function buildChannelProfile(basic, options = {}) {
   const { emailOnly = false } = options;
 
@@ -578,4 +614,4 @@ async function fastSeedSearch(keyword, maxChannels = 30) {
   return results;
 }
 
-module.exports = { searchChannels, searchChannelsMulti, buildChannelProfile, fastSeedSearch, extractEmail, isImageBugCorruptedEmail };
+module.exports = { searchChannels, searchChannelsMulti, buildChannelProfile, fastSeedSearch, extractEmail, isImageBugCorruptedEmail, fetchCommunityPosts };

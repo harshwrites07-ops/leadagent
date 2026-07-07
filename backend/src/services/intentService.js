@@ -493,15 +493,24 @@ async function scoreMasterLead(ml) {
   // Determine if a confirmed hiring signal exists (for downstream enrichment)
   let is_confirmed = false;
   let signal_source = null;
+  let effective_lead_type = lead_type;
   try {
     const db = getDb();
     const confirmedSignal = await db.get(`SELECT platform FROM platform_signals WHERE creator_id = ? AND signal_type = 'confirmed_hiring' ORDER BY confidence DESC LIMIT 1`, [ml.channel_id]);
     if (confirmedSignal) { is_confirmed = true; signal_source = confirmedSignal.platform; }
+    // A community-post apology/strain signal (Session 1.3) is real evidence
+    // even when there's no video history to detect a schedule break from —
+    // it takes STRAINED precedence over a NEUTRAL default (never overrides
+    // SCALING, which is itself real evidence of healthy momentum).
+    if (effective_lead_type !== 'SCALING') {
+      const strainSignal = await db.get(`SELECT id FROM platform_signals WHERE creator_id = ? AND signal_type = 'strain' LIMIT 1`, [ml.channel_id]);
+      if (strainSignal) effective_lead_type = 'STRAINED';
+    }
   } catch (e) {}
 
   return {
     intent_score, confidence: is_confirmed ? 'High' : 'Low', temperature, meta_channel,
-    lead_type, schedule_break, break_severity,
+    lead_type: effective_lead_type, schedule_break, break_severity,
     is_confirmed, signal_source, base_score, signal_boost: Math.round((intent_score - base_score) * 100) / 100,
     signals: {
       niche_score, subs_score, views_score, desc_score,

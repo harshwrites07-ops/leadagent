@@ -1,6 +1,6 @@
 const { getDb, USE_PG } = require('../models/database');
 
-const VALID_SCRAPERS = new Set(['innertube', 'serp_signals', 'reddit', 'twitter', 'upwork', 'ytapi']);
+const VALID_SCRAPERS = new Set(['innertube', 'innertube_community', 'serp_signals', 'reddit', 'twitter', 'upwork', 'ytapi']);
 
 // One row per scraper run — makes silent failures loud instead of a scraper
 // quietly returning 0 forever with no operator visibility (see

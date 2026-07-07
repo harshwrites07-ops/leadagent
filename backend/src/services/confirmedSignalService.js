@@ -37,6 +37,51 @@ const BEHAVIORAL_SIGNALS = [
   'need help with','overwhelmed','posting less',"can't keep up",'struggling to',
 ];
 
+// Apology/strain language in Community posts — feeds the STRAINED
+// classification in intentService.js's classifyLeadType() (Session 1.1/1.3).
+const APOLOGY_PATTERNS = [
+  'sorry for the delay', 'sorry for the wait', 'been a while', 'taking a break',
+  'burnt out', 'burned out', 'schedule slipped', 'life got busy', 'sorry for being mia',
+  'sorry i\'ve been quiet', 'hiatus',
+];
+
+// Scans a channel's Community tab for explicit hiring language (S-tier,
+// same phrase lists as deepScanDescriptions) and apology/strain language.
+// Extends, doesn't duplicate, confirmedSignalService's existing phrase lists
+// and platform_signals write pattern.
+async function scanCommunityPosts(lead) {
+  const db = getDb();
+  const { fetchCommunityPosts } = require('./innertubeService');
+  const posts = await fetchCommunityPosts(lead.channel_id, 10);
+  let confirmedCount = 0, strainCount = 0;
+
+  for (const post of posts) {
+    const text = (post.text || '').toLowerCase();
+    const confirmedMatch = findConfirmedHiringMatch(text);
+    const apologyMatch = APOLOGY_PATTERNS.find(p => text.includes(p));
+
+    if (confirmedMatch) {
+      try {
+        const result = await db.run(
+          `INSERT OR IGNORE INTO platform_signals (creator_id, platform, signal_type, signal_text, signal_url, confidence) VALUES (?, 'youtube_community', 'confirmed_hiring', ?, ?, 0.9)`,
+          [lead.channel_id, `Community post says: "${confirmedMatch}"`, post.url]
+        );
+        if (result.changes > 0) confirmedCount++;
+      } catch {}
+    } else if (apologyMatch) {
+      try {
+        const result = await db.run(
+          `INSERT OR IGNORE INTO platform_signals (creator_id, platform, signal_type, signal_text, signal_url, confidence) VALUES (?, 'youtube_community', 'strain', ?, ?, 0.6)`,
+          [lead.channel_id, `Community post says: "${apologyMatch}"`, post.url]
+        );
+        if (result.changes > 0) strainCount++;
+      } catch {}
+    }
+  }
+
+  return { scanned: posts.length, confirmed: confirmedCount, strain: strainCount };
+}
+
 async function deepScanDescriptions() {
   const db = getDb();
   const leads = await db.all(`
@@ -209,4 +254,4 @@ async function getConfirmedSignalStats() {
   return { total_confirmed: confirmed.count, description_hiring_signals: descriptionHits.count, business_emails: businessEmails.count, upwork_jobs: upworkJobs.count, twitter_signals: twitterSignals.count, community_signals: communitySignals.count, google_signals: googleSignals.count, by_platform: byPlatform };
 }
 
-module.exports = { runConfirmedSignalScan, getConfirmedSignalStats, deepScanDescriptions };
+module.exports = { runConfirmedSignalScan, getConfirmedSignalStats, deepScanDescriptions, scanCommunityPosts };
