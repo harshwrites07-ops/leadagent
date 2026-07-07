@@ -10,7 +10,7 @@ import Icon from '../components/ui/Icon';
 import PowerSendOverlay from '../components/ui/PowerSendOverlay';
 import Sparkline from '../components/ui/Sparkline';
 import { useApp } from '../context/AppContext';
-import { formatNumber, formatDate } from '../utils/api';
+import api, { formatNumber, formatDate } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { useCountUp } from '../hooks/useCountUp';
 
@@ -55,7 +55,18 @@ export default function Dashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [showPowerOverlay, setShowPowerOverlay] = useState(false);
+  const [hotAlerts, setHotAlerts] = useState([]);
   const isMobile = useMobile();
+
+  useEffect(() => {
+    api.get('/analytics/hot-alerts').then(({ data }) => setHotAlerts(data.alerts || [])).catch(() => {});
+  }, []);
+
+  const dismissHotAlerts = () => {
+    const ids = hotAlerts.map(a => a.notification_id);
+    setHotAlerts([]);
+    api.post('/analytics/hot-alerts/seen', { notification_ids: ids }).catch(() => {});
+  };
 
   const s = dashboardStats;
   const firstName = user?.full_name?.split(' ')[0] || user?.name?.split(' ')[0] || 'there';
@@ -123,6 +134,26 @@ export default function Dashboard() {
 
   return (
     <div style={{ padding: isMobile ? '14px 14px 80px' : '28px 32px', maxWidth: 1360, margin: '0 auto' }}>
+
+      {hotAlerts.length > 0 && (
+        <div className="card" style={{
+          marginBottom: 16, padding: '12px 18px', background: 'var(--lime)', color: 'var(--on-accent)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Icon name="bell" size={14} />
+            <span style={{ fontWeight: 700, fontSize: 13 }}>
+              {hotAlerts.length} new HOT lead{hotAlerts.length !== 1 ? 's' : ''} matched your niche
+            </span>
+            <span className="mono" style={{ fontSize: 11.5, opacity: 0.85 }}>
+              {hotAlerts.slice(0, 3).map(a => a.channel_name).join(', ')}{hotAlerts.length > 3 ? ` +${hotAlerts.length - 3} more` : ''}
+            </span>
+          </div>
+          <button className="btn btn--sm" style={{ background: 'var(--on-accent)', color: 'var(--lime)' }} onClick={dismissHotAlerts}>
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* ── Page Header ── */}
       <motion.div

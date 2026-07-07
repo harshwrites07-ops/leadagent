@@ -14,20 +14,49 @@ async function calibrate() {
   return calibrateWeights(leads);
 }
 
+// A lead just BECAME S-tier — insert one hot_alerts row and fan out
+// hot_alert_notifications to every user whose target_niches overlaps this
+// lead's niche (or who set no niche preference at all — an honest default,
+// not a fabricated match). Session 1.4.
+async function createHotAlert(db, ml) {
+  const alert = await db.run(
+    `INSERT INTO hot_alerts (creator_id, channel_name, matched_niche, matched_service) VALUES (?, ?, ?, ?)`,
+    [ml.channel_id, ml.channel_name, ml.niche || null, null]
+  );
+  const alertId = alert.lastID;
+  if (!alertId) return;
+
+  const users = await db.all(`SELECT id, target_niches, hot_alert_digest_enabled FROM users WHERE hot_alert_digest_enabled = 1`);
+  for (const u of users) {
+    let niches = [];
+    try { niches = JSON.parse(u.target_niches || '[]'); } catch { niches = []; }
+    const matches = niches.length === 0 || (ml.niche && niches.some(n => (n || '').toLowerCase() === (ml.niche || '').toLowerCase()));
+    if (!matches) continue;
+    try {
+      await db.run(`INSERT INTO hot_alert_notifications (hot_alert_id, user_id) VALUES (?, ?)`, [alertId, u.id]);
+    } catch {}
+  }
+}
+
 async function scoreBatch(batch, weights) {
   const db = getDb();
   let hot = 0, warm = 0, cold = 0, errors = 0;
 
   for (const ml of batch) {
     try {
-      const { intent_score, temperature, signals, meta_channel, lead_type, schedule_break, break_severity } = await scoreMasterLead(ml);
+      const { intent_score, temperature, signals, meta_channel, lead_type, schedule_break, break_severity, tier } = await scoreMasterLead(ml);
       const handle = (ml.channel_handle || '').replace(/^@+/, '');
       const channelUrl = handle
         ? `https://youtube.com/@${handle}`
         : `https://youtube.com/channel/${ml.channel_id}`;
 
-      await db.run('UPDATE master_leads SET meta_channel=?, lead_type=?, schedule_break=?, break_severity=? WHERE channel_id=?',
-        [meta_channel ? 1 : 0, lead_type, schedule_break ? 1 : 0, break_severity, ml.channel_id]);
+      const wasSTier = ml.tier === 'S';
+      await db.run('UPDATE master_leads SET meta_channel=?, lead_type=?, schedule_break=?, break_severity=?, tier=?, last_refreshed_at=CURRENT_TIMESTAMP WHERE channel_id=?',
+        [meta_channel ? 1 : 0, lead_type, schedule_break ? 1 : 0, break_severity, tier, ml.channel_id]);
+
+      if (tier === 'S' && !wasSTier) {
+        try { await createHotAlert(db, ml); } catch (e) { console.error(`[HotAlert] Failed for ${ml.channel_id}:`, e.message); }
+      }
 
       // meta_channel rows (editing-tutorial/coaching channels) never get
       // promoted to quality_leads regardless of score — they teach/sell the
@@ -37,15 +66,15 @@ async function scoreBatch(batch, weights) {
         await db.run(`
           INSERT OR REPLACE INTO quality_leads
             (creator_id, channel_url, channel_name, channel_handle, subscriber_count, niche, email,
-             intent_score, intent_tier, meta_channel, lead_type, schedule_break, break_severity,
+             intent_score, intent_tier, meta_channel, lead_type, schedule_break, break_severity, tier, last_refreshed_at,
              sig_upload_frequency, sig_view_growth, sig_title_keywords,
              sig_description_keywords, sig_engagement, sig_consistency,
              source, updated_at)
-          VALUES (?,?,?,?,?,?,?,?,?,0,?,?,?,?,?,?,?,?,?,'master_pool',CURRENT_TIMESTAMP)
+          VALUES (?,?,?,?,?,?,?,?,?,0,?,?,?,?,CURRENT_TIMESTAMP,?,?,?,?,?,?,'master_pool',CURRENT_TIMESTAMP)
         `, [
           ml.channel_id, channelUrl, ml.channel_name, ml.channel_handle,
           ml.subscriber_count, ml.niche, ml.email, intent_score, qualTier,
-          lead_type, schedule_break ? 1 : 0, break_severity,
+          lead_type, schedule_break ? 1 : 0, break_severity, tier,
           signals?.niche_score || 0,
           signals?.views_score || 0,
           0,
@@ -221,4 +250,78 @@ async function refreshStaleMasterLeads(limit = STALE_REFRESH_LIMIT) {
   return { checked: stale.length, refreshed, gone: goneChannels, failed };
 }
 
-module.exports = { calibrate, scoreAndPopulate, scoreNewMasterLeads, getStats, getDistribution, refreshStaleMasterLeads };
+const { TIER_REFRESH_CADENCE_DAYS } = require('./intentService');
+const PER_TIER_LIMIT = { S: 100, A: 100, B: 150, C: 150, D: 100 };
+
+// Refreshes leads on a cadence proportional to their tier's value — S-tier
+// (live hiring signal) gets checked daily, D-tier monthly — rather than
+// every lead getting the same weekly treatment regardless of how much it
+// actually matters (Session 1.4, replaces the flat refreshStaleMasterLeads
+// cadence going forward; that function is kept for the existing weekly cron
+// as a broader safety net over rows with no tier yet).
+async function runTieredRefresh() {
+  const db = getDb();
+  const { fetchVideoData, isQuotaExhausted, getAllKeys } = require('./youtubeService');
+  const { incrementQuotaUsage, isBudgetNearlyExhausted } = require('./quotaTracker');
+  const { scanCommunityPosts } = require('./confirmedSignalService');
+
+  const numKeys = getAllKeys().length;
+  let refreshed = 0, goneChannels = 0, failed = 0, skippedBudget = 0, checked = 0;
+
+  for (const [tier, cadenceDays] of Object.entries(TIER_REFRESH_CADENCE_DAYS)) {
+    const cutoff = USE_PG ? `NOW() - INTERVAL '${cadenceDays} days'` : `datetime('now', '-${cadenceDays} days')`;
+    // (last_refreshed_at IS NULL) evaluates to 0/1 in both SQLite and
+    // Postgres, so ordering by it DESC portably puts never-refreshed rows first.
+    const due = await db.all(
+      `SELECT * FROM master_leads WHERE tier = ? AND (last_refreshed_at IS NULL OR last_refreshed_at < ${cutoff}) ORDER BY (last_refreshed_at IS NULL) DESC, last_refreshed_at ASC LIMIT ?`,
+      [tier, PER_TIER_LIMIT[tier] || 100]
+    );
+
+    checked += due.length;
+    for (const ml of due) {
+      if (isQuotaExhausted()) { console.log(`[TieredRefresh] Quota exhausted — stopping (tier ${tier})`); return { checked, refreshed, gone: goneChannels, failed, skippedBudget }; }
+      if (await isBudgetNearlyExhausted(numKeys)) {
+        console.log(`[TieredRefresh] 80% of daily quota budget spent — stopping (tier ${tier})`);
+        skippedBudget += due.length;
+        return { checked, refreshed, gone: goneChannels, failed, skippedBudget };
+      }
+      try {
+        const result = await fetchVideoData(ml.channel_id);
+        await incrementQuotaUsage(getAllKeys()[0], 3); // approximate: channels.list + videos.list ≈ 3 units
+        if (result.status === 'channel_gone') { goneChannels++; continue; }
+        if (result.status !== 'ok') { failed++; continue; }
+
+        await db.run(`
+          UPDATE master_leads SET
+            subscriber_count = ?, avg_views = ?, upload_frequency_days = ?,
+            last_upload_date = COALESCE(?, last_upload_date), scraped_at = CURRENT_TIMESTAMP
+          WHERE channel_id = ?
+        `, [
+          result.subscriberCount || ml.subscriber_count,
+          Math.round(result.avgViews || 0),
+          parseFloat((result.uploadFreqDays || 0).toFixed(1)),
+          result.lastUploadDate, ml.channel_id,
+        ]);
+
+        // Community scan piggybacks on refresh (Session 1.3 point 3) — only
+        // for S/A tier, where the extra InnerTube call is worth the cost.
+        if (tier === 'S' || tier === 'A') {
+          try { await scanCommunityPosts(ml); } catch {}
+        }
+
+        const updated = await db.get('SELECT * FROM master_leads WHERE channel_id = ?', [ml.channel_id]);
+        await scoreBatch([updated]);
+        refreshed++;
+      } catch (e) {
+        failed++;
+        console.warn(`[TieredRefresh] Refresh failed for ${ml.channel_id} (tier ${tier}): ${e.message}`);
+      }
+      await new Promise(r => setImmediate(r));
+    }
+  }
+
+  console.log(`[TieredRefresh] Refreshed ${refreshed}/${checked} due leads (gone=${goneChannels}, failed=${failed}, skipped_budget=${skippedBudget})`);
+  return { checked, refreshed, gone: goneChannels, failed, skippedBudget };
+}
+
+module.exports = { calibrate, scoreAndPopulate, scoreNewMasterLeads, getStats, getDistribution, refreshStaleMasterLeads, runTieredRefresh };

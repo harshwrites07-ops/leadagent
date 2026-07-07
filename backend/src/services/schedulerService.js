@@ -316,6 +316,21 @@ cron.schedule('0 4 * * 0', async () => {
   } catch (e) { console.error('[Scheduler] Staleness refresh error:', e.message); }
 });
 
+// Tiered refresh — every 30 min, budget-aware. Refreshes leads on a cadence
+// proportional to tier value (S:24h, A:3d, B:7d, C:14d, D:30d) rather than
+// the flat weekly cadence every lead got before (Session 1.4). The existing
+// weekly staleness-refresh cron below is kept as a broader safety net for
+// rows with no tier computed yet.
+cron.schedule('*/30 * * * *', async () => {
+  try {
+    const { runTieredRefresh } = require('./qualityLeadsService');
+    const result = await runTieredRefresh();
+    if (result.refreshed > 0 || result.checked > 0) {
+      console.log(`[Scheduler] Tiered refresh — checked=${result.checked} refreshed=${result.refreshed} gone=${result.gone} failed=${result.failed}`);
+    }
+  } catch (e) { console.error('[Scheduler] Tiered refresh error:', e.message); }
+});
+
 // Mailbox verification batch — off-peak daily at 2am. Verifies 'unchecked'
 // emails in priority order (HOT quality_leads first), budget-capped by the
 // admin `daily_verify_limit` setting (default 500/day). No-op cost when no
@@ -326,6 +341,47 @@ cron.schedule('0 2 * * *', async () => {
     console.log('[Scheduler] Starting nightly email verification batch...');
     await runEmailVerificationBatch();
   } catch (e) { console.error('[Scheduler] Email verification batch error:', e.message); }
+});
+
+// HOT alert digest — daily 9am. At most one email per user per day, only if
+// they have >=1 new matched S-tier lead since their last digest (honest
+// empty behavior — no email when there's nothing new). Respects
+// users.hot_alert_digest_enabled opt-out.
+cron.schedule('0 9 * * *', async () => {
+  try {
+    const db = getDb();
+    const { sendEmail } = require('./emailService');
+
+    const pending = await db.all(`
+      SELECT han.id as notification_id, han.user_id, u.email as user_email,
+             ha.channel_name, ha.matched_niche, ha.creator_id
+      FROM hot_alert_notifications han
+      JOIN users u ON u.id = han.user_id
+      JOIN hot_alerts ha ON ha.id = han.hot_alert_id
+      WHERE han.digested_at IS NULL AND u.hot_alert_digest_enabled = 1 AND u.email IS NOT NULL
+      ORDER BY han.user_id, han.created_at DESC
+    `);
+    if (!pending.length) return;
+
+    const byUser = {};
+    for (const row of pending) {
+      if (!byUser[row.user_id]) byUser[row.user_id] = { email: row.user_email, leads: [] };
+      byUser[row.user_id].leads.push(row);
+    }
+
+    let sent = 0;
+    for (const [userId, data] of Object.entries(byUser)) {
+      const lines = data.leads.slice(0, 20).map(l => `- ${l.channel_name}${l.matched_niche ? ` (${l.matched_niche})` : ''}`).join('\n');
+      const body = `${data.leads.length} new HOT lead${data.leads.length !== 1 ? 's' : ''} matched your niche since your last update:\n\n${lines}\n\nLog in to Quelro to view and pitch them.`;
+      try {
+        await sendEmail({ to: data.email, subject: `${data.leads.length} new HOT lead${data.leads.length !== 1 ? 's' : ''} for you`, body, leadId: null, userId: Number(userId) });
+        sent++;
+      } catch (e) { console.warn(`[Scheduler] HOT digest send failed for user ${userId}:`, e.message); }
+      const ids = data.leads.map(l => l.notification_id);
+      await db.run(`UPDATE hot_alert_notifications SET digested_at = CURRENT_TIMESTAMP WHERE id IN (${ids.map(() => '?').join(',')})`, ids);
+    }
+    console.log(`[Scheduler] HOT alert digest sent to ${sent}/${Object.keys(byUser).length} users`);
+  } catch (e) { console.error('[Scheduler] HOT alert digest error:', e.message); }
 });
 
 // Scraper health check — hourly. Scrapers can silently start returning

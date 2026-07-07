@@ -696,6 +696,38 @@ function _initSqliteSchema(db) {
   alterTry(`ALTER TABLE quality_leads ADD COLUMN email_status TEXT DEFAULT 'unchecked'`);
   alterTry(`ALTER TABLE quality_leads ADD COLUMN email_checked_at TEXT`);
 
+  // Tiered refresh cadence + signal decay (Session 1.4)
+  alterTry(`ALTER TABLE master_leads ADD COLUMN last_refreshed_at DATETIME`);
+  alterTry(`ALTER TABLE master_leads ADD COLUMN tier TEXT`);
+  alterTry(`ALTER TABLE quality_leads ADD COLUMN last_refreshed_at DATETIME`);
+  alterTry(`ALTER TABLE quality_leads ADD COLUMN tier TEXT`);
+  alterTry(`ALTER TABLE users ADD COLUMN hot_alert_digest_enabled INTEGER DEFAULT 1`);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS quota_usage (
+      api_key_hash TEXT NOT NULL,
+      usage_date TEXT NOT NULL,
+      units_used INTEGER DEFAULT 0,
+      PRIMARY KEY (api_key_hash, usage_date)
+    );
+    CREATE TABLE IF NOT EXISTS hot_alerts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      creator_id TEXT NOT NULL,
+      channel_name TEXT,
+      detected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      matched_niche TEXT,
+      matched_service TEXT
+    );
+    CREATE TABLE IF NOT EXISTS hot_alert_notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      hot_alert_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      seen INTEGER DEFAULT 0,
+      digested_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
   db.exec(`CREATE TABLE IF NOT EXISTS user_followup_settings (
     user_id INTEGER PRIMARY KEY,
     interval_days INTEGER DEFAULT 3,
@@ -750,6 +782,7 @@ async function _seedDefaultSettings() {
     blacklist_channels: '[]',
     average_deal_value: '1000',
     daily_verify_limit: '500',
+    youtube_quota_budget_per_key: '10000',
     smtp_host: process.env.SMTP_HOST || '',
     smtp_port: process.env.SMTP_PORT || '587',
     smtp_user: process.env.SMTP_USER || '',

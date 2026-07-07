@@ -211,6 +211,42 @@ function classifyLeadType(lead, videos, signals) {
   return { lead_type: 'NEUTRAL', schedule_break: breakInfo.schedule_break, break_severity: breakInfo.severity };
 }
 
+// Base tier at scoring time (Session 1.4): S = live confirmed_hiring signal
+// (<=14 days old), A = a confirmed_hiring signal that's already a bit older
+// (>14d) at scoring time, B = STRAINED, C = SCALING, D = everything else.
+// Team-change signals (Phase 2 — credit diffing) will extend the A tier
+// later; not available yet, so not fabricated here.
+function computeTier({ meta_channel, is_confirmed, confirmedSignalAgeDays, lead_type }) {
+  if (meta_channel) return 'D';
+  if (is_confirmed) {
+    if (confirmedSignalAgeDays === null || confirmedSignalAgeDays <= 14) return 'S';
+    return 'A';
+  }
+  if (lead_type === 'STRAINED') return 'B';
+  if (lead_type === 'SCALING') return 'C';
+  return 'D';
+}
+
+// Re-derives a lead's CURRENT tier from its last-known base tier plus how
+// much time has passed since the confirmed-hiring signal was found — a tier
+// stored at scoring time goes stale as days pass without a rescore. Only
+// S/A decay (they're driven by a dated signal); B/C/D are stable until the
+// next rescore. Returns null when the signal has fully expired (>45 days) —
+// the caller should mark the platform_signal expired (not delete it) and
+// treat this lead as needing a fresh rescore rather than guessing a tier.
+function computeEffectiveTier(storedTier, confirmedSignalFoundAt) {
+  if (storedTier !== 'S' && storedTier !== 'A') return storedTier;
+  if (!confirmedSignalFoundAt) return storedTier;
+  const ageDays = (Date.now() - new Date(confirmedSignalFoundAt).getTime()) / 86400000;
+  if (Number.isNaN(ageDays)) return storedTier;
+  if (ageDays > 45) return null;
+  if (ageDays > 30) return 'B';
+  if (ageDays > 14) return 'A';
+  return 'S';
+}
+
+const TIER_REFRESH_CADENCE_DAYS = { S: 1, A: 3, B: 7, C: 14, D: 30 };
+
 // ── Human-readable reason ─────────────────────────────────────────────────────
 function buildReason(lead, s, videos) {
   const parts = [];
@@ -493,11 +529,18 @@ async function scoreMasterLead(ml) {
   // Determine if a confirmed hiring signal exists (for downstream enrichment)
   let is_confirmed = false;
   let signal_source = null;
+  let confirmedSignalAgeDays = null;
+  let confirmedSignalFoundAt = null;
   let effective_lead_type = lead_type;
   try {
     const db = getDb();
-    const confirmedSignal = await db.get(`SELECT platform FROM platform_signals WHERE creator_id = ? AND signal_type = 'confirmed_hiring' ORDER BY confidence DESC LIMIT 1`, [ml.channel_id]);
-    if (confirmedSignal) { is_confirmed = true; signal_source = confirmedSignal.platform; }
+    const confirmedSignal = await db.get(`SELECT platform, found_at FROM platform_signals WHERE creator_id = ? AND signal_type = 'confirmed_hiring' ORDER BY confidence DESC LIMIT 1`, [ml.channel_id]);
+    if (confirmedSignal) {
+      is_confirmed = true; signal_source = confirmedSignal.platform;
+      confirmedSignalFoundAt = confirmedSignal.found_at;
+      const age = (Date.now() - new Date(confirmedSignal.found_at).getTime()) / 86400000;
+      confirmedSignalAgeDays = Number.isNaN(age) ? null : age;
+    }
     // A community-post apology/strain signal (Session 1.3) is real evidence
     // even when there's no video history to detect a schedule break from —
     // it takes STRAINED precedence over a NEUTRAL default (never overrides
@@ -508,9 +551,12 @@ async function scoreMasterLead(ml) {
     }
   } catch (e) {}
 
+  const tier = computeTier({ meta_channel, is_confirmed, confirmedSignalAgeDays, lead_type: effective_lead_type });
+
   return {
     intent_score, confidence: is_confirmed ? 'High' : 'Low', temperature, meta_channel,
     lead_type: effective_lead_type, schedule_break, break_severity,
+    tier, confirmed_signal_found_at: confirmedSignalFoundAt,
     is_confirmed, signal_source, base_score, signal_boost: Math.round((intent_score - base_score) * 100) / 100,
     signals: {
       niche_score, subs_score, views_score, desc_score,
@@ -648,4 +694,5 @@ module.exports = {
   scoreMasterLead, calibrateWeights, DEFAULT_WEIGHTS, scoreWithPlatformSignals,
   classifyMetaChannel, detectScheduleBreak, classifyLeadType,
   signalViewGrowth, signalUploadFrequency,
+  computeTier, computeEffectiveTier, TIER_REFRESH_CADENCE_DAYS,
 };

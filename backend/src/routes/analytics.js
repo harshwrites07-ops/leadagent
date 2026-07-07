@@ -261,4 +261,27 @@ router.get('/signal-outcomes', requireAdmin, asyncHandler(async (req, res) => {
   });
 }));
 
+// Unseen HOT-alert notifications for the current user (Session 1.4) —
+// in-app bell/banner data. Honest empty state: empty array when nothing new.
+router.get('/hot-alerts', asyncHandler(async (req, res) => {
+  const db = getDb();
+  const alerts = await db.all(`
+    SELECT han.id as notification_id, ha.creator_id, ha.channel_name, ha.matched_niche, ha.detected_at
+    FROM hot_alert_notifications han
+    JOIN hot_alerts ha ON ha.id = han.hot_alert_id
+    WHERE han.user_id = ? AND han.seen = 0
+    ORDER BY ha.detected_at DESC LIMIT 20
+  `, [req.user.id]);
+  res.json({ success: true, alerts, count: alerts.length });
+}));
+
+router.post('/hot-alerts/seen', asyncHandler(async (req, res) => {
+  const db = getDb();
+  const { notification_ids } = req.body;
+  if (!Array.isArray(notification_ids) || !notification_ids.length) return res.json({ success: true, updated: 0 });
+  const placeholders = notification_ids.map(() => '?').join(',');
+  const r = await db.run(`UPDATE hot_alert_notifications SET seen = 1 WHERE user_id = ? AND id IN (${placeholders})`, [req.user.id, ...notification_ids]);
+  res.json({ success: true, updated: r.changes });
+}));
+
 module.exports = router;

@@ -74,6 +74,7 @@ function normalizeSql(sql) {
         subscriber_count=EXCLUDED.subscriber_count, niche=EXCLUDED.niche, email=EXCLUDED.email,
         intent_score=EXCLUDED.intent_score, intent_tier=EXCLUDED.intent_tier, meta_channel=EXCLUDED.meta_channel,
         lead_type=EXCLUDED.lead_type, schedule_break=EXCLUDED.schedule_break, break_severity=EXCLUDED.break_severity,
+        tier=EXCLUDED.tier, last_refreshed_at=EXCLUDED.last_refreshed_at,
         sig_upload_frequency=EXCLUDED.sig_upload_frequency, sig_view_growth=EXCLUDED.sig_view_growth,
         sig_title_keywords=EXCLUDED.sig_title_keywords, sig_description_keywords=EXCLUDED.sig_description_keywords,
         sig_engagement=EXCLUDED.sig_engagement, sig_consistency=EXCLUDED.sig_consistency,
@@ -790,6 +791,45 @@ async function initPostgres() {
     try { await query(`ALTER TABLE master_leads ADD COLUMN IF NOT EXISTS email_checked_at TEXT`); } catch {}
     try { await query(`ALTER TABLE quality_leads ADD COLUMN IF NOT EXISTS email_status TEXT DEFAULT 'unchecked'`); } catch {}
     try { await query(`ALTER TABLE quality_leads ADD COLUMN IF NOT EXISTS email_checked_at TEXT`); } catch {}
+    try { await query(`ALTER TABLE master_leads ADD COLUMN IF NOT EXISTS last_refreshed_at TIMESTAMP`); } catch {}
+    try { await query(`ALTER TABLE master_leads ADD COLUMN IF NOT EXISTS tier TEXT`); } catch {}
+    try { await query(`ALTER TABLE quality_leads ADD COLUMN IF NOT EXISTS last_refreshed_at TIMESTAMP`); } catch {}
+    try { await query(`ALTER TABLE quality_leads ADD COLUMN IF NOT EXISTS tier TEXT`); } catch {}
+    try { await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS hot_alert_digest_enabled INTEGER DEFAULT 1`); } catch {}
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS quota_usage (
+        api_key_hash TEXT NOT NULL,
+        usage_date TEXT NOT NULL,
+        units_used INTEGER DEFAULT 0,
+        PRIMARY KEY (api_key_hash, usage_date)
+      )
+    `);
+    console.log('[PG] ✅ quota_usage');
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS hot_alerts (
+        id SERIAL PRIMARY KEY,
+        creator_id TEXT NOT NULL,
+        channel_name TEXT,
+        detected_at TIMESTAMP DEFAULT NOW(),
+        matched_niche TEXT,
+        matched_service TEXT
+      )
+    `);
+    console.log('[PG] ✅ hot_alerts');
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS hot_alert_notifications (
+        id SERIAL PRIMARY KEY,
+        hot_alert_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        seen INTEGER DEFAULT 0,
+        digested_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('[PG] ✅ hot_alert_notifications');
 
     // Per-user unique indexes
     try { await query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_channel_id_user ON leads(channel_id, user_id) WHERE channel_id IS NOT NULL AND channel_id != ''`); } catch {}
