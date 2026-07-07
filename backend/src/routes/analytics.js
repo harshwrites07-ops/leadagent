@@ -284,4 +284,45 @@ router.post('/hot-alerts/seen', asyncHandler(async (req, res) => {
   res.json({ success: true, updated: r.changes });
 }));
 
+// Outcome learning v1 (Session 3.1) — admin-only weight-analysis workflow:
+// run analysis -> review proposed weights -> apply (versions engine_version)
+// or ignore. Never auto-applies.
+router.get('/weight-analysis/latest', requireAdmin, asyncHandler(async (req, res) => {
+  const db = getDb();
+  const run = await db.get(`SELECT * FROM weight_analysis_runs ORDER BY run_at DESC LIMIT 1`);
+  if (!run) return res.json({ success: true, run: null, message: 'No analysis has been run yet.' });
+  res.json({
+    success: true,
+    run: {
+      id: run.id, run_at: run.run_at, sample_size: run.sample_size, applied: !!run.applied,
+      results: JSON.parse(run.results_json),
+      proposed_weights: run.proposed_weights_json ? JSON.parse(run.proposed_weights_json) : null,
+    },
+  });
+}));
+
+router.post('/weight-analysis/run', requireAdmin, asyncHandler(async (req, res) => {
+  const { runOutcomeAnalysis } = require('../services/outcomeLearning');
+  const result = await runOutcomeAnalysis();
+  res.json({ success: true, ...result });
+}));
+
+router.post('/weight-analysis/:runId/apply', requireAdmin, asyncHandler(async (req, res) => {
+  const { applyProposedWeights } = require('../services/outcomeLearning');
+  const result = await applyProposedWeights(parseInt(req.params.runId));
+  res.json(result);
+}));
+
+router.get('/weight-analysis/weights-history', requireAdmin, asyncHandler(async (req, res) => {
+  const db = getDb();
+  const rows = await db.all(`SELECT id, engine_version, weights_json, is_active, created_at FROM scoring_weights ORDER BY created_at DESC LIMIT 20`);
+  res.json({ success: true, weights: rows.map(r => ({ ...r, weights_json: undefined, weights: JSON.parse(r.weights_json) })) });
+}));
+
+router.post('/weight-analysis/rollback/:weightsId', requireAdmin, asyncHandler(async (req, res) => {
+  const { rollbackToWeights } = require('../services/outcomeLearning');
+  const result = await rollbackToWeights(parseInt(req.params.weightsId));
+  res.json(result);
+}));
+
 module.exports = router;

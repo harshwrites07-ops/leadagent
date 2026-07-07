@@ -272,7 +272,20 @@ function buildReason(lead, s, videos) {
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
-function calculateIntentScore(lead) {
+// Reads weights from the scoring_weights table (Session 3.1) rather than a
+// hardcoded constant, falling back to DEFAULT_WEIGHTS if the table isn't
+// reachable for any reason (never let a DB hiccup zero out every lead's score).
+async function getWeightsForScoring() {
+  try {
+    const { getActiveWeights } = require('./outcomeLearning');
+    const active = await getActiveWeights();
+    return active.weights;
+  } catch {
+    return DEFAULT_WEIGHTS;
+  }
+}
+
+async function calculateIntentScore(lead) {
   // Dormant channel
   const daysSince = lead.last_upload_date
     ? Math.floor((Date.now() - new Date(lead.last_upload_date)) / 86400000) : 999;
@@ -301,12 +314,16 @@ function calculateIntentScore(lead) {
   // it rewarded a channel for talking about the service in its own titles,
   // which selects editing-tutorial/competitor channels, not buyers. It's
   // still computed and reported in `signals` for visibility/debugging.
+  // Weights come from the active scoring_weights row (Session 3.1), not a
+  // hardcoded constant, so a reviewed+applied reweighting takes effect
+  // immediately without a code deploy.
+  const w = await getWeightsForScoring();
   let score = (
-    0.25 * s.upload_frequency +
-    0.25 * s.view_growth +
-    0.20 * s.description_keywords +
-    0.15 * s.engagement_rate +
-    0.15 * s.upload_consistency
+    (w.upload_frequency ?? DEFAULT_WEIGHTS.upload_frequency) * s.upload_frequency +
+    (w.view_growth ?? DEFAULT_WEIGHTS.view_growth) * s.view_growth +
+    (w.description_keywords ?? DEFAULT_WEIGHTS.description_keywords) * s.description_keywords +
+    (w.engagement_rate ?? DEFAULT_WEIGHTS.engagement_rate) * s.engagement_rate +
+    (w.upload_consistency ?? DEFAULT_WEIGHTS.upload_consistency) * s.upload_consistency
   );
 
   if ((lead.total_videos || 0) < 100) score *= 0.85; // new channel penalty
@@ -319,8 +336,8 @@ function calculateIntentScore(lead) {
 }
 
 // Score + rank an array of leads, returns them sorted by intent_score desc
-function scoreAndRankLeads(leads) {
-  const scored = leads.map(lead => ({ ...lead, ...calculateIntentScore(lead) }));
+async function scoreAndRankLeads(leads) {
+  const scored = await Promise.all(leads.map(async lead => ({ ...lead, ...(await calculateIntentScore(lead)) })));
   scored.sort((a, b) => b.intent_score - a.intent_score);
   return scored.map((lead, i) => ({ ...lead, intent_rank: i + 1 }));
 }

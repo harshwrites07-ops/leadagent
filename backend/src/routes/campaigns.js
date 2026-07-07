@@ -81,7 +81,7 @@ router.post('/:id/add-leads', asyncHandler(async (req, res) => {
 
   if (!leads.length) return res.json({ success: true, added: 0, message: 'No leads matched the criteria' });
 
-  const ranked = scoreAndRankLeads(leads);
+  const ranked = await scoreAndRankLeads(leads);
   const { hot, warm, cold } = classifyLeads(ranked);
 
   let added = 0;

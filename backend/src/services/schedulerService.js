@@ -331,6 +331,16 @@ cron.schedule('*/30 * * * *', async () => {
   } catch (e) { console.error('[Scheduler] Tiered refresh error:', e.message); }
 });
 
+// Outcome-learning weekly analysis — Sunday 5am. Proposes weights, never
+// applies them — an admin reviews and applies via the analytics routes.
+cron.schedule('0 5 * * 0', async () => {
+  try {
+    const { runOutcomeAnalysis } = require('./outcomeLearning');
+    const result = await runOutcomeAnalysis();
+    console.log(`[Scheduler] Weight analysis run ${result.run_id} — sample_size=${result.results.total_sample_size}${result.proposed_weights ? ', proposed weights available for review' : ', not enough data for a proposal'}`);
+  } catch (e) { console.error('[Scheduler] Weight analysis error:', e.message); }
+});
+
 // Graph-walk niche crawler — every 6h (discover) + every 30 min offset
 // (drain), both off by default (graph_crawl_enabled admin setting).
 cron.schedule('15 */6 * * *', async () => {

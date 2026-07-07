@@ -706,6 +706,27 @@ function _initSqliteSchema(db) {
   // Per-service fit v1 (Session 2.4) — { editor, thumbnail, shorts, scriptwriter }, each 0-1.
   alterTry(`ALTER TABLE quality_leads ADD COLUMN service_fit TEXT DEFAULT '{}'`);
 
+  // Outcome learning v1 (Session 3.1) — scoring weights are versioned rows,
+  // not hardcoded constants, so a proposed reweighting can be reviewed,
+  // applied, and rolled back without a code deploy.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS scoring_weights (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      engine_version TEXT NOT NULL,
+      weights_json TEXT NOT NULL,
+      is_active INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS weight_analysis_runs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      run_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      sample_size INTEGER DEFAULT 0,
+      results_json TEXT NOT NULL,
+      proposed_weights_json TEXT,
+      applied INTEGER DEFAULT 0
+    );
+  `);
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS quota_usage (
       api_key_hash TEXT NOT NULL,

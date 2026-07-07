@@ -799,6 +799,29 @@ async function initPostgres() {
     try { await query(`ALTER TABLE quality_leads ADD COLUMN IF NOT EXISTS service_fit TEXT DEFAULT '{}'`); } catch {}
 
     await query(`
+      CREATE TABLE IF NOT EXISTS scoring_weights (
+        id SERIAL PRIMARY KEY,
+        engine_version TEXT NOT NULL,
+        weights_json TEXT NOT NULL,
+        is_active INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('[PG] ✅ scoring_weights');
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS weight_analysis_runs (
+        id SERIAL PRIMARY KEY,
+        run_at TIMESTAMP DEFAULT NOW(),
+        sample_size INTEGER DEFAULT 0,
+        results_json TEXT NOT NULL,
+        proposed_weights_json TEXT,
+        applied INTEGER DEFAULT 0
+      )
+    `);
+    console.log('[PG] ✅ weight_analysis_runs');
+
+    await query(`
       CREATE TABLE IF NOT EXISTS quota_usage (
         api_key_hash TEXT NOT NULL,
         usage_date TEXT NOT NULL,
