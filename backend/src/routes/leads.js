@@ -268,7 +268,7 @@ router.post('/scrape/youtube/stream', scrapeLimiter, asyncHandler(async (req, re
     if (!usageCheck.allowed) { send({ type: 'error', message: `Monthly lead limit reached (${usageCheck.used}/${usageCheck.limit}).`, upgradeRequired: true }); return res.end(); }
 
     const db = getDb();
-    const conditions = ["email IS NOT NULL AND email != '' AND (email_corrupt IS NULL OR email_corrupt = 0) AND (meta_channel IS NULL OR meta_channel = 0)"]; const mParams = [];
+    const conditions = ["email IS NOT NULL AND email != '' AND (email_corrupt IS NULL OR email_corrupt = 0) AND (meta_channel IS NULL OR meta_channel = 0) AND (email_status IS NULL OR email_status != 'invalid')"]; const mParams = [];
     if (keyword) { conditions.push('(channel_name LIKE ? OR channel_description LIKE ? OR niche LIKE ?)'); mParams.push(`%${keyword}%`,`%${keyword}%`,`%${keyword}%`); }
     if (minSubs) { conditions.push('subscriber_count >= ?'); mParams.push(Number(minSubs)); }
     if (maxSubs) { conditions.push('subscriber_count <= ?'); mParams.push(Number(maxSubs)); }
@@ -303,7 +303,7 @@ router.post('/scrape/youtube/stream', scrapeLimiter, asyncHandler(async (req, re
 
     // Broadened search
     {
-      const bConds = ["email IS NOT NULL AND email != '' AND (email_corrupt IS NULL OR email_corrupt = 0) AND (meta_channel IS NULL OR meta_channel = 0)"]; const bParams = [];
+      const bConds = ["email IS NOT NULL AND email != '' AND (email_corrupt IS NULL OR email_corrupt = 0) AND (meta_channel IS NULL OR meta_channel = 0) AND (email_status IS NULL OR email_status != 'invalid')"]; const bParams = [];
       if (keyword) { bConds.push('(channel_name LIKE ? OR channel_description LIKE ? OR niche LIKE ?)'); bParams.push(`%${keyword}%`,`%${keyword}%`,`%${keyword}%`); }
       const bExclude = (await db.all(`SELECT channel_id FROM leads WHERE user_id=? AND channel_id IS NOT NULL`, [req.user.id])).map(r => r.channel_id);
       let bWhere = bConds.join(' AND '); const bAll = [...bParams];
@@ -509,7 +509,7 @@ router.get('/master', asyncHandler(async (req, res) => {
 
   // Never copy a row whose email is flagged as an image/asset-filename artifact
   // (see purgeCorruptEmails.js) — rows with no email at all are still fine to serve.
-  const conditions = ['(email_corrupt IS NULL OR email_corrupt = 0) AND (meta_channel IS NULL OR meta_channel = 0)']; const params = [];
+  const conditions = [`(email_corrupt IS NULL OR email_corrupt = 0) AND (meta_channel IS NULL OR meta_channel = 0) AND (email_status IS NULL OR email_status != 'invalid')`]; const params = [];
   if (niche)     { conditions.push('niche LIKE ?'); params.push(`%${niche}%`); }
   if (min_subs)  { conditions.push('subscriber_count >= ?'); params.push(Number(min_subs)); }
   if (max_subs)  { conditions.push('subscriber_count <= ?'); params.push(Number(max_subs)); }

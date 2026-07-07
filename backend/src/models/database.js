@@ -686,6 +686,16 @@ function _initSqliteSchema(db) {
   alterTry(`ALTER TABLE quality_leads ADD COLUMN schedule_break INTEGER DEFAULT 0`);
   alterTry(`ALTER TABLE quality_leads ADD COLUMN break_severity REAL`);
 
+  // Mailbox verification waterfall (Session 1.2) — email_status defaults to
+  // 'unchecked' everywhere until the batch verify job or a live bounce
+  // updates it. See emailVerifier.js.
+  alterTry(`ALTER TABLE leads ADD COLUMN email_status TEXT DEFAULT 'unchecked'`);
+  alterTry(`ALTER TABLE leads ADD COLUMN email_checked_at TEXT`);
+  alterTry(`ALTER TABLE master_leads ADD COLUMN email_status TEXT DEFAULT 'unchecked'`);
+  alterTry(`ALTER TABLE master_leads ADD COLUMN email_checked_at TEXT`);
+  alterTry(`ALTER TABLE quality_leads ADD COLUMN email_status TEXT DEFAULT 'unchecked'`);
+  alterTry(`ALTER TABLE quality_leads ADD COLUMN email_checked_at TEXT`);
+
   db.exec(`CREATE TABLE IF NOT EXISTS user_followup_settings (
     user_id INTEGER PRIMARY KEY,
     interval_days INTEGER DEFAULT 3,
@@ -739,6 +749,7 @@ async function _seedDefaultSettings() {
     blacklist_keywords: '[]',
     blacklist_channels: '[]',
     average_deal_value: '1000',
+    daily_verify_limit: '500',
     smtp_host: process.env.SMTP_HOST || '',
     smtp_port: process.env.SMTP_PORT || '587',
     smtp_user: process.env.SMTP_USER || '',

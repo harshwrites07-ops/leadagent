@@ -138,7 +138,7 @@ async function runPowerMode(user, opts = {}) {
   const db = getDb();
   const nicheConditions = requestedNiches.map(() => 'niche LIKE ?').join(' OR ');
   const nicheParams = requestedNiches.map(n => `%${n}%`);
-  const emailFilter = "email IS NOT NULL AND email != '' AND (email_corrupt IS NULL OR email_corrupt = 0) AND (meta_channel IS NULL OR meta_channel = 0)";
+  const emailFilter = "email IS NOT NULL AND email != '' AND (email_corrupt IS NULL OR email_corrupt = 0) AND (meta_channel IS NULL OR meta_channel = 0) AND (email_status IS NULL OR email_status != 'invalid')";
   let baseWhere = nicheConditions ? `(${nicheConditions}) AND ${emailFilter}` : emailFilter;
   const baseParams = [...nicheParams];
 

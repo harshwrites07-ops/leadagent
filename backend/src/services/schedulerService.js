@@ -316,6 +316,18 @@ cron.schedule('0 4 * * 0', async () => {
   } catch (e) { console.error('[Scheduler] Staleness refresh error:', e.message); }
 });
 
+// Mailbox verification batch — off-peak daily at 2am. Verifies 'unchecked'
+// emails in priority order (HOT quality_leads first), budget-capped by the
+// admin `daily_verify_limit` setting (default 500/day). No-op cost when no
+// MILLIONVERIFIER_API_KEY is set — falls back to the free mx-only driver.
+cron.schedule('0 2 * * *', async () => {
+  try {
+    const { runEmailVerificationBatch } = require('./emailVerifier');
+    console.log('[Scheduler] Starting nightly email verification batch...');
+    await runEmailVerificationBatch();
+  } catch (e) { console.error('[Scheduler] Email verification batch error:', e.message); }
+});
+
 // Scraper health check — hourly. Scrapers can silently start returning
 // nothing (dead selectors, revoked tokens, IP blocks) with zero operator
 // visibility — see AUDIT_REPORT.md §1.3 / roadmap Session 0.5. Alerts once

@@ -784,6 +784,12 @@ async function initPostgres() {
     try { await query(`ALTER TABLE quality_leads ADD COLUMN IF NOT EXISTS lead_type TEXT`); } catch {}
     try { await query(`ALTER TABLE quality_leads ADD COLUMN IF NOT EXISTS schedule_break INTEGER DEFAULT 0`); } catch {}
     try { await query(`ALTER TABLE quality_leads ADD COLUMN IF NOT EXISTS break_severity REAL`); } catch {}
+    try { await query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS email_status TEXT DEFAULT 'unchecked'`); } catch {}
+    try { await query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS email_checked_at TEXT`); } catch {}
+    try { await query(`ALTER TABLE master_leads ADD COLUMN IF NOT EXISTS email_status TEXT DEFAULT 'unchecked'`); } catch {}
+    try { await query(`ALTER TABLE master_leads ADD COLUMN IF NOT EXISTS email_checked_at TEXT`); } catch {}
+    try { await query(`ALTER TABLE quality_leads ADD COLUMN IF NOT EXISTS email_status TEXT DEFAULT 'unchecked'`); } catch {}
+    try { await query(`ALTER TABLE quality_leads ADD COLUMN IF NOT EXISTS email_checked_at TEXT`); } catch {}
 
     // Per-user unique indexes
     try { await query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_channel_id_user ON leads(channel_id, user_id) WHERE channel_id IS NOT NULL AND channel_id != ''`); } catch {}

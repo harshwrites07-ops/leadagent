@@ -17,6 +17,19 @@ function isValidEmailFormat(email) {
   return /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/.test(e);
 }
 
+// A confirmed-bad address kills it everywhere in the pool, not just the one
+// lead row that happened to bounce — the same email can sit unverified on
+// master_leads/quality_leads rows shared across users (see Session 1.2).
+async function markEmailInvalidPoolWide(db, email) {
+  if (!email) return;
+  const checkedAt = new Date().toISOString();
+  for (const table of ['leads', 'master_leads', 'quality_leads']) {
+    try {
+      await db.run(`UPDATE ${table} SET email_status = 'invalid', email_checked_at = ? WHERE LOWER(email) = LOWER(?)`, [checkedAt, email]);
+    } catch {}
+  }
+}
+
 const mxCache = new Map();
 const MX_CACHE_TTL_VALID = 24 * 60 * 60 * 1000;
 const MX_CACHE_TTL_FAIL  =  1 * 60 * 60 * 1000;
@@ -131,6 +144,7 @@ async function sendEmail({ to, subject, body, leadId, followUpNumber = 0, skipIn
   if (!isValidEmailFormat(to)) {
     console.warn(`[Email] Invalid format rejected: ${to}`);
     if (leadId) await db.run(`UPDATE leads SET email_invalid=1, bounce_reason='invalid_format', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [leadId]);
+    await markEmailInvalidPoolWide(db, to);
     throw new Error(`Invalid email address skipped: ${to}`);
   }
 
@@ -139,6 +153,7 @@ async function sendEmail({ to, subject, body, leadId, followUpNumber = 0, skipIn
     const mxOk = await hasMxRecord(emailDomain);
     if (!mxOk) {
       if (leadId) await db.run(`UPDATE leads SET email_invalid=1, bounce_reason='no_mx_record', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [leadId]);
+      await markEmailInvalidPoolWide(db, to);
       throw new Error(`Domain ${emailDomain} has no MX record — email would bounce`);
     }
   }
@@ -197,6 +212,7 @@ async function sendEmail({ to, subject, body, leadId, followUpNumber = 0, skipIn
     if (isHardBounce && leadId) {
       await db.run(`UPDATE leads SET email_invalid=1, bounce_reason='hard_bounce', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [leadId]);
       await db.run(`INSERT INTO emails (lead_id, subject, body, status, sent_at, tracking_id, follow_up_number, from_email, bounce_reason, user_id, signal_snapshot) VALUES (?, ?, ?, 'bounced', CURRENT_TIMESTAMP, ?, ?, ?, 'hard_bounce', ?, ?)`, [leadId, subject, body, trackingId, followUpNumber, fromEmail, userId, signalSnapshot]);
+      await markEmailInvalidPoolWide(db, to);
     }
     throw smtpErr;
   }
@@ -448,6 +464,7 @@ async function checkSpamFolders() {
               const reason = isSoft ? 'soft_bounce' : 'hard_bounce';
               await db.run(`UPDATE leads SET email_invalid=1, bounce_reason=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`, [reason, bouncedLead.id]);
               await db.run(`UPDATE emails SET status='bounced', bounce_reason=? WHERE lead_id=? AND status='sent' ORDER BY sent_at DESC LIMIT 1`, [reason, bouncedLead.id]);
+              await markEmailInvalidPoolWide(db, bouncedEmail);
               logActivity('bounce_detected', `Bounce: ${bouncedEmail} (${reason})`, bouncedLead.id);
               report.newlyMarked++;
             }
