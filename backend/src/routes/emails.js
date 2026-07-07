@@ -5,6 +5,7 @@ const { asyncHandler } = require('../middleware/errorHandler');
 const { requireAdmin } = require('../middleware/requireAuth');
 const { sendEmail, sendReply, testSmtp, resetTransporter, checkSpamFolders, getInboxes, checkReplies, checkDeliverability, isValidEmailFormat, ensureClean, hasMxRecord } = require('../services/emailService');
 const { checkUsageLimit, incrementUsage } = require('../services/authService');
+const { buildSnapshot } = require('../services/signalSnapshot');
 
 const dateGte30Days = USE_PG
   ? "sent_at::date >= CURRENT_DATE + INTERVAL '-30 days'"
@@ -141,7 +142,8 @@ router.post('/queue', asyncHandler(async (req, res) => {
       action: 'Click "Rewrite" to regenerate this pitch and improve its score above 70.',
     });
   }
-  const result = await db.run(`INSERT INTO email_queue (user_id, lead_id, subject, body, status, scheduled_at, priority) VALUES (?, ?, ?, ?, 'pending', ?, ?) ${USE_PG ? 'RETURNING id' : ''}`, [req.user.id, lead.id, finalSubject, finalBody, scheduled_at || null, priority]);
+  const snapshot = await buildSnapshot(lead);
+  const result = await db.run(`INSERT INTO email_queue (user_id, lead_id, subject, body, status, scheduled_at, priority, signal_snapshot) VALUES (?, ?, ?, ?, 'pending', ?, ?, ?) ${USE_PG ? 'RETURNING id' : ''}`, [req.user.id, lead.id, finalSubject, finalBody, scheduled_at || null, priority, snapshot]);
   await incrementUsage(req.user.id, 'emails', 1);
   logActivity('queued', `Email queued for ${lead.channel_name}`, lead.id, {}, req.user.id);
   const item = await db.get('SELECT * FROM email_queue WHERE id = ?', [result.lastID]);
@@ -175,7 +177,8 @@ router.post('/queue/bulk', asyncHandler(async (req, res) => {
     if (pitch.generation_method === 'fallback' && !allowFallback) { fallbackBlocked++; continue; }
     const existing = await db.get(`SELECT id FROM email_queue WHERE lead_id = ? AND status = 'pending'`, [id]);
     if (existing) { skipped++; continue; }
-    await db.run(`INSERT INTO email_queue (user_id, lead_id, subject, body, status) VALUES (?, ?, ?, ?, 'pending')`, [req.user.id, id, pitch.email_subject, pitch.cold_email]);
+    const snapshot = await buildSnapshot(lead);
+    await db.run(`INSERT INTO email_queue (user_id, lead_id, subject, body, status, signal_snapshot) VALUES (?, ?, ?, ?, 'pending', ?)`, [req.user.id, id, pitch.email_subject, pitch.cold_email, snapshot]);
     added++;
   }
   if (added > 0) await incrementUsage(req.user.id, 'emails', added);
@@ -212,7 +215,8 @@ router.post('/queue/:leadId', asyncHandler(async (req, res) => {
       error: 'This email is a fallback template, not a Marcus draft. Regenerate it or explicitly override.',
     });
   }
-  const result = await db.run(`INSERT INTO email_queue (user_id, lead_id, subject, body, status, scheduled_at, priority) VALUES (?, ?, ?, ?, 'pending', ?, ?) ${USE_PG ? 'RETURNING id' : ''}`, [req.user.id, lead.id, finalSubject, finalBody, scheduled_at || null, priority]);
+  const snapshot2 = await buildSnapshot(lead);
+  const result = await db.run(`INSERT INTO email_queue (user_id, lead_id, subject, body, status, scheduled_at, priority, signal_snapshot) VALUES (?, ?, ?, ?, 'pending', ?, ?, ?) ${USE_PG ? 'RETURNING id' : ''}`, [req.user.id, lead.id, finalSubject, finalBody, scheduled_at || null, priority, snapshot2]);
   await incrementUsage(req.user.id, 'emails', 1);
   logActivity('queued', `Email queued for ${lead.channel_name}`, lead.id, {}, req.user.id);
   const item = await db.get('SELECT * FROM email_queue WHERE id = ?', [result.lastID]);
@@ -234,7 +238,7 @@ router.post('/send-now/:queueId', asyncHandler(async (req, res) => {
   if (!item.email) return res.status(400).json({ success: false, error: 'Lead has no email address' });
   await db.run(`UPDATE email_queue SET status = 'sending' WHERE id = ?`, [item.id]);
   try {
-    const result = await sendEmail({ to: item.email, subject: item.subject, body: item.body, leadId: item.lead_id, userId: req.user.id });
+    const result = await sendEmail({ to: item.email, subject: item.subject, body: item.body, leadId: item.lead_id, userId: req.user.id, signalSnapshot: item.signal_snapshot || null });
     await db.run(`UPDATE email_queue SET status='sent', sent_at=CURRENT_TIMESTAMP, email_id=? WHERE id=?`, [result.emailId, item.id]);
     res.json({ success: true, result });
   } catch (e) {

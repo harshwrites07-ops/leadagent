@@ -3,6 +3,7 @@ const { getSetting, getDb, logActivity, USE_PG } = require('../models/database')
 const { processQueue, checkReplies, checkSpamFolders, getInboxes } = require('./emailService');
 const { generateFollowUp } = require('./claudeService');
 const { searchChannelsMulti } = require('./youtubeService');
+const { buildSnapshot } = require('./signalSnapshot');
 
 let queueInterval = null;
 let isProcessing = false;
@@ -172,13 +173,14 @@ cron.schedule('0 * * * *', async () => {
       const subject = subjectMatch[1].trim();
       const body = bodyMatch[1].trim();
 
+      const snapshot = await buildSnapshot(lead);
       const qrSql = USE_PG
-        ? `INSERT INTO email_queue (user_id,lead_id,subject,body,status,priority) VALUES (?,?,?,?,'sending',?) RETURNING id`
-        : `INSERT INTO email_queue (user_id,lead_id,subject,body,status,priority) VALUES (?,?,?,?,'sending',?)`;
-      const qr = await db.run(qrSql, [lead.user_id, lead.id, subject, body, nextStep]);
+        ? `INSERT INTO email_queue (user_id,lead_id,subject,body,status,priority,signal_snapshot) VALUES (?,?,?,?,'sending',?,?) RETURNING id`
+        : `INSERT INTO email_queue (user_id,lead_id,subject,body,status,priority,signal_snapshot) VALUES (?,?,?,?,'sending',?,?)`;
+      const qr = await db.run(qrSql, [lead.user_id, lead.id, subject, body, nextStep, snapshot]);
 
       try {
-        await sendEmail({ to: lead.email, subject, body, leadId: lead.id, userId: lead.user_id });
+        await sendEmail({ to: lead.email, subject, body, leadId: lead.id, userId: lead.user_id, signalSnapshot: snapshot });
         await db.run(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP WHERE id=?`, [qr.lastID]);
       } catch (sendErr) {
         await db.run(`UPDATE email_queue SET status='failed' WHERE id=?`, [qr.lastID]);

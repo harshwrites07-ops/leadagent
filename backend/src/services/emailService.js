@@ -124,7 +124,7 @@ async function testSmtp(config) {
   } catch (e) { return { ok: false, error: e.message }; }
 }
 
-async function sendEmail({ to, subject, body, leadId, followUpNumber = 0, skipInboxes = [], userId = null }) {
+async function sendEmail({ to, subject, body, leadId, followUpNumber = 0, skipInboxes = [], userId = null, signalSnapshot = null }) {
   console.log(`[Email] Attempting send to: ${to} | leadId: ${leadId} | userId: ${userId}`);
   const db = getDb();
 
@@ -162,9 +162,10 @@ async function sendEmail({ to, subject, body, leadId, followUpNumber = 0, skipIn
         messageId = `gmail-${trackingId}`;
         console.log(`[Email] Gmail send success: ${fromEmail} → ${to}`);
         const emailInsertSql = USE_PG
-          ? `INSERT INTO emails (lead_id, subject, body, status, sent_at, tracking_id, follow_up_number, from_email, user_id) VALUES (?, ?, ?, 'sent', CURRENT_TIMESTAMP, ?, ?, ?, ?) RETURNING id`
-          : `INSERT INTO emails (lead_id, subject, body, status, sent_at, tracking_id, follow_up_number, from_email, user_id) VALUES (?, ?, ?, 'sent', CURRENT_TIMESTAMP, ?, ?, ?, ?)`;
-        const emailRecord = await db.run(emailInsertSql, [leadId, subject, body, trackingId, followUpNumber, fromEmail, userId]);
+          ? `INSERT INTO emails (lead_id, subject, body, status, sent_at, tracking_id, follow_up_number, from_email, user_id, signal_snapshot) VALUES (?, ?, ?, 'sent', CURRENT_TIMESTAMP, ?, ?, ?, ?, ?) RETURNING id`
+          : `INSERT INTO emails (lead_id, subject, body, status, sent_at, tracking_id, follow_up_number, from_email, user_id, signal_snapshot) VALUES (?, ?, ?, 'sent', CURRENT_TIMESTAMP, ?, ?, ?, ?, ?)`;
+        const emailRecord = await db.run(emailInsertSql, [leadId, subject, body, trackingId, followUpNumber, fromEmail, userId, signalSnapshot]);
+        if (leadId) await db.run('UPDATE campaign_leads SET email_id=? WHERE lead_id=? AND email_id IS NULL', [emailRecord.lastID, leadId]).catch(() => {});
         logActivity('email_sent', `Email sent to lead #${leadId} via Gmail (${fromEmail})`, leadId, { subject }, userId);
         return { emailId: emailRecord.lastID, trackingId, messageId, fromEmail };
       } else {
@@ -195,15 +196,16 @@ async function sendEmail({ to, subject, body, leadId, followUpNumber = 0, skipIn
     const isHardBounce = code >= 500 || /user.*not.*found|no.*such.*user|does.*not.*exist|invalid.*address|mailbox.*unavailable|address.*rejected/i.test(msg);
     if (isHardBounce && leadId) {
       await db.run(`UPDATE leads SET email_invalid=1, bounce_reason='hard_bounce', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [leadId]);
-      await db.run(`INSERT INTO emails (lead_id, subject, body, status, sent_at, tracking_id, follow_up_number, from_email, bounce_reason, user_id) VALUES (?, ?, ?, 'bounced', CURRENT_TIMESTAMP, ?, ?, ?, 'hard_bounce', ?)`, [leadId, subject, body, trackingId, followUpNumber, fromEmail, userId]);
+      await db.run(`INSERT INTO emails (lead_id, subject, body, status, sent_at, tracking_id, follow_up_number, from_email, bounce_reason, user_id, signal_snapshot) VALUES (?, ?, ?, 'bounced', CURRENT_TIMESTAMP, ?, ?, ?, 'hard_bounce', ?, ?)`, [leadId, subject, body, trackingId, followUpNumber, fromEmail, userId, signalSnapshot]);
     }
     throw smtpErr;
   }
 
   const emailInsertSql = USE_PG
-    ? `INSERT INTO emails (lead_id, subject, body, status, sent_at, tracking_id, follow_up_number, from_email, user_id) VALUES (?, ?, ?, 'sent', CURRENT_TIMESTAMP, ?, ?, ?, ?) RETURNING id`
-    : `INSERT INTO emails (lead_id, subject, body, status, sent_at, tracking_id, follow_up_number, from_email, user_id) VALUES (?, ?, ?, 'sent', CURRENT_TIMESTAMP, ?, ?, ?, ?)`;
-  const emailRecord = await db.run(emailInsertSql, [leadId, subject, body, trackingId, followUpNumber, fromEmail, userId]);
+    ? `INSERT INTO emails (lead_id, subject, body, status, sent_at, tracking_id, follow_up_number, from_email, user_id, signal_snapshot) VALUES (?, ?, ?, 'sent', CURRENT_TIMESTAMP, ?, ?, ?, ?, ?) RETURNING id`
+    : `INSERT INTO emails (lead_id, subject, body, status, sent_at, tracking_id, follow_up_number, from_email, user_id, signal_snapshot) VALUES (?, ?, ?, 'sent', CURRENT_TIMESTAMP, ?, ?, ?, ?, ?)`;
+  const emailRecord = await db.run(emailInsertSql, [leadId, subject, body, trackingId, followUpNumber, fromEmail, userId, signalSnapshot]);
+  if (leadId) await db.run('UPDATE campaign_leads SET email_id=? WHERE lead_id=? AND email_id IS NULL', [emailRecord.lastID, leadId]).catch(() => {});
   logActivity('email_sent', `Email sent to lead #${leadId} via ${fromEmail}`, leadId, { subject, messageId: info.messageId }, userId);
   return { emailId: emailRecord.lastID, trackingId, messageId: info.messageId, fromEmail };
 }
@@ -252,7 +254,7 @@ async function processQueue() {
   await db.run(`UPDATE email_queue SET status = 'sending' WHERE id = ?`, [item.id]);
 
   try {
-    const result = await sendEmail({ to: item.email, subject: item.subject, body: item.body, leadId: item.lead_id, userId: item.user_id || null });
+    const result = await sendEmail({ to: item.email, subject: item.subject, body: item.body, leadId: item.lead_id, userId: item.user_id || null, signalSnapshot: item.signal_snapshot || null });
     await db.run(`UPDATE email_queue SET status = 'sent', sent_at = CURRENT_TIMESTAMP, email_id = ? WHERE id = ?`, [result.emailId, item.id]);
     await db.run(`UPDATE leads SET crm_stage = 'emailed', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND crm_stage IN ('new_lead', 'studying', 'pitch_ready')`, [item.lead_id]);
     const delay = delayMin + Math.random() * (delayMax - delayMin);

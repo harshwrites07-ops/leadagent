@@ -424,6 +424,7 @@ router.post('/generate-and-send', aiLimiter, asyncHandler(async (req, res) => {
   }
   const { sendEmail } = require('../services/emailService');
   const { incrementUsage } = require('../services/authService');
+  const { buildSnapshot } = require('../services/signalSnapshot');
   const ids = leadIds.slice(0, 20);
   const results = [];
   const CONCURRENCY = 5;
@@ -498,10 +499,11 @@ router.post('/generate-and-send', aiLimiter, asyncHandler(async (req, res) => {
         }
 
         const emailSubject = result.email_subject || result.subject;
-        const qr = await db.run(`INSERT INTO email_queue (user_id,lead_id,subject,body,status) VALUES (?,?,?,?,'pending') ${USE_PG ? 'RETURNING id' : ''}`, [req.user.id, id, emailSubject, emailBody]);
+        const snapshot = await buildSnapshot(lead);
+        const qr = await db.run(`INSERT INTO email_queue (user_id,lead_id,subject,body,status,signal_snapshot) VALUES (?,?,?,?,'pending',?) ${USE_PG ? 'RETURNING id' : ''}`, [req.user.id, id, emailSubject, emailBody, snapshot]);
         await db.run(`UPDATE email_queue SET status='sending' WHERE id=?`, [qr.lastID]);
 
-        const sent = await sendEmail({ to: lead.email, subject: emailSubject, body: emailBody, leadId: id, userId: req.user.id });
+        const sent = await sendEmail({ to: lead.email, subject: emailSubject, body: emailBody, leadId: id, userId: req.user.id, signalSnapshot: snapshot });
         await db.run(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP,email_id=? WHERE id=?`, [sent.emailId || null, qr.lastID]);
         await db.run(`UPDATE leads SET crm_stage='emailed', last_contacted_date=CURRENT_DATE, follow_up_count=0, follow_up_status='active', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [id]);
         await incrementUsage(req.user.id, 'emails', 1);
@@ -549,6 +551,7 @@ async function jobUpdate(db, jobId, fields) {
 async function runPowerSendJob(jobId, { lead_ids, max_leads = 100, per_account_limit = 0, gap_seconds = 0, skip_inboxes = [], _userId }) {
   const db = getDb();
   const { sendEmail, getInboxes } = require('../services/emailService');
+  const { buildSnapshot } = require('../services/signalSnapshot');
   const ctx = activeJobs.get(jobId) || { stopped: false };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const withTimeout = (promise, ms, label) => Promise.race([
@@ -700,7 +703,8 @@ async function runPowerSendJob(jobId, { lead_ids, max_leads = 100, per_account_l
           }
 
           const emailSubject = result.email_subject || result.subject;
-          const sentResult = await withRetry(() => sendEmail({ to: lead.email, subject: emailSubject, body: emailBody, leadId: lead.id, skipInboxes: getSkipInboxes(), userId: _userId }), lead.channel_name);
+          const powerSendSnapshot = await buildSnapshot(lead);
+          const sentResult = await withRetry(() => sendEmail({ to: lead.email, subject: emailSubject, body: emailBody, leadId: lead.id, skipInboxes: getSkipInboxes(), userId: _userId, signalSnapshot: powerSendSnapshot }), lead.channel_name);
           if (sentResult.fromEmail) runCounts[sentResult.fromEmail] = (runCounts[sentResult.fromEmail] || 0) + 1;
           await db.run(`UPDATE leads SET crm_stage='emailed', last_contacted_date=CURRENT_DATE, follow_up_count=0, follow_up_status='active', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [lead.id]);
           logActivity('email_sent', `Email sent to ${lead.channel_name}`, lead.id, {}, _userId);

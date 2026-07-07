@@ -816,6 +816,8 @@ async function initPostgres() {
     await pgAlter(`ALTER TABLE emails ADD COLUMN client_value REAL DEFAULT 0`);
     await pgAlter(`ALTER TABLE emails ADD COLUMN ab_variant TEXT`);
     await pgAlter(`ALTER TABLE emails ADD COLUMN user_id INTEGER REFERENCES users(id)`);
+    await pgAlter(`ALTER TABLE email_queue ADD COLUMN signal_snapshot TEXT`);
+    await pgAlter(`ALTER TABLE emails ADD COLUMN signal_snapshot TEXT`);
     await pgAlter(`ALTER TABLE pitches ADD COLUMN signal_type TEXT`);
     await pgAlter(`ALTER TABLE pitches ADD COLUMN user_id INTEGER REFERENCES users(id)`);
     // Distinguishes a real Marcus/AI-generated pitch from buildFallback()'s

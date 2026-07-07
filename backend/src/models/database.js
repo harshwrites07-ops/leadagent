@@ -381,6 +381,10 @@ function _initSqliteSchema(db) {
   alterTry(`ALTER TABLE emails ADD COLUMN client_closed INTEGER DEFAULT 0`);
   alterTry(`ALTER TABLE emails ADD COLUMN client_value REAL DEFAULT 0`);
   alterTry(`ALTER TABLE emails ADD COLUMN ab_variant TEXT`);
+  // Freezes the lead's signal state at send time (see signalSnapshot.js) so
+  // reply outcomes can later be joined back to what produced them.
+  alterTry(`ALTER TABLE email_queue ADD COLUMN signal_snapshot TEXT`);
+  alterTry(`ALTER TABLE emails ADD COLUMN signal_snapshot TEXT`);
   alterTry(`ALTER TABLE pitches ADD COLUMN signal_type TEXT`);
 
   // Indexes

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { getDb, getSetting, USE_PG } = require('../models/database');
 const { asyncHandler } = require('../middleware/errorHandler');
+const { requireAdmin } = require('../middleware/requireAuth');
 
 function rangeClause(range) {
   const map = { '7d': '-7 days', '30d': '-30 days', '90d': '-90 days' };
@@ -200,6 +201,64 @@ router.get('/platforms', asyncHandler(async (req, res) => {
   `, [uid]);
 
   res.json({ success: true, youtube: makeStats(ytData, ytEmails), reddit: makeStats(rdData, rdEmails), niche_stats: niches, subreddit_stats: subreddits });
+}));
+
+// Reply-rate grouped by tier and by intent-score band, computed from the
+// signal snapshots frozen at send time (signalSnapshot.js). This is the read
+// side of "the moat" — it's what later sessions' outcome-learning work reads
+// from. Empty/small buckets return honest zeros with sample_size so nobody
+// misreads noise as signal (tier/lead_type are all null until Sessions 1.1/1.4
+// wire in real classifiers — they'll show up as an "unknown" bucket until then).
+function intentBand(score) {
+  if (score === null || score === undefined) return 'unknown';
+  if (score >= 0.75) return '0.75-1.00';
+  if (score >= 0.50) return '0.50-0.75';
+  if (score >= 0.25) return '0.25-0.50';
+  return '0.00-0.25';
+}
+
+router.get('/signal-outcomes', requireAdmin, asyncHandler(async (req, res) => {
+  const db = getDb();
+  const rows = await db.all(`
+    SELECT signal_snapshot, status, replied_at
+    FROM emails
+    WHERE signal_snapshot IS NOT NULL
+  `);
+
+  const byTier = {};
+  const byBand = {};
+
+  const bump = (map, key, replied) => {
+    if (!map[key]) map[key] = { sample_size: 0, replies: 0 };
+    map[key].sample_size++;
+    if (replied) map[key].replies++;
+  };
+
+  for (const row of rows) {
+    let snap;
+    try { snap = JSON.parse(row.signal_snapshot); } catch { continue; }
+    const replied = row.status === 'replied' || !!row.replied_at;
+    bump(byTier, snap.tier ?? 'unknown', replied);
+    bump(byBand, intentBand(snap.intent_score), replied);
+  }
+
+  const finalize = (map) => Object.fromEntries(
+    Object.entries(map).map(([key, v]) => [key, {
+      sample_size: v.sample_size,
+      replies: v.replies,
+      reply_rate: v.sample_size > 0 ? Math.round((v.replies / v.sample_size) * 1000) / 10 : 0,
+    }])
+  );
+
+  res.json({
+    success: true,
+    total_snapshots: rows.length,
+    by_tier: finalize(byTier),
+    by_signal_band: finalize(byBand),
+    note: rows.length === 0
+      ? 'No sends with a signal snapshot yet — this fills in as emails go out after Session 0.3.'
+      : null,
+  });
 }));
 
 module.exports = router;

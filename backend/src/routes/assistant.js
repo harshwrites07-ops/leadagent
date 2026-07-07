@@ -5,6 +5,7 @@ const { asyncHandler } = require('../middleware/errorHandler');
 const { getDb, getSetting, setSetting, logActivity, USE_PG } = require('../models/database');
 const { FAST_MODEL, SMART_MODEL, getGeminiKey, getGeminiKeys, makeGeminiModel, checkAiAvailability } = require('../services/claudeService');
 const { getAllKeys: getYtKeys, isQuotaExhausted } = require('../services/youtubeService');
+const { buildSnapshot } = require('../services/signalSnapshot');
 
 const ENV_PATH = path.join(__dirname, '../../../.env');
 
@@ -531,28 +532,22 @@ async function runTool(name, input, userId) {
     }
 
     case 'trigger_powermode': {
-      const { searchChannelsMulti: pmSearch } = require('../services/youtubeService');
-      const POWERMODE_KEYWORDS = [
-        'business coach YouTube', 'entrepreneur channel', 'startup founder vlog', 'agency owner YouTube',
-        'consultant YouTube channel', 'online business tips', 'CEO vlog',
-        'stock trader YouTube', 'investing channel', 'personal finance channel',
-        'real estate agent YouTube', 'property investor channel',
-        'online fitness coach', 'personal trainer YouTube', 'SaaS founder YouTube',
-      ];
-      ;(async () => {
-        try {
-          let totalSaved = 0;
-          for (let i = 0; i < POWERMODE_KEYWORDS.length; i += 3) {
-            const batch = POWERMODE_KEYWORDS.slice(i, i + 3);
-            const leads = await pmSearch(batch, { minSubs: 5000, maxSubs: 500000, maxResults: 30, emailOnly: false });
-            for (const lead of leads) {
-              try { const r = await db.run(LEAD_INSERT_SQL, leadInsertParams(lead, userId)); if (r.changes > 0) totalSaved++; } catch {}
-            }
-          }
-          console.log(`[Jack] powermode complete: ${totalSaved} leads saved`);
-        } catch (e) { console.error('[Jack] powermode error:', e.message); }
-      })();
-      return { status: 'started', message: 'PowerMode launched — searching 15 high-value keywords in background. Expect 50-150 leads in CRM over next 10-20 minutes.' };
+      // Delegate to the same handler as the PowerMode UI button (routes/scraper.js)
+      // instead of re-implementing scraping here — these used to be two
+      // incompatible implementations with different filtering/usage-limit
+      // behavior depending on which UI surface triggered them (AUDIT_REPORT.md §1.1).
+      const { runPowerMode } = require('./scraper');
+      const currentUser = await db.get('SELECT * FROM users WHERE id=?', [userId]);
+      const result = await runPowerMode(currentUser, input || {});
+      if (result.httpStatus >= 400) return { status: 'error', message: result.body.error };
+      if (result.body.status === 'empty') return { status: 'empty', message: result.body.message };
+      return {
+        status: result.body.status,
+        saved: result.body.saved,
+        message: result.body.status === 'instant'
+          ? `PowerMode served ${result.body.saved} leads instantly from the pre-seeded database.`
+          : 'PowerMode already running for this account.',
+      };
     }
 
     case 'analyze_channel': {
@@ -676,8 +671,8 @@ async function runTool(name, input, userId) {
       if (!leads.length) return { sent: 0, message: `No leads found (temperature: ${temp || 'any'}, stage: new_lead/pitch_ready).` };
 
       const qInsertSql = USE_PG
-        ? `INSERT INTO email_queue (user_id,lead_id,subject,body,status) VALUES (?,?,?,?,'pending') RETURNING id`
-        : `INSERT INTO email_queue (user_id,lead_id,subject,body,status) VALUES (?,?,?,?,'pending')`;
+        ? `INSERT INTO email_queue (user_id,lead_id,subject,body,status,signal_snapshot) VALUES (?,?,?,?,'pending',?) RETURNING id`
+        : `INSERT INTO email_queue (user_id,lead_id,subject,body,status,signal_snapshot) VALUES (?,?,?,?,'pending',?)`;
       const lcSql = USE_PG
         ? `UPDATE leads SET crm_stage='emailed', last_contacted_date=CURRENT_DATE, follow_up_count=0, follow_up_status='active', updated_at=CURRENT_TIMESTAMP WHERE id=?`
         : `UPDATE leads SET crm_stage='emailed', last_contacted_date=date('now'), follow_up_count=0, follow_up_status='active', updated_at=CURRENT_TIMESTAMP WHERE id=?`;
@@ -692,9 +687,10 @@ async function runTool(name, input, userId) {
           const result = await claude.generateFullPitch(lead);
           await db.run(`INSERT OR REPLACE INTO pitches (lead_id,user_id,deep_study,custom_offer,cold_email,email_subject,subject_variants) VALUES (?,?,?,?,?,?,?)`,
             [lead.id, userId, result.key_insight, result.custom_offer, result.email_body, result.email_subject, JSON.stringify(result.subject_variants || [])]);
-          const qr = await db.run(qInsertSql, [userId, lead.id, result.email_subject, result.email_body]);
+          const snapshot = await buildSnapshot(lead);
+          const qr = await db.run(qInsertSql, [userId, lead.id, result.email_subject, result.email_body, snapshot]);
           await db.run(`UPDATE email_queue SET status='sending' WHERE id=?`, [qr.lastID]);
-          const sentResult = await sendEmail({ to: lead.email, subject: result.email_subject, body: result.email_body, leadId: lead.id });
+          const sentResult = await sendEmail({ to: lead.email, subject: result.email_subject, body: result.email_body, leadId: lead.id, signalSnapshot: snapshot });
           await db.run(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP,email_id=? WHERE id=?`, [sentResult.emailId || null, qr.lastID]);
           await db.run(lcSql, [lead.id]);
           logActivity('email_sent', `[Jack] Email sent to ${lead.channel_name}`, lead.id, {}, userId);
@@ -747,8 +743,8 @@ async function runTool(name, input, userId) {
       if (!leads.length) return { sent: 0, message: `No emailed leads found that are ${daysSince}+ days silent.` };
 
       const qInsertSql = USE_PG
-        ? `INSERT INTO email_queue (user_id,lead_id,subject,body,status) VALUES (?,?,?,?,'pending') RETURNING id`
-        : `INSERT INTO email_queue (user_id,lead_id,subject,body,status) VALUES (?,?,?,?,'pending')`;
+        ? `INSERT INTO email_queue (user_id,lead_id,subject,body,status,signal_snapshot) VALUES (?,?,?,?,'pending',?) RETURNING id`
+        : `INSERT INTO email_queue (user_id,lead_id,subject,body,status,signal_snapshot) VALUES (?,?,?,?,'pending',?)`;
 
       const CONCURRENCY = 3;
       ;(async () => {
@@ -762,9 +758,10 @@ async function runTool(name, input, userId) {
               const bm = followUpRaw.match(/---\s*([\s\S]+)/);
               const subject = sm?.[1]?.trim() || `Following up — ${lead.channel_name}`;
               const body = bm?.[1]?.trim() || followUpRaw;
-              const qr = await db.run(qInsertSql, [userId, lead.id, subject, body]);
+              const snapshot = await buildSnapshot(lead);
+              const qr = await db.run(qInsertSql, [userId, lead.id, subject, body, snapshot]);
               await db.run(`UPDATE email_queue SET status='sending' WHERE id=?`, [qr.lastID]);
-              const sentResult = await sendEmail({ to: lead.email, subject, body, leadId: lead.id });
+              const sentResult = await sendEmail({ to: lead.email, subject, body, leadId: lead.id, signalSnapshot: snapshot });
               await db.run(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP,email_id=? WHERE id=?`, [sentResult.emailId || null, qr.lastID]);
               logActivity('follow_up_sent', `[Jack] Follow-up #${followUpNum} sent to ${lead.channel_name}`, lead.id, {}, userId);
               sent++;
@@ -961,8 +958,8 @@ async function runTool(name, input, userId) {
       if (!leads.length) return { sent: 0, message: 'No follow-ups due right now (need 3+ days since last contact).' };
 
       const qInsertSql = USE_PG
-        ? `INSERT INTO email_queue (user_id,lead_id,subject,body,status,priority) VALUES (?,?,?,?,'pending',?) RETURNING id`
-        : `INSERT INTO email_queue (user_id,lead_id,subject,body,status,priority) VALUES (?,?,?,?,'pending',?)`;
+        ? `INSERT INTO email_queue (user_id,lead_id,subject,body,status,priority,signal_snapshot) VALUES (?,?,?,?,'pending',?,?) RETURNING id`
+        : `INSERT INTO email_queue (user_id,lead_id,subject,body,status,priority,signal_snapshot) VALUES (?,?,?,?,'pending',?,?)`;
       const lcSql = USE_PG
         ? `UPDATE leads SET follow_up_count=?,last_contacted_date=CURRENT_DATE,updated_at=CURRENT_TIMESTAMP WHERE id=?`
         : `UPDATE leads SET follow_up_count=?,last_contacted_date=date('now'),updated_at=CURRENT_TIMESTAMP WHERE id=?`;
@@ -980,9 +977,10 @@ async function runTool(name, input, userId) {
               const bm = raw.match(/---\s*([\s\S]+)/);
               const subject = sm?.[1]?.trim() || `Following up — ${lead.channel_name}`;
               const body = bm?.[1]?.trim() || raw;
-              const qr = await db.run(qInsertSql, [userId, lead.id, subject, body, step]);
+              const snapshot = await buildSnapshot(lead);
+              const qr = await db.run(qInsertSql, [userId, lead.id, subject, body, step, snapshot]);
               await db.run(`UPDATE email_queue SET status='sending' WHERE id=?`, [qr.lastID]);
-              await sendEmail({ to: lead.email, subject, body, leadId: lead.id });
+              await sendEmail({ to: lead.email, subject, body, leadId: lead.id, signalSnapshot: snapshot });
               await db.run(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP WHERE id=?`, [qr.lastID]);
               await db.run(lcSql, [step, lead.id]);
               if (step >= 5) await db.run(`UPDATE leads SET follow_up_status='complete',crm_stage='no_response',updated_at=CURRENT_TIMESTAMP WHERE id=?`, [lead.id]);
