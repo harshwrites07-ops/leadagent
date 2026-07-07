@@ -726,6 +726,17 @@ function _initSqliteSchema(db) {
       digested_at DATETIME,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS job_board_listings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      board TEXT NOT NULL,
+      listing_url TEXT UNIQUE NOT NULL,
+      title TEXT,
+      role_type TEXT,
+      channel_ref TEXT,
+      resolved_channel_id TEXT,
+      posted_at TEXT,
+      found_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
     CREATE TABLE IF NOT EXISTS discovery_queue (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       channel_ref TEXT NOT NULL,
@@ -802,6 +813,10 @@ async function _seedDefaultSettings() {
     graph_crawl_min_subs: '1000',
     graph_crawl_max_subs: '500000',
     graph_crawl_niche_caps: '{}',
+    // Empty by default (honest — no board scraped until an admin configures a
+    // real, public, robots.txt-compliant RSS/JSON feed URL). Pluggable: keys
+    // are arbitrary board names, e.g. {"ytjobs": "https://...", "mandy": "https://..."}.
+    job_board_feed_urls: '{}',
     smtp_host: process.env.SMTP_HOST || '',
     smtp_port: process.env.SMTP_PORT || '587',
     smtp_user: process.env.SMTP_USER || '',

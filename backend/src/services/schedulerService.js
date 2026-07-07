@@ -351,6 +351,17 @@ cron.schedule('15,45 * * * *', async () => {
   } catch (e) { console.error('[Scheduler] Discovery drain error:', e.message); }
 });
 
+// Job-board ingestion — every 2h. Off by default (empty job_board_feed_urls
+// setting = nothing scraped, honest no-op) until an admin configures a real,
+// public, robots.txt-compliant feed URL.
+cron.schedule('0 */2 * * *', async () => {
+  try {
+    const { scanJobBoards } = require('./jobBoardService');
+    const result = await scanJobBoards();
+    if (!result.skipped) console.log(`[Scheduler] Job board scan — ${JSON.stringify(result.boards)}`);
+  } catch (e) { console.error('[Scheduler] Job board scan error:', e.message); }
+});
+
 // Mailbox verification batch — off-peak daily at 2am. Verifies 'unchecked'
 // emails in priority order (HOT quality_leads first), budget-capped by the
 // admin `daily_verify_limit` setting (default 500/day). No-op cost when no

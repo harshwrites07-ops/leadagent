@@ -832,6 +832,21 @@ async function initPostgres() {
     console.log('[PG] ✅ hot_alert_notifications');
 
     await query(`
+      CREATE TABLE IF NOT EXISTS job_board_listings (
+        id SERIAL PRIMARY KEY,
+        board TEXT NOT NULL,
+        listing_url TEXT UNIQUE NOT NULL,
+        title TEXT,
+        role_type TEXT,
+        channel_ref TEXT,
+        resolved_channel_id TEXT,
+        posted_at TEXT,
+        found_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('[PG] ✅ job_board_listings');
+
+    await query(`
       CREATE TABLE IF NOT EXISTS discovery_queue (
         id SERIAL PRIMARY KEY,
         channel_ref TEXT NOT NULL,

@@ -77,6 +77,7 @@ const ADMIN_SETTING_KEYS = [
   'queue_paused',
   'daily_verify_limit', 'youtube_quota_budget_per_key',
   'graph_crawl_enabled', 'graph_crawl_daily_cap', 'graph_crawl_min_subs', 'graph_crawl_max_subs', 'graph_crawl_niche_caps',
+  'job_board_feed_urls',
 ];
 
 router.get('/', requireAdmin, asyncHandler(async (req, res) => {
