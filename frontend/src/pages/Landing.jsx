@@ -6,6 +6,7 @@ import {
   Radar, ShieldCheck, Clock, Flame,
 } from 'lucide-react';
 import { fadeUp, stagger, springIn, viewportOnce } from '../lib/motion';
+import FeatureBentoGrid from '../components/marketing/FeatureBentoGrid';
 
 /* ─────────────────────────────────────────────────────────────
    Kinetic headline — rotating word set, 3s cadence
@@ -560,6 +561,7 @@ export default function Landing() {
           .lp-demo__grid { grid-template-columns: 1fr; }
           .lp-demo__grid > div:first-child { border-right: none; border-bottom: 1px solid var(--line); }
           .lp-nav-links { display: none; }
+          .lp-bento-grid { grid-template-columns: 1fr !important; }
         }
         @media (max-width: 540px) {
           .lp-container { padding: 0 var(--sp-4); }
@@ -691,6 +693,18 @@ export default function Landing() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* ══ WHAT'S RUNNING UNDER THE HOOD ══ */}
+      <div className="lp-container" style={{ padding: 'var(--sp-16) var(--sp-6) 0' }}>
+        <motion.div variants={fadeUp} initial="hidden" whileInView="visible" viewport={viewportOnce} style={{ textAlign: 'center', marginBottom: 'var(--sp-8)' }}>
+          <div className="lp-eyebrow" style={{ justifyContent: 'center' }}>UNDER THE HOOD</div>
+          <h2 className="lp-h2">The engine behind every lead.</h2>
+          <p style={{ fontSize: 'var(--fs-base)', color: 'var(--text-2)', maxWidth: 480, margin: '0 auto', lineHeight: 1.6 }}>
+            Scanning, scoring, and vacancy detection running continuously — not a one-time scrape.
+          </p>
+        </motion.div>
+        <FeatureBentoGrid />
       </div>
 
       {/* ══ THE JOURNEY: FIND → WRITE → SEND → CLOSE ══ */}
