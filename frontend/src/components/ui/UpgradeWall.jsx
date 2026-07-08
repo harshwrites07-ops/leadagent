@@ -9,19 +9,19 @@ const PLANS = [
   {
     id: 'starter',
     name: 'Starter',
-    price: '$39',
+    price: '$29',
     period: '/mo',
     leads: 'Unlimited lead extraction',
-    emails: '2,000 emails/mo',
+    emails: '500 emails/mo',
     highlight: false,
   },
   {
     id: 'pro',
     name: 'Pro',
-    price: '$79',
+    price: '$49',
     period: '/mo',
     leads: 'Unlimited lead extraction',
-    emails: '10,000 emails/mo',
+    emails: '1,500 emails/mo',
     highlight: true,
   },
   {
@@ -30,7 +30,7 @@ const PLANS = [
     price: '$149',
     period: '/mo',
     leads: 'Unlimited lead extraction',
-    emails: 'Unlimited emails',
+    emails: '5,000 emails/mo',
     highlight: false,
   },
 ];
@@ -42,11 +42,46 @@ export default function UpgradeWall() {
   const handleUpgrade = async (planId) => {
     setLoading(planId);
     try {
-      const { data } = await api.post('/stripe/create-checkout', { plan: planId });
-      if (data.url) window.location.href = data.url;
+      const { data } = await api.post('/razorpay/create-subscription', { plan: planId });
+      const { subscription_id, key, plan_name, user_name, user_email, user_contact } = data;
+
+      if (!window.Razorpay) {
+        await new Promise((resolve, reject) => {
+          const s = document.createElement('script');
+          s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+          s.onload = resolve;
+          s.onerror = reject;
+          document.head.appendChild(s);
+        });
+      }
+
+      const rzp = new window.Razorpay({
+        key,
+        subscription_id,
+        name: 'Quelro',
+        description: plan_name,
+        prefill: { name: user_name, email: user_email, contact: user_contact },
+        theme: { color: '#3ea2fd' },
+        handler: async (response) => {
+          try {
+            await api.post('/razorpay/verify-payment', {
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_subscription_id: response.razorpay_subscription_id,
+              razorpay_signature: response.razorpay_signature,
+              plan: planId,
+            });
+            window.location.reload();
+          } catch (e) {
+            alert(e.response?.data?.error || 'Payment verification failed');
+          } finally {
+            setLoading(null);
+          }
+        },
+        modal: { ondismiss: () => setLoading(null) },
+      });
+      rzp.open();
     } catch (e) {
       alert(e.response?.data?.error || 'Failed to start checkout. Try again.');
-    } finally {
       setLoading(null);
     }
   };
@@ -139,7 +174,7 @@ export default function UpgradeWall() {
         </div>
 
         <p className="type-body-12" style={{ color: 'var(--app-text-muted)' }}>
-          Cancel anytime · Secure checkout via Stripe · <a href="/terms" target="_blank" style={{ color: 'var(--app-text-secondary)' }}>Terms</a> · <a href="/privacy" target="_blank" style={{ color: 'var(--app-text-secondary)' }}>Privacy</a>
+          Cancel anytime · Secure checkout via Razorpay · <a href="/terms" target="_blank" style={{ color: 'var(--app-text-secondary)' }}>Terms</a> · <a href="/privacy" target="_blank" style={{ color: 'var(--app-text-secondary)' }}>Privacy</a>
         </p>
       </motion.div>
     </motion.div>

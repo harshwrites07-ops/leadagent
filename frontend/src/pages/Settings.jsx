@@ -938,9 +938,9 @@ export default function Settings() {
 
           <div className="grid g-3" style={{ gap: 14 }}>
             {[
-              { key: 'starter', n: 'Starter', p: '₹2,499', leads: '500 emails/month' },
-              { key: 'pro',     n: 'Pro',     p: '₹3,999', leads: '1,500 emails/month' },
-              { key: 'agency',  n: 'Agency',  p: '₹12,499', leads: '5,000 emails/month' },
+              { key: 'starter', n: 'Starter', p: '$29', leads: '500 emails/month' },
+              { key: 'pro',     n: 'Pro',     p: '$49', leads: '1,500 emails/month' },
+              { key: 'agency',  n: 'Agency',  p: '$149', leads: '5,000 emails/month' },
             ].map((plan, i) => {
               const current = planName === plan.key;
               const isLoading = loadingCheckout === plan.key;

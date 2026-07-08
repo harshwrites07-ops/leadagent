@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { List, X } from '@phosphor-icons/react'
 
 const links = [
-  { label: 'Product', href: '#features' },
+  { label: 'Features', href: '#features' },
   { label: 'How it works', href: '#how-it-works' },
   { label: 'Pricing', href: '#pricing' },
   { label: 'FAQ', href: '#faq' },
@@ -12,15 +12,10 @@ export default function Navbar() {
   const [open, setOpen] = useState(false)
 
   return (
-    <header className="sticky top-0 z-50 border-b border-border/70 bg-background/85 backdrop-blur-sm">
+    <header className="sticky top-0 z-50 border-b border-border bg-background/72 backdrop-blur-md">
       <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
-        <a href="#top" className="flex items-center gap-2.5 font-heading text-lg font-semibold tracking-tight text-foreground">
-          <span
-            className="grid h-6 w-6 place-items-center rounded-[7px] font-mono text-xs font-bold text-white"
-            style={{ background: '#0070f3' }}
-          >
-            Q
-          </span>
+        <a href="#top" className="flex items-center gap-2.5 font-heading text-xl tracking-tight text-foreground">
+          <span className="h-2.5 w-2.5 rounded-full bg-primary animate-q-pulse" />
           Quelro
         </a>
 
@@ -40,13 +35,13 @@ export default function Navbar() {
         <div className="hidden items-center gap-3 md:flex">
           <a
             href="#"
-            className="text-sm font-semibold text-foreground transition-colors duration-200 hover:text-primary"
+            className="text-sm font-medium text-foreground transition-colors duration-200 hover:text-primary"
           >
             Log in
           </a>
           <a
             href="#pricing"
-            className="cursor-pointer rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_0_24px_rgba(0, 112, 243,0.35)]"
+            className="cursor-pointer rounded-lg bg-primary px-4 py-2 text-sm font-semibold tracking-tight text-primary-foreground transition-colors duration-200 hover:brightness-110"
           >
             Start free
           </a>

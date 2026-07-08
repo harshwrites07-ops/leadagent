@@ -51,9 +51,6 @@ app.set('trust proxy', 1);
 const FRONTEND_DIST = path.join(__dirname, '../frontend/dist');
 const isProd = process.env.NODE_ENV === 'production' || require('fs').existsSync(FRONTEND_DIST + '/index.html');
 
-const { router: stripeRouter, webhookRouter: stripeWebhookRouter } = require('./src/routes/stripe');
-app.use('/api/stripe/webhook', stripeWebhookRouter);
-
 const { router: razorpayRouter, webhookRouter: razorpayWebhookRouter } = require('./src/routes/razorpay');
 app.use('/api/razorpay/webhook', razorpayWebhookRouter);
 
@@ -226,7 +223,6 @@ const isHttps = process.env.NODE_ENV === 'production' || !!(
   app.use('/api/followups', requireAuth, requireActiveSubscription, require('./src/routes/followups'));
   app.use('/api/campaigns', requireAuth, requireActiveSubscription, require('./src/routes/campaigns'));
   app.use('/api/quality',   requireAuth, require('./src/routes/qualityLeads'));
-  app.use('/api/stripe',    requireAuth, stripeRouter);
   app.use('/api/razorpay',  requireAuth, razorpayRouter);
 
   app.get('/', (req, res) => res.sendFile(path.join(FRONTEND_DIST, 'index.html')));

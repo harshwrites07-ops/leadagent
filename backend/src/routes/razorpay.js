@@ -16,12 +16,13 @@ function getRazorpay() {
   });
 }
 
-// Plan amounts in paise (INR) or smallest currency unit
-// Razorpay uses INR by default — amounts are in paise (1 INR = 100 paise)
+// Plan amounts in cents (USD) — Razorpay international accounts bill in the
+// smallest currency unit, so $29.00 = 2900.
+const CURRENCY = 'USD';
 const PLAN_CONFIG = {
-  starter: { amount: 2499 * 100, name: 'Starter Plan', interval: 1, period: 'monthly' },
-  pro:     { amount: 3999 * 100, name: 'Pro Plan',     interval: 1, period: 'monthly' },
-  agency:  { amount: 12499 * 100, name: 'Agency Plan', interval: 1, period: 'monthly' },
+  starter: { amount: 29 * 100, name: 'Starter Plan', interval: 1, period: 'monthly' },
+  pro:     { amount: 49 * 100, name: 'Pro Plan',     interval: 1, period: 'monthly' },
+  agency:  { amount: 149 * 100, name: 'Agency Plan', interval: 1, period: 'monthly' },
 };
 
 // Cache plan IDs so we don't recreate on every request
@@ -50,7 +51,7 @@ async function getOrCreateRazorpayPlanId(rzp, planKey) {
     item: {
       name: config.name,
       amount: config.amount,
-      currency: 'INR',
+      currency: CURRENCY,
       description: `${config.name} monthly subscription`,
     },
   });
@@ -99,7 +100,7 @@ router.post('/create-subscription', asyncHandler(async (req, res) => {
     subscription_id: subscription.id,
     key: process.env.RAZORPAY_KEY_ID,
     amount: PLAN_CONFIG[plan].amount,
-    currency: 'INR',
+    currency: CURRENCY,
     plan_name: PLAN_CONFIG[plan].name,
     user_name: user.full_name || '',
     user_email: user.email,

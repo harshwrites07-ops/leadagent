@@ -80,7 +80,7 @@ export default function TermsOfService() {
           <li>A 14-day free trial is provided upon signup with no credit card required</li>
           <li>After the trial, continued use requires an active paid subscription</li>
           <li>Subscriptions are billed monthly in advance and automatically renew</li>
-          <li>All payments are processed by Stripe and are subject to Stripe's terms</li>
+          <li>All payments are processed by Razorpay and are subject to Razorpay's terms</li>
           <li>Refunds are provided at our discretion within 7 days of a charge if you contact us</li>
           <li>Cancellation takes effect at the end of the current billing period</li>
         </ul>

@@ -60,7 +60,7 @@ export default function PrivacyPolicy() {
         <ul style={S.ul}>
           <li>Account information: name, email address, password (hashed), phone number</li>
           <li>Profile information: agency name, role, portfolio URL, pricing range</li>
-          <li>Payment information: processed securely by Stripe — we never store card numbers</li>
+          <li>Payment information: processed securely by Razorpay — we never store card numbers</li>
           <li>Usage data: leads found, emails sent, CRM activity, and platform interactions</li>
           <li>Gmail OAuth tokens: only if you connect a Gmail account for sending (stored encrypted)</li>
         </ul>
@@ -83,7 +83,7 @@ export default function PrivacyPolicy() {
         <h2 style={S.h2}>4. Data Sharing</h2>
         <p style={S.p}>We do not sell your personal information. We share data only with:</p>
         <ul style={S.ul}>
-          <li><strong>Stripe</strong> — payment processing</li>
+          <li><strong>Razorpay</strong> — payment processing</li>
           <li><strong>Google</strong> — Gmail OAuth and YouTube API usage</li>
           <li><strong>Twilio</strong> — SMS OTP verification (phone numbers only)</li>
           <li><strong>Anthropic / Google AI</strong> — AI pitch generation (lead channel data is sent to generate pitches; no personal user account data is shared)</li>

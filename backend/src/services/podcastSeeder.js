@@ -186,7 +186,7 @@ async function runPodcastCycle() {
             p.country || null, niche
           ]);
           if (res.changes > 0) totalSaved++;
-        } catch {}
+        } catch (e) { console.warn(`[PodcastSeeder] Insert failed for ${p.collectionId}: ${e.message}`); }
       }
     }
 

@@ -118,7 +118,9 @@ function ResultDossier({ result, navigate, motionIndex = 0 }) {
               <span>{channel.email}</span>
               <Icon name="check" size={11} style={{ color: 'var(--ok)' }} />
             </div>
-            <div className="muted" style={{ fontSize: 10.5, marginTop: 6 }}>Verified via Hunter · Apollo · domain MX check</div>
+            <div className="muted" style={{ fontSize: 10.5, marginTop: 6 }}>
+              {channel.email_mx_valid ? 'Domain MX record verified' : 'Email found on channel page · not yet verified'}
+            </div>
           </>
         )}
 

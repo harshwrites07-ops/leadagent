@@ -5,7 +5,7 @@
  */
 
 const { getDb } = require('../models/database');
-const { getNextKey } = require('./youtubeService');
+const { getNextKey, markExhausted } = require('./youtubeService');
 
 const YT_BASE = 'https://www.googleapis.com/youtube/v3';
 
@@ -26,7 +26,17 @@ const COMMENT_SIGNAL_KEYWORDS = [
 async function fetchWithKey(url) {
   const key = getNextKey();
   const response = await fetch(`${url}&key=${key}`);
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    const reason = body?.error?.errors?.[0]?.reason;
+    const err = new Error(`HTTP ${response.status} (${reason || 'unknown'})`);
+    err.quotaReason = reason;
+    err.status = response.status;
+    if (reason === 'quotaExceeded' || reason === 'dailyLimitExceeded' || reason === 'rateLimitExceeded' || response.status === 429 || response.status === 403) {
+      markExhausted(key);
+    }
+    throw err;
+  }
   return response.json();
 }
 
@@ -59,14 +69,18 @@ async function scanCommunityPosts(channelIds) {
               [channelId, text.substring(0, 500), `https://youtube.com/channel/${channelId}/community`]
             );
             if (result.changes > 0) { signalsFound++; console.log(`[YT Community] Hiring signal found for ${channelId}`); }
-          } catch {}
+          } catch (e) { console.warn(`[YT Advanced] Failed to save community signal for ${channelId}: ${e.message}`); }
         }
       }
 
       await new Promise(r => setTimeout(r, 200));
 
     } catch (e) {
-      // Skip channels with errors
+      console.error(`[YT Advanced] Community scan failed for ${channelId}: ${e.message}`);
+      if (e.quotaReason === 'quotaExceeded' || e.quotaReason === 'dailyLimitExceeded' || e.status === 403 || e.status === 429) {
+        console.error('[YT Advanced] Quota exhausted — aborting remaining community scans for this run');
+        break;
+      }
     }
   }
 
@@ -108,7 +122,13 @@ async function scanComments(channelId, videoIds) {
 
       await new Promise(r => setTimeout(r, 300));
 
-    } catch (e) {}
+    } catch (e) {
+      console.error(`[YT Advanced] Comment scan failed for video ${videoId}: ${e.message}`);
+      if (e.quotaReason === 'quotaExceeded' || e.quotaReason === 'dailyLimitExceeded' || e.status === 403 || e.status === 429) {
+        console.error('[YT Advanced] Quota exhausted — aborting remaining comment scans for this run');
+        break;
+      }
+    }
   }
 
   return signalsFound;

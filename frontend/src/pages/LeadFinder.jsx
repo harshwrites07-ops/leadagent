@@ -426,11 +426,11 @@ export default function LeadFinder() {
                       disabled={pmRunning}
                     />
                     <span className="muted" style={{ fontSize: 12 }}>
-                      leads with verified emails · max {(PLAN_RUN_LIMITS[user?.plan || 'free'] ?? 100).toLocaleString()} on {user?.plan || 'free'} plan
+                      leads with an email found · max {(PLAN_RUN_LIMITS[user?.plan || 'free'] ?? 100).toLocaleString()} on {user?.plan || 'free'} plan
                     </span>
                   </div>
                   <div className="muted" style={{ fontSize: 11.5, marginTop: 6, lineHeight: 1.5 }}>
-                    We'll keep searching until we find exactly <strong style={{ color: 'var(--lime)' }}>{pmTargetCount}</strong> leads with verified emails.
+                    We'll keep searching until we find exactly <strong style={{ color: 'var(--lime)' }}>{pmTargetCount}</strong> leads with an email found.
                   </div>
                 </div>
 

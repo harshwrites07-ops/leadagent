@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "backend",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["C:\\Users\\it\\AppData\\Local\\Temp\\claude\\C--Users-it-contentcrafterzz-outreach-os\\63a29365-f7ae-436a-bd1d-cfc6f9983050\\scratchpad\\dev-local-qa.js"],
+      "port": 3001
+    },
+    {
+      "name": "frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "frontend"],
+      "port": 5173
+    }
+  ]
+}

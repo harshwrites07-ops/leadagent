@@ -6,7 +6,7 @@ const plans = [
   {
     key: 'starter',
     name: 'Starter',
-    price: '₹2,499',
+    price: '$29',
     description: 'For freelancers sending their first pitches.',
     features: ['500 emails / month', '1 Gmail account', 'Lead Finder + Pitch Generator', 'CRM & analytics included'],
     cta: 'Start with Starter',
@@ -15,7 +15,7 @@ const plans = [
   {
     key: 'pro',
     name: 'Pro',
-    price: '₹3,999',
+    price: '$49',
     description: 'For freelancers running outreach as their main channel.',
     features: [
       '1,500 emails / month',
@@ -29,7 +29,7 @@ const plans = [
   {
     key: 'agency',
     name: 'Agency',
-    price: '₹12,499',
+    price: '$149',
     description: 'For agencies pitching on behalf of multiple clients.',
     features: [
       '5,000 emails / month',
