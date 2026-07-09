@@ -2,9 +2,14 @@ const { google } = require('googleapis');
 const crypto = require('crypto');
 const { getDb } = require('../models/database');
 
+// gmail.readonly was previously requested but never used anywhere in this
+// codebase (reply/bounce detection goes through IMAP in emailService.js,
+// not the Gmail API) — it's a "restricted" scope under Google's OAuth
+// verification tiers, requiring a paid annual CASA security assessment on
+// top of standard review. Dropping it leaves only gmail.send, a "sensitive"
+// (not restricted) scope — standard verification only, no CASA required.
 const GMAIL_SCOPES = [
   'https://www.googleapis.com/auth/gmail.send',
-  'https://www.googleapis.com/auth/gmail.readonly',
   'https://www.googleapis.com/auth/userinfo.email',
 ];
 
