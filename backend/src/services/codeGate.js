@@ -44,6 +44,34 @@ function roundHumanNumbers(text) {
   });
 }
 
+// Deterministic last-resort fix for tooManyEmDashes: the model tends to reach
+// for a second em-dash in this conversational register often enough that the
+// 3-attempt retry loop doesn't reliably self-correct it, and discarding an
+// otherwise good, fully personalized draft over exactly one extra dash is a
+// worse trade than mechanically fixing it. Keeps the first real em-dash
+// (before the sign-off), replaces every one after that with a comma. Never
+// touches the sign-off's own "— [name]" dash.
+function reduceEmDashes(text) {
+  if (!text) return text;
+  const psMatch = (text || '').match(/\n\s*P\.?\s?S\.?[:\s][\s\S]*$/i);
+  const mainEnd = psMatch ? psMatch.index : text.length;
+  const main = text.slice(0, mainEnd);
+  const rest = text.slice(mainEnd);
+
+  const lines = main.split('\n');
+  let lastNonBlank = lines.length - 1;
+  while (lastNonBlank >= 0 && !lines[lastNonBlank].trim()) lastNonBlank--;
+  const signOffIdx = (lastNonBlank >= 0 && /^—?\s*[A-Za-z][a-zA-Z']{0,20}$/.test(lines[lastNonBlank].trim()))
+    ? lastNonBlank : -1;
+
+  let seen = 0;
+  const fixedLines = lines.map((line, i) => {
+    if (i === signOffIdx) return line;
+    return line.replace(/\s*(?:—|--)\s*/g, (m) => (++seen === 1 ? m : ', '));
+  });
+  return fixedLines.join('\n') + rest;
+}
+
 // The prompt mandates an exact skeleton — CTA question, then a sign-off line
 // ("— [name]" or bare first name), then optionally a P.S. — see buildMARCUSPrompt's
 // OUTPUT SKELETON and every MARCUS_V2_EXAMPLES entry. Two checks below need to
@@ -326,6 +354,7 @@ module.exports = {
   wordCount,
   formatCompact,
   roundHumanNumbers,
+  reduceEmDashes,
   BANNED_PHRASES,
   HARD_CHECKS,
   SOFT_CHECKS,

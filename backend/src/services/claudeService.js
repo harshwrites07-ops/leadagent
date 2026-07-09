@@ -2035,7 +2035,7 @@ async function generateWithMarcus(lead, userId, onProgress) {
   // Generate with MARCUS V2 prompt — up to 3 attempts. Every draft runs
   // through the code gate (Part 4) before being accepted: instant,
   // deterministic checks, max 2 code-gate retries within this budget.
-  const { runCodeGate, describeViolation, roundHumanNumbers } = require('./codeGate');
+  const { runCodeGate, describeViolation, roundHumanNumbers, reduceEmDashes } = require('./codeGate');
   let generated = null;
   let previousFeedback = null;
   let codeGateAttempts = 0;
@@ -2061,16 +2061,27 @@ async function generateWithMarcus(lead, userId, onProgress) {
       codeGateAttempts++;
       console.log(`[Marcus] Attempt ${attempt} code-gate violation for ${lead.channel_name}: ${gate.violations.map(v => v.type).join(', ')}`);
       if (attempt === 3) {
-        // Out of attempts — rather than ship a raw-number violation verbatim,
-        // force-round any remaining raw stat before shipping. Other soft/hard
-        // violations still ship as-is (no safe deterministic fix exists for
-        // them), but a raw exact number is the one thing we can always repair.
+        // Out of attempts — rather than ship a raw-number or 2+-em-dash
+        // violation verbatim, force-fix what can be safely, mechanically
+        // repaired before shipping. Other soft/hard violations still ship
+        // as-is (no safe deterministic fix exists for them), but these two
+        // are common enough (model tics the retry loop doesn't reliably
+        // self-correct) and safe enough to auto-repair rather than discard
+        // an otherwise good, fully personalized draft over.
         const hasRawNumber = gate.violations.some(v => v.type === 'rawNumberDump');
         if (hasRawNumber) {
           const before = parsed.body;
           parsed.body = roundHumanNumbers(parsed.body);
           if (parsed.body !== before) {
             console.warn(`[Marcus] Force-rounded raw number(s) in final draft for ${lead.channel_name}`);
+          }
+        }
+        const hasTooManyEmDashes = gate.violations.some(v => v.type === 'tooManyEmDashes');
+        if (hasTooManyEmDashes) {
+          const before = parsed.body;
+          parsed.body = reduceEmDashes(parsed.body);
+          if (parsed.body !== before) {
+            console.warn(`[Marcus] Force-reduced em-dash count in final draft for ${lead.channel_name}`);
           }
         }
         generated = parsed;
