@@ -176,6 +176,28 @@ const SOFT_CHECKS = {
 // exact stat. A ratio alone ("169K subs, 15K views") does not count. This is
 // the code-level enforcement of the input contract's rule: no watched signal,
 // no email — hard-fails runCodeGate() same as the ban list.
+// "Four million subs" is just as real a reference to 4,000,000 subscribers as
+// "4M subs" — natural prose spells round numbers out as often as it uses
+// compact digits. Only covers 1-20 (million/thousand), which is the range
+// that actually shows up in casual writing; anyone would write "4.3M", not
+// "four point three million", so the compact-digit check already covers that.
+const NUMBER_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
+  'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty'];
+function hasSpelledOutStatRef(lowerBody, stats) {
+  return stats.some(s => {
+    for (const [divisor, unit] of [[1000000, 'million'], [1000, 'thousand']]) {
+      const rounded = Math.round(s / divisor);
+      if (rounded < 1 || rounded > 20) continue;
+      // Only a "round" match — i.e. the number is genuinely close to that
+      // round figure — counts; 1.4M shouldn't pass as "one million".
+      if (Math.abs(s - rounded * divisor) / s > 0.08) continue;
+      const word = NUMBER_WORDS[rounded];
+      if (lowerBody.includes(`${word} ${unit}`) || lowerBody.includes(`${rounded} ${unit}`)) return true;
+    }
+    return false;
+  });
+}
+
 function personalizationCheck(body, intelligencePack) {
   const pack = intelligencePack || {};
   const hook = pack.hook_data || {};
@@ -190,7 +212,8 @@ function personalizationCheck(body, intelligencePack) {
   const stats = [pack.subscribers, hook.recent_avg_views, hook.channel_avg_views,
     hook.best_video_views, hook.most_recent_video_views, pack.last_upload_days_ago]
     .filter(v => v != null && v !== 0);
-  const hasStatRef = stats.some(s => lowerBody.includes(formatCompact(s).toLowerCase()) || lowerBody.includes(String(s)));
+  const hasStatRef = stats.some(s => lowerBody.includes(formatCompact(s).toLowerCase()) || lowerBody.includes(String(s)))
+    || hasSpelledOutStatRef(lowerBody, stats);
 
   return hasTitleRef || hasStatRef;
 }
