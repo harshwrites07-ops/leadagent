@@ -686,14 +686,22 @@ async function runSeedCycle() {
   return false;
 }
 
+// Cost control: this loop previously paused only 10s between full cycles —
+// with 512 keywords across up to 8 API keys plus InnerTube fallback, that's
+// effectively continuous 24/7 compute/network load, which is the dominant
+// driver of Railway usage-based billing. The pool is already substantial
+// (~22K master_leads); a 30-minute pause keeps it growing steadily at a
+// fraction of the resource cost. Override via SEEDER_CYCLE_PAUSE_MS if
+// you want to tune this without a redeploy-requiring code change later.
+const SEEDER_CYCLE_PAUSE_MS = parseInt(process.env.SEEDER_CYCLE_PAUSE_MS || '', 10) || 30 * 60 * 1000;
+
 async function startBackgroundSeeder() {
-  console.log(`[Seeder] Background seeder started — 24/7, InnerTube fallback enabled`);
+  console.log(`[Seeder] Background seeder started — cycle every ~${Math.round(SEEDER_CYCLE_PAUSE_MS / 60000)}min, InnerTube fallback enabled`);
 
   while (true) {
     try {
       await runSeedCycle();
-      // Short pause between cycles
-      await new Promise(r => setTimeout(r, 10000));
+      await new Promise(r => setTimeout(r, SEEDER_CYCLE_PAUSE_MS));
     } catch (e) {
       console.error('[Seeder] Cycle error:', e.message);
       seederStatus.running = false;

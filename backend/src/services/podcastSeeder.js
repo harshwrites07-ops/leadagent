@@ -236,12 +236,15 @@ function guessNiche(keyword) {
   return 'podcast';
 }
 
+// Cost control — see backgroundSeeder.js's identical change for context.
+const PODCAST_CYCLE_PAUSE_MS = parseInt(process.env.PODCAST_CYCLE_PAUSE_MS || '', 10) || 30 * 60 * 1000;
+
 async function startPodcastSeeder() {
-  console.log('[PodcastSeeder] Started — iTunes API, no quota limits');
+  console.log(`[PodcastSeeder] Started — iTunes API, no quota limits, cycle every ~${Math.round(PODCAST_CYCLE_PAUSE_MS / 60000)}min`);
   while (true) {
     try {
       await runPodcastCycle();
-      await new Promise(r => setTimeout(r, 15000)); // 15s between cycles
+      await new Promise(r => setTimeout(r, PODCAST_CYCLE_PAUSE_MS));
     } catch (e) {
       console.error('[PodcastSeeder] Cycle error:', e.message);
       podcastSeederStatus.running = false;

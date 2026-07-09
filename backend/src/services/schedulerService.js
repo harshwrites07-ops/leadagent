@@ -316,12 +316,15 @@ cron.schedule('0 4 * * 0', async () => {
   } catch (e) { console.error('[Scheduler] Staleness refresh error:', e.message); }
 });
 
-// Tiered refresh — every 30 min, budget-aware. Refreshes leads on a cadence
-// proportional to tier value (S:24h, A:3d, B:7d, C:14d, D:30d) rather than
-// the flat weekly cadence every lead got before (Session 1.4). The existing
-// weekly staleness-refresh cron below is kept as a broader safety net for
-// rows with no tier computed yet.
-cron.schedule('*/30 * * * *', async () => {
+// Tiered refresh — hourly (was every 30 min; the tier cadences themselves
+// are day-scale (S:24h being the tightest), so halving the poll frequency
+// doesn't meaningfully change outcomes but does halve this job's API/DB
+// load — a real cost driver on Railway's usage-based billing). Refreshes
+// leads on a cadence proportional to tier value (S:24h, A:3d, B:7d, C:14d,
+// D:30d) rather than the flat weekly cadence every lead got before
+// (Session 1.4). The existing weekly staleness-refresh cron below is kept
+// as a broader safety net for rows with no tier computed yet.
+cron.schedule('0 * * * *', async () => {
   try {
     const { runTieredRefresh } = require('./qualityLeadsService');
     const result = await runTieredRefresh();
