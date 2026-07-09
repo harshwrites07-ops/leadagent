@@ -55,17 +55,6 @@ async function savePitch(db, leadId, userId, { email_subject, email_body, deep_s
   }
 }
 
-// Marcus V2, Part 6 — Voice DNA enforcement. Bulk/power-send generation is
-// blocked without at least one voice sample + register detection; single
-// pitches still work but the caller should show a default-voice banner.
-async function checkVoiceProfile(db, userId) {
-  const user = await db.get('SELECT voice_sample_1, voice_sample_2, voice_sample_3, voice_dna FROM users WHERE id = ?', [userId]);
-  const hasSample = !!(user?.voice_sample_1 || user?.voice_sample_2 || user?.voice_sample_3);
-  let hasRegister = false;
-  try { hasRegister = !!(JSON.parse(user?.voice_dna || '{}').confidence_register); } catch {}
-  return { ready: hasSample && hasRegister, hasSample, hasRegister };
-}
-
 async function logQualityAttempt(db, userId, lead, attemptNum, email, result) {
   try {
     await db.run(
@@ -331,14 +320,8 @@ router.post('/bulk-generate', aiLimiter, asyncHandler(async (req, res) => {
   const leadIds = req.body.lead_ids || req.body.leadIds;
   if (!leadIds?.length) return res.status(400).json({ success: false, error: 'lead_ids required' });
   const db = getDb();
-  const voiceCheck = await checkVoiceProfile(db, req.user.id);
-  if (!voiceCheck.ready) {
-    return res.status(400).json({
-      success: false,
-      error: 'Add at least one voice sample in Settings → Voice Profile before bulk-generating pitches. Single-pitch generation still works.',
-      code: 'VOICE_PROFILE_INCOMPLETE',
-    });
-  }
+  // Voice sample is optional — generateWithMarcus already falls back to a
+  // default-voice banner (voice_warning) when none is set, same as single-pitch.
   const ids = leadIds.slice(0, 20);
   const results = [];
   const CONCURRENCY = 5;
@@ -421,14 +404,8 @@ router.post('/generate-and-send', aiLimiter, asyncHandler(async (req, res) => {
   const leadIds = req.body.lead_ids || req.body.leadIds;
   if (!leadIds?.length) return res.status(400).json({ success: false, error: 'lead_ids required' });
   const db = getDb();
-  const voiceCheck = await checkVoiceProfile(db, req.user.id);
-  if (!voiceCheck.ready) {
-    return res.status(400).json({
-      success: false,
-      error: 'Add at least one voice sample in Settings → Voice Profile before sending in bulk. Single-pitch generation still works.',
-      code: 'VOICE_PROFILE_INCOMPLETE',
-    });
-  }
+  // Voice sample is optional — generateWithMarcus already falls back to a
+  // default-voice banner (voice_warning) when none is set, same as single-pitch.
   const { sendEmail } = require('../services/emailService');
   const { incrementUsage } = require('../services/authService');
   const { buildSnapshot } = require('../services/signalSnapshot');
@@ -744,14 +721,8 @@ async function runPowerSendJob(jobId, { lead_ids, max_leads = 100, per_account_l
 
 router.post('/power-send', aiLimiter, asyncHandler(async (req, res) => {
   const db = getDb();
-  const voiceCheck = await checkVoiceProfile(db, req.user.id);
-  if (!voiceCheck.ready) {
-    return res.status(400).json({
-      success: false,
-      error: 'Add at least one voice sample in Settings → Voice Profile before running Power Send. Single-pitch generation still works.',
-      code: 'VOICE_PROFILE_INCOMPLETE',
-    });
-  }
+  // Voice sample is optional — generateWithMarcus already falls back to a
+  // default-voice banner (voice_warning) when none is set, same as single-pitch.
   const existing = await db.get(`SELECT id FROM power_send_jobs WHERE status='running' AND user_id=? LIMIT 1`, [req.user.id]);
   if (existing) return res.json({ success: true, job_id: existing.id, status: 'already_running' });
 
