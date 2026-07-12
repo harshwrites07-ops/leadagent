@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
-import Icon from '../components/ui/Icon';
 import api, { formatNumber } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
@@ -30,11 +29,9 @@ const DEFAULT_SUBREDDITS = [
 ];
 
 function ScorePill({ score }) {
-  const s = score >= 90 ? { bg: 'var(--coral-soft)', color: 'var(--coral)', border: 'var(--coral-border)' }
-          : score >= 80 ? { bg: 'var(--lime-soft)',  color: 'var(--lime)',  border: 'var(--lime-border)'  }
-          :               { bg: 'var(--surface-2)',  color: 'var(--text-2)', border: 'var(--line)'        };
+  const color = score >= 90 ? 'var(--lime)' : 'var(--text-3)';
   return (
-    <span style={{ fontFamily: 'var(--f-mono)', fontSize: 12, background: s.bg, color: s.color, border: `1px solid ${s.border}`, padding: '2px 8px', borderRadius: 4 }}>
+    <span style={{ fontFamily: 'var(--f-mono)', fontSize: 12.5, fontWeight: 500, color }}>
       {score}
     </span>
   );
@@ -309,7 +306,7 @@ export default function LeadFinder() {
         transition={{ duration: 0.35, ease: [0.16,1,0.3,1] }}
         className="page__head"
       >
-        <div>
+        <div style={{ whiteSpace: 'nowrap' }}>
           <h1 className="page__title">Lead Finder — <em>tell the agent who you want. It scrapes, enriches, scores.</em></h1>
         </div>
         <div className="page__actions">
@@ -323,10 +320,10 @@ export default function LeadFinder() {
                 style={{ gap: 6 }}
               >
                 <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }} className="btn btn--ghost" onClick={() => toast.promise(api.post('/pitches/bulk-generate', { lead_ids: [...currentSelected] }), { loading: 'Generating...', success: 'Pitches queued!', error: 'Failed' })}>
-                  <Icon name="sparkle" size={13} />Pitch {currentSelected.size}
+                  Pitch {currentSelected.size}
                 </motion.button>
                 <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }} className="btn btn--ghost" onClick={() => toast.promise(api.post('/emails/queue/bulk', { lead_ids: [...currentSelected] }), { loading: 'Adding...', success: 'Added to queue!', error: 'Failed' })}>
-                  <Icon name="mail" size={13} />Queue {currentSelected.size}
+                  Queue {currentSelected.size}
                 </motion.button>
               </motion.div>
             )}
@@ -365,14 +362,13 @@ export default function LeadFinder() {
                 className="pm"
               >
                 <div className="pm__head">
-                  <div className="pm__icon"><Icon name="bolt" size={18} /></div>
                   <div style={{ flex: 1 }}>
                     <div className="pm__title">PowerMode</div>
                     <div className="pm__sub">One-click discovery. Pick niches, hit go, watch it work.</div>
                   </div>
                   {pmRunning
-                    ? <motion.button whileTap={{ scale: 0.97 }} className="btn btn--ghost btn--sm" onClick={handlePowerModeStop}><Icon name="pause" size={12} />Stop</motion.button>
-                    : <button className="btn btn--ghost btn--sm"><Icon name="sliders" size={12} />Advanced filters</button>
+                    ? <motion.button whileTap={{ scale: 0.97 }} className="btn btn--ghost btn--sm" onClick={handlePowerModeStop} style={{ whiteSpace: 'nowrap' }}>Stop</motion.button>
+                    : <button className="btn btn--ghost btn--sm" style={{ whiteSpace: 'nowrap' }}>Advanced filters</button>
                   }
                 </div>
 
@@ -445,7 +441,6 @@ export default function LeadFinder() {
                   {pmRunning
                     ? <><span className="dot dot--pulse" style={{ background: 'var(--on-accent)', width: 8, height: 8 }} /> Finding leads with emails...</>
                     : <>
-                        <Icon name="bolt" size={16} />
                         Find {pmTargetCount} {selectedNiches.size === 1 ? [...selectedNiches].map(id => NICHES.find(n => n.id === id)?.name || id)[0] : `${selectedNiches.size}-niche`} Leads
                         <span className="sub">with emails · {selectedNiches.size} niche{selectedNiches.size === 1 ? '' : 's'}</span>
                       </>
@@ -520,10 +515,10 @@ export default function LeadFinder() {
                                     if (arr.length > 0) { setYtLeads(arr); setYtSearched(true); toast.success(`${arr.length} leads loaded`); }
                                   } catch { toast.error('Failed to load leads'); }
                                 }}>
-                                  View here <Icon name="eye" size={11} />
+                                  View here
                                 </button>
                                 <button className="btn btn--ghost btn--sm" onClick={() => navigate('/crm')}>
-                                  CRM <Icon name="arrowR" size={11} />
+                                  Go to CRM
                                 </button>
                               </>
                             )}
@@ -566,11 +561,11 @@ export default function LeadFinder() {
                     <motion.button
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.97 }}
-                      className="btn btn--primary"
+                      className="btn btn--ghost"
                       type="submit"
                       disabled={ytLoading}
+                      style={{ whiteSpace: 'nowrap' }}
                     >
-                      <Icon name="search" size={13} />
                       {ytLoading ? (ytProgress || 'Scanning...') : 'Find Leads'}
                     </motion.button>
                   </div>
@@ -587,7 +582,7 @@ export default function LeadFinder() {
                     style={{ borderColor: 'var(--coral-border)', background: 'var(--coral-soft)', marginBottom: 20 }}
                   >
                     <div className="row" style={{ gap: 12 }}>
-                      <Icon name="clock" size={18} style={{ color: 'var(--warn)', flexShrink: 0 }} />
+                      <span className="dot" style={{ background: 'var(--warn)', flexShrink: 0 }} />
                       <div style={{ flex: 1 }}>
                         <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>YouTube API quota reached for today</div>
                         <div className="muted" style={{ fontSize: 12 }}>Daily limit resets at midnight Pacific Time. Add more API keys in Settings to continue.</div>
@@ -610,7 +605,6 @@ export default function LeadFinder() {
               style={{ marginBottom: 20 }}
             >
               <div className="pm__head">
-                <div className="pm__icon"><Icon name="upload" size={18} /></div>
                 <div style={{ flex: 1 }}>
                   <div className="pm__title">Upload CSV</div>
                   <div className="pm__sub">Import your own list. Required column: <span className="mono" style={{ fontSize: 11 }}>channel_name</span>. Optional: <span className="mono" style={{ fontSize: 11 }}>email, subscriber_count, channel_url, niche</span></div>
@@ -631,15 +625,9 @@ export default function LeadFinder() {
                     onDragOver={e => e.preventDefault()}
                     onDrop={e => { e.preventDefault(); handleCsvFile(e.dataTransfer.files[0]); }}
                     style={{ padding: '40px', textAlign: 'center', border: '2px dashed var(--line)', borderRadius: 'var(--r)', marginTop: 12, cursor: 'pointer', transition: 'border-color .2s' }}
-                    onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--lime)'}
+                    onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--line-3)'}
                     onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--line)'}
                   >
-                    <motion.div
-                      animate={{ y: [0, -5, 0] }}
-                      transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
-                    >
-                      <Icon name="upload" size={28} style={{ color: 'var(--text-3)', display: 'block', margin: '0 auto 10px' }} />
-                    </motion.div>
                     <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>Drag & drop a CSV or click to browse</div>
                     <div className="muted" style={{ fontSize: 11 }}>Required: channel_name · Optional: email, subscriber_count, channel_url, niche</div>
                   </motion.div>
@@ -648,7 +636,7 @@ export default function LeadFinder() {
                     <div style={{ marginTop: 14, marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontSize: 13 }}><strong style={{ color: 'var(--lime)' }}>{csvRows.length}</strong> leads ready to import · {csvRows.filter(r => r.email).length} have emails</span>
                       <button className="btn btn--ghost btn--sm" onClick={() => { setCsvRows([]); setCsvFile(null); }}>
-                        <Icon name="x" size={11} />Clear
+                        Clear
                       </button>
                     </div>
                     <div style={{ maxHeight: 240, overflowY: 'auto', border: '1px solid var(--line)', borderRadius: 'var(--r)', marginBottom: 14 }}>
@@ -678,7 +666,7 @@ export default function LeadFinder() {
                     >
                       {csvImporting
                         ? <><span className="dot dot--pulse" style={{ background: 'var(--on-accent)', width: 8, height: 8 }} /> Importing...</>
-                        : <><Icon name="upload" size={16} />Import {csvRows.length} leads to CRM</>
+                        : <>Import {csvRows.length} leads to CRM</>
                       }
                     </motion.button>
                   </motion.div>
@@ -687,9 +675,10 @@ export default function LeadFinder() {
                     key="done"
                     initial={{ opacity: 0, scale: 0.97 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    style={{ marginTop: 14, padding: '14px 16px', background: 'var(--lime-soft)', border: '1px solid var(--lime-border)', borderRadius: 'var(--r)' }}
+                    style={{ marginTop: 14, padding: '14px 16px', background: 'transparent', border: '1px solid var(--line)', borderRadius: 'var(--r)' }}
                   >
-                    <div style={{ fontSize: 13, color: 'var(--lime)', fontWeight: 600, marginBottom: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text)', fontWeight: 600, marginBottom: 4 }}>
+                      <span className="dot" style={{ background: 'var(--ok)' }} />
                       Import complete — {csvDone?.added} leads added to CRM
                     </div>
                     <div className="muted" style={{ fontSize: 12 }}>{csvDone?.skipped} skipped (duplicates or missing name)</div>
@@ -735,18 +724,17 @@ export default function LeadFinder() {
                 </span>
               </h3>
               <div className="row" style={{ gap: 6 }}>
-                <button className="btn btn--ghost btn--sm"><Icon name="filter" size={11} />Filter</button>
-                <button className="btn btn--ghost btn--sm"><Icon name="sort" size={11} />Sort: Score</button>
-                <button className="btn btn--ghost btn--sm"><Icon name="arrowDown" size={11} />Export CSV</button>
+                <button className="btn btn--ghost btn--sm">Filter</button>
+                <button className="btn btn--ghost btn--sm">Sort: Score</button>
+                <button className="btn btn--ghost btn--sm">Export CSV</button>
                 {currentSelected.size > 0 && (
                   <motion.button
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    className="btn btn--sm"
-                    style={{ background: 'var(--coral-soft)', color: 'var(--coral)', borderColor: 'var(--coral-border)' }}
+                    className="btn btn--ghost btn--sm"
                     onClick={() => toast.promise(api.post('/pitches/generate/bulk', { lead_ids: [...currentSelected] }), { loading: 'Generating...', success: 'Pitches queued!', error: 'Failed' })}
                   >
-                    <Icon name="rocket" size={11} />Send to Pitch Gen
+                    Send to Pitch Gen
                   </motion.button>
                 )}
               </div>
@@ -791,7 +779,7 @@ export default function LeadFinder() {
                         </div>
                       </td>
                       <td>
-                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: 'var(--lime-soft)', color: 'var(--lime)', border: '1px solid var(--lime-border)' }}>
+                        <span style={{ fontSize: 12, color: 'var(--text-2)' }}>
                           {lead.niche || 'General'}
                         </span>
                       </td>
@@ -804,11 +792,11 @@ export default function LeadFinder() {
                       <td className="num"><ScorePill score={lead.lead_score ?? 0} /></td>
                       <td>
                         <div className="row" style={{ gap: 4, justifyContent: 'flex-end' }}>
-                          <button className="btn btn--ghost btn--sm" title="Analyze" onClick={() => navigate(`/leads/${lead.id}`)}>
-                            <Icon name="eye" size={12} />
+                          <button className="btn btn--ghost btn--sm" style={{ whiteSpace: 'nowrap' }} onClick={() => navigate(`/leads/${lead.id}`)}>
+                            View
                           </button>
-                          <button className="btn btn--ghost btn--sm" title="Pitch" onClick={() => navigate(`/pitch?lead=${lead.id}`)}>
-                            <Icon name="sparkle" size={12} />
+                          <button className="btn btn--ghost btn--sm" style={{ whiteSpace: 'nowrap' }} onClick={() => navigate(`/pitch?lead=${lead.id}`)}>
+                            Pitch
                           </button>
                         </div>
                       </td>

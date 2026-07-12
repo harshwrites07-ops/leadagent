@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
-import Icon from '../components/ui/Icon';
 import api, { formatNumber } from '../utils/api';
 import { useCountUp } from '../hooks/useCountUp';
 import Sparkline from '../components/ui/Sparkline';
@@ -109,7 +108,7 @@ export default function Analytics() {
               <div key={r} className={`tab ${dateRange === r ? 'is-active' : ''}`} onClick={() => setDateRange(r)}>{r}</div>
             ))}
           </div>
-          <button className="btn btn--ghost btn--sm"><Icon name="arrowDown" size={12} />Export</button>
+          <button className="btn btn--ghost btn--sm" style={{ whiteSpace: 'nowrap' }}>Export</button>
         </div>
       </motion.div>
 
@@ -132,70 +131,51 @@ export default function Analytics() {
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.25 }}
           >
-            {/* Hero numbers */}
-            <div className="grid" style={{ gridTemplateColumns: '1.4fr 1fr 1fr', marginBottom: 28, gap: 16 }}>
+            {/* Hero numbers — borderless row, hairline dividers */}
+            <div style={{
+              display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', gap: 0,
+              paddingBottom: 24, marginBottom: 28, borderBottom: '1px solid var(--line)',
+            }}>
               {[
                 {
                   label: 'Pipeline value generated',
-                  content: (
-                    <>
-                      <div className="hero-num" style={{ color: 'var(--cream)', marginTop: 14 }}>${formatNumber(pipeVal)}</div>
-                      <div className="row" style={{ marginTop: 12, gap: 14 }}>
-                        <span className="badge badge--lime"><Icon name="arrowUp" size={11} />active</span>
-                        <span className="muted" style={{ fontSize: 12 }}>vs previous {dateRange}</span>
-                      </div>
-                      <div style={{ marginTop: 18 }}>
-                        <Sparkline data={emailData?.daily_sends?.map(d => d.count) || []} color="var(--cream)" height={56} />
-                      </div>
-                    </>
-                  ),
-                  style: { padding: '32px 28px' },
-                  delay: 0,
+                  value: `$${formatNumber(pipeVal)}`,
+                  sub: `vs previous ${dateRange}`,
+                  color: 'var(--lime)',
+                  spark: emailData?.daily_sends?.map(d => d.count) || [],
                 },
                 {
                   label: 'Meetings booked',
-                  content: (
-                    <>
-                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 10 }}>
-                        <span className="serif" style={{ fontSize: 64, lineHeight: 1, letterSpacing: '-0.03em', color: 'var(--coral)' }}>{formatNumber(animCalls)}</span>
-                      </div>
-                      <div className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>from your pipeline</div>
-                      <div style={{ marginTop: 14 }}>
-                        <Sparkline data={funnelRows.map(f => f.count || 0)} color="var(--coral)" height={36} />
-                      </div>
-                    </>
-                  ),
-                  style: { padding: '24px' },
-                  delay: 0.06,
+                  value: formatNumber(animCalls),
+                  sub: 'from your pipeline',
+                  color: 'var(--text)',
+                  spark: funnelRows.map(f => f.count || 0),
                 },
                 {
                   label: 'Cost per meeting',
-                  content: (
-                    <>
-                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 10 }}>
-                        <span className="serif" style={{ fontSize: 64, lineHeight: 1, letterSpacing: '-0.03em' }}>{costPerMeeting}</span>
-                      </div>
-                      <div className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>pipeline value ÷ meetings booked</div>
-                      <div style={{ marginTop: 14 }}>
-                        <Sparkline data={emailData?.rate_trend?.map(r => r.reply_rate || 0) || []} color="var(--lime)" height={36} />
-                      </div>
-                    </>
-                  ),
-                  style: { padding: '24px' },
-                  delay: 0.12,
+                  value: costPerMeeting,
+                  sub: 'pipeline value ÷ meetings booked',
+                  color: 'var(--text)',
+                  spark: emailData?.rate_trend?.map(r => r.reply_rate || 0) || [],
                 },
-              ].map(({ label, content, style, delay }) => (
+              ].map((stat, i, arr) => (
                 <motion.div
-                  key={label}
-                  initial={{ opacity: 0, y: 16 }}
+                  key={stat.label}
+                  initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay, duration: 0.4, ease: [0.16,1,0.3,1] }}
-                  whileHover={{ y: -3 }}
-                  className="card"
-                  style={style}
+                  transition={{ duration: 0.35, delay: i * 0.05, ease: [0.16, 1, 0.3, 1] }}
+                  style={{
+                    flex: '1 1 220px', display: 'flex', flexDirection: 'column', gap: 8,
+                    paddingRight: 32, marginRight: 32, minWidth: 200,
+                    borderRight: i === arr.length - 1 ? 'none' : '1px solid var(--line)',
+                  }}
                 >
-                  <div className="muted" style={{ fontSize: 11.5, textTransform: 'uppercase', letterSpacing: '.08em' }}>{label}</div>
-                  {content}
+                  <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.09em', color: 'var(--text-4)', fontWeight: 500, whiteSpace: 'nowrap' }}>{stat.label}</span>
+                  <span style={{ fontFamily: 'var(--f-mono)', fontSize: 34, fontWeight: 500, letterSpacing: '-0.03em', lineHeight: 1, color: stat.color }}>{stat.value}</span>
+                  <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>{stat.sub}</span>
+                  <div style={{ marginTop: 6 }}>
+                    <Sparkline data={stat.spark} color={stat.color} height={36} />
+                  </div>
                 </motion.div>
               ))}
             </div>
@@ -215,7 +195,6 @@ export default function Analytics() {
                 <div className="card__body">
                   {funnelRows.length === 0 ? (
                     <div className="empty" style={{ padding: '32px 0' }}>
-                      <Icon name="filter" size={24} style={{ opacity: 0.2, marginBottom: 8 }} />
                       <div className="empty__title">No funnel data yet</div>
                       <div className="empty__desc">Send your first pitches and the conversion funnel fills in stage by stage.</div>
                     </div>
@@ -254,11 +233,15 @@ export default function Analytics() {
                 <div className="card__head">
                   <div className="card__title">Deliverability</div>
                   {deliveredPct != null ? (
-                    <span className={`badge ${deliveredPct >= 95 ? 'badge--lime' : 'badge--warn'}`}>
-                      <Icon name="check" size={11} />{deliveredPct >= 95 ? 'Healthy' : 'Watch closely'}
+                    <span className="row" style={{ gap: 8 }}>
+                      <span className={`dot ${deliveredPct >= 95 ? 'dot--ok' : 'dot--warn'}`} />
+                      <span style={{ fontSize: 12, color: deliveredPct >= 95 ? 'var(--ok)' : 'var(--warn)' }}>{deliveredPct >= 95 ? 'Healthy' : 'Watch closely'}</span>
                     </span>
                   ) : (
-                    <span className="badge badge--neutral">No data yet</span>
+                    <span className="row" style={{ gap: 8 }}>
+                      <span className="dot dot--neutral" />
+                      <span style={{ fontSize: 12, color: 'var(--text-3)' }}>No data yet</span>
+                    </span>
                   )}
                 </div>
                 <div className="card__body">
@@ -299,7 +282,6 @@ export default function Analytics() {
               <div className="card__body">
                 {!hasHeatData ? (
                   <div className="empty" style={{ padding: '32px 0' }}>
-                    <Icon name="clock" size={24} style={{ opacity: 0.2, marginBottom: 8 }} />
                     <div className="empty__title">Not enough send data yet</div>
                     <div className="empty__desc">Send more pitches across different hours and this heatmap will fill in from your real reply data.</div>
                   </div>
@@ -427,8 +409,9 @@ export default function Analytics() {
                     return (
                       <div key={i} style={{ marginBottom: 12 }}>
                         <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
-                          <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: 'var(--bg-2)', color, border: `1px solid ${color}22` }}>
-                            {row.niche}
+                          <span className="row" style={{ gap: 8 }}>
+                            <span className="dot" style={{ background: color }} />
+                            <span style={{ fontSize: 12 }}>{row.niche}</span>
                           </span>
                           <span className="mono" style={{ fontSize: 12 }}>{pctVal.toFixed(1)}%</span>
                         </div>

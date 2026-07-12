@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
 import toast from 'react-hot-toast';
-import Icon from '../components/ui/Icon';
 import PowerSendOverlay from '../components/ui/PowerSendOverlay';
 import api, { formatNumber, formatDate } from '../utils/api';
 
@@ -12,17 +11,10 @@ const STAGES = [
   { id: 'pitch_ready',    label: 'Pitch Ready', color: 'var(--violet)' },
   { id: 'emailed',        label: 'Sent',        color: 'var(--lime)' },
   { id: 'replied',        label: 'Replied',     color: 'var(--ok)' },
-  { id: 'call_booked',    label: 'Call Booked', color: 'var(--coral)' },
+  { id: 'call_booked',    label: 'Call Booked', color: 'var(--warn)' },
   { id: 'closed_won',     label: 'Won',         color: 'var(--ok)' },
   { id: 'closed_lost',    label: 'Lost',        color: 'var(--bad)' },
 ];
-
-const NICHE_COLORS = {
-  Finance: 'var(--lime)', Tech: 'var(--sky)', Fitness: 'var(--coral)',
-  Cooking: 'var(--cream)', Gaming: 'var(--violet)', Design: 'var(--sky)',
-  Travel: 'var(--coral)', Beauty: 'var(--coral)', Education: 'var(--lime)',
-  Business: 'var(--cream)',
-};
 
 function channelUrl(lead) {
   if (lead.channel_url) return lead.channel_url;
@@ -150,15 +142,15 @@ export default function CRM() {
         className="page__head"
       >
         <div>
-          <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>
+          <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8, fontFamily: 'var(--f-mono)' }}>
             Pipeline · {leads.length} creators{totalValue > 0 ? ` · $${(totalValue / 1000).toFixed(1)}k open value` : ''}
           </div>
-          <h1 className="page__title">CRM — <em>drag a creator from cold to closed.</em></h1>
+          <h1 className="page__title" style={{ whiteSpace: 'nowrap' }}>CRM — <em>drag a creator from cold to closed.</em></h1>
         </div>
         <div className="page__actions">
-          <button className="btn btn--ghost btn--sm"><Icon name="filter" size={12} />Filter</button>
-          <button className="btn btn--ghost btn--sm"><Icon name="search" size={12} />Search</button>
-          <button className="btn btn--ghost btn--sm" onClick={handleExportCsv}><Icon name="arrowDown" size={12} />Export</button>
+          <button className="btn btn--ghost btn--sm">Filter</button>
+          <button className="btn btn--ghost btn--sm">Search</button>
+          <button className="btn btn--ghost btn--sm" onClick={handleExportCsv}>Export</button>
         </div>
       </motion.div>
 
@@ -171,7 +163,7 @@ export default function CRM() {
             exit={{ opacity: 0 }}
             style={{ padding: '48px', textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}
           >
-            <span className="dot dot--pulse" style={{ marginRight: 8, display: 'inline-block' }} />Loading pipeline...
+            Loading pipeline...
           </motion.div>
         ) : (
           <LayoutGroup>
@@ -224,10 +216,8 @@ export default function CRM() {
                     )}
                     {col.leads.map((lead, i) => {
                       const isHot = lead.temperature === 'hot' || col.id === 'replied' || col.id === 'call_booked';
-                      const nicheColor = NICHE_COLORS[lead.niche] || 'var(--text-3)';
                       const isChecked = checkedLeads.has(lead.id);
                       const url = channelUrl(lead);
-                      const isDropped = justDropped === lead.id;
                       return (
                         <motion.div
                           key={lead.id || i}
@@ -238,14 +228,12 @@ export default function CRM() {
                             opacity: draggingId === lead.id ? 0.35 : 1,
                             scale: draggingId === lead.id ? 0.97 : 1,
                             rotate: draggingId === lead.id ? -2 : 0,
-                            boxShadow: isDropped ? '0 0 0 2px var(--lime), 0 8px 24px rgba(var(--lime-rgb),0.25)' : '0 0 0 0 transparent',
                           }}
                           transition={{
-                            delay: colIdx * 0.04 + i * 0.03, duration: 0.3, boxShadow: { duration: 0.5 },
+                            delay: colIdx * 0.04 + i * 0.03, duration: 0.3,
                             scale: { type: 'spring', stiffness: 400, damping: 30 },
                             rotate: { type: 'spring', stiffness: 400, damping: 30 },
                           }}
-                          whileHover={{ y: -2, boxShadow: 'var(--sh-sm)' }}
                           whileTap={{ scale: 0.98 }}
                           className="kb__card"
                           draggable
@@ -254,9 +242,8 @@ export default function CRM() {
                           onClick={() => handleSelectLead(lead)}
                           style={{
                             cursor: 'grab',
-                            ...(isChecked
-                              ? { borderColor: 'var(--lime-border)', background: 'rgba(var(--lime-rgb),0.04)' }
-                              : isHot ? { borderColor: 'var(--coral-border)' } : undefined),
+                            borderColor: isChecked ? 'var(--lime-border)' : 'var(--line)',
+                            background: isChecked ? 'var(--surface-2)' : undefined,
                           }}
                         >
                           <div className="kb__card-head">
@@ -291,11 +278,11 @@ export default function CRM() {
                               </div>
                             </div>
                             {isHot && !isChecked && (
-                              <span className="dot dot--pulse-coral" style={{ background: 'var(--coral)', width: 7, height: 7, marginTop: 4, flexShrink: 0 }} />
+                              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--warn)', marginTop: 4, flexShrink: 0, display: 'inline-block' }} />
                             )}
                           </div>
                           <div className="kb__card-foot">
-                            <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: 'var(--bg-2)', color: nicheColor, border: `1px solid ${nicheColor}22` }}>
+                            <span style={{ fontSize: 11, color: 'var(--text-3)' }}>
                               {lead.niche || 'General'}
                             </span>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
@@ -310,16 +297,12 @@ export default function CRM() {
                                   onClick={e => e.stopPropagation()}
                                   title="Open YouTube channel"
                                   style={{
-                                    display: 'flex', alignItems: 'center', gap: 3,
-                                    fontSize: 10, color: 'var(--text-3)', textDecoration: 'none',
-                                    padding: '2px 6px', borderRadius: 5,
-                                    border: '1px solid var(--line)', background: 'var(--bg-2)',
-                                    transition: 'color 0.12s, border-color 0.12s',
+                                    fontSize: 10.5, color: 'var(--text-3)', textDecoration: 'none',
+                                    whiteSpace: 'nowrap',
                                   }}
-                                  onMouseEnter={e => { e.currentTarget.style.color = 'var(--bad)'; e.currentTarget.style.borderColor = 'rgba(255,0,0,0.3)'; }}
-                                  onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-3)'; e.currentTarget.style.borderColor = 'var(--line)'; }}
+                                  onMouseEnter={e => { e.currentTarget.style.color = 'var(--text)'; }}
+                                  onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-3)'; }}
                                 >
-                                  <Icon name="youtube" size={10} />
                                   Channel
                                 </a>
                               )}
@@ -330,7 +313,7 @@ export default function CRM() {
                     })}
                   </div>
                   <button className="kb__add" onClick={() => setShowAddModal(true)}>
-                    <Icon name="plus" size={11} /> Add
+                    Add
                   </button>
                 </motion.div>
               );
@@ -353,29 +336,23 @@ export default function CRM() {
               background: 'var(--surface-2)', border: '1px solid var(--lime-border)',
               borderRadius: 12, padding: '10px 16px',
               display: 'flex', alignItems: 'center', gap: 12,
-              zIndex: 50, boxShadow: '0 8px 32px rgba(0,0,0,0.55), 0 0 0 1px rgba(var(--lime-rgb),0.1)',
+              zIndex: 50,
             }}
           >
             <span style={{ fontSize: 13, color: 'var(--text)', fontWeight: 600, whiteSpace: 'nowrap' }}>
               {checkedLeads.size} lead{checkedLeads.size !== 1 ? 's' : ''} selected
             </span>
             <button
+              className="btn btn--primary btn--sm"
               onClick={() => setShowPowerSend(true)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                padding: '7px 14px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                background: 'var(--lime)', color: 'var(--on-accent)',
-                fontSize: 13, fontWeight: 700,
-                boxShadow: '0 0 16px rgba(var(--lime-rgb),0.3)',
-              }}
             >
-              <Icon name="zap" size={12} /> Send Emails
+              Send Emails
             </button>
             <button
               className="btn btn--ghost btn--sm"
               onClick={() => setCheckedLeads(new Set())}
             >
-              <Icon name="x" size={11} /> Clear
+              Clear
             </button>
           </motion.div>
         )}
@@ -403,7 +380,7 @@ export default function CRM() {
               <p style={{ fontSize: 13, color: 'var(--text-3)', margin: '0 0 20px' }}>Find a lead in your leads database and add them to the CRM pipeline.</p>
               <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
                 <button className="btn btn--ghost" onClick={() => setShowAddModal(false)}>Cancel</button>
-                <button className="btn btn--primary" onClick={() => { setShowAddModal(false); navigate('/leads'); }}>Browse Leads →</button>
+                <button className="btn" onClick={() => { setShowAddModal(false); navigate('/leads'); }}>Browse Leads →</button>
               </div>
             </motion.div>
           </motion.div>
@@ -427,7 +404,7 @@ export default function CRM() {
           >
             <div className="row" style={{ marginBottom: 16 }}>
               <button className="btn btn--ghost btn--sm" onClick={() => setSelected(null)}>
-                <Icon name="x" size={12} />Close
+                Close
               </button>
               <div style={{ flex: 1 }} />
               {channelUrl(selected) && (
@@ -437,14 +414,12 @@ export default function CRM() {
                   rel="noopener noreferrer"
                   className="btn btn--ghost btn--sm"
                   style={{ textDecoration: 'none', color: 'var(--text-2)' }}
-                  onMouseEnter={e => { e.currentTarget.style.color = 'var(--bad)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-2)'; }}
                 >
-                  <Icon name="youtube" size={12} />Open Channel
+                  Open Channel
                 </a>
               )}
               <button className="btn btn--ghost btn--sm" onClick={() => navigate(`/analyzer`)}>
-                <Icon name="eye" size={12} />Open in Analyzer
+                Open in Analyzer
               </button>
             </div>
 
@@ -461,11 +436,16 @@ export default function CRM() {
                 <div className="mono muted" style={{ fontSize: 11.5 }}>
                   {selected.channel_handle || ''} · {formatNumber(selected.subscriber_count ?? 0)}
                 </div>
-                <div className="row" style={{ gap: 6, marginTop: 6 }}>
-                  <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: 'var(--bg-2)', color: NICHE_COLORS[selected.niche] || 'var(--text-3)', border: '1px solid var(--line)' }}>
+                <div className="row" style={{ gap: 10, marginTop: 6 }}>
+                  <span style={{ fontSize: 11, color: 'var(--text-3)' }}>
                     {selected.niche || 'General'}
                   </span>
-                  {selected.email && <span className="badge badge--lime">email found</span>}
+                  {selected.email && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text-2)' }}>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--ok)', display: 'inline-block' }} />
+                      email found
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -512,9 +492,10 @@ export default function CRM() {
                         className="row"
                         style={{ gap: 12, padding: '10px 0', borderBottom: '1px dashed var(--line)' }}
                       >
-                        <span style={{ color: e.type === 'reply' ? 'var(--coral)' : e.type === 'open' ? 'var(--lime)' : 'var(--text-3)', width: 16, display: 'grid', placeItems: 'center' }}>
-                          <Icon name={e.type === 'reply' ? 'reply' : e.type === 'open' ? 'eye' : e.type === 'note' ? 'pen' : 'mail'} size={13} />
-                        </span>
+                        <span style={{
+                          width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+                          background: e.type === 'reply' ? 'var(--ok)' : e.type === 'open' ? 'var(--lime)' : 'var(--text-4)',
+                        }} />
                         <div style={{ flex: 1, fontSize: 12.5 }}>{e.description || e.event || '—'}</div>
                         <span className="mono muted" style={{ fontSize: 10.5 }}>{formatDate(e.created_at || e.timestamp)}</span>
                       </motion.div>
@@ -537,7 +518,7 @@ export default function CRM() {
                       <div style={{ textAlign: 'center', padding: '24px 0' }}>
                         <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>No pitch written yet.</div>
                         <button className="btn btn--ghost btn--sm" onClick={() => navigate(`/pitch?lead=${selected.id}`)}>
-                          <Icon name="sparkle" size={11} />Write pitch
+                          Write pitch
                         </button>
                       </div>
                     )}
@@ -555,7 +536,7 @@ export default function CRM() {
                       style={{ fontFamily: 'var(--f-sans)', fontSize: 12, resize: 'vertical', width: '100%', boxSizing: 'border-box', marginBottom: 8 }}
                     />
                     <button className="btn btn--ghost btn--sm" onClick={handleAddNote}>
-                      <Icon name="pen" size={11} />Save note
+                      Save note
                     </button>
                   </div>
                 )}
@@ -563,15 +544,15 @@ export default function CRM() {
             </AnimatePresence>
 
             <div className="row" style={{ gap: 6, marginTop: 20 }}>
-              <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} className="btn btn--sm" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setDetailTab('Notes')}>
-                <Icon name="pen" size={11} />Note
-              </motion.button>
-              <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} className="btn btn--sm" style={{ flex: 1, justifyContent: 'center' }} onClick={() => navigate(`/pitch?lead=${selected.id}`)}>
-                <Icon name="sparkle" size={11} />Pitch
-              </motion.button>
-              <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} className="btn btn--coral btn--sm" style={{ flex: 1, justifyContent: 'center' }} onClick={() => navigate('/email')}>
-                <Icon name="reply" size={11} />Reply
-              </motion.button>
+              <button className="btn btn--sm" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setDetailTab('Notes')}>
+                Note
+              </button>
+              <button className="btn btn--sm" style={{ flex: 1, justifyContent: 'center' }} onClick={() => navigate(`/pitch?lead=${selected.id}`)}>
+                Pitch
+              </button>
+              <button className="btn btn--sm" style={{ flex: 1, justifyContent: 'center' }} onClick={() => navigate('/email')}>
+                Reply
+              </button>
             </div>
           </motion.div>
         )}

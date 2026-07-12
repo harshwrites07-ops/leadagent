@@ -8,26 +8,29 @@
    ═══════════════════════════════════════════════════════════ */
 :root {
   /* ── Backgrounds ── */
-  --app-bg:         #0d0e12;
-  --app-surface-1:  #14161c;
-  --app-surface-2:  #191c24;
+  --app-bg:         #0A0A0D;
+  --app-surface-1:  #0D0E12;  /* surface / card / input fill */
+  --app-surface-2:  #0D0E12;
   --app-danger:     #f87171;
 
-  /* ── Text ── */
-  --app-text-primary:   #f6f4ef;
-  --app-text-secondary: #8f9099;
-  --app-text-soft:      #f6f4ef;
-  --app-text-muted:     #5d616e;
-  --app-text-ghost:     #43464f;
+  /* ── Text — white at fixed opacity tiers, no gray hex values ── */
+  --app-text-primary:   rgba(255, 255, 255, 1);
+  --app-text-secondary: rgba(255, 255, 255, 0.7);
+  --app-text-soft:      rgba(255, 255, 255, 0.7);
+  --app-text-muted:     rgba(255, 255, 255, 0.45);
+  --app-text-ghost:     rgba(255, 255, 255, 0.35);
+  --app-text-faint:     rgba(255, 255, 255, 0.30);
   /* Content tone — email/draft body text only, never UI chrome. */
-  --app-text-content:   #c9c6bc;
+  --app-text-content:   rgba(255, 255, 255, 0.7);
 
-  /* ── Accent — champagne, the only chromatic accent, used sparingly ── */
-  --app-accent:         #e8dcc0;
+  /* ── Accent — champagne, the only chromatic accent, used sparingly:
+     one primary button per screen, active nav text, active tab
+     underline, progress fill, intent scores ≥90. ── */
+  --app-accent:         #E8DCC0;
   --app-accent-hover:   #f0e6ce;
   --app-accent-pressed: #d9caa3;
-  --app-warning:        #fbbf24;
-  --app-success:        #4ade80;
+  --app-warning:        #FBBF24;
+  --app-success:        #4ADE80;
 
   /* Alpha tints derived from --app-accent / --app-warning / --app-danger for
      soft fills, borders, and glows (badges, focus glows, hero gradients).
@@ -46,16 +49,18 @@
   --app-success-border: rgba(74, 222, 128, 0.38);
   --app-success-rgb:    74, 222, 128;
 
-  /* Hairline divider — distinct from the (darker) card/input border. */
-  --app-divider:     #1c1f27;
-  --app-border:      #262933;
-  --app-border-soft: rgba(38, 41, 51, 0.6);
+  /* Borders — hairline only, no drop shadows anywhere. Single tier plus
+     its hover state (both driven by opacity on white, not a new hex). */
+  --app-divider:      rgba(255, 255, 255, 0.08);
+  --app-border:       rgba(255, 255, 255, 0.08);
+  --app-border-hover: rgba(255, 255, 255, 0.16);
+  --app-border-soft:  rgba(255, 255, 255, 0.08);
 
   /* ── Border radius ── */
-  --app-radius-sm:   4px;
-  --app-radius-md:   6px;
-  --app-radius-lg:   8px;    /* default card/input radius */
-  --app-radius-pill: 9999px; /* buttons, badges, pills only */
+  --app-radius-sm:   8px;    /* buttons / inputs */
+  --app-radius-md:   8px;    /* buttons / inputs */
+  --app-radius-lg:   12px;   /* cards (10-14px range) */
+  --app-radius-pill: 9999px; /* pills only — avoid on stat/status containers */
 
   /* ── Spacing (8px base grid) ── */
   --app-space-tight: 6px;  /* icon gaps, tight badge padding only */
@@ -64,20 +69,19 @@
   --app-space-3:     24px;
   --app-space-4:     32px;
 
-  /* ── Shadows (real computed values — used exactly) ── */
-  --app-shadow-card: rgba(126, 140, 168, 0.2) 0px 4px 12px;
-  --app-shadow-modal:
-    rgba(22, 24, 31, 0.4) 0px 2px 5px 0px,
-    rgba(255, 255, 255, 0.1) 0px 2px 1px -1px inset,
-    rgba(255, 255, 255, 0.05) 0px 0px 0px 0.5px inset;
-  --app-shadow-focus: rgb(232, 220, 192) 0px 0px 5px;
+  /* ── Shadows — no drop shadows anywhere per spec. Elevation is conveyed
+     by the hairline border alone; focus state brightens the border
+     rather than adding a glow. Kept as tokens (rather than deleted) so
+     every consuming selector still resolves, just to nothing. ── */
+  --app-shadow-card:  none;
+  --app-shadow-modal: none;
+  --app-shadow-focus: none;
 
-  /* ── Typography ── */
-  /* 'Inter var' and 'Inter' currently resolve to the same loaded family —
-     kept as two token names for a future variable-font-file upgrade path,
-     without introducing a third family. */
-  --app-font-heading: 'Inter var', 'Inter', ui-sans-serif, system-ui, sans-serif;
-  --app-font-body:    'Inter', ui-sans-serif, system-ui, sans-serif;
+  /* ── Typography — General Sans for UI text, Inter fallback. Numbers,
+     metrics, counts, timestamps, and badges use --f-mono (JetBrains
+     Mono), defined in index.css. ── */
+  --app-font-heading: 'General Sans', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --app-font-body:    'General Sans', 'Inter', ui-sans-serif, system-ui, sans-serif;
 }
 
 /* ═══════════════════════════════════════════════════════════

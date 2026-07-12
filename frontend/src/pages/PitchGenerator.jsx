@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
-import Icon from '../components/ui/Icon';
 import { useApp } from '../context/AppContext';
 import api, { formatNumber } from '../utils/api';
 
@@ -484,8 +483,7 @@ export default function PitchGenerator() {
                 initial={{ opacity: 0, y: -6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
-                className="mono muted"
-                style={{ fontSize: 11, marginBottom: 8 }}
+                style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--text-3)', marginBottom: 8, whiteSpace: 'nowrap' }}
               >
                 FOR · {selectedLead.channel_name} · {formatNumber(selectedLead.subscriber_count ?? 0)} subs
               </motion.div>
@@ -494,13 +492,13 @@ export default function PitchGenerator() {
           <h1 className="page__title">Pitch Gen — <em>brief → research → draft → review → send.</em></h1>
         </div>
         <div className="page__actions">
-          <button className="btn btn--ghost" onClick={() => setShowLeadPicker(o => !o)}>
-            <Icon name="users" size={13} />{selectedLead ? 'Change lead' : 'Select lead'}
+          <button className="btn btn--ghost" onClick={() => setShowLeadPicker(o => !o)} style={{ whiteSpace: 'nowrap' }}>
+            {selectedLead ? 'Change lead' : 'Select lead'}
           </button>
           {selectedLead && (
             <>
-              <button className="btn btn--ghost btn--sm">Save as template</button>
-              <button className="btn btn--ghost btn--sm"><Icon name="arrowR" size={12} />Next prospect</button>
+              <button className="btn btn--ghost btn--sm" style={{ whiteSpace: 'nowrap' }}>Save as template</button>
+              <button className="btn btn--ghost btn--sm" style={{ whiteSpace: 'nowrap' }}>Next prospect</button>
             </>
           )}
         </div>
@@ -521,17 +519,16 @@ export default function PitchGenerator() {
                 <div className="card__title">Select leads</div>
                 <div className="row" style={{ gap: 8 }}>
                   {selectedLeads.size > 0 && (
-                    <span className="mono" style={{ fontSize: 11, color: 'var(--lime)' }}>{selectedLeads.size} selected</span>
+                    <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--lime)' }}>{selectedLeads.size} selected</span>
                   )}
                   <button className="btn btn--ghost btn--sm" onClick={() => setShowLeadPicker(false)}>
-                    <Icon name="x" size={12} />Close
+                    Close
                   </button>
                 </div>
               </div>
               <div className="card__body">
                 <div style={{ position: 'relative', marginBottom: 12 }}>
-                  <Icon name="search" size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)' }} />
-                  <input className="input" style={{ paddingLeft: 32 }} placeholder="Search leads..." value={leadSearch} onChange={e => setLeadSearch(e.target.value)} />
+                  <input className="input" placeholder="Search leads..." value={leadSearch} onChange={e => setLeadSearch(e.target.value)} />
                 </div>
                 {filteredLeads.length > 0 && (
                   <div style={{ padding: '6px 12px', borderBottom: '1px solid var(--line)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -561,8 +558,8 @@ export default function PitchGenerator() {
                       }}
                       style={{
                         padding: '10px 12px', borderRadius: 'var(--r-sm)', cursor: 'pointer',
-                        background: selectedLeads.has(lead.id) ? 'var(--lime-soft)' : 'transparent',
-                        border: `1px solid ${selectedLeads.has(lead.id) ? 'var(--lime-border)' : 'transparent'}`,
+                        background: selectedLeads.has(lead.id) ? 'var(--surface-2)' : 'transparent',
+                        border: `1px solid ${selectedLeads.has(lead.id) ? 'var(--line-3)' : 'transparent'}`,
                         display: 'flex', alignItems: 'center', gap: 10,
                       }}
                     >
@@ -571,9 +568,9 @@ export default function PitchGenerator() {
                       <span className="ava" style={{ fontSize: 11, flexShrink: 0 }}>{(lead.channel_name || '?')[0].toUpperCase()}</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 13, fontWeight: 500 }}>{lead.channel_name}</div>
-                        <div className="muted" style={{ fontSize: 11 }}>{formatNumber(lead.subscriber_count ?? 0)} subs · {lead.temperature || 'cold'}{lead.email ? ' · ✉' : ''}</div>
+                        <div className="muted" style={{ fontSize: 11 }}>{formatNumber(lead.subscriber_count ?? 0)} subs · {lead.temperature || 'cold'}{lead.email ? ' · has email' : ''}</div>
                       </div>
-                      {lead.pitch_id && <Icon name="check" size={12} style={{ color: 'var(--ok)', flexShrink: 0 }} />}
+                      {lead.pitch_id && <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--ok)', flexShrink: 0 }} />}
                     </motion.div>
                   ))}
                 </div>
@@ -585,9 +582,9 @@ export default function PitchGenerator() {
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: 8 }}
-                      style={{ marginTop: 14, padding: '12px 16px', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}
+                      style={{ marginTop: 14, padding: '12px 16px', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--r)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}
                     >
-                      <span style={{ fontSize: 13, fontWeight: 500 }}>{selectedLeads.size} lead{selectedLeads.size !== 1 ? 's' : ''} selected</span>
+                      <span style={{ fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap' }}>{selectedLeads.size} lead{selectedLeads.size !== 1 ? 's' : ''} selected</span>
                       <div style={{ flex: 1 }} />
                       <div className="field" style={{ margin: 0 }}>
                         <div className="field__label" style={{ fontSize: 10 }}>Delay between sends</div>
@@ -600,17 +597,16 @@ export default function PitchGenerator() {
                           <option value={600}>10 minutes</option>
                         </select>
                       </div>
-                      <button className="btn btn--ghost" onClick={handleStreamGenerate}>
-                        <Icon name="sparkle" size={13} />Generate {selectedLeads.size} Pitch{selectedLeads.size !== 1 ? 'es' : ''}
+                      <button className="btn btn--ghost" style={{ whiteSpace: 'nowrap' }} onClick={handleStreamGenerate}>
+                        Generate {selectedLeads.size} Pitch{selectedLeads.size !== 1 ? 'es' : ''}
                       </button>
-                      <motion.button
-                        whileHover={{ scale: 1.02, y: -1 }}
-                        whileTap={{ scale: 0.97 }}
+                      <button
                         className="btn btn--primary"
+                        style={{ whiteSpace: 'nowrap' }}
                         onClick={() => handleBulkGenerate(true)}
                       >
-                        <Icon name="rocket" size={13} />Generate & Send
-                      </motion.button>
+                        Generate & Send
+                      </button>
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -636,7 +632,7 @@ export default function PitchGenerator() {
               </div>
               {bulkProgress.done && (
                 <button className="btn btn--ghost btn--sm" onClick={() => { setBulkProgress({ current: 0, total: 0, done: false, action: '' }); setBulkResults([]); setShowLeadPicker(true); }}>
-                  <Icon name="refresh" size={11} />New batch
+                  New batch
                 </button>
               )}
             </div>
@@ -659,9 +655,9 @@ export default function PitchGenerator() {
                   initial={{ opacity: 0, x: -8 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: i * 0.05, duration: 0.25 }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: r.status === 'error' ? 'rgba(255,80,80,.07)' : 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 6 }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', border: '1px solid var(--line)', borderRadius: 6 }}
                 >
-                  <span style={{ color: r.status === 'error' ? 'var(--bad)' : 'var(--ok)', fontSize: 13 }}>{r.status === 'error' ? '✗' : '✓'}</span>
+                  <span style={{ width: 6, height: 6, flexShrink: 0, borderRadius: '50%', background: r.status === 'error' ? 'var(--bad)' : 'var(--ok)' }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12.5, fontWeight: 500 }}>{r.lead.channel_name}</div>
                     <div className="muted" style={{ fontSize: 11 }}>{r.status === 'error' ? r.error : r.status}</div>
@@ -693,7 +689,7 @@ export default function PitchGenerator() {
               </div>
               <div style={{ flex: 1 }} />
               <button className="btn btn--ghost btn--sm" onClick={() => { setStreamMode(false); setStreamEmails([]); setShowLeadPicker(true); }}>
-                <Icon name="x" size={11} />Exit batch
+                Exit batch
               </button>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 14 }}>
@@ -701,7 +697,7 @@ export default function PitchGenerator() {
                 const p = data?.pitch;
                 const qs = p?.quality_score ?? null;
                 const blocked = qs !== null && qs < 70;
-                const badgeColor = blocked ? 'var(--coral)' : qs >= 85 ? 'var(--lime)' : qs >= 75 ? 'var(--lime-dim)' : null;
+                const qsColor = qs === null ? 'var(--text-3)' : blocked ? 'var(--bad)' : qs >= 85 ? 'var(--lime)' : 'var(--text-2)';
 
                 if (status === 'loading') {
                   return (
@@ -709,7 +705,7 @@ export default function PitchGenerator() {
                       key={leadId}
                       initial={{ opacity: 0, y: 6 }}
                       animate={{ opacity: 1, y: 0 }}
-                      style={{ padding: 16, background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 10 }}
+                      style={{ padding: 16, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)' }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                         <span className="ava" style={{ fontSize: 10 }}>{(lead.channel_name || '?')[0].toUpperCase()}</span>
@@ -734,7 +730,7 @@ export default function PitchGenerator() {
                   const isNeedsResearch = code === 'NEEDS_RESEARCH';
                   return (
                     <motion.div key={leadId} initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                      style={{ padding: 16, background: 'rgba(255,80,80,.05)', border: '1px solid rgba(255,80,80,.2)', borderRadius: 10 }}>
+                      style={{ padding: 16, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)' }}>
                       <div style={{ fontSize: 12.5, fontWeight: 500, marginBottom: 4 }}>{lead.channel_name}</div>
                       <div className="muted" style={{ fontSize: 11, color: 'var(--bad)', marginBottom: 10 }}>
                         {isNeedsResearch ? error : `Failed: ${error || 'Request failed — check Railway logs for details'}`}
@@ -747,7 +743,7 @@ export default function PitchGenerator() {
                           title={videoDataStatus === 'channel_gone' ? 'Channel appears deleted or private — retry unlikely to help' : undefined}
                           onClick={() => retryLeadGeneration(lead)}
                         >
-                          <Icon name="refresh" size={11} />{isNeedsResearch ? 'Retry research' : 'Retry'}
+                          {isNeedsResearch ? 'Retry research' : 'Retry'}
                         </button>
                         <button className="btn btn--ghost btn--sm" style={{ flex: 1 }} onClick={() => skipLead(leadId)}>
                           Skip this lead
@@ -759,16 +755,17 @@ export default function PitchGenerator() {
 
                 return (
                   <motion.div key={leadId} initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}
-                    style={{ padding: 16, background: 'var(--bg-2)', border: `1px solid ${blocked ? 'var(--coral-border)' : 'var(--line)'}`, borderRadius: 10 }}>
+                    style={{ padding: 16, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                       <span className="ava" style={{ fontSize: 10 }}>{(lead.channel_name || '?')[0].toUpperCase()}</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 12.5, fontWeight: 500 }}>{lead.channel_name}</div>
                         <div className="muted" style={{ fontSize: 11 }}>{formatNumber(lead.subscriber_count ?? 0)} subs</div>
                       </div>
-                      {qs !== null && badgeColor && (
-                        <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--f-mono)', padding: '3px 8px', borderRadius: 5, background: badgeColor, color: 'var(--on-accent)', flexShrink: 0 }}>
-                          {blocked ? `⚠ ${qs}/100` : `✓ ${qs}/100`}
+                      {qs !== null && (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: qsColor }} />
+                          <span style={{ fontSize: 11, fontWeight: 600, fontFamily: 'var(--f-mono)', color: qsColor }}>{qs}/100</span>
                         </span>
                       )}
                     </div>
@@ -776,7 +773,8 @@ export default function PitchGenerator() {
                       {(p?.cold_email_body || '').slice(0, 180)}{(p?.cold_email_body || '').length > 180 ? '…' : ''}
                     </div>
                     {blocked && (
-                      <div style={{ fontSize: 10.5, color: 'var(--coral)', marginBottom: 8, padding: '5px 8px', background: 'var(--coral-soft)', borderRadius: 5 }}>
+                      <div style={{ fontSize: 10.5, color: 'var(--bad)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--bad)', flexShrink: 0 }} />
                         Score too low to send — needs rewrite
                       </div>
                     )}
@@ -792,7 +790,7 @@ export default function PitchGenerator() {
                         Review
                       </button>
                       {!blocked && p && (
-                        <button className="btn btn--primary btn--sm" style={{ flex: 1 }} onClick={async () => {
+                        <button className="btn btn--ghost btn--sm" style={{ flex: 1 }} onClick={async () => {
                           try {
                             await api.post('/emails/queue', { lead_id: lead.id, subject: p.email_subject, body: p.cold_email_body });
                             toast.success(`${lead.channel_name} queued!`);
@@ -821,22 +819,14 @@ export default function PitchGenerator() {
             className="card"
             style={{ textAlign: 'center', padding: '64px 24px' }}
           >
-            <motion.div
-              animate={{ y: [0, -6, 0] }}
-              transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-            >
-              <Icon name="sparkle" size={36} style={{ color: 'var(--lime)', margin: '0 auto 16px', display: 'block', opacity: 0.6 }} />
-            </motion.div>
             <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 8 }}>Select one or multiple leads to generate pitches</div>
             <div className="muted" style={{ fontSize: 13, marginBottom: 16 }}>Use checkboxes for bulk generation. Single lead = full edit mode.</div>
-            <motion.button
-              whileHover={{ scale: 1.02, y: -1 }}
-              whileTap={{ scale: 0.97 }}
+            <button
               className="btn btn--primary"
               onClick={() => setShowLeadPicker(true)}
             >
-              <Icon name="users" size={13} />Select lead
-            </motion.button>
+              Select lead
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
@@ -852,7 +842,7 @@ export default function PitchGenerator() {
               return (
                 <div key={s.n} className={`step ${isDone ? 'is-done' : isCurrent ? 'is-current' : ''}`}>
                   <span className="step__num">
-                    {isDone ? <Icon name="check" size={11} /> : s.n}
+                    {isDone ? '✓' : s.n}
                   </span>
                   <span>{s.label}</span>
                   {i < GEN_STEPS.length - 1 && <span className="muted" style={{ marginLeft: 'auto', fontSize: 10 }}>→</span>}
@@ -875,7 +865,7 @@ export default function PitchGenerator() {
                 <div style={{
                   display: 'flex', alignItems: 'center', gap: 8,
                   padding: '10px 16px', borderBottom: '1px solid var(--line)',
-                  background: 'var(--bg-2)',
+                  background: 'var(--surface)',
                 }}>
                   <span className="dot dot--lime dot--pulse" style={{ width: 6, height: 6 }} />
                   <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10.5, letterSpacing: '.08em', color: 'var(--text-3)', textTransform: 'uppercase' }}>
@@ -897,9 +887,7 @@ export default function PitchGenerator() {
                         color: isDone ? 'var(--text-2)' : isCurrent ? 'var(--lime)' : 'var(--text-4)',
                         transition: 'color 200ms ease',
                       }}>
-                        {isDone
-                          ? <Icon name="check" size={12} style={{ color: 'var(--lime)', flexShrink: 0 }} />
-                          : <span className={isCurrent ? 'dot dot--lime dot--pulse' : 'dot dot--neutral'} style={{ width: 5, height: 5, flexShrink: 0 }} />}
+                        <span className={isDone ? 'dot' : isCurrent ? 'dot dot--lime dot--pulse' : 'dot dot--neutral'} style={{ width: 5, height: 5, flexShrink: 0, background: isDone ? 'var(--lime)' : undefined }} />
                         <span style={{ opacity: isFuture ? 0.55 : 1 }}>{s.work}{isCurrent ? '…' : ''}</span>
                       </div>
                     );
@@ -933,24 +921,16 @@ export default function PitchGenerator() {
                 className="card"
                 style={{ textAlign: 'center', padding: '48px 24px', marginBottom: 20 }}
               >
-                <motion.div
-                  animate={{ y: [0, -5, 0] }}
-                  transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
-                >
-                  <Icon name="bolt" size={36} style={{ color: 'var(--lime)', margin: '0 auto 16px', display: 'block', opacity: 0.7 }} />
-                </motion.div>
                 <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 8 }}>Ready to generate</div>
                 <div className="muted" style={{ fontSize: 13, marginBottom: 20 }}>
                   Click <strong style={{ color: 'var(--lime)' }}>Study & Generate</strong> to run deep channel analysis, craft a custom offer, and write the cold email.
                 </div>
-                <motion.button
-                  whileHover={{ scale: 1.02, y: -1 }}
-                  whileTap={{ scale: 0.97 }}
+                <button
                   className="btn btn--primary"
                   onClick={handleGenerate}
                 >
-                  <Icon name="bolt" size={14} />Study & Generate Pitch
-                </motion.button>
+                  Study & Generate Pitch
+                </button>
               </motion.div>
             )}
           </AnimatePresence>
@@ -970,13 +950,13 @@ export default function PitchGenerator() {
                   animate={{ opacity: 1, y: 0 }}
                   style={{
                     padding: '12px 16px',
-                    background: 'rgba(var(--warn-rgb),0.08)',
-                    border: '1px solid rgba(var(--warn-rgb),0.25)',
-                    borderRadius: 10, marginBottom: 16,
+                    background: 'var(--surface)',
+                    border: '1px solid var(--line-3)',
+                    borderRadius: 'var(--r-md)', marginBottom: 16,
                     display: 'flex', alignItems: 'center', gap: 10,
                   }}
                 >
-                  <span style={{ fontSize: 16 }}>⚠️</span>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--warn)', flexShrink: 0 }} />
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--warn)' }}>Voice profile incomplete</div>
                     <div style={{ fontSize: 11, color: 'var(--text-3)' }}>
@@ -998,19 +978,21 @@ export default function PitchGenerator() {
                   >
                     <div className="card__head">
                       <div className="card__title">Brief</div>
-                      <span className="badge badge--lime"><Icon name="check" size={11} />Compiled</span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-3)' }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--ok)' }} />Compiled
+                      </span>
                     </div>
                     <div className="card__body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                       <div className="field">
                         <div className="field__label">Goal</div>
-                        <div style={{ padding: '8px 11px', background: 'var(--bg-2)', borderRadius: 6, fontSize: 12.5, border: '1px solid var(--line)' }}>
+                        <div style={{ padding: '8px 11px', background: 'var(--surface)', borderRadius: 'var(--r-sm)', fontSize: 12.5, border: '1px solid var(--line)' }}>
                           Book a call to discuss sponsorship
                         </div>
                       </div>
                       {pitch.custom_offer && (
                         <div className="field">
                           <div className="field__label">Custom offer</div>
-                          <div style={{ padding: '8px 11px', background: 'var(--bg-2)', borderRadius: 6, fontSize: 12.5, border: '1px solid var(--line)', lineHeight: 1.55 }}>
+                          <div style={{ padding: '8px 11px', background: 'var(--surface)', borderRadius: 'var(--r-sm)', fontSize: 12.5, border: '1px solid var(--line)', lineHeight: 1.55 }}>
                             {pitch.custom_offer.slice(0, 120)}
                           </div>
                         </div>
@@ -1025,15 +1007,15 @@ export default function PitchGenerator() {
                               animate={{ opacity: 1, x: 0 }}
                               transition={{ delay: i * 0.06 + 0.1 }}
                               className="row"
-                              style={{ fontSize: 12, color: 'var(--text-2)', gap: 6 }}
+                              style={{ fontSize: 12, color: 'var(--text-2)', gap: 8 }}
                             >
-                              <Icon name="check" size={11} style={{ color: 'var(--lime)' }} />{s}
+                              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--ok)', flexShrink: 0 }} />{s}
                             </motion.div>
                           ))}
                         </div>
                       </div>
                       <button className="btn btn--ghost btn--sm" style={{ justifyContent: 'center' }} onClick={handleGenerate} disabled={generating}>
-                        <Icon name="refresh" size={11} />Regenerate
+                        Regenerate
                       </button>
                     </div>
                   </motion.div>
@@ -1048,7 +1030,7 @@ export default function PitchGenerator() {
                     >
                       <div className="card__head">
                         <div className="card__title">{subjects.length} subject variants</div>
-                        <span className="mono muted" style={{ fontSize: 11 }}>click to use</span>
+                        <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--text-4)' }}>click to use</span>
                       </div>
                       <div style={{ padding: 8 }}>
                         {subjects.map((s, i) => (
@@ -1067,8 +1049,8 @@ export default function PitchGenerator() {
                             }}
                           >
                             <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
-                              <span className="mono muted" style={{ fontSize: 10.5 }}>VARIANT {String.fromCharCode(65 + i)}</span>
-                              {i === 0 && <span className="badge badge--coral" style={{ fontSize: 9.5 }}>Recommended</span>}
+                              <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10.5, color: 'var(--text-4)' }}>VARIANT {String.fromCharCode(65 + i)}</span>
+                              {i === 0 && <span style={{ fontSize: 9.5, color: 'var(--lime)' }}>Recommended</span>}
                             </div>
                             <div style={{ fontSize: 12.5, fontWeight: 500 }}>{s}</div>
                           </motion.button>
@@ -1094,9 +1076,9 @@ export default function PitchGenerator() {
                         </span>
                       </div>
                       <div className="row" style={{ gap: 6 }}>
-                        <button className="btn btn--ghost btn--sm"><Icon name="pen" size={11} />Edit</button>
+                        <button className="btn btn--ghost btn--sm">Edit</button>
                         <button className="btn btn--ghost btn--sm" onClick={handleRescore} disabled={rescoring}>
-                          <Icon name="refresh" size={11} />{rescoring ? 'Rescoring...' : 'Rescore'}
+                          {rescoring ? 'Rescoring...' : 'Rescore'}
                         </button>
                       </div>
                     </div>
@@ -1130,9 +1112,8 @@ export default function PitchGenerator() {
                           <div style={{ marginBottom: 12 }}>
                             <div style={{
                               display: 'inline-flex', alignItems: 'center', gap: 6,
-                              background: 'var(--lime-soft)',
-                              border: '1px solid var(--lime-border)',
-                              borderRadius: 6, padding: '4px 10px',
+                              border: '1px solid var(--line)',
+                              borderRadius: 'var(--r-sm)', padding: '4px 10px',
                               fontSize: 10, fontWeight: 700,
                               color: 'var(--lime)',
                               fontFamily: 'var(--f-mono)',
@@ -1153,19 +1134,22 @@ export default function PitchGenerator() {
                           never rendered the same as a real Marcus draft */}
                       {pitch.generation_method === 'fallback' && (
                         <div style={{
-                          marginBottom: 14, padding: '10px 14px', borderRadius: 6,
-                          background: 'var(--coral)', color: 'var(--on-accent)',
+                          marginBottom: 14, padding: '10px 14px', borderRadius: 'var(--r-sm)',
+                          border: '1px solid var(--bad)', color: 'var(--bad)',
                           fontSize: 12, fontWeight: 700, fontFamily: 'var(--f-mono)',
                           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
                         }}>
-                          <span>⚠ FALLBACK TEMPLATE — AI generation failed for this lead. This is not a real Marcus draft.</span>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--bad)', flexShrink: 0 }} />
+                            FALLBACK TEMPLATE — AI generation failed for this lead. This is not a real Marcus draft.
+                          </span>
                           <button
-                            className="btn btn--sm"
-                            style={{ background: 'var(--on-accent)', color: 'var(--coral)', flexShrink: 0 }}
+                            className="btn btn--ghost btn--sm"
+                            style={{ flexShrink: 0 }}
                             onClick={handleGenerate}
                             disabled={generating}
                           >
-                            <Icon name="refresh" size={11} />Regenerate now
+                            Regenerate now
                           </button>
                         </div>
                       )}
@@ -1178,11 +1162,11 @@ export default function PitchGenerator() {
                               const qs = pitch.quality_score;
                               const warn = pitch.quality_warning;
                               const label = warn || qs < 70
-                                ? '⚠ Needs polish'
-                                : qs >= 90 ? '✅ Quality: Excellent'
-                                : qs >= 85 ? '✓ Quality: Good'
-                                : '✓ Quality: Enhanced';
-                              const bg = warn || qs < 70 ? 'var(--coral)' : qs >= 85 ? 'var(--lime)' : 'var(--lime-dim)';
+                                ? 'Needs polish'
+                                : qs >= 90 ? 'Quality: Excellent'
+                                : qs >= 85 ? 'Quality: Good'
+                                : 'Quality: Enhanced';
+                              const color = warn || qs < 70 ? 'var(--bad)' : qs >= 85 ? 'var(--lime)' : 'var(--text-2)';
                               return (
                                 <motion.div
                                   key={label}
@@ -1191,11 +1175,11 @@ export default function PitchGenerator() {
                                   transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                                   style={{
                                     display: 'inline-flex', alignItems: 'center', gap: 6,
-                                    padding: '5px 12px', borderRadius: 6,
-                                    fontSize: 11, fontWeight: 700, fontFamily: 'var(--f-mono)',
-                                    background: bg, color: 'var(--on-accent)',
+                                    fontSize: 11, fontWeight: 600, fontFamily: 'var(--f-mono)',
+                                    color,
                                   }}
                                 >
+                                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0 }} />
                                   {label}
                                 </motion.div>
                               );
@@ -1229,27 +1213,28 @@ export default function PitchGenerator() {
                               >
                                 <div style={{
                                   padding: '10px 12px',
-                                  background: 'var(--bg-2)',
+                                  background: 'var(--surface)',
                                   border: '1px solid var(--line)',
-                                  borderRadius: 8,
+                                  borderRadius: 'var(--r-sm)',
                                   display: 'flex', flexDirection: 'column', gap: 6,
                                 }}>
                                   {Object.entries(pitch.quality_breakdown).map(([key, val]) => {
                                     const maxMap = { personalization: 20, hook: 15, specificity: 15, value_prop: 15, cta: 15, tone: 12, spam_flag: 8 };
                                     const max = maxMap[key] || 15;
                                     const pct = Math.round((val.points / max) * 100);
+                                    const barColor = pct >= 75 ? 'var(--lime)' : pct >= 50 ? 'var(--warn)' : 'var(--bad)';
                                     return (
                                       <div key={key}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
                                           <span style={{ fontSize: 10, fontFamily: 'var(--f-mono)', textTransform: 'uppercase', color: 'var(--text-3)' }}>
                                             {key.replace('_', ' ')}
                                           </span>
-                                          <span style={{ fontSize: 10, fontFamily: 'var(--f-mono)', color: pct >= 75 ? 'var(--lime)' : pct >= 50 ? 'var(--warn)' : 'var(--bad)' }}>
+                                          <span style={{ fontSize: 10, fontFamily: 'var(--f-mono)', color: barColor }}>
                                             {val.points}/{max}
                                           </span>
                                         </div>
                                         <div style={{ height: 3, background: 'var(--surface-3)', borderRadius: 2, overflow: 'hidden', marginBottom: 2 }}>
-                                          <div style={{ width: `${pct}%`, height: '100%', borderRadius: 2, background: pct >= 75 ? 'var(--lime)' : pct >= 50 ? 'var(--warn)' : 'var(--coral)', transition: 'width 0.4s ease' }} />
+                                          <div style={{ width: `${pct}%`, height: '100%', borderRadius: 2, background: barColor, transition: 'width 0.4s ease' }} />
                                         </div>
                                         <div style={{ fontSize: 10, color: 'var(--text-4)', lineHeight: 1.4 }}>{val.feedback}</div>
                                       </div>
@@ -1267,7 +1252,7 @@ export default function PitchGenerator() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                           <span style={{ fontSize: 11, color: 'var(--text-3)' }}>Quality Score</span>
                           <span style={{
-                            fontSize: 20, fontWeight: 900,
+                            fontSize: 20, fontWeight: 700,
                             fontFamily: 'var(--f-mono)',
                             color: pitch.pitch_score >= 80 ? 'var(--ok)' :
                                    pitch.pitch_score >= 60 ? 'var(--lime)' :
@@ -1291,8 +1276,8 @@ export default function PitchGenerator() {
                               className="chan"
                               style={{
                                 cursor: 'pointer', padding: '6px 11px', fontSize: 12,
-                                background: selectedSubj === i ? 'var(--lime-soft)' : 'var(--surface)',
-                                borderColor: selectedSubj === i ? 'var(--lime-border)' : 'var(--line)',
+                                background: selectedSubj === i ? 'var(--surface-2)' : 'var(--surface)',
+                                borderColor: selectedSubj === i ? 'var(--line-3)' : 'var(--line)',
                                 color: selectedSubj === i ? 'var(--lime)' : 'var(--text-2)',
                               }}
                             >
@@ -1326,38 +1311,32 @@ export default function PitchGenerator() {
                             style={{
                               marginTop: 14,
                               padding: '14px 16px',
-                              background: 'var(--coral)',
-                              borderRadius: 8,
-                              color: 'var(--on-accent)',
+                              background: 'var(--surface)',
+                              border: '1px solid var(--bad)',
+                              borderRadius: 'var(--r-md)',
+                              color: 'var(--text)',
                             }}
                           >
-                            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, marginBottom: 4, color: 'var(--bad)' }}>
+                              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--bad)', flexShrink: 0 }} />
                               Blocked — Score too low to send ({pitch.quality_score ?? blockDetails?.score ?? '?'}/100)
                             </div>
-                            <div style={{ fontSize: 11, marginBottom: 10, opacity: 0.85 }}>
+                            <div style={{ fontSize: 11, marginBottom: 10, color: 'var(--text-3)' }}>
                               {blockDetails?.message || `This pitch scored below 70 and cannot be sent until rewritten. Click Rewrite to regenerate.`}
                             </div>
                             {(blockDetails?.feedback || pitch.quality_breakdown) && (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 10 }}>
                                 {Object.entries(blockDetails?.feedback || pitch.quality_breakdown || {}).filter(([, v]) => v.points < 8).slice(0, 4).map(([k, v]) => (
-                                  <div key={k} style={{ fontSize: 10.5, opacity: 0.9 }}>
+                                  <div key={k} style={{ fontSize: 10.5, color: 'var(--text-3)' }}>
                                     · {k.replace('_', ' ')}: {v.feedback}
                                   </div>
                                 ))}
                               </div>
                             )}
                             <button
+                              className="btn btn--ghost btn--sm"
                               onClick={handleGenerate}
                               disabled={generating}
-                              style={{
-                                padding: '6px 14px', fontSize: 12, fontWeight: 600,
-                                background: 'transparent',
-                                border: '1px solid var(--bg)',
-                                borderRadius: 6, cursor: 'pointer', color: 'var(--on-accent)',
-                                transition: 'background 150ms',
-                              }}
-                              onMouseEnter={e => e.currentTarget.style.background = 'rgba(10,10,12,0.12)'}
-                              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                             >
                               Rewrite pitch
                             </button>
@@ -1398,13 +1377,13 @@ export default function PitchGenerator() {
                                 padding: '8px 12px',
                                 background: 'var(--surface-2)',
                                 border: '1px solid var(--line)',
-                                borderRadius: 6, marginBottom: 6,
+                                borderRadius: 'var(--r-sm)', marginBottom: 6,
                                 fontSize: 12, color: 'var(--text-2)',
                                 cursor: 'pointer',
                                 transition: 'all 150ms',
                               }}
                               onClick={() => copyToClipboard(s)}
-                              onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--lime-border)'}
+                              onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--line-3)'}
                               onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--line)'}
                             >
                               {s} <span style={{ fontSize: 10, color: 'var(--text-4)' }}>(click to copy)</span>
@@ -1424,7 +1403,7 @@ export default function PitchGenerator() {
                         </motion.div>
                       )}
 
-                      <div className="grid g-3" style={{ gap: 10, marginTop: 14 }}>
+                      <div style={{ display: 'flex', marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--line)' }}>
                         {[
                           { l: 'Pitch quality', v: pitch.quality_score >= 90 ? 'Excellent' : pitch.quality_score >= 85 ? 'Good' : pitch.quality_score >= 70 ? 'Enhanced' : (pitch.quality_score ?? pitch.pitch_score) != null ? 'Needs polish' : '—', c: 'var(--lime)' },
                           { l: 'Word count', v: String((emailBody || '').trim().split(/\s+/).filter(Boolean).length), c: 'var(--text)' },
@@ -1435,13 +1414,13 @@ export default function PitchGenerator() {
                             initial={{ opacity: 0, y: 6 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: i * 0.08 + 0.1 }}
-                            style={{ padding: 12, background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 8 }}
+                            style={{
+                              flex: 1, paddingRight: 16, marginRight: 16,
+                              borderRight: i === 2 ? 'none' : '1px solid var(--line)',
+                            }}
                           >
-                            <div className="muted" style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.06em' }}>{m.l}</div>
-                            <div className="row" style={{ alignItems: 'baseline', gap: 6, marginTop: 4 }}>
-                              <span className="mono" style={{ fontSize: 18, color: m.c }}>{m.v}</span>
-                              {m.d && <span className="muted" style={{ fontSize: 11 }}>{m.d}</span>}
-                            </div>
+                            <div style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--text-4)' }}>{m.l}</div>
+                            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 18, fontWeight: 500, color: m.c, marginTop: 4 }}>{m.v}</div>
                           </motion.div>
                         ))}
                       </div>
@@ -1457,7 +1436,7 @@ export default function PitchGenerator() {
                   >
                     <div className="card__head">
                       <div className="card__title">Followups</div>
-                      <span className="mono muted" style={{ fontSize: 11 }}>3 steps · skips on reply</span>
+                      <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--text-4)' }}>3 steps · skips on reply</span>
                     </div>
                     <div className="card__body" style={{ padding: 0 }}>
                       {[
@@ -1466,12 +1445,12 @@ export default function PitchGenerator() {
                         { d: 'Day 9', l: 'Final break-up',     prev: '"Last note — happy to never bother you again, just say the word."' },
                       ].map((f, i) => (
                         <div key={i} style={{ padding: '14px 16px', borderBottom: i < 2 ? '1px solid var(--line)' : 'none', display: 'flex', gap: 14 }}>
-                          <div className="mono" style={{ width: 50, color: 'var(--text-3)', fontSize: 11, paddingTop: 2 }}>{f.d}</div>
+                          <div style={{ width: 50, color: 'var(--text-3)', fontFamily: 'var(--f-mono)', fontSize: 11, paddingTop: 2, flexShrink: 0 }}>{f.d}</div>
                           <div style={{ flex: 1 }}>
                             <div style={{ fontSize: 12.5, fontWeight: 500, marginBottom: 2 }}>{f.l}</div>
                             <div className="muted" style={{ fontSize: 12, fontStyle: 'italic' }}>{f.prev}</div>
                           </div>
-                          <button className="btn btn--ghost btn--sm"><Icon name="pen" size={11} /></button>
+                          <button className="btn btn--ghost btn--sm">Edit</button>
                         </div>
                       ))}
                     </div>
@@ -1479,15 +1458,16 @@ export default function PitchGenerator() {
 
                   {/* Pre-send checklist */}
                   {checklist && (
-                    <div style={{ padding: '12px 14px', background: checklist.canSend ? 'rgba(var(--lime-rgb),0.04)' : 'rgba(var(--lime-rgb),0.06)', border: `1px solid ${checklist.canSend ? 'var(--lime-border)' : 'rgba(var(--lime-rgb),0.25)'}`, borderRadius: 8, marginBottom: 4 }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: checklist.canSend ? 'var(--lime)' : 'var(--coral)', marginBottom: 8 }}>
-                        {checklist.canSend ? '✓ Ready to send' : '⚠ Issues found'}
+                    <div style={{ padding: '12px 14px', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)', marginBottom: 4 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: checklist.canSend ? 'var(--lime)' : 'var(--bad)', marginBottom: 8 }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: checklist.canSend ? 'var(--ok)' : 'var(--bad)', flexShrink: 0 }} />
+                        {checklist.canSend ? 'Ready to send' : 'Issues found'}
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                         {checklist.items.map((item, i) => (
                           <div key={i} className="row" style={{ gap: 8, alignItems: 'flex-start' }}>
-                            <span style={{ fontSize: 12, color: item.pass ? 'var(--lime)' : item.critical ? 'var(--coral)' : 'var(--text-4)', flexShrink: 0, lineHeight: 1.6 }}>{item.pass ? '✓' : item.critical ? '✗' : '·'}</span>
-                            <span style={{ fontSize: 12, color: item.pass ? 'var(--text-2)' : item.critical ? 'var(--coral)' : 'var(--text-3)', lineHeight: 1.6 }}>{item.label}</span>
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', marginTop: 5, flexShrink: 0, background: item.pass ? 'var(--ok)' : item.critical ? 'var(--bad)' : 'rgba(255,255,255,0.3)' }} />
+                            <span style={{ fontSize: 12, color: item.pass ? 'var(--text-2)' : item.critical ? 'var(--bad)' : 'var(--text-3)', lineHeight: 1.6 }}>{item.label}</span>
                             {!item.pass && <span className="muted" style={{ fontSize: 11, lineHeight: 1.6 }}>— {item.detail}</span>}
                           </div>
                         ))}
@@ -1506,29 +1486,27 @@ export default function PitchGenerator() {
                         <div className="row" style={{ gap: 8 }}>
                           <button
                             className="btn btn--ghost"
-                            style={{ borderColor: 'var(--coral-border)', color: 'var(--coral)' }}
+                            style={{ borderColor: 'var(--bad)', color: 'var(--bad)' }}
                             onClick={handleGenerate}
                             disabled={generating}
                           >
-                            <Icon name="refresh" size={11} />Rewrite
+                            Rewrite
                           </button>
                           <button
-                            className="btn btn--primary"
+                            className="btn btn--ghost"
                             style={{ opacity: 0.3, cursor: 'not-allowed', pointerEvents: 'none' }}
                             disabled
                           >
-                            <Icon name="rocket" size={12} />Queue for sending
+                            Queue for sending
                           </button>
                         </div>
                       ) : (
-                        <motion.button
-                          whileHover={{ scale: 1.02, y: -1 }}
-                          whileTap={{ scale: 0.97 }}
+                        <button
                           className="btn btn--primary"
                           onClick={handleAddToQueue}
                         >
-                          <Icon name="rocket" size={12} />Queue for sending
-                        </motion.button>
+                          Queue for sending
+                        </button>
                       );
                     })()}
                   </div>

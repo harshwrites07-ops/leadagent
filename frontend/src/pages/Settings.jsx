@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import Icon from '../components/ui/Icon';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import ConfirmModal from '../components/ui/ConfirmModal';
@@ -310,8 +309,7 @@ export default function Settings() {
         </div>
         {dirty && (
           <div className="page__actions">
-            <button className="btn btn--sm" onClick={save} disabled={saving}>
-              <Icon name={saving ? 'refresh' : 'check'} size={11} />
+            <button className="btn btn--primary btn--sm" onClick={save} disabled={saving} style={{ whiteSpace: 'nowrap' }}>
               {saving ? 'Saving…' : 'Save changes'}
             </button>
           </div>
@@ -615,8 +613,8 @@ export default function Settings() {
           <div className="card" style={{ marginBottom: 16 }}>
             <div className="card__head">
               <div className="card__title">Connected mailboxes</div>
-              <button className="btn btn--sm" onClick={connectGmail} disabled={connectingGmail}>
-                <Icon name="plus" size={11} />{connectingGmail ? 'Connecting…' : 'Connect Gmail'}
+              <button className="btn btn--sm" onClick={connectGmail} disabled={connectingGmail} style={{ whiteSpace: 'nowrap' }}>
+                {connectingGmail ? 'Connecting…' : 'Connect Gmail'}
               </button>
             </div>
             <div>
@@ -624,7 +622,7 @@ export default function Settings() {
                 <div style={{ padding: '24px 16px', textAlign: 'center' }}>
                   <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>No mailboxes connected yet.</div>
                   <button className="btn btn--sm" onClick={connectGmail} disabled={connectingGmail}>
-                    <Icon name="plus" size={11} />Connect Gmail
+                    Connect Gmail
                   </button>
                 </div>
               ) : gmailAccounts.map((acc, i, arr) => {
@@ -657,19 +655,19 @@ export default function Settings() {
                       </div>
                       <div className="bar"><span style={{ width: `${Math.min((sent / limit) * 100, 100)}%`, background: 'var(--cream)' }} /></div>
                     </div>
-                    <div>
+                    <div className="row" style={{ gap: 8 }}>
                       {isActive
-                        ? <span className="badge badge--lime"><span className="dot dot--pulse" />Sending</span>
-                        : <span className="badge badge--warn">Revoked</span>}
+                        ? <><span className="dot dot--pulse" /><span style={{ fontSize: 12, color: 'var(--ok)' }}>Sending</span></>
+                        : <><span className="dot dot--warn" /><span style={{ fontSize: 12, color: 'var(--warn)' }}>Revoked</span></>}
                     </div>
                     <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                       {!isActive && (
                         <button className="btn btn--ghost btn--sm" onClick={() => reconnectGmail(acc.id)}>
-                          <Icon name="refresh" size={11} />
+                          Reconnect
                         </button>
                       )}
                       <button className="btn btn--ghost btn--sm" onClick={() => disconnectGmail(acc.id)}>
-                        <Icon name="x" size={11} />
+                        Remove
                       </button>
                     </div>
                   </div>
@@ -749,7 +747,7 @@ export default function Settings() {
                   onKeyDown={e => e.key === 'Enter' && saveGeminiKey()}
                   style={{ flex: 1, fontSize: 12 }}
                 />
-                <button className="btn btn--primary btn--sm" onClick={saveGeminiKey} disabled={savingGemini || !geminiKey.trim()}>
+                <button className="btn btn--sm" onClick={saveGeminiKey} disabled={savingGemini || !geminiKey.trim()} style={{ whiteSpace: 'nowrap' }}>
                   {savingGemini ? 'Saving…' : 'Save key'}
                 </button>
               </div>
@@ -765,8 +763,8 @@ export default function Settings() {
             <div className="card__body" style={{ padding: 0 }}>
               {/* Gmail */}
               <div className="row" style={{ padding: 16, gap: 14, borderBottom: '1px solid var(--line)' }}>
-                <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', color: gmailAccounts.length > 0 ? 'var(--lime)' : 'var(--text-3)' }}>
-                  <Icon name="mail" size={14} />
+                <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-2)' }}>
+                  G
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, fontWeight: 500 }}>Gmail</div>
@@ -777,10 +775,10 @@ export default function Settings() {
                   </div>
                 </div>
                 {gmailAccounts.length > 0
-                  ? <span className="badge badge--lime"><Icon name="check" size={11} />Connected</span>
+                  ? <span className="row" style={{ gap: 8 }}><span className="dot dot--ok" /><span style={{ fontSize: 12, color: 'var(--ok)' }}>Connected</span></span>
                   : (
                     <button
-                      className="btn btn--primary btn--sm"
+                      className="btn btn--sm"
                       onClick={async () => {
                         setConnectingGmail(true);
                         try {
@@ -790,6 +788,7 @@ export default function Settings() {
                         finally { setConnectingGmail(false); }
                       }}
                       disabled={connectingGmail}
+                      style={{ whiteSpace: 'nowrap' }}
                     >
                       {connectingGmail ? 'Redirecting…' : 'Connect Gmail'}
                     </button>
@@ -797,14 +796,14 @@ export default function Settings() {
               </div>
               {/* SMTP */}
               <div className="row" style={{ padding: 16, gap: 14 }}>
-                <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', color: 'var(--text-3)' }}>
-                  <Icon name="inbox" size={14} />
+                <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-3)' }}>
+                  S
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, fontWeight: 500 }}>Custom SMTP</div>
                   <div className="muted" style={{ fontSize: 11.5 }}>Connect any email provider via SMTP — Outlook, Zoho, SendGrid, etc.</div>
                 </div>
-                <span className="badge" style={{ opacity: .5 }}>Coming soon</span>
+                <span className="muted" style={{ fontSize: 11.5, whiteSpace: 'nowrap' }}>Coming soon</span>
               </div>
             </div>
           </div>
@@ -815,20 +814,20 @@ export default function Settings() {
             </div>
             <div className="card__body" style={{ padding: 0 }}>
               {[
-                { name: 'Slack', icon: 'bell', desc: 'Get notified in Slack when a creator replies or books a call.' },
-                { name: 'HubSpot', icon: 'layers', desc: 'Sync leads and deals to your HubSpot CRM automatically.' },
-                { name: 'Notion', icon: 'pen', desc: 'Push lead data and email history to a Notion database.' },
-                { name: 'Pipedrive', icon: 'target', desc: 'Auto-create deals in Pipedrive when leads reply.' },
+                { name: 'Slack', desc: 'Get notified in Slack when a creator replies or books a call.' },
+                { name: 'HubSpot', desc: 'Sync leads and deals to your HubSpot CRM automatically.' },
+                { name: 'Notion', desc: 'Push lead data and email history to a Notion database.' },
+                { name: 'Pipedrive', desc: 'Auto-create deals in Pipedrive when leads reply.' },
               ].map((item, i, arr) => (
                 <div key={item.name} className="row" style={{ padding: 16, gap: 14, borderBottom: i < arr.length - 1 ? '1px solid var(--line)' : 'none' }}>
-                  <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', color: 'var(--text-3)' }}>
-                    <Icon name={item.icon} size={14} />
+                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-3)' }}>
+                    {item.name[0]}
                   </div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 13, fontWeight: 500 }}>{item.name}</div>
                     <div className="muted" style={{ fontSize: 11.5 }}>{item.desc}</div>
                   </div>
-                  <button className="btn btn--ghost btn--sm" onClick={() => toast('Coming soon — join the waitlist!')} style={{ fontSize: 11 }}>
+                  <button className="btn btn--ghost btn--sm" onClick={() => toast('Coming soon — join the waitlist!')} style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
                     Request
                   </button>
                 </div>
@@ -842,18 +841,18 @@ export default function Settings() {
             </div>
             <div className="card__body" style={{ padding: 0 }}>
               {[
-                { name: 'Zapier', icon: 'bolt', desc: 'Connect Quelro to 5,000+ apps via Zapier triggers.' },
-                { name: 'Webhook', icon: 'link', desc: 'Send real-time events (reply, open, bounce) to your own URL.' },
+                { name: 'Zapier', desc: 'Connect Quelro to 5,000+ apps via Zapier triggers.' },
+                { name: 'Webhook', desc: 'Send real-time events (reply, open, bounce) to your own URL.' },
               ].map((item, i, arr) => (
                 <div key={item.name} className="row" style={{ padding: 16, gap: 14, borderBottom: i < arr.length - 1 ? '1px solid var(--line)' : 'none' }}>
-                  <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', color: 'var(--text-3)' }}>
-                    <Icon name={item.icon} size={14} />
+                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-3)' }}>
+                    {item.name[0]}
                   </div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 13, fontWeight: 500 }}>{item.name}</div>
                     <div className="muted" style={{ fontSize: 11.5 }}>{item.desc}</div>
                   </div>
-                  <button className="btn btn--ghost btn--sm" onClick={() => toast('Coming soon — join the waitlist!')} style={{ fontSize: 11 }}>
+                  <button className="btn btn--ghost btn--sm" onClick={() => toast('Coming soon — join the waitlist!')} style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
                     Request
                   </button>
                 </div>
@@ -878,11 +877,10 @@ export default function Settings() {
                 <div style={{ fontSize: 13, fontWeight: 500 }}>{user?.email?.split('@')[0] || 'You'}</div>
                 <div className="mono muted" style={{ fontSize: 11 }}>{user?.email || ''}</div>
               </div>
-              <span className="badge badge--coral">Owner</span>
-              <button className="btn btn--ghost btn--sm"><Icon name="moreH" size={12} /></button>
+              <span className="muted" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>Owner</span>
             </div>
             <div style={{ padding: 16, borderTop: '1px solid var(--line)' }}>
-              <button className="btn btn--sm" disabled><Icon name="plus" size={12} />Invite teammate</button>
+              <button className="btn btn--sm" disabled>Invite teammate</button>
             </div>
           </div>
         </div>
@@ -893,7 +891,10 @@ export default function Settings() {
         <>
           <div className="card" style={{ marginBottom: 16, padding: 24 }}>
             <div className="row" style={{ gap: 14, marginBottom: 14 }}>
-              <span className="badge badge--coral">{planName} plan</span>
+              <span className="row" style={{ gap: 8 }}>
+                <span className="dot dot--lime" />
+                <span style={{ fontSize: 12, fontWeight: 500, textTransform: 'capitalize' }}>{planName} plan</span>
+              </span>
               <span className="mono muted" style={{ fontSize: 11 }}>
                 {billing?.price ? `$${billing.price} / month` : ''}{billing?.reset_date ? ` · renews ${billing.reset_date}` : ''}
               </span>
@@ -930,8 +931,8 @@ export default function Settings() {
               </div>
             )}
             {billing?.has_billing && billing?.plan !== 'free' && billing?.plan_status !== 'cancelled' && (
-              <button className="btn btn--ghost btn--sm" style={{ marginTop: 16 }} onClick={cancelSubscription} disabled={loadingPortal}>
-                <Icon name="x" size={11} />{loadingPortal ? 'Cancelling…' : 'Cancel subscription'}
+              <button className="btn btn--ghost btn--sm" style={{ marginTop: 16, whiteSpace: 'nowrap' }} onClick={cancelSubscription} disabled={loadingPortal}>
+                {loadingPortal ? 'Cancelling…' : 'Cancel subscription'}
               </button>
             )}
           </div>
@@ -947,8 +948,8 @@ export default function Settings() {
               return (
                 <div key={i} className="card" style={{
                   padding: 20,
-                  border: current ? '1px solid var(--coral-border)' : '1px solid var(--line)',
-                  background: current ? 'var(--coral-soft)' : 'var(--surface)',
+                  border: current ? '1px solid var(--line-3)' : '1px solid var(--line)',
+                  background: 'var(--surface)',
                 }}>
                   <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 6 }}>{plan.n}</div>
                   <div className="row" style={{ alignItems: 'baseline', gap: 4, marginBottom: 10 }}>
@@ -957,7 +958,7 @@ export default function Settings() {
                   </div>
                   <div className="muted" style={{ fontSize: 12, marginBottom: 14 }}>{plan.leads}</div>
                   {current
-                    ? <span className="badge badge--coral">Current</span>
+                    ? <span className="row" style={{ gap: 8 }}><span className="dot dot--lime" /><span style={{ fontSize: 12, color: 'var(--text-2)' }}>Current</span></span>
                     : (
                       <button
                         className="btn btn--sm"

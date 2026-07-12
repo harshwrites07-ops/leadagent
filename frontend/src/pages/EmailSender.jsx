@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
-import Icon from '../components/ui/Icon';
 import { useAuth } from '../context/AuthContext';
 import PowerSendOverlay from '../components/ui/PowerSendOverlay';
 import SpamMonitorPanel from '../components/ui/SpamMonitorPanel';
@@ -10,15 +9,25 @@ import api, { formatNumber, formatDate } from '../utils/api';
 import { useApp } from '../context/AppContext';
 import { useCountUp } from '../hooks/useCountUp';
 
-const STATUS_BADGE = {
-  pending:  { label: 'Pending',  kind: '' },
-  sending:  { label: 'Sending',  kind: 'warn' },
-  sent:     { label: 'Sent',     kind: 'lime' },
-  failed:   { label: 'Failed',   kind: 'bad' },
-  opened:   { label: 'Opened',   kind: 'lime' },
-  replied:  { label: 'Replied',  kind: 'coral' },
-  bounced:  { label: 'Bounced',  kind: 'bad' },
+const STATUS_META = {
+  pending:  { label: 'Pending',  dot: 'rgba(255,255,255,0.3)' },
+  sending:  { label: 'Sending',  dot: 'var(--warn)' },
+  sent:     { label: 'Sent',     dot: 'var(--ok)' },
+  failed:   { label: 'Failed',   dot: 'var(--bad)' },
+  opened:   { label: 'Opened',   dot: 'var(--ok)' },
+  replied:  { label: 'Replied',  dot: 'var(--ok)' },
+  bounced:  { label: 'Bounced',  dot: 'var(--bad)' },
 };
+
+function StatusDot({ status }) {
+  const meta = STATUS_META[status] || STATUS_META.pending;
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: meta.dot, flexShrink: 0, display: 'inline-block' }} />
+      <span style={{ fontSize: 12.5, color: 'var(--text-2)' }}>{meta.label}</span>
+    </span>
+  );
+}
 
 export default function EmailSender() {
   const navigate = useNavigate();
@@ -129,8 +138,15 @@ export default function EmailSender() {
     { id: 'queue',   label: 'Queue',   count: queueCount },
     { id: 'sent',    label: 'Sent',    count: sentToday },
     { id: 'opened',  label: 'Opened',  count: stats?.opened_count ?? 0 },
-    { id: 'replied', label: 'Replied', count: stats?.replied_count ?? 0, kind: 'coral' },
+    { id: 'replied', label: 'Replied', count: stats?.replied_count ?? 0 },
     { id: 'bounced', label: 'Bounced', count: stats?.bounced_count ?? 0 },
+  ];
+
+  const statDefs = [
+    { label: 'Queued', value: formatNumber(queueCount), sub: 'across mailboxes' },
+    { label: 'Sent today', value: formatNumber(animSent), sub: `${formatNumber((stats?.daily_limit ?? 150) - sentToday)} capacity left` },
+    { label: 'Replied', value: formatNumber(animReplied), sub: 'need attention' },
+    { label: 'Inbox placement', value: stats?.inbox_placement != null ? `${stats.inbox_placement}%` : '—', sub: `${formatNumber(stats?.bounced_count ?? 0)} bounces` },
   ];
 
   return (
@@ -142,57 +158,47 @@ export default function EmailSender() {
         className="page__head"
       >
         <div>
-          <h1 className="page__title">Email Sender — <em>your outbox, alive.</em></h1>
+          <h1 className="page__title" style={{ whiteSpace: 'nowrap' }}>Email Sender — <em>your outbox, alive.</em></h1>
         </div>
-        <div className="page__actions">
+        <div className="page__actions" style={{ flexWrap: 'wrap' }}>
           <button className="btn btn--ghost" onClick={() => setShowSpamMonitor(true)}>
-            <Icon name="shield" size={13} />Spam Monitor
+            Spam Monitor
           </button>
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.97 }}
-            className="btn btn--ghost"
-            onClick={handleTogglePause}
-          >
-            <Icon name={paused ? 'play' : 'pause'} size={13} />{paused ? 'Resume sending' : 'Pause sending'}
-          </motion.button>
+          <button className="btn" onClick={handleTogglePause}>
+            {paused ? 'Resume sending' : 'Pause sending'}
+          </button>
+          <button className="btn" onClick={() => setShowFollowUpModal(true)}>
+            Power Follow-up
+          </button>
           <button
-            className="btn"
-            style={{ background: 'var(--coral-soft)', borderColor: 'var(--coral-border)', color: 'var(--coral)' }}
-            onClick={() => setShowFollowUpModal(true)}
-          >
-            <Icon name="bolt" size={13} />Power Follow-up
-          </button>
-          <motion.button
-            whileHover={{ scale: 1.02, y: -1 }}
-            whileTap={{ scale: 0.97 }}
             className="btn btn--primary"
             onClick={() => { if (!requiresProfile()) setShowPowerSendModal(true); }}
           >
-            <Icon name="bolt" size={13} />Power Send · {queueCount} ready
-          </motion.button>
+            Power Send · {queueCount} ready
+          </button>
         </div>
       </motion.div>
 
-      {/* KPI row */}
-      <div className="grid g-4" style={{ marginBottom: 16 }}>
-        {[
-          { label: 'Queued', value: formatNumber(queueCount), sub: 'across mailboxes', color: 'var(--text)', delay: 0 },
-          { label: 'Sent today', value: formatNumber(animSent), sub: `${formatNumber((stats?.daily_limit ?? 150) - sentToday)} capacity left`, color: 'var(--lime)', delay: 0.06 },
-          { label: 'Replied', value: formatNumber(animReplied), sub: 'need attention', color: 'var(--coral)', delay: 0.12 },
-          { label: 'Inbox placement', value: stats?.inbox_placement != null ? `${stats.inbox_placement}%` : '—', sub: `${formatNumber(stats?.bounced_count ?? 0)} bounces`, color: 'var(--lime)', delay: 0.18 },
-        ].map(({ label, value, sub, color, delay }) => (
+      {/* Stats row — borderless, hairline dividers */}
+      <div style={{
+        display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', gap: 0,
+        paddingBottom: 20, marginBottom: 20, borderBottom: '1px solid var(--line)',
+      }}>
+        {statDefs.map((stat, i) => (
           <motion.div
-            key={label}
-            initial={{ opacity: 0, y: 16 }}
+            key={stat.label}
+            initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay, duration: 0.4, ease: [0.16,1,0.3,1] }}
-            whileHover={{ y: -3 }}
-            className="stat"
+            transition={{ duration: 0.35, delay: i * 0.05, ease: [0.16, 1, 0.3, 1] }}
+            style={{
+              flex: '1 1 200px', display: 'flex', flexDirection: 'column', gap: 8,
+              paddingRight: 32, marginRight: 32, minWidth: 160,
+              borderRight: i === statDefs.length - 1 ? 'none' : '1px solid var(--line)',
+            }}
           >
-            <div className="stat__label">{label}</div>
-            <div className="stat__value stat__value--mono" style={{ color }}>{value}</div>
-            <div className="muted mono" style={{ fontSize: 11, marginTop: 6 }}>{sub}</div>
+            <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.09em', color: 'var(--text-4)', fontWeight: 500, whiteSpace: 'nowrap' }}>{stat.label}</span>
+            <span style={{ fontFamily: 'var(--f-mono)', fontSize: 32, fontWeight: 500, letterSpacing: '-0.03em', lineHeight: 1, color: 'var(--text)' }}>{stat.value}</span>
+            <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>{stat.sub}</span>
           </motion.div>
         ))}
       </div>
@@ -202,7 +208,7 @@ export default function EmailSender() {
         {TABS.map(t => (
           <div key={t.id} className={`tab ${tab === t.id ? 'is-active' : ''}`} onClick={() => setTab(t.id)}>
             {t.label}{' '}
-            <span className="mono muted" style={{ marginLeft: 6, fontSize: 10.5, color: t.kind === 'coral' ? 'var(--coral)' : 'var(--text-3)' }}>
+            <span className="mono" style={{ marginLeft: 6, fontSize: 10.5, color: 'var(--text-3)' }}>
               {t.count}
             </span>
           </div>
@@ -223,23 +229,23 @@ export default function EmailSender() {
             <>
               {queueLoading ? (
                 <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>
-                  <span className="dot dot--pulse" style={{ marginRight: 8, display: 'inline-block' }} />Loading queue...
+                  Loading queue...
                 </div>
               ) : queue.length === 0 ? (
                 <motion.div
                   initial={{ opacity: 0, y: 16 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="card"
-                  style={{ padding: '48px', textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}
+                  className="empty"
+                  style={{ border: '1px solid var(--line)', borderRadius: 12 }}
                 >
-                  Nothing queued yet. Head to Pitch Gen, generate some pitches, and they'll land here ready to send.
+                  <div className="empty__desc">Nothing queued yet. Head to Pitch Gen, generate some pitches, and they'll land here ready to send.</div>
                 </motion.div>
               ) : (
                 <div className="card" style={{ overflow: 'hidden' }}>
                   <table className="tbl">
                     <thead>
                       <tr>
-                        <th style={{ width: 32 }}><Icon name="moreH" size={12} /></th>
+                        <th style={{ width: 32 }}></th>
                         <th style={{ width: 32 }}><input type="checkbox" onChange={e => {}} /></th>
                         <th>To</th>
                         <th>Subject</th>
@@ -250,67 +256,57 @@ export default function EmailSender() {
                       </tr>
                     </thead>
                     <tbody>
-                      {queue.map((item, i) => {
-                        const badge = STATUS_BADGE[item.status] || STATUS_BADGE.pending;
-                        return (
-                          <motion.tr
-                            key={item.id || i}
-                            initial={{ opacity: 0, y: 6 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: i * 0.04, duration: 0.3 }}
-                          >
-                            <td><span style={{ cursor: 'grab', color: 'var(--text-4)', fontSize: 14, letterSpacing: '-1px' }}>⋮⋮</span></td>
-                            <td><input type="checkbox" defaultChecked /></td>
-                            <td>
-                              <div className="row" style={{ gap: 8 }}>
-                                <span className="ava" style={{ fontSize: 11, flexShrink: 0 }}>
-                                  {(item.lead_name || '?')[0].toUpperCase()}
-                                </span>
-                                <div>
-                                  <div style={{ fontSize: 13, fontWeight: 500 }}>{item.lead_name || 'Unknown'}</div>
-                                  <div className="mono muted" style={{ fontSize: 10.5 }}>{item.email || ''}</div>
-                                </div>
+                      {queue.map((item, i) => (
+                        <motion.tr
+                          key={item.id || i}
+                          initial={{ opacity: 0, y: 6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: i * 0.04, duration: 0.3 }}
+                        >
+                          <td><span style={{ cursor: 'grab', color: 'var(--text-4)', fontSize: 14, letterSpacing: '-1px' }}>⋮⋮</span></td>
+                          <td><input type="checkbox" defaultChecked /></td>
+                          <td>
+                            <div className="row" style={{ gap: 8 }}>
+                              <span className="ava" style={{ fontSize: 11, flexShrink: 0 }}>
+                                {(item.lead_name || '?')[0].toUpperCase()}
+                              </span>
+                              <div>
+                                <div style={{ fontSize: 13, fontWeight: 500 }}>{item.lead_name || 'Unknown'}</div>
+                                <div className="mono muted" style={{ fontSize: 10.5 }}>{item.email || ''}</div>
                               </div>
-                            </td>
-                            <td style={{ fontSize: 12.5, color: 'var(--text-2)', maxWidth: 280 }}>
-                              <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.subject}</div>
-                              {item.pitch_generation_method === 'fallback' && (
-                                <div style={{
-                                  marginTop: 4, display: 'inline-block', padding: '2px 6px', borderRadius: 4,
-                                  background: 'var(--coral)', color: 'var(--on-accent)',
-                                  fontSize: 9.5, fontWeight: 700, fontFamily: 'var(--f-mono)',
-                                }} title="This item was explicitly overridden past the fallback-template block.">
-                                  ⚠ FALLBACK TEMPLATE
-                                </div>
-                              )}
-                            </td>
-                            <td className="mono" style={{ fontSize: 11.5 }}>{item.mailbox || item.from_email || '—'}</td>
-                            <td>
-                              <span className={`badge${badge.kind ? ' badge--' + badge.kind : ''}`}>{badge.label}</span>
-                            </td>
-                            <td className="muted" style={{ fontSize: 11.5 }}>
-                              {item.scheduled_at ? formatDate(item.scheduled_at) : '—'}
-                            </td>
-                            <td>
-                              <div className="row" style={{ gap: 4, justifyContent: 'flex-end' }}>
-                                <button className="btn btn--ghost btn--sm" title="Preview"><Icon name="eye" size={11} /></button>
-                                <motion.button
-                                  whileHover={{ scale: 1.05 }}
-                                  whileTap={{ scale: 0.95 }}
-                                  className="btn btn--ghost btn--sm"
-                                  title="Send now"
-                                  onClick={() => { if (!requiresProfile()) handleSendNow(item.id); }}
-                                >
-                                  <Icon name="play" size={11} />
-                                </motion.button>
-                                <button className="btn btn--ghost btn--sm" title="Remove" onClick={() => handleRemove(item.id)}>
-                                  <Icon name="x" size={11} />
-                                </button>
+                            </div>
+                          </td>
+                          <td style={{ fontSize: 12.5, color: 'var(--text-2)', maxWidth: 280 }}>
+                            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.subject}</div>
+                            {item.pitch_generation_method === 'fallback' && (
+                              <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }} title="This item was explicitly overridden past the fallback-template block.">
+                                <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--bad)', display: 'inline-block' }} />
+                                <span style={{ fontSize: 10.5, fontFamily: 'var(--f-mono)', color: 'var(--bad)' }}>FALLBACK TEMPLATE</span>
                               </div>
-                            </td>
-                          </motion.tr>
-                        );
-                      })}
+                            )}
+                          </td>
+                          <td className="mono" style={{ fontSize: 11.5 }}>{item.mailbox || item.from_email || '—'}</td>
+                          <td><StatusDot status={item.status} /></td>
+                          <td className="muted" style={{ fontSize: 11.5 }}>
+                            {item.scheduled_at ? formatDate(item.scheduled_at) : '—'}
+                          </td>
+                          <td>
+                            <div className="row" style={{ gap: 4, justifyContent: 'flex-end' }}>
+                              <button className="btn btn--ghost btn--sm" title="Preview">Preview</button>
+                              <button
+                                className="btn btn--ghost btn--sm"
+                                title="Send now"
+                                onClick={() => { if (!requiresProfile()) handleSendNow(item.id); }}
+                              >
+                                Send
+                              </button>
+                              <button className="btn btn--ghost btn--sm" title="Remove" onClick={() => handleRemove(item.id)}>
+                                Remove
+                              </button>
+                            </div>
+                          </td>
+                        </motion.tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
@@ -323,11 +319,11 @@ export default function EmailSender() {
             <>
               {historyLoading ? (
                 <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>
-                  <span className="dot dot--pulse" style={{ marginRight: 8, display: 'inline-block' }} />Loading...
+                  Loading...
                 </div>
               ) : history.length === 0 ? (
-                <div className="card" style={{ padding: '32px', textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>
-                  No replies yet.
+                <div className="empty" style={{ border: '1px solid var(--line)', borderRadius: 12 }}>
+                  <div className="empty__desc">No replies yet.</div>
                 </div>
               ) : (
                 <div className="card" style={{ overflow: 'hidden' }}>
@@ -346,22 +342,24 @@ export default function EmailSender() {
                         <div className="row" style={{ gap: 8, marginBottom: 2 }}>
                           <span style={{ fontSize: 13, fontWeight: 500 }}>{h.lead_name || h.to_name || 'Unknown'}</span>
                           {h.reply_sentiment && (
-                            <span className={`badge badge--${h.reply_sentiment === 'positive' ? 'coral' : h.reply_sentiment === 'question' ? 'warn' : 'bad'}`}>
-                              {h.reply_sentiment}
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11 }}>
+                              <span style={{
+                                width: 6, height: 6, borderRadius: '50%', display: 'inline-block',
+                                background: h.reply_sentiment === 'positive' ? 'var(--ok)' : h.reply_sentiment === 'question' ? 'var(--warn)' : 'var(--bad)',
+                              }} />
+                              <span style={{ color: 'var(--text-2)' }}>{h.reply_sentiment}</span>
                             </span>
                           )}
                         </div>
                         <div className="muted" style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.subject}</div>
                       </div>
                       <div className="muted mono" style={{ fontSize: 11, flexShrink: 0 }}>{h.sent_at ? formatDate(h.sent_at) : '—'}</div>
-                      <motion.button
-                        whileHover={{ scale: 1.03 }}
-                        whileTap={{ scale: 0.97 }}
-                        className="btn btn--coral btn--sm"
+                      <button
+                        className="btn btn--sm"
                         onClick={() => navigate('/email')}
                       >
-                        Reply <Icon name="arrowR" size={11} />
-                      </motion.button>
+                        Reply
+                      </button>
                     </motion.div>
                   ))}
                 </div>
@@ -374,11 +372,11 @@ export default function EmailSender() {
             <>
               {historyLoading ? (
                 <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>
-                  <span className="dot dot--pulse" style={{ marginRight: 8, display: 'inline-block' }} />Loading...
+                  Loading...
                 </div>
               ) : history.length === 0 ? (
-                <div className="card" style={{ padding: '32px', textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>
-                  No {tab} emails yet.
+                <div className="empty" style={{ border: '1px solid var(--line)', borderRadius: 12 }}>
+                  <div className="empty__desc">No {tab} emails yet.</div>
                 </div>
               ) : (
                 <div className="card" style={{ overflow: 'hidden' }}>
@@ -393,41 +391,36 @@ export default function EmailSender() {
                       </tr>
                     </thead>
                     <tbody>
-                      {history.map((h, i) => {
-                        const badge = STATUS_BADGE[h.status] || STATUS_BADGE.sent;
-                        return (
-                          <motion.tr
-                            key={h.id || i}
-                            initial={{ opacity: 0, y: 6 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: i * 0.04, duration: 0.3 }}
-                          >
-                            <td>
-                              <div className="row" style={{ gap: 8 }}>
-                                <span className="ava" style={{ fontSize: 11 }}>
-                                  {(h.lead_name || h.to_name || '?')[0].toUpperCase()}
-                                </span>
-                                <div>
-                                  <div style={{ fontSize: 13, fontWeight: 500 }}>{h.lead_name || h.to_name}</div>
-                                  <div className="mono muted" style={{ fontSize: 10.5 }}>{h.to_email || ''}</div>
-                                </div>
+                      {history.map((h, i) => (
+                        <motion.tr
+                          key={h.id || i}
+                          initial={{ opacity: 0, y: 6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: i * 0.04, duration: 0.3 }}
+                        >
+                          <td>
+                            <div className="row" style={{ gap: 8 }}>
+                              <span className="ava" style={{ fontSize: 11 }}>
+                                {(h.lead_name || h.to_name || '?')[0].toUpperCase()}
+                              </span>
+                              <div>
+                                <div style={{ fontSize: 13, fontWeight: 500 }}>{h.lead_name || h.to_name}</div>
+                                <div className="mono muted" style={{ fontSize: 10.5 }}>{h.to_email || ''}</div>
                               </div>
-                            </td>
-                            <td style={{ fontSize: 12.5, color: 'var(--text-2)', maxWidth: 280 }}>
-                              <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.subject}</div>
-                            </td>
-                            <td>
-                              <span className={`badge${badge.kind ? ' badge--' + badge.kind : ''}`}>{badge.label}</span>
-                            </td>
-                            <td className="muted" style={{ fontSize: 11.5 }}>{h.sent_at ? formatDate(h.sent_at) : '—'}</td>
-                            <td>
-                              <div className="row" style={{ gap: 4, justifyContent: 'flex-end' }}>
-                                <button className="btn btn--ghost btn--sm"><Icon name="eye" size={11} /></button>
-                              </div>
-                            </td>
-                          </motion.tr>
-                        );
-                      })}
+                            </div>
+                          </td>
+                          <td style={{ fontSize: 12.5, color: 'var(--text-2)', maxWidth: 280 }}>
+                            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.subject}</div>
+                          </td>
+                          <td><StatusDot status={h.status} /></td>
+                          <td className="muted" style={{ fontSize: 11.5 }}>{h.sent_at ? formatDate(h.sent_at) : '—'}</td>
+                          <td>
+                            <div className="row" style={{ gap: 4, justifyContent: 'flex-end' }}>
+                              <button className="btn btn--ghost btn--sm">Preview</button>
+                            </div>
+                          </td>
+                        </motion.tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
@@ -456,10 +449,7 @@ export default function EmailSender() {
               style={{ maxWidth: 540 }}
             >
               <div style={{ padding: '28px 32px 8px' }}>
-                <div className="row" style={{ marginBottom: 14 }}>
-                  <div className="pm__icon" style={{ width: 30, height: 30, borderRadius: 8 }}><Icon name="bolt" size={14} /></div>
-                  <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em' }}>Power send · about to launch</div>
-                </div>
+                <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 14 }}>Power send · about to launch</div>
                 <h2 className="page__title" style={{ fontSize: 28 }}>
                   Send <em style={{ fontStyle: 'normal', color: 'var(--lime)' }}>{queueCount} emails</em> across <em style={{ fontStyle: 'normal' }}>your mailboxes?</em>
                 </h2>
@@ -474,15 +464,13 @@ export default function EmailSender() {
                 </div>
                 <div className="row" style={{ gap: 8 }}>
                   <button className="btn" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setShowPowerSendModal(false)}>Cancel</button>
-                  <motion.button
-                    whileHover={{ scale: 1.02, y: -1 }}
-                    whileTap={{ scale: 0.97 }}
+                  <button
                     className="btn btn--primary"
                     style={{ flex: 2, justifyContent: 'center' }}
                     onClick={() => { if (!requiresProfile()) { setShowPowerSendModal(false); setShowPowerOverlay(true); } }}
                   >
-                    <Icon name="bolt" size={13} />Launch send
-                  </motion.button>
+                    Launch send
+                  </button>
                 </div>
               </div>
             </motion.div>
@@ -518,15 +506,7 @@ export default function EmailSender() {
               style={{ maxWidth: 460 }}
             >
               <div style={{ padding: '32px 32px 8px', textAlign: 'center' }}>
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ delay: 0.1, duration: 0.4, ease: [0.16,1,0.3,1] }}
-                  style={{ width: 64, height: 64, borderRadius: 18, background: 'var(--lime-soft)', border: '1px solid var(--lime-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', fontSize: 28 }}
-                >
-                  ⚡
-                </motion.div>
-                <h2 style={{ fontFamily: 'var(--f-heading)', fontSize: 22, fontWeight: 800, marginBottom: 8 }}>
+                <h2 style={{ fontFamily: 'var(--f-heading)', fontSize: 22, fontWeight: 700, marginBottom: 8 }}>
                   Complete your voice profile first
                 </h2>
                 <p className="muted" style={{ fontSize: 13, lineHeight: 1.7, marginBottom: 0 }}>
@@ -537,15 +517,13 @@ export default function EmailSender() {
                 <div style={{ padding: '12px 16px', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 10, fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>
                   Takes <strong style={{ color: 'var(--lime)' }}>~2 minutes</strong> · 4 short questions · unlocks personalized AI pitches for every creator
                 </div>
-                <motion.button
-                  whileHover={{ scale: 1.02, y: -1 }}
-                  whileTap={{ scale: 0.97 }}
-                  className="btn btn--lime btn--lg"
+                <button
+                  className="btn btn--primary btn--lg"
                   style={{ justifyContent: 'center' }}
                   onClick={() => { setShowProfileGate(false); navigate('/onboarding'); }}
                 >
-                  ⚡ Complete voice profile →
-                </motion.button>
+                  Complete voice profile →
+                </button>
                 <button
                   className="btn btn--ghost"
                   style={{ justifyContent: 'center' }}
@@ -578,14 +556,9 @@ export default function EmailSender() {
               style={{ maxWidth: 480 }}
             >
               <div style={{ padding: '28px 32px 8px' }}>
-                <div className="row" style={{ marginBottom: 14 }}>
-                  <div className="pm__icon" style={{ width: 30, height: 30, borderRadius: 8, background: 'var(--coral-soft)', border: '1px solid var(--coral-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Icon name="bolt" size={14} color="var(--coral)" />
-                  </div>
-                  <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--coral)' }}>Auto Follow-up</div>
-                </div>
+                <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 14 }}>Auto Follow-up</div>
                 <h2 className="page__title" style={{ fontSize: 22, marginBottom: 8 }}>
-                  Set up <em style={{ fontStyle: 'normal', color: 'var(--coral)' }}>automatic follow-ups</em>
+                  Set up <em style={{ fontStyle: 'normal' }}>automatic follow-ups</em>
                 </h2>
                 <p className="muted" style={{ fontSize: 13, lineHeight: 1.6, marginBottom: 0 }}>
                   Marcus AI will send a personalised follow-up to everyone who hasn't replied — automatically, at your chosen interval — until they respond or opt out.
@@ -596,7 +569,7 @@ export default function EmailSender() {
                   <div className="muted" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>Follow-up interval</div>
                   <div style={{ display: 'flex', gap: 8 }}>
                     {[1, 2, 3, 5, 7].map(d => (
-                      <button key={d} onClick={() => setFollowUpDays(d)} className={`btn btn--sm${followUpDays === d ? ' btn--primary' : ' btn--ghost'}`} style={{ flex: 1, justifyContent: 'center' }}>
+                      <button key={d} onClick={() => setFollowUpDays(d)} className={`btn btn--sm${followUpDays === d ? ' btn--primary' : ''}`} style={{ flex: 1, justifyContent: 'center' }}>
                         {d}d
                       </button>
                     ))}
@@ -607,7 +580,7 @@ export default function EmailSender() {
                   <div className="muted" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>Max follow-ups per lead</div>
                   <div style={{ display: 'flex', gap: 8 }}>
                     {[1, 2, 3, 4].map(n => (
-                      <button key={n} onClick={() => setFollowUpCount(n)} className={`btn btn--sm${followUpCount === n ? ' btn--primary' : ' btn--ghost'}`} style={{ flex: 1, justifyContent: 'center' }}>
+                      <button key={n} onClick={() => setFollowUpCount(n)} className={`btn btn--sm${followUpCount === n ? ' btn--primary' : ''}`} style={{ flex: 1, justifyContent: 'center' }}>
                         {n}×
                       </button>
                     ))}
@@ -622,8 +595,8 @@ export default function EmailSender() {
                 <div className="row" style={{ gap: 8 }}>
                   <button className="btn" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setShowFollowUpModal(false)}>Cancel</button>
                   <button
-                    className="btn btn--primary"
-                    style={{ flex: 2, justifyContent: 'center', background: 'var(--coral-soft)', borderColor: 'var(--coral-border)', color: 'var(--coral)' }}
+                    className="btn"
+                    style={{ flex: 2, justifyContent: 'center' }}
                     onClick={async () => {
                       try {
                         await api.post('/emails/follow-up/schedule', { interval_days: followUpDays, max_count: followUpCount });
@@ -632,7 +605,7 @@ export default function EmailSender() {
                       setShowFollowUpModal(false);
                     }}
                   >
-                    <Icon name="bolt" size={13} />Activate Auto Follow-up
+                    Activate Auto Follow-up
                   </button>
                 </div>
               </div>

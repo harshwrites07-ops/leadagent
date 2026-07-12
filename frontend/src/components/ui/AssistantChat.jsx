@@ -134,7 +134,7 @@ export default function AssistantChat() {
   useEffect(() => {
     const handler = () => { setOpen(true); setMinimized(false); };
     const onKey = (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      if ((e.metaKey || e.ctrlKey) && (e.key.toLowerCase() === 'k' || e.key.toLowerCase() === 'j')) {
         e.preventDefault();
         setOpen(v => !v);
         setMinimized(false);
