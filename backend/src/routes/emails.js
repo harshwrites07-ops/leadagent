@@ -78,7 +78,7 @@ router.post('/test-send', requireAdmin, asyncHandler(async (req, res) => {
   if (!to) return res.status(400).json({ success: false, error: 'to is required' });
   const inboxes = getInboxes();
   const { pickAccountForUser } = require('../services/gmailService');
-  const gmailAccount = pickAccountForUser(req.user.id);
+  const gmailAccount = await pickAccountForUser(req.user.id);
   const diagnostics = { smtpInboxes: inboxes.map(i => ({ email: i.email, host: i.host, port: i.port })), gmailAccount: gmailAccount ? { email: gmailAccount.email, status: gmailAccount.status, sentToday: gmailAccount.emails_sent_today } : null, method: null, error: null, success: false };
   try {
     const result = await sendEmail({ to, subject: 'ContentCrafterzz — Test Email', body: `This is a test email sent at ${new Date().toISOString()}.\n\nIf you received this, email sending is working correctly.`, leadId: null, userId: req.user.id });

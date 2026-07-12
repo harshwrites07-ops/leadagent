@@ -167,7 +167,7 @@ async function sendEmail({ to, subject, body, leadId, followUpNumber = 0, skipIn
   if (userId) {
     try {
       const { pickAccountForUser, sendViaGmail } = require('./gmailService');
-      const gmailAccount = pickAccountForUser(userId);
+      const gmailAccount = await pickAccountForUser(userId);
       if (gmailAccount) {
         console.log(`[Email] Using Gmail OAuth: ${gmailAccount.email} (sent today: ${gmailAccount.emails_sent_today})`);
         const userRow = await db.get('SELECT full_name, agency_name FROM users WHERE id=?', [userId]);
