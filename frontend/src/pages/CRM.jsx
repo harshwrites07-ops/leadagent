@@ -10,11 +10,11 @@ const STAGES = [
   { id: 'new_lead',       label: 'Discovered',  color: 'var(--text-4)' },
   { id: 'studying',       label: 'Enriched',    color: 'var(--sky)' },
   { id: 'pitch_ready',    label: 'Pitch Ready', color: 'var(--violet)' },
-  { id: 'email_sent',     label: 'Sent',        color: 'var(--lime)' },
+  { id: 'emailed',        label: 'Sent',        color: 'var(--lime)' },
   { id: 'replied',        label: 'Replied',     color: 'var(--ok)' },
   { id: 'call_booked',    label: 'Call Booked', color: 'var(--coral)' },
-  { id: 'closed',         label: 'Won',         color: 'var(--ok)' },
-  { id: 'not_interested', label: 'Lost',        color: 'var(--bad)' },
+  { id: 'closed_won',     label: 'Won',         color: 'var(--ok)' },
+  { id: 'closed_lost',    label: 'Lost',        color: 'var(--bad)' },
 ];
 
 const NICHE_COLORS = {
@@ -54,7 +54,7 @@ export default function CRM() {
   const loadLeads = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await api.get('/crm');
+      const { data } = await api.get('/crm?limit=2000');
       const arr = Array.isArray(data.leads) ? data.leads : Array.isArray(data) ? data : [];
       setLeads(arr);
     } catch { toast.error('Failed to load CRM'); }

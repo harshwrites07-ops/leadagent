@@ -9,7 +9,7 @@ router.get('/', asyncHandler(async (req, res) => {
   const db = getDb();
   const { search, temperature, platform, page = 1, limit = 50 } = req.query;
   const pageNum  = Math.max(1, parseInt(page) || 1);
-  const limitNum = Math.min(200, Math.max(1, parseInt(limit) || 50));
+  const limitNum = Math.min(2000, Math.max(1, parseInt(limit) || 50));
   const offset = (pageNum - 1) * limitNum;
 
   let where = ['l.user_id = ?'];

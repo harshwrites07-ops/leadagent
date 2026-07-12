@@ -476,12 +476,6 @@ router.post('/generate-and-send', aiLimiter, asyncHandler(async (req, res) => {
           return { id, success: false, quality_blocked: true, channel_name: lead.channel_name, error: 'AI generation failed — a fallback template was produced instead of a real pitch. Refusing to send it.' };
         }
 
-        // Hard block: refuse to send if quality < 70
-        if (gateScore !== null && gateScore < 70) {
-          await db.run(`UPDATE leads SET crm_stage='pitch_ready', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [id]);
-          return { id, success: false, quality_blocked: true, score: gateScore, channel_name: lead.channel_name, error: `Quality score ${gateScore}/100 below threshold` };
-        }
-
         const emailSubject = result.email_subject || result.subject;
         const snapshot = await buildSnapshot(lead);
         const qr = await db.run(`INSERT INTO email_queue (user_id,lead_id,subject,body,status,signal_snapshot) VALUES (?,?,?,?,'pending',?) ${USE_PG ? 'RETURNING id' : ''}`, [req.user.id, id, emailSubject, emailBody, snapshot]);
@@ -673,15 +667,6 @@ async function runPowerSendJob(jobId, { lead_ids, max_leads = 100, per_account_l
             stats.failed++;
             await jobUpdate(db, jobId, { failed: stats.failed });
             await jobLog(db, jobId, 'blocked', `Blocked ${lead.channel_name} — AI generation failed, fallback template produced instead of a real pitch`);
-            try { await db.run(`UPDATE leads SET crm_stage='pitch_ready', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [lead.id]); } catch {}
-            return;
-          }
-
-          // Hard block: skip send if quality < 70
-          if (gateScore !== null && gateScore < 70) {
-            stats.failed++;
-            await jobUpdate(db, jobId, { failed: stats.failed });
-            await jobLog(db, jobId, 'blocked', `Blocked ${lead.channel_name} — quality score ${gateScore}/100 below 70 threshold`);
             try { await db.run(`UPDATE leads SET crm_stage='pitch_ready', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [lead.id]); } catch {}
             return;
           }

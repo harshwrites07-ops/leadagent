@@ -131,17 +131,6 @@ router.post('/queue', asyncHandler(async (req, res) => {
       error: 'This email is a fallback template, not a Marcus draft. Regenerate it or explicitly override.',
     });
   }
-  // Hard block: refuse to queue if quality score < 70
-  if (pitch && pitch.quality_score !== null && pitch.quality_score < 70) {
-    return res.status(403).json({
-      success: false,
-      error: 'QUALITY_BLOCK',
-      message: `This pitch scored ${pitch.quality_score}/100 and cannot be sent until it passes quality review.`,
-      score: pitch.quality_score,
-      feedback: (() => { try { return pitch.quality_breakdown ? JSON.parse(pitch.quality_breakdown) : null; } catch { return null; } })(),
-      action: 'Click "Rewrite" to regenerate this pitch and improve its score above 70.',
-    });
-  }
   // Contact throttle (Session 3.2) — a first-touch email (never contacted
   // this lead before) counts against the pool-wide per-creator cap;
   // follow-ups to an existing thread are exempt, never blocked or counted.

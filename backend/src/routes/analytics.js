@@ -76,6 +76,7 @@ router.get('/dashboard', asyncHandler(async (req, res) => {
     stats: {
       total_leads: totalLeads.count, leads_today: leadsToday.count,
       emails_today: emailsToday.count, emails_month: emailsMonth.count,
+      total_replies: totalReplies.count,
       reply_rate:      totalSent.count > 0 ? parseFloat(((totalReplies.count / totalSent.count) * 100).toFixed(1)) : 0,
       open_rate:       totalSent.count > 0 ? parseFloat(((totalOpens.count   / totalSent.count) * 100).toFixed(1)) : 0,
       conversion_rate: totalSent.count > 0 ? parseFloat(((totalClosed.count  / totalSent.count) * 100).toFixed(1)) : 0,
