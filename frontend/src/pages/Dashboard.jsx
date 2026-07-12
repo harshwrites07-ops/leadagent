@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Zap } from 'lucide-react';
-import Icon from '../components/ui/Icon';
 import PowerSendOverlay from '../components/ui/PowerSendOverlay';
 import { useApp } from '../context/AppContext';
 import api, { formatNumber, formatDate } from '../utils/api';
@@ -104,7 +102,6 @@ export default function Dashboard() {
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Icon name="bell" size={14} />
             <span style={{ fontWeight: 700, fontSize: 13 }}>
               {hotAlerts.length} new HOT lead{hotAlerts.length !== 1 ? 's' : ''} matched your niche
             </span>
@@ -125,11 +122,8 @@ export default function Dashboard() {
         </h1>
         <div style={{ flex: 1 }} />
         <button className="btn" onClick={() => navigate('/leads')}>Import leads</button>
+        <button className="btn" onClick={() => setShowPowerOverlay(true)}>Power Email</button>
         <button className="btn btn--primary" onClick={() => navigate('/campaigns')}>New campaign</button>
-        <button className="btn btn--primary" onClick={() => setShowPowerOverlay(true)} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Zap size={13} />
-          Power Email
-        </button>
       </div>
 
       {/* Stats row */}

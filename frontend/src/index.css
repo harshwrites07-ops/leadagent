@@ -17,23 +17,27 @@
   --surface:      var(--app-surface-1);
   --surface-2:    var(--app-surface-2);
   --surface-3:    var(--app-surface-2);
-  --hover:        var(--app-surface-1);
+  --hover:        var(--app-surface-2);
+  --surface-hover: var(--app-surface-2);
 
-  /* ── Lines ── (no dedicated border token in the source system; reuses
-     the highest elevation surface — see app-tokens.css) */
-  --line:         var(--app-border);
+  /* ── Lines ── hairline dividers (between rows) are a step lighter than
+     card/input borders — see app-tokens.css. ── */
+  --line:         var(--app-divider);
   --line-2:       var(--app-border);
-  --line-3:       var(--app-accent);
+  --line-3:       var(--app-border);
 
   /* ── Text ── */
   --text:         var(--app-text-primary);
   --heading:      var(--app-text-primary);
   --text-2:       var(--app-text-secondary);
   --text-3:       var(--app-text-muted);
-  --text-4:       var(--app-text-muted);
-  --on-accent:    #ffffff;   /* text color used on accent/status-colored fills */
+  --text-4:       var(--app-text-ghost);
+  --text-content: var(--app-text-content);
+  --on-accent:    #241d0d;   /* text color used on champagne fills */
 
-  /* ── Accent (single accent: buttons, links, focus, live indicators) ── */
+  /* ── Accent (single accent: buttons, links, focus, live indicators).
+     Used sparingly (≤5 chromatic touches per screen) — everything else
+     is ink/text tones. ── */
   --lime:         var(--app-accent);
   --lime-2:       var(--app-accent-hover);
   --lime-dim:     var(--app-accent-pressed);
@@ -42,9 +46,8 @@
   --lime-glow:    var(--app-accent-glow);
   --lime-rgb:     var(--app-accent-rgb);
 
-  /* ── Coral — the app's former second "urgency/hot" accent. The source
-     system allows exactly one chromatic accent, so coral is folded onto
-     --app-warning (amber reads as "hot/urgent") rather than kept distinct. ── */
+  /* ── Coral — retired as a distinct hue; folded onto --app-warning so
+     "hot/urgent" reads amber rather than reintroducing a second accent. ── */
   --coral:        var(--app-warning);
   --coral-2:      var(--app-warning);
   --coral-dim:    var(--app-warning);
@@ -52,19 +55,18 @@
   --coral-border: var(--app-warning-border);
   --coral-rgb:    var(--app-warning-rgb);
 
-  /* ── Status ── --ok (success/positive) has no token in the source
-     system; folded onto the single accent for a fully monochrome status
-     scheme (confirmed). --bad maps onto the real danger token. ── */
-  --ok:           var(--app-accent);
+  /* ── Status — real semantic colors (data only, never decorative), kept
+     independent of the champagne accent. ── */
+  --ok:           var(--app-success);
   --warn:         var(--app-warning);
   --bad:          var(--app-danger);
   --info:         var(--app-accent);
-  --ok-rgb:       var(--app-accent-rgb);
+  --ok-rgb:       var(--app-success-rgb);
   --bad-rgb:      var(--app-danger-rgb);
   --warn-rgb:     var(--app-warning-rgb);
 
-  /* ── Editorial accents (retired — alias onto text/accent) ── */
-  --cream:        #ffffff;
+  /* ── Editorial accents (retired — alias onto the single accent) ── */
+  --cream:        var(--app-accent);
   --sky:          var(--app-accent);
   --violet:       var(--app-accent);
   --rose:         var(--coral);

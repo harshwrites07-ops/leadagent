@@ -1,50 +1,55 @@
 /* ═══════════════════════════════════════════════════════════
-   QUELRO APP TOKENS — Clay.com-derived design system
+   QUELRO APP TOKENS — Ink & Champagne design system
    Source of truth for the app interior (Dashboard/CRM/etc).
    Namespaced --app-* so it never collides with landing-page tokens.
    Every raw hex value in the app should trace back to one of these.
+   The 12 hex values below are the whole palette — do not add new
+   chromatic colors; derive soft/border/glow tints from these only.
    ═══════════════════════════════════════════════════════════ */
 :root {
   /* ── Backgrounds ── */
-  --app-bg:         #16181f;
-  --app-surface-1:  #282c35;
-  --app-surface-2:  #3c414d;
-  --app-danger:     #9f3e15;
+  --app-bg:         #0d0e12;
+  --app-surface-1:  #14161c;
+  --app-surface-2:  #191c24;
+  --app-danger:     #f87171;
 
   /* ── Text ── */
-  --app-text-primary:   #ffffff;
-  --app-text-secondary: #e6e8ec;
-  --app-text-soft:      #eff1f3;
-  /* No tertiary/muted text token was specified in the source system.
-     Derived from text-secondary at reduced opacity rather than a new hex
-     (decision confirmed with product owner). Used for timestamps, meta
-     labels, and de-emphasized text. */
-  --app-text-muted:     rgba(230, 232, 236, 0.55);
+  --app-text-primary:   #f6f4ef;
+  --app-text-secondary: #8f9099;
+  --app-text-soft:      #f6f4ef;
+  --app-text-muted:     #5d616e;
+  --app-text-ghost:     #43464f;
+  /* Content tone — email/draft body text only, never UI chrome. */
+  --app-text-content:   #c9c6bc;
 
-  /* ── Accent — the only chromatic color for interactive/meaningful elements ── */
-  --app-accent:         #3ea2fd;
-  --app-accent-hover:   #b8ddff;
-  --app-accent-pressed: #001e4b;
-  --app-warning:        #b37601;
+  /* ── Accent — champagne, the only chromatic accent, used sparingly ── */
+  --app-accent:         #e8dcc0;
+  --app-accent-hover:   #f0e6ce;
+  --app-accent-pressed: #d9caa3;
+  --app-warning:        #fbbf24;
+  --app-success:        #4ade80;
 
   /* Alpha tints derived from --app-accent / --app-warning / --app-danger for
      soft fills, borders, and glows (badges, focus glows, hero gradients).
      Not new base colors — computed tints of the sanctioned tokens above. */
-  --app-accent-soft:    rgba(62, 162, 253, 0.12);
-  --app-accent-border:  rgba(62, 162, 253, 0.32);
-  --app-accent-glow:    rgba(62, 162, 253, 0.35);
-  --app-accent-rgb:     62, 162, 253;
-  --app-warning-soft:   rgba(179, 118, 1, 0.14);
-  --app-warning-border: rgba(179, 118, 1, 0.38);
-  --app-warning-rgb:    179, 118, 1;
-  --app-danger-soft:    rgba(159, 62, 21, 0.14);
-  --app-danger-border:  rgba(159, 62, 21, 0.38);
-  --app-danger-rgb:     159, 62, 21;
+  --app-accent-soft:    rgba(232, 220, 192, 0.12);
+  --app-accent-border:  rgba(232, 220, 192, 0.32);
+  --app-accent-glow:    rgba(232, 220, 192, 0.35);
+  --app-accent-rgb:     232, 220, 192;
+  --app-warning-soft:   rgba(251, 191, 36, 0.14);
+  --app-warning-border: rgba(251, 191, 36, 0.38);
+  --app-warning-rgb:    251, 191, 36;
+  --app-danger-soft:    rgba(248, 113, 113, 0.14);
+  --app-danger-border:  rgba(248, 113, 113, 0.38);
+  --app-danger-rgb:     248, 113, 113;
+  --app-success-soft:   rgba(74, 222, 128, 0.14);
+  --app-success-border: rgba(74, 222, 128, 0.38);
+  --app-success-rgb:    74, 222, 128;
 
-  /* No dedicated border/divider token was specified. Decision: reuse the
-     highest elevation surface as the border color (confirmed). */
-  --app-border:      var(--app-surface-2);
-  --app-border-soft: rgba(60, 65, 77, 0.6);
+  /* Hairline divider — distinct from the (darker) card/input border. */
+  --app-divider:     #1c1f27;
+  --app-border:      #262933;
+  --app-border-soft: rgba(38, 41, 51, 0.6);
 
   /* ── Border radius ── */
   --app-radius-sm:   4px;
@@ -65,7 +70,7 @@
     rgba(22, 24, 31, 0.4) 0px 2px 5px 0px,
     rgba(255, 255, 255, 0.1) 0px 2px 1px -1px inset,
     rgba(255, 255, 255, 0.05) 0px 0px 0px 0.5px inset;
-  --app-shadow-focus: rgb(87, 197, 247) 0px 0px 5px;
+  --app-shadow-focus: rgb(232, 220, 192) 0px 0px 5px;
 
   /* ── Typography ── */
   /* 'Inter var' and 'Inter' currently resolve to the same loaded family —
