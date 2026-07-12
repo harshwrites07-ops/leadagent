@@ -1,145 +1,166 @@
-// Quality Gate V2 — Marcus v2 email-engine rebuild spec, section 5.
-// 9-row point table, mostly deterministic (codeGate.js does word count, raw-
-// stat-dump, ban-list, personalization, burstiness, CTA shape, reading grade,
-// P.S. presence for free and instantly). The AI is only asked to judge the one
-// thing code can't: tone (conversational vs. informative), plus a fact-check
-// pass against the lead's verified data to kill hallucinated personalization.
+// Quality Gate V4 — deterministic pipeline rebuild (Marcus V4 spec, Stage 4).
+// Pure code checks, no AI judge. 7 checks, 100 points, every check always
+// returns {name, points_awarded, points_possible, detail} — a check that
+// throws scores 0 with the error in `detail`, never a missing key. The array
+// is always length 7; if it's ever not, the caller must block the email.
 
 const { completeSmart } = require('./services/claudeService');
-const { buildCreatorIntelligencePack } = require('./services/channelAnalyzer');
-const { runCodeGate, describeViolation, wordCount } = require('./services/codeGate');
+const { runCodeGate, describeViolation, wordCount, fleschKincaidGrade, BANNED_PHRASES } = require('./services/codeGate');
 
 // ═══════════════════════════════════════════════════════════════════════════
-// AI GATE V2 — deterministic 95 pts (codeGate) + AI-judged tone (5 pts) + fact-check
+// STAGE 4 — deterministic quality gate. 7 checks, 100 points total.
 // ═══════════════════════════════════════════════════════════════════════════
 
-function buildLeadFactsCompact(intelligencePack) {
-  const p = intelligencePack || {};
-  const hook = p.hook_data || {};
-  const facts = [];
-  if (p.subscribers) facts.push(`subscribers: ${p.subscribers}`);
-  if (hook.best_video_title) facts.push(`best video: "${hook.best_video_title}" (${hook.best_video_views || '?'} views)`);
-  if (hook.most_recent_video_title) facts.push(`most recent video: "${hook.most_recent_video_title}" (${hook.most_recent_video_views || '?'} views)`);
-  if (hook.recent_avg_views) facts.push(`recent avg views: ${hook.recent_avg_views}`);
-  if (hook.channel_avg_views) facts.push(`channel avg views: ${hook.channel_avg_views}`);
-  if (p.last_upload_days_ago != null) facts.push(`days since last upload: ${p.last_upload_days_ago}`);
-  return facts.join('\n') || 'No verified facts available for this lead.';
+function splitBodyParagraphs(body) {
+  return (body || '').split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
 }
 
-// Deterministic 95-point subscore from codeGate's violation list. Mirrors the
-// spec's table exactly: word count 15, personalization 20, no-raw-stat 15,
-// ban-list 15, burstiness 10, CTA shape 10, reading grade 5, P.S. present 5.
-function scoreDeterministic(gate, body) {
-  const types = new Set(gate.violations.map(v => v.type));
-  const has = (...t) => t.some(x => types.has(x));
+function stripSignOffLine(text) {
+  const noPs = (text || '').replace(/\s*(?:^|\n)\s*P\.?\s?S\.?[:\s][\s\S]*$/i, '');
+  const lines = noPs.split('\n');
+  while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+  if (lines.length) {
+    const last = lines[lines.length - 1].trim();
+    if (/^—?\s*[A-Za-z][a-zA-Z']{0,20}$/.test(last)) lines.pop();
+  }
+  return lines.join('\n').trimEnd();
+}
 
-  const wc = wordCount(body);
-  const wordCountPts = (wc >= 70 && wc <= 120) ? 15 : has('tooLong', 'tooShort') ? 0 : 8;
-  const personalizationPts = has('no_verifiable_personalization') ? 0 : 20;
-  const rawStatPts = has('rawNumberDump') ? 0 : 15;
-  const banListPts = has('banned_phrase', 'ruleOfThree', 'ingSentenceOpener', 'tooManyEmDashes', 'mentionsPricing') ? 0 : 15;
-  const burstinessPts = has('noBurstiness') ? 0 : 10;
-  const ctaPts = has('noQuestionCTA', 'tooManyQuestions') ? 0 : 10;
-  const readingGradePts = has('readingGradeOff') ? 0 : 5;
-  const psPts = has('psAbsent') ? 0 : 5;
-
-  return {
-    total: wordCountPts + personalizationPts + rawStatPts + banListPts + burstinessPts + ctaPts + readingGradePts + psPts,
-    breakdown: {
-      word_count:       { points: wordCountPts, max: 15, feedback: wordCountPts < 15 ? `${wc} words — target is 70-120` : '' },
-      personalization:  { points: personalizationPts, max: 20, feedback: personalizationPts === 0 ? 'No real video title or stat from this lead\'s data appears in the body' : '' },
-      no_raw_stat_dump: { points: rawStatPts, max: 15, feedback: rawStatPts === 0 ? 'Contains a raw 4+ digit number — convert to a formatted stat or story-form comparison' : '' },
-      ban_list_clean:   { points: banListPts, max: 15, feedback: banListPts === 0 ? 'Hit a banned phrase, tricolon, -ing opener, pricing mention, or 2+ em-dashes' : '' },
-      burstiness:       { points: burstinessPts, max: 10, feedback: burstinessPts === 0 ? 'Needs one sentence under 5 words and one over 20 words' : '' },
-      cta_shape:        { points: ctaPts, max: 10, feedback: ctaPts === 0 ? 'CTA must end in exactly one question' : '' },
-      reading_grade:    { points: readingGradePts, max: 5, feedback: readingGradePts === 0 ? 'Reading level drifted outside grade 3-5' : '' },
-      ps_present:       { points: psPts, max: 5, feedback: psPts === 0 ? 'Missing a P.S. with a genuine specific detail' : '' },
+// Each entry: name, points_possible, and a fn(subject, body, intelligencePack)
+// that returns { pass, detail } — thrown errors are caught by the runner below.
+const CHECKS = [
+  {
+    name: 'personalization_proof',
+    points_possible: 30,
+    run: (subject, body, pack) => {
+      const { personalizationCheck } = require('./services/codeGate');
+      const ok = personalizationCheck(body, pack || {});
+      return {
+        pass: ok,
+        detail: ok
+          ? 'Contains a verbatim video title fragment or real stat from this lead\'s data'
+          : 'No real video title or stat from this lead\'s data appears in the body — ratio math alone does not count',
+      };
     },
-  };
-}
+  },
+  {
+    name: 'ban_list_clean',
+    points_possible: 20,
+    run: (subject, body) => {
+      const gate = runCodeGate({ subject, body }, {});
+      const banHits = gate.violations.filter(v =>
+        v.severity === 'hard' &&
+        ['banned_phrase', 'ruleOfThree', 'ingSentenceOpener', 'tooManyEmDashes', 'mentionsPricing'].includes(v.type));
+      const ok = banHits.length === 0;
+      return {
+        pass: ok,
+        detail: ok ? 'Zero banned patterns survived' : banHits.map(describeViolation).join('; '),
+      };
+    },
+  },
+  {
+    name: 'reading_grade',
+    points_possible: 15,
+    run: (subject, body) => {
+      const grade = fleschKincaidGrade(body);
+      const ok = grade != null && grade <= 7;
+      return {
+        pass: ok,
+        detail: grade == null
+          ? 'Could not compute reading grade (empty body)'
+          : `Flesch-Kincaid grade ${grade.toFixed(1)}${ok ? ' (≤7)' : ' — target is ≤ grade 7'}`,
+      };
+    },
+  },
+  {
+    name: 'structure',
+    points_possible: 15,
+    run: (subject, body) => {
+      const paragraphs = splitBodyParagraphs(body);
+      const hasParagraphs = paragraphs.length >= 3;
+      const ctaLine = stripSignOffLine(body);
+      const hasQuestionCTA = /\?\s*$/.test(ctaLine);
+      const ok = hasParagraphs && hasQuestionCTA;
+      const issues = [];
+      if (!hasParagraphs) issues.push(`only ${paragraphs.length} paragraph(s) — needs greeting, observation, and proof/offer at minimum`);
+      if (!hasQuestionCTA) issues.push('final content paragraph does not end in a single CTA question');
+      return { pass: ok, detail: ok ? 'Four-movement skeleton present' : issues.join('; ') };
+    },
+  },
+  {
+    name: 'length',
+    points_possible: 10,
+    run: (subject, body) => {
+      const wc = wordCount(body);
+      const ok = wc >= 60 && wc <= 130;
+      return { pass: ok, detail: `${wc} words${ok ? ' (60-130)' : ' — target is 60-130'}` };
+    },
+  },
+  {
+    name: 'ps_present',
+    points_possible: 5,
+    run: (subject, body) => {
+      const ok = /(^|\n)\s*P\.?\s?S\.?[:\s]/i.test(body || '');
+      return { pass: ok, detail: ok ? 'P.S. line present' : 'Missing a P.S. line with a genuine specific detail' };
+    },
+  },
+  {
+    name: 'subject_valid',
+    points_possible: 5,
+    run: (subject) => {
+      const s = (subject || '').trim();
+      const words = s.split(/\s+/).filter(Boolean);
+      const wordCountOk = words.length >= 2 && words.length <= 6;
+      const notTitleCase = !/\b[A-Z][a-z]+\b.*\b[A-Z][a-z]+\b/.test(s);
+      const hasBannedWord = BANNED_PHRASES.some(p => p.test(s));
+      const ok = wordCountOk && notTitleCase && !hasBannedWord;
+      const issues = [];
+      if (!wordCountOk) issues.push(`${words.length} words — target is 2-6`);
+      if (!notTitleCase) issues.push('subject is title-cased, not lowercase/casual');
+      if (hasBannedWord) issues.push('subject contains a banned phrase');
+      return { pass: ok, detail: ok ? 'Subject line valid' : issues.join('; ') };
+    },
+  },
+];
 
-function buildToneAndFactCheckPrompt(subject, body, intelligencePack, knownIssues) {
-  return `Judge ONE thing about this cold email, plus fact-check it. Everything else (word count, banned phrases, personalization, CTA shape) has already been checked by a separate deterministic pass — do not re-score those.
-
-EMAIL:
-Subject: ${subject}
-${body}
-
-LEAD FACTS (verify claims against these — any number or title in the email that doesn't match is an automatic fail):
-${buildLeadFactsCompact(intelligencePack)}
-${knownIssues.length ? `\nKNOWN STRUCTURAL ISSUES (already detected, factor into weakest_sentence/fix_direction if relevant):\n${knownIssues.map(d => `- ${d}`).join('\n')}` : ''}
-
-TONE (0-5): Is this conversational (a person typed it quickly between tasks) or informative (a service talking AT the reader)? 5 = unmistakably conversational — casual rhythm, sounds spoken. 0 = reads like a service description or marketing copy.
-
-FACT CHECK: "fact_violations" must contain ONLY claims that are WRONG or unverifiable against the lead facts above. If every claim checks out, "fact_violations" MUST be an empty array []. Do NOT list confirmations.
-
-Also name the single weakest sentence in the email (for a surgical one-sentence rewrite) and what it should do instead — pull from the known structural issues above if one applies, otherwise judge freely.
-
-Return JSON only:
-{"tone": N, "fact_violations": [], "weakest_sentence": "<exact sentence>", "fix_direction": "<one line>"}`;
+// Runs every check independently — one throwing never drops it from the
+// array or corrupts the others. A thrown check scores 0 with the error
+// named in `detail`, per the V4 spec's "no silent failures" rule.
+function runChecks(subject, body, intelligencePack) {
+  return CHECKS.map(({ name, points_possible, run }) => {
+    try {
+      const { pass, detail } = run(subject, body, intelligencePack);
+      return { name, points_awarded: pass ? points_possible : 0, points_possible, detail };
+    } catch (err) {
+      return { name, points_awarded: 0, points_possible, detail: `check errored: ${err.message}` };
+    }
+  });
 }
 
 async function evaluateEmailQualityV2(subject, body, intelligencePack) {
+  const checks = runChecks(subject, body, intelligencePack);
+  const checksComplete = checks.length === CHECKS.length;
+  const score = checks.reduce((sum, c) => sum + c.points_awarded, 0);
+  const failedChecks = checks.filter(c => c.points_awarded < c.points_possible);
+  const passed = checksComplete && score >= 70;
+
+  // gate.hardViolations still drives regen/angle-switch triggers below —
+  // recomputed here from the same codeGate pass the checks already ran.
   const gate = runCodeGate({ subject, body }, intelligencePack || {});
-  const deterministic = scoreDeterministic(gate, body);
-  const knownIssues = gate.softViolations.map(describeViolation);
+  const worst = failedChecks[0];
 
-  try {
-    const prompt = buildToneAndFactCheckPrompt(subject, body, intelligencePack || {}, knownIssues);
-    const text = await completeSmart(prompt, '', 400);
-    const cleaned = text.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(cleaned.match(/\{[\s\S]*\}/)[0]);
-
-    const tonePts = Math.max(0, Math.min(5, Number.isFinite(parsed.tone) ? parsed.tone : 0));
-    // Defensive filter: some model responses pad fact_violations with
-    // confirmation entries ("X — confirmed, no violation") instead of leaving
-    // the array empty. Only count entries that actually describe a mismatch.
-    const realViolations = (Array.isArray(parsed.fact_violations) ? parsed.fact_violations : [])
-      .filter(v => !/no violation|confirmed|correct|matches|checks out/i.test(String(v)));
-    const hasFactViolation = realViolations.length > 0;
-
-    const rawTotal = deterministic.total + tonePts;
-    // Hard-block conditions (spec: word count/personalization/raw-stat/ban-list
-    // are all "hard block" rows) and fact violations both force the email below
-    // the 70 threshold so runQualityGate's existing regen/angle-switch path
-    // picks it up, without needing separate control flow here.
-    const hardBlocked = gate.hardViolations.length > 0 || hasFactViolation;
-    const total = hardBlocked ? Math.min(rawTotal, 40) : rawTotal;
-
-    return {
-      score: total,
-      passed: total >= 85 && !hardBlocked,
-      hardBlocked,
-      codeGateViolations: gate.violations,
-      dimensions: {
-        ...deterministic.breakdown,
-        tone: { score: tonePts, max: 5 },
-      },
-      fact_violations:  realViolations,
-      weakest_sentence: parsed.weakest_sentence || '',
-      fix_direction:    parsed.fix_direction || (gate.hardViolations[0] ? describeViolation(gate.hardViolations[0]) : ''),
-      breakdown: {
-        ...deterministic.breakdown,
-        tone: { points: tonePts, max: 5, feedback: tonePts < 5 ? 'Reads informative rather than conversational' : '' },
-      },
-      overall_feedback: parsed.fix_direction || (gate.hardViolations[0] ? describeViolation(gate.hardViolations[0]) : ''),
-    };
-  } catch (err) {
-    console.error('[QualityGate] V2 evaluation error:', err.message);
-    // Even if the AI call fails, ship the deterministic part of the score —
-    // it's free and already computed, no reason to zero it out.
-    const hardBlocked = gate.hardViolations.length > 0;
-    return {
-      score: hardBlocked ? Math.min(deterministic.total, 40) : deterministic.total,
-      passed: false,
-      hardBlocked,
-      error: true,
-      codeGateViolations: gate.violations,
-      breakdown: deterministic.breakdown,
-      weakest_sentence: '',
-      fix_direction: gate.hardViolations[0] ? describeViolation(gate.hardViolations[0]) : '',
-    };
-  }
+  return {
+    score,
+    passed,
+    hardBlocked: !passed,
+    checksComplete,
+    checks,
+    codeGateViolations: gate.violations,
+    weakest_sentence: '',
+    fix_direction: worst ? worst.detail : '',
+    breakdown: checks,
+    overall_feedback: worst ? worst.detail : '',
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -415,8 +436,9 @@ async function runQualityGate(emailText, creatorData, voiceDNA, onAttempt, fullI
 module.exports = {
   runQualityGate,
   evaluateEmailQualityV2,
-  buildToneAndFactCheckPrompt,
   generateInitialDraft,
   buildCreatorData,
   getQualityStatus,
+  CHECKS,
+  runChecks,
 };
