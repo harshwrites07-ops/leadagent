@@ -334,6 +334,19 @@ function _initSqliteSchema(db) {
       breakdown TEXT DEFAULT '{}',
       attempt_number INTEGER DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    -- Marcus V4 P1-2 — per-stage verdicts (intake/sanitize/gate/send), the
+    -- first-attempt-pass-rate metric's data source. quality_log above only
+    -- ever covered the gate stage; this is every stage, as structured rows
+    -- instead of console.log.
+    CREATE TABLE IF NOT EXISTS generation_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      lead_id INTEGER,
+      stage TEXT NOT NULL,
+      passed INTEGER DEFAULT 0,
+      detail TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
   alterTry(`ALTER TABLE quality_log ADD COLUMN attempt_number INTEGER DEFAULT 1`);

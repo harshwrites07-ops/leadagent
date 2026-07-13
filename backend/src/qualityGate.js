@@ -206,7 +206,11 @@ async function surgicalFix(subject, body, fixDirection) {
 // when 2 consecutive AI-gate attempts score under 70 (Part 5)
 // ═══════════════════════════════════════════════════════════════════════════
 
-async function angleSwitchRegenerate(lead, user, voiceDNA, intelligencePack, previousAngleResult) {
+// Marcus V4 P1-1 — regen feedback injection. previousGateResult is the
+// evaluateEmailQualityV2() verdict that triggered this regen; its failed
+// checks are named explicitly in the new prompt so the redraft fixes the
+// specific things that failed instead of guessing blind.
+async function angleSwitchRegenerate(lead, user, voiceDNA, intelligencePack, previousAngleResult, previousGateResult) {
   const { selectAngle } = require('./services/angleEngine');
   const { buildMARCUSPrompt } = require('./services/claudeService');
 
@@ -214,7 +218,12 @@ async function angleSwitchRegenerate(lead, user, voiceDNA, intelligencePack, pre
     excludeAngle: previousAngleResult?.selected_angle,
   });
 
-  const prompt = buildMARCUSPrompt(lead, user, voiceDNA, intelligencePack, newAngleResult, null);
+  const failedChecks = (previousGateResult?.checks || []).filter(c => c.points_awarded < c.points_possible);
+  const feedback = failedChecks.length
+    ? `Previous attempt failed: ${failedChecks.map(c => c.detail).join('; ')}. Fix these specifically.`
+    : null;
+
+  const prompt = buildMARCUSPrompt(lead, user, voiceDNA, intelligencePack, newAngleResult, feedback);
   try {
     const raw = await completeSmart(prompt, '', 1200);
     const cleaned = raw.replace(/```json|```/g, '').trim();
@@ -410,7 +419,7 @@ async function runQualityGate(emailText, creatorData, voiceDNA, onAttempt, fullI
   // ── <70 twice (or 70-84 surgical retry still landed <70): angle-switch ──
   if (under70Count >= 2 && lead && user) {
     regenerated = true;
-    const regen = await angleSwitchRegenerate(lead, user, voiceDNA, scoringPack, currentAngleResult);
+    const regen = await angleSwitchRegenerate(lead, user, voiceDNA, scoringPack, currentAngleResult, result);
     if (regen) {
       subject = regen.subject; body = regen.body; currentAngleResult = regen.angleResult;
       console.log(`[QualityGate] Angle-switch regen: ${currentAngleResult.selected_angle}`);

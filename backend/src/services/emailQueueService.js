@@ -9,6 +9,7 @@
 const { getDb, USE_PG } = require('../models/database');
 const { buildSnapshot } = require('./signalSnapshot');
 const { checkUsageLimit, incrementUsage } = require('./authService');
+const { logGenerationStage } = require('./generationLog');
 
 class QueueBlockedError extends Error {
   constructor(code, message) {
@@ -42,52 +43,60 @@ function deriveGateFromPitch(pitch) {
 // gate: { score, checksComplete, breakdown, attempts?, model? } — from
 //   deriveGateFromPitch() or a fresh evaluateEmailQualityV2() result.
 async function queueEmail({ user, lead, subject, body, gate, scheduledAt = null, priority = 0, skipThrottle = false }) {
-  if (!user) throw new QueueBlockedError('USER_REQUIRED', 'user is required');
-  if (!lead) throw new QueueBlockedError('LEAD_REQUIRED', 'lead is required');
-  if (!subject || !body) throw new QueueBlockedError('EMAIL_REQUIRED', 'subject and body are required to queue an email');
+  try {
+    if (!user) throw new QueueBlockedError('USER_REQUIRED', 'user is required');
+    if (!lead) throw new QueueBlockedError('LEAD_REQUIRED', 'lead is required');
+    if (!subject || !body) throw new QueueBlockedError('EMAIL_REQUIRED', 'subject and body are required to queue an email');
 
-  // Send Guard — the whole reason this file exists. No override parameter,
-  // by design: a bypassable constraint is not a constraint.
-  if (!gate || gate.score == null || !gate.checksComplete) {
-    throw new QueueBlockedError('QUALITY_GATE_INCOMPLETE', 'Email has not been scored by a complete Marcus quality gate run — cannot queue');
-  }
-  if (gate.score < 70) {
-    throw new QueueBlockedError('QUALITY_GATE_FAILED', `Quality gate score ${gate.score}/100 is below the 70 send threshold`);
-  }
-
-  const usageCheck = await checkUsageLimit(user, 'emails');
-  if (!usageCheck.allowed) {
-    throw new QueueBlockedError('USAGE_LIMIT', `Monthly email limit reached (${usageCheck.used}/${usageCheck.limit}). Upgrade your plan to send more emails.`);
-  }
-
-  const isFirstTouch = !lead.last_contacted_date;
-  if (!skipThrottle && isFirstTouch && lead.channel_id) {
-    const { checkContactThrottle } = require('./allocationEngine');
-    const throttle = await checkContactThrottle(lead.channel_id);
-    if (!throttle.allowed) {
-      throw new QueueBlockedError('CREATOR_THROTTLED', 'This creator was recently contacted through Quelro. Protecting reply rates for everyone.');
+    // Send Guard — the whole reason this file exists. No override parameter,
+    // by design: a bypassable constraint is not a constraint.
+    if (!gate || gate.score == null || !gate.checksComplete) {
+      throw new QueueBlockedError('QUALITY_GATE_INCOMPLETE', 'Email has not been scored by a complete Marcus quality gate run — cannot queue');
     }
+    if (gate.score < 70) {
+      throw new QueueBlockedError('QUALITY_GATE_FAILED', `Quality gate score ${gate.score}/100 is below the 70 send threshold`);
+    }
+
+    const usageCheck = await checkUsageLimit(user, 'emails');
+    if (!usageCheck.allowed) {
+      throw new QueueBlockedError('USAGE_LIMIT', `Monthly email limit reached (${usageCheck.used}/${usageCheck.limit}). Upgrade your plan to send more emails.`);
+    }
+
+    const isFirstTouch = !lead.last_contacted_date;
+    if (!skipThrottle && isFirstTouch && lead.channel_id) {
+      const { checkContactThrottle } = require('./allocationEngine');
+      const throttle = await checkContactThrottle(lead.channel_id);
+      if (!throttle.allowed) {
+        throw new QueueBlockedError('CREATOR_THROTTLED', 'This creator was recently contacted through Quelro. Protecting reply rates for everyone.');
+      }
+    }
+
+    const db = getDb();
+    const snapshot = await buildSnapshot(lead);
+    const result = await db.run(
+      `INSERT INTO email_queue
+         (user_id, lead_id, subject, body, status, scheduled_at, priority, signal_snapshot,
+          gate_score, gate_checks_complete, gate_breakdown, generation_attempts, generation_model)
+       VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?) ${USE_PG ? 'RETURNING id' : ''}`,
+      [user.id, lead.id, subject, body, scheduledAt, priority, snapshot,
+       gate.score, USE_PG ? gate.checksComplete : (gate.checksComplete ? 1 : 0),
+       JSON.stringify(gate.breakdown || []), gate.attempts ?? null, gate.model ?? null]
+    );
+
+    await incrementUsage(user.id, 'emails', 1);
+    if (lead.channel_id) {
+      const { recordContact } = require('./allocationEngine');
+      await recordContact(lead.channel_id, user.id, isFirstTouch);
+    }
+
+    await logGenerationStage(user.id, lead.id, 'send', true, `Queued at score ${gate.score}/100`);
+    return db.get('SELECT * FROM email_queue WHERE id = ?', [result.lastID]);
+  } catch (err) {
+    if (err instanceof QueueBlockedError) {
+      await logGenerationStage(user?.id, lead?.id, 'send', false, `${err.code}: ${err.message}`);
+    }
+    throw err;
   }
-
-  const db = getDb();
-  const snapshot = await buildSnapshot(lead);
-  const result = await db.run(
-    `INSERT INTO email_queue
-       (user_id, lead_id, subject, body, status, scheduled_at, priority, signal_snapshot,
-        gate_score, gate_checks_complete, gate_breakdown, generation_attempts, generation_model)
-     VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?) ${USE_PG ? 'RETURNING id' : ''}`,
-    [user.id, lead.id, subject, body, scheduledAt, priority, snapshot,
-     gate.score, USE_PG ? gate.checksComplete : (gate.checksComplete ? 1 : 0),
-     JSON.stringify(gate.breakdown || []), gate.attempts ?? null, gate.model ?? null]
-  );
-
-  await incrementUsage(user.id, 'emails', 1);
-  if (lead.channel_id) {
-    const { recordContact } = require('./allocationEngine');
-    await recordContact(lead.channel_id, user.id, isFirstTouch);
-  }
-
-  return db.get('SELECT * FROM email_queue WHERE id = ?', [result.lastID]);
 }
 
 module.exports = { queueEmail, deriveGateFromPitch, QueueBlockedError };
