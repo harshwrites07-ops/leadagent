@@ -1218,25 +1218,26 @@ export default function PitchGenerator() {
                                   borderRadius: 'var(--r-sm)',
                                   display: 'flex', flexDirection: 'column', gap: 6,
                                 }}>
-                                  {Object.entries(pitch.quality_breakdown).map(([key, val]) => {
-                                    const maxMap = { personalization: 20, hook: 15, specificity: 15, value_prop: 15, cta: 15, tone: 12, spam_flag: 8 };
-                                    const max = maxMap[key] || 15;
-                                    const pct = Math.round((val.points / max) * 100);
+                                  {/* Renders exclusively from the backend's check array — each row carries
+                                      its own points_possible, so the UI never guesses a max. */}
+                                  {(Array.isArray(pitch.quality_breakdown) ? pitch.quality_breakdown : []).map((check) => {
+                                    const { name, points_awarded = 0, points_possible = 0, detail = '' } = check || {};
+                                    const pct = points_possible > 0 ? Math.round((points_awarded / points_possible) * 100) : 0;
                                     const barColor = pct >= 75 ? 'var(--lime)' : pct >= 50 ? 'var(--warn)' : 'var(--bad)';
                                     return (
-                                      <div key={key}>
+                                      <div key={name}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
                                           <span style={{ fontSize: 10, fontFamily: 'var(--f-mono)', textTransform: 'uppercase', color: 'var(--text-3)' }}>
-                                            {key.replace('_', ' ')}
+                                            {(name || '').replace(/_/g, ' ')}
                                           </span>
                                           <span style={{ fontSize: 10, fontFamily: 'var(--f-mono)', color: barColor }}>
-                                            {val.points}/{max}
+                                            {points_awarded}/{points_possible}
                                           </span>
                                         </div>
                                         <div style={{ height: 3, background: 'var(--surface-3)', borderRadius: 2, overflow: 'hidden', marginBottom: 2 }}>
                                           <div style={{ width: `${pct}%`, height: '100%', borderRadius: 2, background: barColor, transition: 'width 0.4s ease' }} />
                                         </div>
-                                        <div style={{ fontSize: 10, color: 'var(--text-4)', lineHeight: 1.4 }}>{val.feedback}</div>
+                                        <div style={{ fontSize: 10, color: 'var(--text-4)', lineHeight: 1.4 }}>{detail}</div>
                                       </div>
                                     );
                                   })}
