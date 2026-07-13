@@ -156,7 +156,6 @@ async function evaluateEmailQualityV2(subject, body, intelligencePack) {
     checksComplete,
     checks,
     codeGateViolations: gate.violations,
-    weakest_sentence: '',
     fix_direction: worst ? worst.detail : '',
     breakdown: checks,
     overall_feedback: worst ? worst.detail : '',
@@ -164,31 +163,34 @@ async function evaluateEmailQualityV2(subject, body, intelligencePack) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Surgical fix — edits ONLY the flagged weakest_sentence, per Part 5
+// Surgical fix — a targeted retry against the deterministic gate's worst check
 // ═══════════════════════════════════════════════════════════════════════════
 
-function buildSurgicalFixPrompt(subject, body, weakestSentence, fixDirection) {
-  return `You are editing a cold outreach email. This is SURGICAL WORK — do NOT rewrite from scratch.
+// Marcus V4 — the trigger is now the deterministic gate's own worst-check
+// detail (fixDirection, e.g. "CTA must end in exactly one question"), not an
+// AI-judged weakest_sentence. There's no quoted sentence to anchor on
+// anymore, so this asks for a targeted fix against a named failing check
+// instead of a single-sentence edit — still deliberately narrow ("don't
+// rewrite from scratch") to avoid wasting the regen on unrelated changes.
+function buildSurgicalFixPrompt(subject, body, fixDirection) {
+  return `You are editing a cold outreach email. This is a TARGETED FIX — do NOT rewrite from scratch.
 
 CURRENT EMAIL:
 Subject: ${subject}
 ${body}
 
-THE ONE SENTENCE THAT MUST CHANGE:
-"${weakestSentence}"
-
-WHAT IT SHOULD DO INSTEAD:
+WHAT FAILED THE QUALITY GATE:
 ${fixDirection}
 
-YOUR ONLY JOB: fix that sentence. Leave every other sentence exactly as written — they scored well, touching them will make things worse. Keep the same subject unless it was the flagged text.
+YOUR ONLY JOB: fix that specific problem. Leave everything else exactly as written — it already passed its checks, touching it will make things worse. Keep the same subject unless the subject itself is what failed.
 
 Return ONLY this JSON:
 {"subject": "${subject.replace(/"/g, '\\"')}", "body": "<edited body>"}`;
 }
 
-async function surgicalFix(subject, body, weakestSentence, fixDirection) {
+async function surgicalFix(subject, body, fixDirection) {
   try {
-    const prompt = buildSurgicalFixPrompt(subject, body, weakestSentence, fixDirection);
+    const prompt = buildSurgicalFixPrompt(subject, body, fixDirection);
     const raw = await completeSmart(prompt, '', 400);
     const cleaned = raw.replace(/```json|```/g, '').trim();
     const parsed = JSON.parse(cleaned.match(/\{[\s\S]*\}/)[0]);
@@ -392,10 +394,10 @@ async function runQualityGate(emailText, creatorData, voiceDNA, onAttempt, fullI
 
   if (result.score < HARD_BLOCK_SCORE) under70Count++;
 
-  // ── 70-84: one surgical retry on the weakest sentence ────────────────────
-  if (result.score >= HARD_BLOCK_SCORE && result.score < TARGET_SCORE && result.weakest_sentence) {
+  // ── 70-84: one surgical retry against the gate's own worst-check detail ──
+  if (result.score >= HARD_BLOCK_SCORE && result.score < TARGET_SCORE && result.fix_direction) {
     regenerated = true;
-    const fixed = await surgicalFix(subject, body, result.weakest_sentence, result.fix_direction);
+    const fixed = await surgicalFix(subject, body, result.fix_direction);
     subject = fixed.subject; body = fixed.body;
     result = await score('surgical retry');
     if (result.score >= TARGET_SCORE) {

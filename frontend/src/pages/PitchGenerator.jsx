@@ -227,8 +227,8 @@ export default function PitchGenerator() {
       if (selectedLead?.id) loadChecklist(selectedLead.id);
       setLeads(prev => prev.map(l => l.id === selectedLead.id ? { ...l, pitch_id: data.pitch?.id ?? true } : l));
       if (data.warning) toast(data.warning, { icon: '⚠️', duration: 6000 });
-      if (p.generation_method === 'fallback') {
-        toast.error('AI generation failed — this is a fallback template, not a real Marcus draft. Do not send it as-is.', { duration: 8000 });
+      if (p.generation_method === 'needs_human') {
+        toast.error('AI generation failed 3x — no draft was produced. This needs a human rewrite.', { duration: 8000 });
       } else if (data.qualityWarning) {
         toast('Quality gate could not fully improve this pitch — review carefully.', { icon: '⚠️', duration: 5000 });
       } else if (data.qualityRegenerated) {
@@ -728,12 +728,14 @@ export default function PitchGenerator() {
 
                 if (status === 'error') {
                   const isNeedsResearch = code === 'NEEDS_RESEARCH';
+                  const isIntakeBlocked = code === 'INTAKE_BLOCKED';
+                  const isNeedsHuman = code === 'NEEDS_HUMAN';
                   return (
                     <motion.div key={leadId} initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                       style={{ padding: 16, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)' }}>
                       <div style={{ fontSize: 12.5, fontWeight: 500, marginBottom: 4 }}>{lead.channel_name}</div>
                       <div className="muted" style={{ fontSize: 11, color: 'var(--bad)', marginBottom: 10 }}>
-                        {isNeedsResearch ? error : `Failed: ${error || 'Request failed — check Railway logs for details'}`}
+                        {isNeedsResearch || isIntakeBlocked || isNeedsHuman ? error : `Failed: ${error || 'Request failed — check Railway logs for details'}`}
                       </div>
                       <div className="row" style={{ gap: 6 }}>
                         <button
@@ -1130,27 +1132,36 @@ export default function PitchGenerator() {
                         );
                       })()}
 
-                      {/* Fallback-template banner — AI generation failed and this is boilerplate,
-                          never rendered the same as a real Marcus draft */}
-                      {pitch.generation_method === 'fallback' && (
+                      {/* needs_human banner — Marcus V4 P0-5: no fallback template exists.
+                          3 failed attempts land here with the reasons; a human rewrites or skips. */}
+                      {pitch.generation_method === 'needs_human' && (
                         <div style={{
                           marginBottom: 14, padding: '10px 14px', borderRadius: 'var(--r-sm)',
                           border: '1px solid var(--bad)', color: 'var(--bad)',
                           fontSize: 12, fontWeight: 700, fontFamily: 'var(--f-mono)',
-                          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
+                          display: 'flex', flexDirection: 'column', gap: 8,
                         }}>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--bad)', flexShrink: 0 }} />
-                            FALLBACK TEMPLATE — AI generation failed for this lead. This is not a real Marcus draft.
-                          </span>
-                          <button
-                            className="btn btn--ghost btn--sm"
-                            style={{ flexShrink: 0 }}
-                            onClick={handleGenerate}
-                            disabled={generating}
-                          >
-                            Regenerate now
-                          </button>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--bad)', flexShrink: 0 }} />
+                              NEEDS HUMAN — AI generation failed 3x for this lead. No draft was produced.
+                            </span>
+                            <button
+                              className="btn btn--ghost btn--sm"
+                              style={{ flexShrink: 0 }}
+                              onClick={handleGenerate}
+                              disabled={generating}
+                            >
+                              Retry generation
+                            </button>
+                          </div>
+                          {pitch.needs_human_reasons?.length > 0 && (
+                            <div style={{ fontSize: 10.5, fontWeight: 400, color: 'var(--text-3)', lineHeight: 1.5 }}>
+                              {pitch.needs_human_reasons.map((f, i) => (
+                                <div key={i}>Attempt {f.attempt}: {f.reason}</div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       )}
 

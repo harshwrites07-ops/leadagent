@@ -319,6 +319,9 @@ function _initSqliteSchema(db) {
   // this column and are assumed 'marcus' (the only path that wrote pitches
   // before this column existed).
   alterTry(`ALTER TABLE pitches ADD COLUMN generation_method TEXT DEFAULT 'marcus'`);
+  // Marcus V4 P0-5 — populated when generation_method='needs_human': the
+  // JSON array of per-attempt failure reasons, so the UI can show why.
+  alterTry(`ALTER TABLE pitches ADD COLUMN needs_human_reasons TEXT`);
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS quality_log (
