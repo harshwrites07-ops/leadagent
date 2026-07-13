@@ -4,8 +4,15 @@ const { getDb, getSetting, logActivity, USE_PG } = require('../models/database')
 const { asyncHandler } = require('../middleware/errorHandler');
 const { requireAdmin } = require('../middleware/requireAuth');
 const { sendEmail, sendReply, testSmtp, resetTransporter, checkSpamFolders, getInboxes, checkReplies, checkDeliverability, isValidEmailFormat, ensureClean, hasMxRecord } = require('../services/emailService');
-const { checkUsageLimit, incrementUsage } = require('../services/authService');
-const { buildSnapshot } = require('../services/signalSnapshot');
+const { queueEmail, deriveGateFromPitch, QueueBlockedError } = require('../services/emailQueueService');
+
+// Maps a QueueBlockedError to the HTTP response shape each existing call
+// site used to hand-roll (status code + extra fields the frontend reads,
+// e.g. upgradeRequired for the usage-limit paywall prompt).
+function sendQueueBlocked(res, e) {
+  if (e.code === 'USAGE_LIMIT') return res.status(429).json({ success: false, upgradeRequired: true, error: e.message });
+  return res.status(409).json({ success: false, code: e.code, error: e.message });
+}
 
 const dateGte30Days = USE_PG
   ? "sent_at::date >= CURRENT_DATE + INTERVAL '-30 days'"
@@ -110,10 +117,8 @@ router.get('/queue', asyncHandler(async (req, res) => {
 
 router.post('/queue', asyncHandler(async (req, res) => {
   const db = getDb();
-  const { lead_id, subject, body, scheduled_at, priority = 0, allowFallback = false } = req.body;
+  const { lead_id, subject, body, scheduled_at, priority = 0 } = req.body;
   if (!lead_id) return res.status(400).json({ success: false, error: 'lead_id required' });
-  const usageCheck = await checkUsageLimit(req.user, 'emails');
-  if (!usageCheck.allowed) return res.status(429).json({ success: false, upgradeRequired: true, error: `Monthly email limit reached (${usageCheck.used}/${usageCheck.limit}). Upgrade your plan to send more emails.` });
   const lead = await db.get('SELECT * FROM leads WHERE id = ? AND user_id = ?', [lead_id, req.user.id]);
   if (!lead) return res.status(404).json({ success: false, error: 'Lead not found' });
   let finalSubject = subject, finalBody = body;
@@ -123,39 +128,18 @@ router.post('/queue', asyncHandler(async (req, res) => {
     finalSubject = finalSubject || pitch.email_subject;
     finalBody = finalBody || pitch.cold_email;
   }
-  // Hard block: a fallback template (Marcus generation failed) must never
-  // reach a real prospect without the user consciously overriding.
-  if (pitch && pitch.generation_method === 'fallback' && !allowFallback) {
-    return res.status(409).json({
-      code: 'FALLBACK_PITCH',
-      error: 'This email is a fallback template, not a Marcus draft. Regenerate it or explicitly override.',
-    });
-  }
-  // Contact throttle (Session 3.2) — a first-touch email (never contacted
-  // this lead before) counts against the pool-wide per-creator cap;
-  // follow-ups to an existing thread are exempt, never blocked or counted.
-  const isFirstTouch = !lead.last_contacted_date;
-  if (isFirstTouch && lead.channel_id) {
-    const { checkContactThrottle } = require('../services/allocationEngine');
-    const throttle = await checkContactThrottle(lead.channel_id);
-    if (!throttle.allowed) {
-      return res.status(409).json({
-        code: 'CREATOR_THROTTLED',
-        error: 'This creator was recently contacted through Quelro. Protecting reply rates for everyone.',
-      });
-    }
-  }
 
-  const snapshot = await buildSnapshot(lead);
-  const result = await db.run(`INSERT INTO email_queue (user_id, lead_id, subject, body, status, scheduled_at, priority, signal_snapshot) VALUES (?, ?, ?, ?, 'pending', ?, ?, ?) ${USE_PG ? 'RETURNING id' : ''}`, [req.user.id, lead.id, finalSubject, finalBody, scheduled_at || null, priority, snapshot]);
-  await incrementUsage(req.user.id, 'emails', 1);
-  logActivity('queued', `Email queued for ${lead.channel_name}`, lead.id, {}, req.user.id);
-  if (lead.channel_id) {
-    const { recordContact } = require('../services/allocationEngine');
-    await recordContact(lead.channel_id, req.user.id, isFirstTouch);
+  try {
+    const item = await queueEmail({
+      user: req.user, lead, subject: finalSubject, body: finalBody,
+      gate: deriveGateFromPitch(pitch), scheduledAt: scheduled_at || null, priority,
+    });
+    logActivity('queued', `Email queued for ${lead.channel_name}`, lead.id, {}, req.user.id);
+    res.status(201).json({ success: true, item });
+  } catch (e) {
+    if (e instanceof QueueBlockedError) return sendQueueBlocked(res, e);
+    throw e;
   }
-  const item = await db.get('SELECT * FROM email_queue WHERE id = ?', [result.lastID]);
-  res.status(201).json({ success: true, item });
 }));
 
 router.post('/queue/pause', asyncHandler(async (req, res) => {
@@ -171,26 +155,30 @@ router.post('/queue/resume', asyncHandler(async (req, res) => {
 }));
 
 router.post('/queue/bulk', asyncHandler(async (req, res) => {
-  const { lead_ids, allowFallback = false } = req.body;
+  const { lead_ids } = req.body;
   if (!lead_ids?.length) return res.status(400).json({ success: false, error: 'lead_ids required' });
-  const usageCheck = await checkUsageLimit(req.user, 'emails');
-  if (!usageCheck.allowed) return res.status(429).json({ success: false, upgradeRequired: true, error: `Monthly email limit reached (${usageCheck.used}/${usageCheck.limit}). Upgrade your plan to send more emails.` });
   const db = getDb();
-  let added = 0, skipped = 0, fallbackBlocked = 0;
+  let added = 0, skipped = 0, gateBlocked = 0;
   for (const id of lead_ids) {
     const lead  = await db.get('SELECT * FROM leads WHERE id = ? AND user_id = ?', [id, req.user.id]);
     if (!lead) { skipped++; continue; }
     const pitch = await db.get('SELECT * FROM pitches WHERE lead_id = ?', [id]);
     if (!pitch) { skipped++; continue; }
-    if (pitch.generation_method === 'fallback' && !allowFallback) { fallbackBlocked++; continue; }
     const existing = await db.get(`SELECT id FROM email_queue WHERE lead_id = ? AND status = 'pending'`, [id]);
     if (existing) { skipped++; continue; }
-    const snapshot = await buildSnapshot(lead);
-    await db.run(`INSERT INTO email_queue (user_id, lead_id, subject, body, status, signal_snapshot) VALUES (?, ?, ?, ?, 'pending', ?)`, [req.user.id, id, pitch.email_subject, pitch.cold_email, snapshot]);
-    added++;
+    try {
+      await queueEmail({ user: req.user, lead, subject: pitch.email_subject, body: pitch.cold_email, gate: deriveGateFromPitch(pitch) });
+      added++;
+    } catch (e) {
+      if (e instanceof QueueBlockedError) {
+        if (e.code === 'USAGE_LIMIT') break; // monthly limit hit — stop the batch, report what's done so far
+        gateBlocked++;
+        continue;
+      }
+      throw e;
+    }
   }
-  if (added > 0) await incrementUsage(req.user.id, 'emails', added);
-  res.json({ success: true, added, skipped, fallback_blocked: fallbackBlocked });
+  res.json({ success: true, added, skipped, gate_blocked: gateBlocked });
 }));
 
 router.post('/queue/reorder', asyncHandler(async (req, res) => {
@@ -207,9 +195,7 @@ router.post('/queue/:leadId', asyncHandler(async (req, res) => {
   const db = getDb();
   const lead = await db.get('SELECT * FROM leads WHERE id = ? AND user_id = ?', [req.params.leadId, req.user.id]);
   if (!lead) return res.status(404).json({ success: false, error: 'Lead not found' });
-  const usageCheck = await checkUsageLimit(req.user, 'emails');
-  if (!usageCheck.allowed) return res.status(429).json({ success: false, upgradeRequired: true, error: `Monthly email limit reached (${usageCheck.used}/${usageCheck.limit}). Upgrade your plan to send more emails.` });
-  const { subject, body, scheduled_at, priority = 0, allowFallback = false } = req.body;
+  const { subject, body, scheduled_at, priority = 0 } = req.body;
   let finalSubject = subject, finalBody = body;
   const pitch = await db.get('SELECT * FROM pitches WHERE lead_id = ?', [lead.id]);
   if (!finalSubject || !finalBody) {
@@ -217,34 +203,18 @@ router.post('/queue/:leadId', asyncHandler(async (req, res) => {
     finalSubject = finalSubject || pitch.email_subject;
     finalBody = finalBody || pitch.cold_email;
   }
-  if (pitch && pitch.generation_method === 'fallback' && !allowFallback) {
-    return res.status(409).json({
-      code: 'FALLBACK_PITCH',
-      error: 'This email is a fallback template, not a Marcus draft. Regenerate it or explicitly override.',
-    });
-  }
-  const isFirstTouch2 = !lead.last_contacted_date;
-  if (isFirstTouch2 && lead.channel_id) {
-    const { checkContactThrottle } = require('../services/allocationEngine');
-    const throttle = await checkContactThrottle(lead.channel_id);
-    if (!throttle.allowed) {
-      return res.status(409).json({
-        code: 'CREATOR_THROTTLED',
-        error: 'This creator was recently contacted through Quelro. Protecting reply rates for everyone.',
-      });
-    }
-  }
 
-  const snapshot2 = await buildSnapshot(lead);
-  const result = await db.run(`INSERT INTO email_queue (user_id, lead_id, subject, body, status, scheduled_at, priority, signal_snapshot) VALUES (?, ?, ?, ?, 'pending', ?, ?, ?) ${USE_PG ? 'RETURNING id' : ''}`, [req.user.id, lead.id, finalSubject, finalBody, scheduled_at || null, priority, snapshot2]);
-  await incrementUsage(req.user.id, 'emails', 1);
-  logActivity('queued', `Email queued for ${lead.channel_name}`, lead.id, {}, req.user.id);
-  if (lead.channel_id) {
-    const { recordContact } = require('../services/allocationEngine');
-    await recordContact(lead.channel_id, req.user.id, isFirstTouch2);
+  try {
+    const item = await queueEmail({
+      user: req.user, lead, subject: finalSubject, body: finalBody,
+      gate: deriveGateFromPitch(pitch), scheduledAt: scheduled_at || null, priority,
+    });
+    logActivity('queued', `Email queued for ${lead.channel_name}`, lead.id, {}, req.user.id);
+    res.status(201).json({ success: true, item });
+  } catch (e) {
+    if (e instanceof QueueBlockedError) return sendQueueBlocked(res, e);
+    throw e;
   }
-  const item = await db.get('SELECT * FROM email_queue WHERE id = ?', [result.lastID]);
-  res.status(201).json({ success: true, item });
 }));
 
 router.delete('/queue/:id', asyncHandler(async (req, res) => {

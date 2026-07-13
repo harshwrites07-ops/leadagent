@@ -5,7 +5,8 @@ const { asyncHandler } = require('../middleware/errorHandler');
 const { getDb, getSetting, setSetting, logActivity, USE_PG } = require('../models/database');
 const { FAST_MODEL, SMART_MODEL, getGeminiKey, getGeminiKeys, makeGeminiModel, checkAiAvailability } = require('../services/claudeService');
 const { getAllKeys: getYtKeys, isQuotaExhausted } = require('../services/youtubeService');
-const { buildSnapshot } = require('../services/signalSnapshot');
+const { queueEmail, QueueBlockedError } = require('../services/emailQueueService');
+const { evaluateEmailQualityV2 } = require('../qualityGate');
 
 const ENV_PATH = path.join(__dirname, '../../../.env');
 
@@ -367,8 +368,18 @@ function leadInsertParams(lead, userId) {
   ];
 }
 
+// Marcus V4 Session 2 kill-switch — lets an admin disable Jack's direct-send
+// actions (bulk sending without manual queue review) independently of the
+// rest of the assistant, without touching any send-path logic itself.
+// Default-on so this ships as a no-op; flip via setSetting('jack_send_enabled', '0').
+const JACK_SEND_ACTIONS = new Set(['send_emails', 'send_followup_emails', 'power_follow_up']);
+
 async function runTool(name, input, userId) {
   const db = getDb();
+
+  if (JACK_SEND_ACTIONS.has(name) && getSetting('jack_send_enabled') === '0') {
+    return { sent: 0, error: `Jack's "${name}" action is currently disabled by an admin setting (jack_send_enabled). Use the Email Queue for manual sends.` };
+  }
 
   switch (name) {
 
@@ -670,9 +681,7 @@ async function runTool(name, input, userId) {
 
       if (!leads.length) return { sent: 0, message: `No leads found (temperature: ${temp || 'any'}, stage: new_lead/pitch_ready).` };
 
-      const qInsertSql = USE_PG
-        ? `INSERT INTO email_queue (user_id,lead_id,subject,body,status,signal_snapshot) VALUES (?,?,?,?,'pending',?) RETURNING id`
-        : `INSERT INTO email_queue (user_id,lead_id,subject,body,status,signal_snapshot) VALUES (?,?,?,?,'pending',?)`;
+      const jackUser = await db.get('SELECT * FROM users WHERE id=?', [userId]);
       const lcSql = USE_PG
         ? `UPDATE leads SET crm_stage='emailed', last_contacted_date=CURRENT_DATE, follow_up_count=0, follow_up_status='active', updated_at=CURRENT_TIMESTAMP WHERE id=?`
         : `UPDATE leads SET crm_stage='emailed', last_contacted_date=date('now'), follow_up_count=0, follow_up_status='active', updated_at=CURRENT_TIMESTAMP WHERE id=?`;
@@ -687,11 +696,15 @@ async function runTool(name, input, userId) {
           const result = await claude.generateFullPitch(lead);
           await db.run(`INSERT OR REPLACE INTO pitches (lead_id,user_id,deep_study,custom_offer,cold_email,email_subject,subject_variants) VALUES (?,?,?,?,?,?,?)`,
             [lead.id, userId, result.key_insight, result.custom_offer, result.email_body, result.email_subject, JSON.stringify(result.subject_variants || [])]);
-          const snapshot = await buildSnapshot(lead);
-          const qr = await db.run(qInsertSql, [userId, lead.id, result.email_subject, result.email_body, snapshot]);
-          await db.run(`UPDATE email_queue SET status='sending' WHERE id=?`, [qr.lastID]);
-          const sentResult = await sendEmail({ to: lead.email, subject: result.email_subject, body: result.email_body, leadId: lead.id, signalSnapshot: snapshot });
-          await db.run(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP,email_id=? WHERE id=?`, [sentResult.emailId || null, qr.lastID]);
+
+          // Jack's legacy generator isn't scored by the V4 gate — score it now,
+          // same as every other send path. No exemption for the assistant tool.
+          const gateResult = await evaluateEmailQualityV2(result.email_subject, result.email_body, {});
+          const gate = { score: gateResult.score, checksComplete: gateResult.checksComplete, breakdown: gateResult.checks };
+          const queued = await queueEmail({ user: jackUser, lead, subject: result.email_subject, body: result.email_body, gate });
+          await db.run(`UPDATE email_queue SET status='sending' WHERE id=?`, [queued.id]);
+          const sentResult = await sendEmail({ to: lead.email, subject: result.email_subject, body: result.email_body, leadId: lead.id, signalSnapshot: queued.signal_snapshot });
+          await db.run(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP,email_id=? WHERE id=?`, [sentResult.emailId || null, queued.id]);
           await db.run(lcSql, [lead.id]);
           logActivity('email_sent', `[Jack] Email sent to ${lead.channel_name}`, lead.id, {}, userId);
           return lead.channel_name;
@@ -742,10 +755,7 @@ async function runTool(name, input, userId) {
 
       if (!leads.length) return { sent: 0, message: `No emailed leads found that are ${daysSince}+ days silent.` };
 
-      const qInsertSql = USE_PG
-        ? `INSERT INTO email_queue (user_id,lead_id,subject,body,status,signal_snapshot) VALUES (?,?,?,?,'pending',?) RETURNING id`
-        : `INSERT INTO email_queue (user_id,lead_id,subject,body,status,signal_snapshot) VALUES (?,?,?,?,'pending',?)`;
-
+      const jackFuUser = await db.get('SELECT * FROM users WHERE id=?', [userId]);
       const CONCURRENCY = 3;
       ;(async () => {
         let sent = 0;
@@ -758,11 +768,12 @@ async function runTool(name, input, userId) {
               const bm = followUpRaw.match(/---\s*([\s\S]+)/);
               const subject = sm?.[1]?.trim() || `Following up — ${lead.channel_name}`;
               const body = bm?.[1]?.trim() || followUpRaw;
-              const snapshot = await buildSnapshot(lead);
-              const qr = await db.run(qInsertSql, [userId, lead.id, subject, body, snapshot]);
-              await db.run(`UPDATE email_queue SET status='sending' WHERE id=?`, [qr.lastID]);
-              const sentResult = await sendEmail({ to: lead.email, subject, body, leadId: lead.id, signalSnapshot: snapshot });
-              await db.run(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP,email_id=? WHERE id=?`, [sentResult.emailId || null, qr.lastID]);
+              const gateResult = await evaluateEmailQualityV2(subject, body, {});
+              const gate = { score: gateResult.score, checksComplete: gateResult.checksComplete, breakdown: gateResult.checks };
+              const queued = await queueEmail({ user: jackFuUser, lead, subject, body, gate, skipThrottle: true });
+              await db.run(`UPDATE email_queue SET status='sending' WHERE id=?`, [queued.id]);
+              const sentResult = await sendEmail({ to: lead.email, subject, body, leadId: lead.id, signalSnapshot: queued.signal_snapshot });
+              await db.run(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP,email_id=? WHERE id=?`, [sentResult.emailId || null, queued.id]);
               logActivity('follow_up_sent', `[Jack] Follow-up #${followUpNum} sent to ${lead.channel_name}`, lead.id, {}, userId);
               sent++;
             } catch (e) { console.error(`[Jack] followup lead ${lead.id}:`, e.message); }
@@ -957,9 +968,7 @@ async function runTool(name, input, userId) {
       `, [userId, limit]);
       if (!leads.length) return { sent: 0, message: 'No follow-ups due right now (need 3+ days since last contact).' };
 
-      const qInsertSql = USE_PG
-        ? `INSERT INTO email_queue (user_id,lead_id,subject,body,status,priority,signal_snapshot) VALUES (?,?,?,?,'pending',?,?) RETURNING id`
-        : `INSERT INTO email_queue (user_id,lead_id,subject,body,status,priority,signal_snapshot) VALUES (?,?,?,?,'pending',?,?)`;
+      const jackPfuUser = await db.get('SELECT * FROM users WHERE id=?', [userId]);
       const lcSql = USE_PG
         ? `UPDATE leads SET follow_up_count=?,last_contacted_date=CURRENT_DATE,updated_at=CURRENT_TIMESTAMP WHERE id=?`
         : `UPDATE leads SET follow_up_count=?,last_contacted_date=date('now'),updated_at=CURRENT_TIMESTAMP WHERE id=?`;
@@ -977,11 +986,12 @@ async function runTool(name, input, userId) {
               const bm = raw.match(/---\s*([\s\S]+)/);
               const subject = sm?.[1]?.trim() || `Following up — ${lead.channel_name}`;
               const body = bm?.[1]?.trim() || raw;
-              const snapshot = await buildSnapshot(lead);
-              const qr = await db.run(qInsertSql, [userId, lead.id, subject, body, step, snapshot]);
-              await db.run(`UPDATE email_queue SET status='sending' WHERE id=?`, [qr.lastID]);
-              await sendEmail({ to: lead.email, subject, body, leadId: lead.id, signalSnapshot: snapshot });
-              await db.run(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP WHERE id=?`, [qr.lastID]);
+              const gateResult = await evaluateEmailQualityV2(subject, body, {});
+              const gate = { score: gateResult.score, checksComplete: gateResult.checksComplete, breakdown: gateResult.checks };
+              const queued = await queueEmail({ user: jackPfuUser, lead, subject, body, gate, priority: step, skipThrottle: true });
+              await db.run(`UPDATE email_queue SET status='sending' WHERE id=?`, [queued.id]);
+              await sendEmail({ to: lead.email, subject, body, leadId: lead.id, signalSnapshot: queued.signal_snapshot });
+              await db.run(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP WHERE id=?`, [queued.id]);
               await db.run(lcSql, [step, lead.id]);
               if (step >= 5) await db.run(`UPDATE leads SET follow_up_status='complete',crm_stage='no_response',updated_at=CURRENT_TIMESTAMP WHERE id=?`, [lead.id]);
               logActivity('followup_sent', `[Jack] FU#${step}/5 sent to ${lead.channel_name}`, lead.id, {}, userId);

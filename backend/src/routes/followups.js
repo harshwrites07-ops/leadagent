@@ -4,7 +4,8 @@ const { getDb, logActivity, USE_PG } = require('../models/database');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { generateFollowUp2, generateFollowUp3, generateFollowUp4 } = require('../services/followUp');
 const { sendEmail } = require('../services/emailService');
-const { buildSnapshot } = require('../services/signalSnapshot');
+const { queueEmail } = require('../services/emailQueueService');
+const { evaluateEmailQualityV2 } = require('../qualityGate');
 
 const daysSql = USE_PG
   ? `EXTRACT(EPOCH FROM (NOW() - last_contacted_date::timestamp)) / 86400 >= 3`
@@ -84,14 +85,14 @@ router.post('/send-all', async (req, res) => {
           const followUpEmail = await getFollowUpEmail(db, lead, nextStep);
           const { subject, body } = followUpEmail;
 
-          const snapshot = await buildSnapshot(lead);
-          const qrSql = USE_PG
-            ? `INSERT INTO email_queue (user_id,lead_id,subject,body,status,priority,signal_snapshot) VALUES (?,?,?,?,'pending',?,?) RETURNING id`
-            : `INSERT INTO email_queue (user_id,lead_id,subject,body,status,priority,signal_snapshot) VALUES (?,?,?,?,'pending',?,?)`;
-          const qr = await db.run(qrSql, [req.user.id, lead.id, subject, body, nextStep, snapshot]);
-          await db.run(`UPDATE email_queue SET status='sending' WHERE id=?`, [qr.lastID]);
-          await sendEmail({ to: lead.email, subject, body, leadId: lead.id, userId: req.user.id, followUpNumber: nextStep, signalSnapshot: snapshot });
-          await db.run(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP WHERE id=?`, [qr.lastID]);
+          // Follow-ups get the same Stage 4 gate as first-touch emails — the
+          // Send Guard applies universally, no content-type exemptions.
+          const gateResult = await evaluateEmailQualityV2(subject, body, {});
+          const gate = { score: gateResult.score, checksComplete: gateResult.checksComplete, breakdown: gateResult.checks };
+          const queued = await queueEmail({ user: req.user, lead, subject, body, gate, priority: nextStep });
+          await db.run(`UPDATE email_queue SET status='sending' WHERE id=?`, [queued.id]);
+          await sendEmail({ to: lead.email, subject, body, leadId: lead.id, userId: req.user.id, followUpNumber: nextStep, signalSnapshot: queued.signal_snapshot });
+          await db.run(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP WHERE id=?`, [queued.id]);
 
           const lcSql = USE_PG
             ? `UPDATE leads SET follow_up_count=?, last_contacted_date=CURRENT_DATE, updated_at=CURRENT_TIMESTAMP WHERE id=?`

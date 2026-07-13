@@ -1006,6 +1006,18 @@ async function initPostgres() {
     await pgAlter(`ALTER TABLE email_queue ADD COLUMN signal_snapshot TEXT`);
     await pgAlter(`ALTER TABLE emails ADD COLUMN signal_snapshot TEXT`);
     await pgAlter(`ALTER TABLE pitches ADD COLUMN signal_type TEXT`);
+
+    // Marcus V4 Send Guard (Session 2) — every email_queue row must carry the
+    // gate verdict that authorized it. The CHECK constraint below is enforced
+    // by Postgres itself, not just queueEmail()'s application-level check, so
+    // no insert path (present or future) can skip the >=70 / complete-array
+    // requirement. Mirrors the SQLite trigger in database.js.
+    await pgAlter(`ALTER TABLE email_queue ADD COLUMN gate_score INTEGER`);
+    await pgAlter(`ALTER TABLE email_queue ADD COLUMN gate_checks_complete BOOLEAN DEFAULT false`);
+    await pgAlter(`ALTER TABLE email_queue ADD COLUMN gate_breakdown TEXT`);
+    await pgAlter(`ALTER TABLE email_queue ADD COLUMN generation_attempts INTEGER`);
+    await pgAlter(`ALTER TABLE email_queue ADD COLUMN generation_model TEXT`);
+    await pgAlter(`ALTER TABLE email_queue ADD CONSTRAINT chk_email_queue_gate CHECK (gate_score >= 70 AND gate_checks_complete = true)`);
     await pgAlter(`ALTER TABLE pitches ADD COLUMN user_id INTEGER REFERENCES users(id)`);
     // Distinguishes a real Marcus/AI-generated pitch from buildFallback()'s
     // canned template — see database.js for the incident this was added for.
