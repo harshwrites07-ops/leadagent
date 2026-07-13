@@ -3,7 +3,8 @@ const { getSetting, getDb, logActivity, USE_PG } = require('../models/database')
 const { processQueue, checkReplies, checkSpamFolders, getInboxes } = require('./emailService');
 const { generateFollowUp } = require('./claudeService');
 const { searchChannelsMulti } = require('./youtubeService');
-const { buildSnapshot } = require('./signalSnapshot');
+const { queueEmail } = require('./emailQueueService');
+const { evaluateEmailQualityV2 } = require('../qualityGate');
 
 let queueInterval = null;
 let isProcessing = false;
@@ -173,17 +174,27 @@ cron.schedule('0 * * * *', async () => {
       const subject = subjectMatch[1].trim();
       const body = bodyMatch[1].trim();
 
-      const snapshot = await buildSnapshot(lead);
-      const qrSql = USE_PG
-        ? `INSERT INTO email_queue (user_id,lead_id,subject,body,status,priority,signal_snapshot) VALUES (?,?,?,?,'sending',?,?) RETURNING id`
-        : `INSERT INTO email_queue (user_id,lead_id,subject,body,status,priority,signal_snapshot) VALUES (?,?,?,?,'sending',?,?)`;
-      const qr = await db.run(qrSql, [lead.user_id, lead.id, subject, body, nextStep, snapshot]);
+      const schedulerUser = await db.get('SELECT * FROM users WHERE id=?', [lead.user_id]);
+      if (!schedulerUser) { console.warn(`[Scheduler] Skipped follow-up for lead ${lead.id} — user ${lead.user_id} not found`); continue; }
+
+      // Same Stage 4 gate as every other send path — no scheduler exemption.
+      const gateResult = await evaluateEmailQualityV2(subject, body, {});
+      const gate = { score: gateResult.score, checksComplete: gateResult.checksComplete, breakdown: gateResult.checks };
+
+      let queued;
+      try {
+        queued = await queueEmail({ user: schedulerUser, lead, subject, body, gate, priority: nextStep, skipThrottle: true });
+      } catch (guardErr) {
+        console.log(`[Scheduler] Follow-up blocked for ${lead.channel_name}: ${guardErr.message}`);
+        continue;
+      }
+      await db.run(`UPDATE email_queue SET status='sending' WHERE id=?`, [queued.id]);
 
       try {
-        await sendEmail({ to: lead.email, subject, body, leadId: lead.id, userId: lead.user_id, signalSnapshot: snapshot });
-        await db.run(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP WHERE id=?`, [qr.lastID]);
+        await sendEmail({ to: lead.email, subject, body, leadId: lead.id, userId: lead.user_id, signalSnapshot: queued.signal_snapshot });
+        await db.run(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP WHERE id=?`, [queued.id]);
       } catch (sendErr) {
-        await db.run(`UPDATE email_queue SET status='failed' WHERE id=?`, [qr.lastID]);
+        await db.run(`UPDATE email_queue SET status='failed' WHERE id=?`, [queued.id]);
         throw sendErr;
       }
 

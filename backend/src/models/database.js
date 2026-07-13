@@ -387,6 +387,27 @@ function _initSqliteSchema(db) {
   alterTry(`ALTER TABLE emails ADD COLUMN signal_snapshot TEXT`);
   alterTry(`ALTER TABLE pitches ADD COLUMN signal_type TEXT`);
 
+  // Marcus V4 Send Guard (Session 2) — every email_queue row must carry the
+  // gate verdict that authorized it. gate_score/gate_checks_complete are
+  // enforced by trg_email_queue_gate_guard below, not just by queueEmail()'s
+  // application-level check, so no insert path (present or future) can skip
+  // the >=70 / complete-array requirement.
+  alterTry(`ALTER TABLE email_queue ADD COLUMN gate_score INTEGER`);
+  alterTry(`ALTER TABLE email_queue ADD COLUMN gate_checks_complete INTEGER DEFAULT 0`);
+  alterTry(`ALTER TABLE email_queue ADD COLUMN gate_breakdown TEXT`);
+  alterTry(`ALTER TABLE email_queue ADD COLUMN generation_attempts INTEGER`);
+  alterTry(`ALTER TABLE email_queue ADD COLUMN generation_model TEXT`);
+  alterTry(`DROP TRIGGER IF EXISTS trg_email_queue_gate_guard`);
+  alterTry(`
+    CREATE TRIGGER trg_email_queue_gate_guard
+    BEFORE INSERT ON email_queue
+    WHEN NEW.gate_score IS NULL OR NEW.gate_score < 70
+      OR NEW.gate_checks_complete IS NULL OR NEW.gate_checks_complete != 1
+    BEGIN
+      SELECT RAISE(ABORT, 'email_queue insert blocked: gate_score must be >= 70 and gate_checks_complete must be true');
+    END
+  `);
+
   // Indexes
   alterTry(`DROP INDEX IF EXISTS idx_leads_channel_id_uniq`);
   alterTry(`DROP INDEX IF EXISTS idx_leads_handle_uniq`);

@@ -6,6 +6,7 @@ const { aiLimiter } = require('../middleware/rateLimiter');
 const claude = require('../services/claudeService');
 const { runQualityGate, generateInitialDraft, buildCreatorData, getQualityStatus } = require('../qualityGate');
 const { checkAndRegister: dedupCheck, clearSession: dedupClear } = require('../services/ngramDedup');
+const { queueEmail } = require('../services/emailQueueService');
 
 function parsePitch(pitch) {
   if (!pitch) return null;
@@ -407,8 +408,6 @@ router.post('/generate-and-send', aiLimiter, asyncHandler(async (req, res) => {
   // Voice sample is optional — generateWithMarcus already falls back to a
   // default-voice banner (voice_warning) when none is set, same as single-pitch.
   const { sendEmail } = require('../services/emailService');
-  const { incrementUsage } = require('../services/authService');
-  const { buildSnapshot } = require('../services/signalSnapshot');
   const ids = leadIds.slice(0, 20);
   const results = [];
   const CONCURRENCY = 5;
@@ -429,6 +428,7 @@ router.post('/generate-and-send', aiLimiter, asyncHandler(async (req, res) => {
         const voiceDNA = userRow?.voice_dna ? JSON.parse(userRow.voice_dna) : {};
         let emailBody  = result.email_body || result.body;
         let gateScore  = null;
+        let gateBreakdown = null;
         try {
           const emailSub3 = result.email_subject || result.subject || '';
           const gate = await runQualityGate(
@@ -441,6 +441,7 @@ router.post('/generate-and-send', aiLimiter, asyncHandler(async (req, res) => {
           );
           emailBody = gate.email;
           gateScore = gate.quality?.score ?? null;
+          gateBreakdown = gate.quality?.breakdown ?? null;
           await savePitch(db, id, req.user.id, {
             email_subject:       result.email_subject || result.subject,
             email_body:          emailBody,
@@ -477,14 +478,15 @@ router.post('/generate-and-send', aiLimiter, asyncHandler(async (req, res) => {
         }
 
         const emailSubject = result.email_subject || result.subject;
-        const snapshot = await buildSnapshot(lead);
-        const qr = await db.run(`INSERT INTO email_queue (user_id,lead_id,subject,body,status,signal_snapshot) VALUES (?,?,?,?,'pending',?) ${USE_PG ? 'RETURNING id' : ''}`, [req.user.id, id, emailSubject, emailBody, snapshot]);
-        await db.run(`UPDATE email_queue SET status='sending' WHERE id=?`, [qr.lastID]);
+        const gateForQueue = gateScore != null
+          ? { score: gateScore, checksComplete: Array.isArray(gateBreakdown) && gateBreakdown.length === 7, breakdown: gateBreakdown, attempts: null, model: result.generation_method || null }
+          : null;
+        const item = await queueEmail({ user: req.user, lead, subject: emailSubject, body: emailBody, gate: gateForQueue });
+        await db.run(`UPDATE email_queue SET status='sending' WHERE id=?`, [item.id]);
 
-        const sent = await sendEmail({ to: lead.email, subject: emailSubject, body: emailBody, leadId: id, userId: req.user.id, signalSnapshot: snapshot });
-        await db.run(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP,email_id=? WHERE id=?`, [sent.emailId || null, qr.lastID]);
+        const sent = await sendEmail({ to: lead.email, subject: emailSubject, body: emailBody, leadId: id, userId: req.user.id, signalSnapshot: item.signal_snapshot });
+        await db.run(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP,email_id=? WHERE id=?`, [sent.emailId || null, item.id]);
         await db.run(`UPDATE leads SET crm_stage='emailed', last_contacted_date=CURRENT_DATE, follow_up_count=0, follow_up_status='active', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [id]);
-        await incrementUsage(req.user.id, 'emails', 1);
         logActivity('email_sent', `Email sent to ${lead.channel_name}`, id, {}, req.user.id);
         return { id, success: true, channel_name: lead.channel_name, email: lead.email };
       })
@@ -529,7 +531,6 @@ async function jobUpdate(db, jobId, fields) {
 async function runPowerSendJob(jobId, { lead_ids, max_leads = 100, per_account_limit = 0, gap_seconds = 0, skip_inboxes = [], _userId }) {
   const db = getDb();
   const { sendEmail, getInboxes } = require('../services/emailService');
-  const { buildSnapshot } = require('../services/signalSnapshot');
   const ctx = activeJobs.get(jobId) || { stopped: false };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const withTimeout = (promise, ms, label) => Promise.race([
@@ -620,6 +621,7 @@ async function runPowerSendJob(jobId, { lead_ids, max_leads = 100, per_account_l
           const voiceDNA = userRow?.voice_dna ? JSON.parse(userRow.voice_dna) : {};
           let emailBody  = result.email_body || result.body;
           let gateScore  = null;
+          let gateBreakdown = null;
           try {
             const emailSub4 = result.email_subject || result.subject || '';
             const gate = await runQualityGate(
@@ -632,6 +634,7 @@ async function runPowerSendJob(jobId, { lead_ids, max_leads = 100, per_account_l
             );
             emailBody = gate.email;
             gateScore = gate.quality?.score ?? null;
+            gateBreakdown = gate.quality?.breakdown ?? null;
             await savePitch(db, lead.id, _userId, {
               email_subject:       result.email_subject || result.subject,
               email_body:          emailBody,
@@ -672,8 +675,13 @@ async function runPowerSendJob(jobId, { lead_ids, max_leads = 100, per_account_l
           }
 
           const emailSubject = result.email_subject || result.subject;
-          const powerSendSnapshot = await buildSnapshot(lead);
-          const sentResult = await withRetry(() => sendEmail({ to: lead.email, subject: emailSubject, body: emailBody, leadId: lead.id, skipInboxes: getSkipInboxes(), userId: _userId, signalSnapshot: powerSendSnapshot }), lead.channel_name);
+          const gateForQueue = gateScore != null
+            ? { score: gateScore, checksComplete: Array.isArray(gateBreakdown) && gateBreakdown.length === 7, breakdown: gateBreakdown, attempts: null, model: result.generation_method || null }
+            : null;
+          const queued = await queueEmail({ user: userRow, lead, subject: emailSubject, body: emailBody, gate: gateForQueue });
+          await db.run(`UPDATE email_queue SET status='sending' WHERE id=?`, [queued.id]);
+          const sentResult = await withRetry(() => sendEmail({ to: lead.email, subject: emailSubject, body: emailBody, leadId: lead.id, skipInboxes: getSkipInboxes(), userId: _userId, signalSnapshot: queued.signal_snapshot }), lead.channel_name);
+          await db.run(`UPDATE email_queue SET status='sent',sent_at=CURRENT_TIMESTAMP,email_id=? WHERE id=?`, [sentResult.emailId || null, queued.id]);
           if (sentResult.fromEmail) runCounts[sentResult.fromEmail] = (runCounts[sentResult.fromEmail] || 0) + 1;
           await db.run(`UPDATE leads SET crm_stage='emailed', last_contacted_date=CURRENT_DATE, follow_up_count=0, follow_up_status='active', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [lead.id]);
           logActivity('email_sent', `Email sent to ${lead.channel_name}`, lead.id, {}, _userId);
