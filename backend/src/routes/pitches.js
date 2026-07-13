@@ -17,10 +17,11 @@ function parsePitch(pitch) {
     quality_regenerated: !!pitch.quality_regenerated,
     quality_warning: !!pitch.quality_warning,
     generation_method: pitch.generation_method || 'marcus',
+    needs_human_reasons: (() => { try { return pitch.needs_human_reasons ? JSON.parse(pitch.needs_human_reasons) : []; } catch { return []; } })(),
   };
 }
 
-async function savePitch(db, leadId, userId, { email_subject, email_body, deep_study, custom_offer, subject_variants, pitch_score, pitch_feedback, reddit_dm, quality_score, quality_breakdown, quality_regenerated, quality_warning, generation_method }) {
+async function savePitch(db, leadId, userId, { email_subject, email_body, deep_study, custom_offer, subject_variants, pitch_score, pitch_feedback, reddit_dm, quality_score, quality_breakdown, quality_regenerated, quality_warning, generation_method, needs_human_reasons }) {
   const existing = await db.get('SELECT id FROM pitches WHERE lead_id = ?', [leadId]);
   if (existing) {
     await db.run(`
@@ -29,7 +30,7 @@ async function savePitch(db, leadId, userId, { email_subject, email_body, deep_s
         subject_variants=?, pitch_score=COALESCE(?,pitch_score), pitch_feedback=COALESCE(?,pitch_feedback),
         quality_score=COALESCE(?,quality_score), quality_breakdown=COALESCE(?,quality_breakdown),
         quality_regenerated=COALESCE(?,quality_regenerated), quality_warning=COALESCE(?,quality_warning),
-        generation_method=COALESCE(?,generation_method),
+        generation_method=COALESCE(?,generation_method), needs_human_reasons=COALESCE(?,needs_human_reasons),
         updated_at=CURRENT_TIMESTAMP
       WHERE lead_id=?
     `, [deep_study || null, custom_offer || null, email_body, email_subject,
@@ -39,12 +40,12 @@ async function savePitch(db, leadId, userId, { email_subject, email_body, deep_s
         quality_breakdown ? JSON.stringify(quality_breakdown) : null,
         quality_regenerated != null ? (quality_regenerated ? 1 : 0) : null,
         quality_warning != null ? (quality_warning ? 1 : 0) : null,
-        generation_method || null,
+        generation_method || null, needs_human_reasons || null,
         leadId]);
   } else {
     await db.run(`
-      INSERT INTO pitches (lead_id,user_id,deep_study,custom_offer,cold_email,email_subject,reddit_dm,subject_variants,pitch_score,pitch_feedback,quality_score,quality_breakdown,quality_regenerated,quality_warning,generation_method)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      INSERT INTO pitches (lead_id,user_id,deep_study,custom_offer,cold_email,email_subject,reddit_dm,subject_variants,pitch_score,pitch_feedback,quality_score,quality_breakdown,quality_regenerated,quality_warning,generation_method,needs_human_reasons)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `, [leadId, userId, deep_study || null, custom_offer || null, email_body, email_subject,
         reddit_dm || null, JSON.stringify(subject_variants || []),
         pitch_score || null, pitch_feedback || null,
@@ -52,7 +53,7 @@ async function savePitch(db, leadId, userId, { email_subject, email_body, deep_s
         quality_breakdown ? JSON.stringify(quality_breakdown) : null,
         quality_regenerated ? 1 : 0,
         quality_warning ? 1 : 0,
-        generation_method || 'marcus']);
+        generation_method || 'marcus', needs_human_reasons || null]);
   }
 }
 
@@ -100,6 +101,24 @@ router.get('/generate-stream/:leadId', aiLimiter, asyncHandler(async (req, res) 
     if (e.code === 'NEEDS_RESEARCH') {
       await db.run(`UPDATE leads SET crm_stage='needs_research', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [lead.id]);
       send({ type: 'error', error: e.message, code: 'NEEDS_RESEARCH', videoDataStatus: e.videoDataStatus || null });
+      return res.end();
+    }
+    if (e.code === 'INTAKE_BLOCKED') {
+      // Stage 1 Intake Gate rejection — never reached the LLM. Visible,
+      // specific error per the V4 spec; no generic "AI unavailable" mask.
+      send({ type: 'error', error: e.message, code: 'INTAKE_BLOCKED', intakeCheck: e.intakeCheck || null });
+      return res.end();
+    }
+    if (e.code === 'NEEDS_HUMAN') {
+      // P0-5 — no fallback template exists anymore. 3 failed attempts land
+      // here with the reasons displayed; a human rewrites or skips.
+      await db.run(`UPDATE leads SET crm_stage='needs_human', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [lead.id]);
+      await savePitch(db, lead.id, req.user.id, {
+        email_subject: null, email_body: null,
+        generation_method: 'needs_human',
+        needs_human_reasons: JSON.stringify(e.attemptFailures || []),
+      });
+      send({ type: 'error', error: e.message, code: 'NEEDS_HUMAN', attemptFailures: e.attemptFailures || [] });
       return res.end();
     }
     const isTimeout = e.code === 'ECONNABORTED' || /timeout/i.test(e.message || '');
@@ -156,9 +175,6 @@ router.get('/generate-stream/:leadId', aiLimiter, asyncHandler(async (req, res) 
 
   await db.run(`UPDATE leads SET crm_stage='pitch_ready', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [lead.id]);
   logActivity('pitch_generated', `Pitch generated for ${lead.channel_name}`, lead.id, {}, req.user.id);
-  if (result.generation_method === 'fallback') {
-    console.error(`[Marcus/SSE] Saved a FALLBACK pitch for lead=${lead.id} channel="${lead.channel_name}" — reason:`, JSON.stringify(result.fallback_reason || []));
-  }
 
   const pitch = parsePitch(await db.get('SELECT * FROM pitches WHERE lead_id = ?', [lead.id]));
   const qualityScore = gateResult?.quality?.score ?? null;
@@ -205,6 +221,18 @@ router.post('/generate/:leadId', aiLimiter, asyncHandler(async (req, res) => {
     if (e.code === 'NEEDS_RESEARCH') {
       await db.run(`UPDATE leads SET crm_stage='needs_research', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [lead.id]);
       return res.status(422).json({ success: false, error: e.message, code: 'NEEDS_RESEARCH', videoDataStatus: e.videoDataStatus || null });
+    }
+    if (e.code === 'INTAKE_BLOCKED') {
+      return res.status(422).json({ success: false, error: e.message, code: 'INTAKE_BLOCKED', intakeCheck: e.intakeCheck || null });
+    }
+    if (e.code === 'NEEDS_HUMAN') {
+      await db.run(`UPDATE leads SET crm_stage='needs_human', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [lead.id]);
+      await savePitch(db, lead.id, req.user.id, {
+        email_subject: null, email_body: null,
+        generation_method: 'needs_human',
+        needs_human_reasons: JSON.stringify(e.attemptFailures || []),
+      });
+      return res.status(422).json({ success: false, error: e.message, code: 'NEEDS_HUMAN', attemptFailures: e.attemptFailures || [] });
     }
     const isTimeout = e.code === 'ECONNABORTED' || /timeout/i.test(e.message || '');
     const errMsg = isTimeout
@@ -262,9 +290,6 @@ router.post('/generate/:leadId', aiLimiter, asyncHandler(async (req, res) => {
 
   await db.run(`UPDATE leads SET crm_stage='pitch_ready', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [lead.id]);
   logActivity('pitch_generated', `Pitch generated for ${lead.channel_name}`, lead.id, {}, req.user.id);
-  if (result.generation_method === 'fallback') {
-    console.error(`[Marcus] Saved a FALLBACK pitch for lead=${lead.id} channel="${lead.channel_name}" — reason:`, JSON.stringify(result.fallback_reason || []));
-  }
 
   const pitch = parsePitch(await db.get('SELECT * FROM pitches WHERE lead_id = ?', [lead.id]));
   const qualityScore = gateResult?.quality?.score ?? null;
@@ -377,9 +402,6 @@ router.post('/bulk-generate', aiLimiter, asyncHandler(async (req, res) => {
           generation_method:   result.generation_method || 'marcus',
         });
         await db.run(`UPDATE leads SET crm_stage='pitch_ready', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [id]);
-        if (result.generation_method === 'fallback') {
-          console.error(`[BulkGenerate] Saved a FALLBACK pitch for lead=${id} channel="${lead.channel_name}" — reason:`, JSON.stringify(result.fallback_reason || []));
-        }
         return { id, success: true, qualityScore: gateResult?.quality?.score ?? null, generationMethod: result.generation_method || 'marcus' };
       })
     );
@@ -392,6 +414,11 @@ router.post('/bulk-generate', aiLimiter, asyncHandler(async (req, res) => {
         const errMsg = r.reason?.message || 'Unknown failure';
         if (r.reason?.code === 'NEEDS_RESEARCH') {
           try { await db.run(`UPDATE leads SET crm_stage='needs_research', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [failId]); } catch {}
+        } else if (r.reason?.code === 'NEEDS_HUMAN') {
+          try {
+            await db.run(`UPDATE leads SET crm_stage='needs_human', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [failId]);
+            await savePitch(db, failId, req.user.id, { email_subject: null, email_body: null, generation_method: 'needs_human', needs_human_reasons: JSON.stringify(r.reason?.attemptFailures || []) });
+          } catch {}
         }
         console.error(`[BulkGenerate] REJECTED lead=${failId} err="${errMsg}" stack=${r.reason?.stack?.split('\n')[1] || ''}`);
         results.push({ id: failId, success: false, error: errMsg, code: r.reason?.code || null });
@@ -465,18 +492,6 @@ router.post('/generate-and-send', aiLimiter, asyncHandler(async (req, res) => {
             generation_method: result.generation_method || 'marcus',
           });
         }
-        if (result.generation_method === 'fallback') {
-          console.error(`[GenerateAndSend] FALLBACK pitch for lead=${id} channel="${lead.channel_name}" — reason:`, JSON.stringify(result.fallback_reason || []));
-        }
-
-        // Hard block: refuse to send a fallback template — it's unpersonalized
-        // boilerplate by construction, never a real Marcus draft, regardless
-        // of what it happens to score.
-        if (result.generation_method === 'fallback') {
-          await db.run(`UPDATE leads SET crm_stage='pitch_ready', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [id]);
-          return { id, success: false, quality_blocked: true, channel_name: lead.channel_name, error: 'AI generation failed — a fallback template was produced instead of a real pitch. Refusing to send it.' };
-        }
-
         const emailSubject = result.email_subject || result.subject;
         const gateForQueue = gateScore != null
           ? { score: gateScore, checksComplete: Array.isArray(gateBreakdown) && gateBreakdown.length === 7, breakdown: gateBreakdown, attempts: null, model: result.generation_method || null }
@@ -497,8 +512,11 @@ router.post('/generate-and-send', aiLimiter, asyncHandler(async (req, res) => {
       } else {
         const id = batch[batchResults.indexOf(r)];
         results.push({ id, success: false, error: r.reason?.message, code: r.reason?.code || null });
-        const fallbackStage = r.reason?.code === 'NEEDS_RESEARCH' ? 'needs_research' : 'pitch_ready';
-        try { await db.run(`UPDATE leads SET crm_stage=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`, [fallbackStage, id]); } catch {}
+        const stage = r.reason?.code === 'NEEDS_RESEARCH' ? 'needs_research' : r.reason?.code === 'NEEDS_HUMAN' ? 'needs_human' : 'pitch_ready';
+        try { await db.run(`UPDATE leads SET crm_stage=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`, [stage, id]); } catch {}
+        if (r.reason?.code === 'NEEDS_HUMAN') {
+          try { await savePitch(db, id, req.user.id, { email_subject: null, email_body: null, generation_method: 'needs_human', needs_human_reasons: JSON.stringify(r.reason?.attemptFailures || []) }); } catch {}
+        }
       }
     }
   }
@@ -660,19 +678,6 @@ async function runPowerSendJob(jobId, { lead_ids, max_leads = 100, per_account_l
           }
 
           await jobLog(db, jobId, 'generated', `Pitch ready for ${lead.channel_name}${gateScore ? ` (quality: ${gateScore}/100)` : ''}`);
-          if (result.generation_method === 'fallback') {
-            console.error(`[PowerSend] FALLBACK pitch for lead=${lead.id} channel="${lead.channel_name}" — reason:`, JSON.stringify(result.fallback_reason || []));
-          }
-
-          // Hard block: refuse to send a fallback template — unpersonalized
-          // boilerplate by construction, regardless of what it scores.
-          if (result.generation_method === 'fallback') {
-            stats.failed++;
-            await jobUpdate(db, jobId, { failed: stats.failed });
-            await jobLog(db, jobId, 'blocked', `Blocked ${lead.channel_name} — AI generation failed, fallback template produced instead of a real pitch`);
-            try { await db.run(`UPDATE leads SET crm_stage='pitch_ready', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [lead.id]); } catch {}
-            return;
-          }
 
           const emailSubject = result.email_subject || result.subject;
           const gateForQueue = gateScore != null
@@ -692,10 +697,13 @@ async function runPowerSendJob(jobId, { lead_ids, max_leads = 100, per_account_l
         } catch (err) {
           stats.failed++;
           await jobUpdate(db, jobId, { failed: stats.failed });
-          const label = err.code === 'NEEDS_RESEARCH' ? 'needs research' : 'Failed';
+          const label = err.code === 'NEEDS_RESEARCH' ? 'needs research' : err.code === 'INTAKE_BLOCKED' ? 'intake blocked' : err.code === 'NEEDS_HUMAN' ? 'needs human' : 'Failed';
           await jobLog(db, jobId, 'failed', `${label}: ${lead.channel_name} — ${err.message?.substring(0, 100)}`);
-          const fallbackStage = err.code === 'NEEDS_RESEARCH' ? 'needs_research' : 'pitch_ready';
-          try { await db.run(`UPDATE leads SET crm_stage=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`, [fallbackStage, lead.id]); } catch {}
+          const stage = err.code === 'NEEDS_RESEARCH' ? 'needs_research' : err.code === 'NEEDS_HUMAN' ? 'needs_human' : 'pitch_ready';
+          try { await db.run(`UPDATE leads SET crm_stage=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`, [stage, lead.id]); } catch {}
+          if (err.code === 'NEEDS_HUMAN') {
+            try { await savePitch(db, lead.id, _userId, { email_subject: null, email_body: null, generation_method: 'needs_human', needs_human_reasons: JSON.stringify(err.attemptFailures || []) }); } catch {}
+          }
         }
       }));
     }

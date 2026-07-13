@@ -413,16 +413,6 @@ async function analyzeCrossPlatform(lead) {
 
 // ─── Step 4: Signal detection + prompt engine ────────────────────────────────
 
-function daysAgoText(dateStr) {
-  if (!dateStr) return 'recently';
-  const days = Math.floor((Date.now() - new Date(dateStr)) / 86400000);
-  if (days === 0) return 'today';
-  if (days === 1) return 'yesterday';
-  if (days < 7) return `${days} days ago`;
-  if (days < 14) return 'last week';
-  return 'recently';
-}
-
 function getServiceIntelligence(lead, voiceDNA) {
   const {
     channel_name,
@@ -852,37 +842,11 @@ Return ONLY valid JSON:
 }
 
 // ─── Fallback email when all AI attempts fail ─────────────────────────────────
-// NOTE: getDb() returns the async {get,run,all} wrapper, not a raw better-sqlite3
-// handle — it has no .prepare(). Calling .prepare() here always threw, was
-// swallowed by the catch below, and silently shipped "name = 'there'" as the
-// literal sign-off — the source of emails that read like they truncated mid-word.
-async function buildFallback(lead, userId) {
-  let name = 'there', service = 'your space';
-  try {
-    const u = await getDb().get('SELECT full_name, service_type FROM users WHERE id=?', [userId || lead.user_id]);
-    if (u?.full_name) name = u.full_name.split(' ')[0];
-    if (u?.service_type) service = u.service_type.toLowerCase();
-  } catch {}
-  const uploadAgo = daysAgoText(lead.last_upload_date);
-  // This template hardcodes a raw comma-formatted view count via toLocaleString()
-  // — it never went through codeGate, so it always tripped rawNumberDump. Round
-  // it the same way a real Marcus draft gets force-rounded on its last attempt.
-  const { roundHumanNumbers } = require('./codeGate');
-  return {
-    email_subject: `your ${lead.niche || 'channel'} views`,
-    email_body: roundHumanNumbers(`Your last few uploads have been getting ${(lead.avg_views||0).toLocaleString()} views — there's a gap between your best video and your most recent ones worth looking at.\n\nHelped a ${lead.niche||'similar'} creator fix exactly this. Would a quick breakdown of what's holding back your views be useful?\n\n${name}`),
-    subject_variants: [`your ${lead.channel_name?.split(' ')[0]} view pattern`, 'something I noticed', `${lead.niche || 'your'} retention angle`],
-    key_insight: 'View-to-sub ratio and upload pattern',
-    custom_offer: 'Retention-optimized editing for consistent growth',
-    tone_used: 'direct and specific',
-    personalization_elements: ['subscriber count', 'average views', 'upload frequency'],
-    psychology_applied: 'Led with their specific metrics to prove channel knowledge',
-    word_count: 62,
-    quality_score: 55,
-    pitch_score: 55,
-    follow_ups: [],
-  };
-}
+// buildFallback() deleted — Marcus V4 P0-5. It hardcoded quality_score: 55
+// and could reach the send queue whenever a call site didn't opt into
+// blocking it. There is no template path to send anymore: a total
+// generation failure throws NEEDS_HUMAN instead (see generateFullPitch and
+// generateWithMarcus below).
 
 // ─── Validation: check email body for disqualifying patterns ─────────────────
 const BANNED_PATTERNS = [
@@ -992,8 +956,12 @@ async function generateFullPitch(lead, userId = null) {
   }
 
   if (!result) {
-    console.warn('[Pitch] All attempts failed — using fallback for', lead.channel_name);
-    return await buildFallback(lead, userId);
+    // Marcus V4 P0-5 — no template path to send, ever, on any generation
+    // route. A human rewrites or skips; nothing auto-ships in their place.
+    console.warn('[Pitch] All attempts failed for', lead.channel_name, '— needs_human, no fallback template');
+    const err = new Error(`Marcus couldn't generate a pitch for ${lead.channel_name} after ${MAX_ATTEMPTS} attempts — needs a human rewrite.`);
+    err.code = 'NEEDS_HUMAN';
+    throw err;
   }
 
   // Generate 2 alternative subject lines (A/B testing)
@@ -1944,6 +1912,20 @@ Return JSON only:
 async function generateWithMarcus(lead, userId, onProgress) {
   const db = getDb();
 
+  // Marcus V4 Stage 1 — Intake Gate. email_valid and not_already_contacted
+  // don't depend on channel facts, so they run before any network call
+  // (including the live YouTube enrichment lookup below) — no point
+  // burning a YouTube API call on a lead whose email is `flags@2x.png`.
+  const { runIntakeGate } = require('./intakeGate');
+  const earlyIntake = runIntakeGate(lead);
+  const earlyFailed = earlyIntake.checks.find(c => ['email_valid', 'not_already_contacted'].includes(c.name) && !c.pass);
+  if (earlyFailed) {
+    const err = new Error(earlyFailed.detail);
+    err.code = 'INTAKE_BLOCKED';
+    err.intakeCheck = earlyFailed.name;
+    throw err;
+  }
+
   // Load user + voice DNA
   let user = {};
   let voiceDNA = {};
@@ -2027,6 +2009,19 @@ async function generateWithMarcus(lead, userId, onProgress) {
     throw err;
   }
 
+  // Marcus V4 Stage 1 — the remaining two Intake Gate checks (has_channel_facts,
+  // facts_fresh) run here, after the live-enrichment rescue attempt above, on
+  // the now-current lead/facts. Deliberately stricter than hasAnySignal (>=2
+  // facts, not just 1) — a lead that clears hasAnySignal can still fail here.
+  const lateIntake = runIntakeGate(lead);
+  const lateFailed = lateIntake.checks.find(c => ['has_channel_facts', 'facts_fresh'].includes(c.name) && !c.pass);
+  if (lateFailed) {
+    const err = new Error(lateFailed.detail);
+    err.code = 'INTAKE_BLOCKED';
+    err.intakeCheck = lateFailed.name;
+    throw err;
+  }
+
   // Select angle
   const { selectAngle } = require('./angleEngine');
   const angleResult = selectAngle(intelligencePack, { ...user, voice_dna: voiceDNA });
@@ -2051,6 +2046,35 @@ async function generateWithMarcus(lead, userId, onProgress) {
       const parsed = JSON.parse(match[0]);
       if (!parsed.subject || !parsed.body) throw new Error('Missing subject/body fields');
 
+      // Marcus V4 Stage 3 — Sanitizer runs on EVERY attempt's output before
+      // scoring, not just as a last-resort patch on attempt 3. Stop policing
+      // em-dashes and raw numbers, start stripping them: these are the two
+      // violation types with a safe, deterministic fix, so fixing them here
+      // means the gate never burns a regen attempt on something code can
+      // just fix. Never touches already-rounded numbers (Rounding Law) —
+      // roundHumanNumbers only matches raw 4+ digit runs.
+      let sanitizedThisAttempt = false;
+      const preSanitizeGate = runCodeGate(parsed, intelligencePack);
+      if (preSanitizeGate.violations.some(v => v.type === 'rawNumberDump')) {
+        const before = parsed.body;
+        parsed.body = roundHumanNumbers(parsed.body);
+        if (parsed.body !== before) sanitizedThisAttempt = true;
+      }
+      if (preSanitizeGate.violations.some(v => v.type === 'tooManyEmDashes')) {
+        const before = parsed.body;
+        parsed.body = reduceEmDashes(parsed.body);
+        if (parsed.body !== before) sanitizedThisAttempt = true;
+      }
+      // Whitespace/formatting — collapse double blank lines, strip trailing
+      // spaces, never touches wording.
+      const beforeWs = parsed.body;
+      parsed.body = (parsed.body || '').replace(/[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n');
+      if (parsed.body !== beforeWs) sanitizedThisAttempt = true;
+      if (sanitizedThisAttempt) {
+        console.log(`[Marcus] Sanitized attempt ${attempt} for ${lead.channel_name} before scoring`);
+      }
+
+      // Sanitizer output is what gets scored — never the raw generation.
       const gate = runCodeGate(parsed, intelligencePack);
       if (gate.passed) {
         generated = parsed;
@@ -2061,29 +2085,9 @@ async function generateWithMarcus(lead, userId, onProgress) {
       codeGateAttempts++;
       console.log(`[Marcus] Attempt ${attempt} code-gate violation for ${lead.channel_name}: ${gate.violations.map(v => v.type).join(', ')}`);
       if (attempt === 3) {
-        // Out of attempts — rather than ship a raw-number or 2+-em-dash
-        // violation verbatim, force-fix what can be safely, mechanically
-        // repaired before shipping. Other soft/hard violations still ship
-        // as-is (no safe deterministic fix exists for them), but these two
-        // are common enough (model tics the retry loop doesn't reliably
-        // self-correct) and safe enough to auto-repair rather than discard
-        // an otherwise good, fully personalized draft over.
-        const hasRawNumber = gate.violations.some(v => v.type === 'rawNumberDump');
-        if (hasRawNumber) {
-          const before = parsed.body;
-          parsed.body = roundHumanNumbers(parsed.body);
-          if (parsed.body !== before) {
-            console.warn(`[Marcus] Force-rounded raw number(s) in final draft for ${lead.channel_name}`);
-          }
-        }
-        const hasTooManyEmDashes = gate.violations.some(v => v.type === 'tooManyEmDashes');
-        if (hasTooManyEmDashes) {
-          const before = parsed.body;
-          parsed.body = reduceEmDashes(parsed.body);
-          if (parsed.body !== before) {
-            console.warn(`[Marcus] Force-reduced em-dash count in final draft for ${lead.channel_name}`);
-          }
-        }
+        // Out of attempts — the sanitizer above already fixed what it could;
+        // remaining violations have no safe deterministic fix, so ship as-is
+        // rather than discard an otherwise good, fully personalized draft.
         generated = parsed;
         console.warn(`[Marcus] Shipping code-gate-violating draft after 3 attempts for ${lead.channel_name}`);
         break;
@@ -2102,23 +2106,15 @@ async function generateWithMarcus(lead, userId, onProgress) {
     }
   }
 
-  // Fallback if all attempts fail
+  // Marcus V4 P0-5 — needs_human, not a fallback template. Loud, structured,
+  // grep-able: this is the one log line that tells you *why* a lead landed
+  // in needs_human instead of getting a real Marcus draft.
   if (!generated) {
-    // Loud, structured, grep-able — this is the one log line that tells you
-    // *why* a lead got the unpersonalized fallback template instead of a real
-    // Marcus draft. Silent-fallback is what let 3 identical fallback emails
-    // ship to real leads undetected on 2026-07-03.
-    console.error(`[Marcus] FALLBACK TRIGGERED for lead=${lead.id} channel="${lead.channel_name}" user=${userId} — all 3 AI attempts failed:`, JSON.stringify(attemptFailures));
-    const fallback = await buildFallback(lead, userId);
-    return {
-      ...fallback,
-      generation_method: 'fallback',
-      fallback_reason: attemptFailures,
-      intelligence_pack: intelligencePack,
-      angle_result: angleResult,
-      name_warning: nameWarning,
-      voice_warning: voiceWarning,
-    };
+    console.error(`[Marcus] NEEDS_HUMAN for lead=${lead.id} channel="${lead.channel_name}" user=${userId} — all 3 AI attempts failed:`, JSON.stringify(attemptFailures));
+    const err = new Error(`Marcus couldn't generate a passing draft for ${lead.channel_name} after 3 attempts — needs a human rewrite.`);
+    err.code = 'NEEDS_HUMAN';
+    err.attemptFailures = attemptFailures;
+    throw err;
   }
 
   // Generate subject line variants via subject line engine

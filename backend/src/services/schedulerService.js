@@ -153,10 +153,11 @@ cron.schedule('0 * * * *', async () => {
 
   for (const lead of leads) {
     try {
-      // A fallback pitch (Marcus generation failed) must never be auto-queued
-      // or built on top of by the scheduler — the scheduler never overrides.
-      if (lead.pitch_generation_method === 'fallback') {
-        console.log(`[Scheduler] Skipped fallback pitch for ${lead.channel_name}`);
+      // A needs_human pitch (Marcus generation failed, no fallback template
+      // exists per V4) must never be auto-followed-up on by the scheduler —
+      // there's nothing real to reference, and it's waiting on a human.
+      if (lead.pitch_generation_method === 'needs_human') {
+        console.log(`[Scheduler] Skipped needs_human pitch for ${lead.channel_name}`);
         continue;
       }
 

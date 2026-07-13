@@ -1022,6 +1022,9 @@ async function initPostgres() {
     // Distinguishes a real Marcus/AI-generated pitch from buildFallback()'s
     // canned template — see database.js for the incident this was added for.
     await pgAlter(`ALTER TABLE pitches ADD COLUMN generation_method TEXT DEFAULT 'marcus'`);
+    // Marcus V4 P0-5 — populated when generation_method='needs_human': the
+    // JSON array of per-attempt failure reasons, so the UI can show why.
+    await pgAlter(`ALTER TABLE pitches ADD COLUMN needs_human_reasons TEXT`);
     // token_expiry is ms-epoch from Google — exceeds INTEGER max, must be BIGINT
     try { await query(`ALTER TABLE gmail_accounts ALTER COLUMN token_expiry TYPE BIGINT`); } catch {}
     console.log('[PG] ✅ migrations applied');
