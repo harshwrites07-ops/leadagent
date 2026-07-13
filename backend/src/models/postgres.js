@@ -751,6 +751,20 @@ async function initPostgres() {
       )
     `);
     try { await query(`ALTER TABLE quality_log ADD COLUMN IF NOT EXISTS attempt_number INTEGER DEFAULT 1`); } catch {}
+
+    // Marcus V4 P1-2 — per-stage verdicts (intake/sanitize/gate/send).
+    await query(`
+      CREATE TABLE IF NOT EXISTS generation_log (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER,
+        lead_id INTEGER,
+        stage TEXT NOT NULL,
+        passed INTEGER DEFAULT 0,
+        detail TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('[PG] ✅ generation_log');
     console.log('[PG] ✅ quality_log');
 
     // Quality gate columns on pitches (safe migrations)

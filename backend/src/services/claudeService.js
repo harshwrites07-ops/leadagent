@@ -1917,9 +1917,11 @@ async function generateWithMarcus(lead, userId, onProgress) {
   // (including the live YouTube enrichment lookup below) — no point
   // burning a YouTube API call on a lead whose email is `flags@2x.png`.
   const { runIntakeGate } = require('./intakeGate');
+  const { logGenerationStage } = require('./generationLog');
   const earlyIntake = runIntakeGate(lead);
   const earlyFailed = earlyIntake.checks.find(c => ['email_valid', 'not_already_contacted'].includes(c.name) && !c.pass);
   if (earlyFailed) {
+    await logGenerationStage(userId, lead.id, 'intake', false, earlyFailed.detail);
     const err = new Error(earlyFailed.detail);
     err.code = 'INTAKE_BLOCKED';
     err.intakeCheck = earlyFailed.name;
@@ -2016,11 +2018,13 @@ async function generateWithMarcus(lead, userId, onProgress) {
   const lateIntake = runIntakeGate(lead);
   const lateFailed = lateIntake.checks.find(c => ['has_channel_facts', 'facts_fresh'].includes(c.name) && !c.pass);
   if (lateFailed) {
+    await logGenerationStage(userId, lead.id, 'intake', false, lateFailed.detail);
     const err = new Error(lateFailed.detail);
     err.code = 'INTAKE_BLOCKED';
     err.intakeCheck = lateFailed.name;
     throw err;
   }
+  await logGenerationStage(userId, lead.id, 'intake', true, 'All 4 intake checks passed');
 
   // Select angle
   const { selectAngle } = require('./angleEngine');
