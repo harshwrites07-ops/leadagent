@@ -1336,13 +1336,16 @@ export default function PitchGenerator() {
                             <div style={{ fontSize: 11, marginBottom: 10, color: 'var(--text-3)' }}>
                               {blockDetails?.message || `This pitch scored below 70 and cannot be sent until rewritten. Click Rewrite to regenerate.`}
                             </div>
-                            {(blockDetails?.feedback || pitch.quality_breakdown) && (
+                            {Array.isArray(pitch.quality_breakdown) && pitch.quality_breakdown.length > 0 && (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 10 }}>
-                                {Object.entries(blockDetails?.feedback || pitch.quality_breakdown || {}).filter(([, v]) => v.points < 8).slice(0, 4).map(([k, v]) => (
-                                  <div key={k} style={{ fontSize: 10.5, color: 'var(--text-3)' }}>
-                                    · {k.replace('_', ' ')}: {v.feedback}
-                                  </div>
-                                ))}
+                                {pitch.quality_breakdown
+                                  .filter(c => (c?.points_awarded ?? 0) < (c?.points_possible ?? 0))
+                                  .slice(0, 4)
+                                  .map((c) => (
+                                    <div key={c.name} style={{ fontSize: 10.5, color: 'var(--text-3)' }}>
+                                      · {(c.name || '').replace(/_/g, ' ')}: {c.detail}
+                                    </div>
+                                  ))}
                               </div>
                             )}
                             <button
