@@ -7,6 +7,7 @@ const assert = require('node:assert/strict');
 const {
   scoreLeadFromYouTube, scoreLeadFromReddit, getTemperature,
   scoreCloseability, CLOSEABILITY_WEIGHTS,
+  detectTeamSignal, TEAM_CONFIDENCE_THRESHOLDS,
 } = require('../src/utils/scoring');
 
 test('legacy scoreLeadFromYouTube still clamps to 0-100', () => {
@@ -95,4 +96,67 @@ test('weights live in a single named constants block', () => {
   const keywordShare = CLOSEABILITY_WEIGHTS.KEYWORDS /
     Object.values(CLOSEABILITY_WEIGHTS).reduce((a, b) => a + b, 0);
   assert.ok(keywordShare <= 0.10, `keyword weight share must be <=10%, got ${(keywordShare*100).toFixed(1)}%`);
+});
+
+// ── Team detection ───────────────────────────────────────────────────────────
+
+test('a description crediting two different people yields high has_team confidence', () => {
+  const { confidence, evidence } = detectTeamSignal({
+    channel_name: 'Some Creator',
+    channel_description: 'edited by @mike, thumbnail by @sara',
+  });
+  assert.ok(confidence >= TEAM_CONFIDENCE_THRESHOLDS.HIGH, `expected high confidence, got ${confidence}`);
+  assert.ok(evidence.length >= 2, 'expected evidence for both credit matches');
+  assert.ok(evidence.some(e => e.match.includes('mike')));
+  assert.ok(evidence.some(e => e.match.includes('sara')));
+});
+
+test('a bare solo channel with no credits yields low (not null) confidence', () => {
+  const { confidence, evidence } = detectTeamSignal({
+    channel_name: 'Solo Cook',
+    channel_description: 'I make videos about cooking every week. Thanks for watching and see you next time!',
+  });
+  assert.equal(typeof confidence, 'number');
+  assert.ok(confidence < TEAM_CONFIDENCE_THRESHOLDS.MED, `expected low confidence, got ${confidence}`);
+  assert.equal(evidence.length, 0);
+});
+
+test('self-credits ("edited by me") are proof of solo, never counted as team evidence', () => {
+  const { confidence, evidence } = detectTeamSignal({
+    channel_name: 'Solo Editor',
+    channel_description: 'edited by me, thumbnail by me',
+  });
+  assert.equal(confidence, 0);
+  assert.deepEqual(evidence, []);
+});
+
+test('a generic mention of "career" is not mistaken for a team/careers page', () => {
+  const { confidence, evidence } = detectTeamSignal({
+    channel_name: 'Financial Planner',
+    channel_description: "If you're just starting your career, planning for retirement, or looking to invest, I can help.",
+  });
+  assert.ok(confidence < TEAM_CONFIDENCE_THRESHOLDS.MED, `expected low confidence, got ${confidence}`);
+  assert.equal(evidence.length, 0);
+});
+
+test('a data-poor lead (no description, no name, no videos) returns unknown, not false-solo', () => {
+  const result = detectTeamSignal({});
+  assert.equal(result.confidence, null);
+  assert.deepEqual(result.evidence, []);
+});
+
+test('unknown confidence (null) maps to a neutral no_team signal, not a positive one', () => {
+  const withUnknownTeam = scoreCloseability({ subscriber_count: 40000, avg_views: 15000, channel_description: '', has_team: null });
+  const withConfirmedNoTeam = scoreCloseability({ subscriber_count: 40000, avg_views: 15000, channel_description: '', has_team: 0.1 });
+  assert.ok(
+    withConfirmedNoTeam.score > withUnknownTeam.score,
+    'a confirmed-no-team lead must score higher than an unknown-team lead with otherwise identical signals'
+  );
+});
+
+test('high has_team confidence applies the full negative weight in scoreCloseability', () => {
+  const noTeam = scoreCloseability({ subscriber_count: 40000, avg_views: 15000, channel_description: '', has_team: 0.1 });
+  const confirmedTeam = scoreCloseability({ subscriber_count: 40000, avg_views: 15000, channel_description: '', has_team: 0.9 });
+  assert.ok(confirmedTeam.score < noTeam.score);
+  assert.ok(noTeam.score - confirmedTeam.score >= CLOSEABILITY_WEIGHTS.NO_TEAM, 'high-confidence team should swing the full NO_TEAM weight');
 });

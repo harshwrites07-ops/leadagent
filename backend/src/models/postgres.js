@@ -811,6 +811,11 @@ async function initPostgres() {
     try { await query(`ALTER TABLE quality_leads ADD COLUMN IF NOT EXISTS tier TEXT`); } catch {}
     try { await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS hot_alert_digest_enabled INTEGER DEFAULT 1`); } catch {}
     try { await query(`ALTER TABLE quality_leads ADD COLUMN IF NOT EXISTS service_fit TEXT DEFAULT '{}'`); } catch {}
+    // Team/agency detection (has_team input to scoreCloseability, see
+    // utils/scoring.js detectTeamSignal). Nullable — null means genuinely
+    // insufficient data to judge, not a confirmed solo creator.
+    try { await query(`ALTER TABLE master_leads ADD COLUMN IF NOT EXISTS has_team_confidence REAL`); } catch {}
+    try { await query(`ALTER TABLE master_leads ADD COLUMN IF NOT EXISTS team_evidence TEXT`); } catch {}
 
     await query(`
       CREATE TABLE IF NOT EXISTS scoring_weights (

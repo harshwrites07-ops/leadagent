@@ -6,7 +6,7 @@
 
 const axios = require('axios');
 const { getDb } = require('../models/database');
-const { scoreCloseability, getTemperature } = require('../utils/scoring');
+const { scoreCloseability, getTemperature, detectTeamSignal } = require('../utils/scoring');
 
 const MIN_SUBS = 1000;
 const MAX_SUBS = 5000000;
@@ -428,7 +428,7 @@ function getApiKeys() {
   return keys;
 }
 
-const MASTER_INSERT_SQL = `INSERT OR IGNORE INTO master_leads (channel_id, channel_name, channel_handle, subscriber_count, avg_views, email, website, channel_description, lead_score, temperature, country, niche) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`;
+const MASTER_INSERT_SQL = `INSERT OR IGNORE INTO master_leads (channel_id, channel_name, channel_handle, subscriber_count, avg_views, email, website, channel_description, lead_score, temperature, country, niche, has_team_confidence, team_evidence) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`;
 
 // Process one batch of channels for a given keyword+key
 async function processChannelBatch(db, channels, keyword) {
@@ -457,19 +457,30 @@ async function processChannelBatch(db, channels, keyword) {
     const videos = Math.max(1, parseInt(ch.statistics?.videoCount || 1));
     const avgViews = Math.round(views / videos);
 
+    const channelName = ch.snippet?.title || 'Unknown';
+    const { confidence: teamConfidence, evidence: teamEvidence } = detectTeamSignal({
+      channel_name: channelName,
+      channel_description: fullText,
+      urls,
+      subscriber_count: subs,
+    });
+
     const { score } = scoreCloseability({
       subscriber_count: subs,
       avg_views: avgViews,
       channel_description: fullText,
+      has_team: teamConfidence,
     });
 
     const r = await db.run(MASTER_INSERT_SQL, [
-      ch.id, ch.snippet?.title || 'Unknown', ch.snippet?.customUrl || null,
+      ch.id, channelName, ch.snippet?.customUrl || null,
       subs, avgViews, email, website,
       desc.substring(0, 400) || null, score,
       getTemperature(score),
       ch.snippet?.country || null,
-      kwNicheMap[keyword] || keyword.split(' ')[0].toLowerCase()
+      kwNicheMap[keyword] || keyword.split(' ')[0].toLowerCase(),
+      teamConfidence,
+      teamEvidence.length ? JSON.stringify(teamEvidence) : null,
     ]);
     return r.changes > 0 ? 1 : 0;
   });
@@ -592,17 +603,25 @@ async function runInnerTubeCycle(db, keywords) {
           const subs = ch.subscriberCount || 0;
           if (subs > 0 && (subs < MIN_SUBS || subs > MAX_SUBS)) continue;
           try {
+            const { confidence: teamConfidence, evidence: teamEvidence } = detectTeamSignal({
+              channel_name: ch.channelName,
+              channel_description: ch.description || '',
+              subscriber_count: subs,
+            });
             const { score } = scoreCloseability({
               subscriber_count: subs,
               avg_views: 0, // InnerTube fast-search path has no view stats
               channel_description: ch.description || '',
+              has_team: teamConfidence,
             });
             const res = await db.run(MASTER_INSERT_SQL, [
               ch.channelId, ch.channelName, ch.handle || null,
               subs, 0, ch.email, null,
               (ch.description || '').substring(0, 400),
               score, getTemperature(score),
-              ch.country || null, niche
+              ch.country || null, niche,
+              teamConfidence,
+              teamEvidence.length ? JSON.stringify(teamEvidence) : null,
             ]);
             if (res.changes > 0) totalSaved++;
           } catch (e) { console.warn(`[Seeder] InnerTube insert failed for ${ch.channelId}: ${e.message}`); }
