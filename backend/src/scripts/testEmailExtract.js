@@ -1,8 +1,8 @@
-// Unit-style test for extractEmail() in innertubeService.js — no DB required.
+// Unit-style test for extractEmail() in utils/emailFilters.js — no DB required.
 // Run: node backend/src/scripts/testEmailExtract.js
 // Exits 0 if every assertion passes, 1 otherwise.
 
-const { extractEmail } = require('../services/innertubeService');
+const { extractEmail } = require('../utils/emailFilters');
 
 const cases = [
   // ── valid emails must still pass ──────────────────────────────────────────

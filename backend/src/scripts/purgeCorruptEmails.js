@@ -20,11 +20,11 @@
 require('dotenv').config({ path: require('path').join(__dirname, '../../../.env'), override: false });
 
 const { initializeDatabase, getDb } = require('../models/database');
-const { isImageBugCorruptedEmail } = require('../services/innertubeService');
+const { isImageBugCorruptedEmail } = require('../utils/emailFilters');
 
 const DRY_RUN = process.argv.includes('--dry');
 
-// isImageBugCorruptedEmail (exported from innertubeService.js, the same file
+// isImageBugCorruptedEmail (utils/emailFilters.js, the same module
 // extractEmail lives in) checks specifically for the image-extraction bug's
 // three signatures — asset-extension TLD, retina-density marker, trailing
 // second extension — not "is this a valid-looking email for any reason",

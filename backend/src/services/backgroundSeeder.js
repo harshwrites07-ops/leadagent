@@ -7,13 +7,11 @@
 const axios = require('axios');
 const { getDb } = require('../models/database');
 const { scoreCloseability, getTemperature, detectTeamSignal } = require('../utils/scoring');
+const emailFilters = require('../utils/emailFilters');
 
 const MIN_SUBS = 1000;
 const MAX_SUBS = 5000000;
 const CONCURRENCY = 20;
-// Only skip truly junk/internal domains — NOT gmail/yahoo/outlook.
-// Many real creators use gmail as their business inquiry email.
-const SKIP_DOMAINS = new Set(['youtube.com','google.com','googlemail.com','googleapis.com','gstatic.com','ggpht.com','ytimg.com','example.com','sentry.io']);
 
 // Seeder status — readable by admin panel
 const seederStatus = {
@@ -327,21 +325,12 @@ const KEYWORD_NICHE_MAP = [
 
 const kwNicheMap = Object.fromEntries(KEYWORD_NICHE_MAP);
 
-function extractEmail(text) {
-  if (!text) return null;
-  // Normalize obfuscated formats: "name [at] domain [dot] com", "(at)", "{dot}", etc.
-  const normalized = text
-    .replace(/\[at\]/gi, '@').replace(/\(at\)/gi, '@').replace(/\{at\}/gi, '@')
-    .replace(/\s+at\s+/gi, '@')
-    .replace(/\[dot\]/gi, '.').replace(/\(dot\)/gi, '.').replace(/\{dot\}/gi, '.')
-    .replace(/\s+dot\s+/gi, '.');
-  const matches = [...normalized.matchAll(/[\w.+%-]+@[\w.-]+\.[a-zA-Z]{2,}/g)].map(m => m[0].toLowerCase());
-  for (const email of matches) {
-    const domain = email.split('@')[1];
-    if (domain && !SKIP_DOMAINS.has(domain)) return email;
-  }
-  return null;
-}
+// Email extraction/validation now lives in utils/emailFilters.js —
+// consolidated single source of truth (this file's copy was previously the
+// weakest of the three duplicates, with no image-bug-artifact guard at all —
+// the likely source of the ~650 historical rows with an image filename
+// stored as an email; see purgeCorruptEmails.js).
+const extractEmail = emailFilters.extractEmail;
 
 const SOCIAL_RE = /youtube\.com|youtu\.be|instagram\.com|twitter\.com|x\.com|facebook\.com|tiktok\.com|t\.co|snapchat\.com|pinterest\.com|linkedin\.com/;
 
@@ -396,7 +385,7 @@ async function scrapeEmailFromWebsite(url) {
     // mailto: link is the most reliable signal
     const mailto = (html.match(/href="mailto:([^"?]+)/gi) || [])
       .map(m => m.replace(/href="mailto:/i, '').toLowerCase().trim())
-      .find(e => e.includes('@') && !SKIP_DOMAINS.has(e.split('@')[1]));
+      .find(e => e.includes('@') && !emailFilters.isSkippedEmailDomain(e.split('@')[1]));
     if (mailto) return mailto;
     // Try contact/about sub-pages
     const subLinks = (html.match(/href="([^"]*(?:contact|about|hire|work-with)[^"]*)"/gi) || [])

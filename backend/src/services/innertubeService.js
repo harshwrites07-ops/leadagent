@@ -1,6 +1,7 @@
 const axios = require('axios');
 const { scoreLeadFromYouTube, getTemperature } = require('../utils/scoring');
 const { detectPainPoints } = require('../utils/painPoints');
+const emailFilters = require('../utils/emailFilters');
 
 const BASE = 'https://www.youtube.com/youtubei/v1';
 
@@ -16,21 +17,6 @@ const UAS = [
 ];
 let _uaIdx = 0;
 const nextUA = () => UAS[_uaIdx++ % UAS.length];
-
-const SKIP_EMAIL_DOMAINS = new Set([
-  'youtube.com', 'google.com', 'googlemail.com', 'googleapis.com',
-  'gstatic.com', 'ggpht.com', 'ytimg.com', 'sentry.io',
-  // Disposable/temp-mail domains — these often have valid MX records, so an MX
-  // check alone wouldn't catch them; a real send would just bounce or vanish.
-  'mailinator.com', '10minutemail.com', 'guerrillamail.com', 'tempmail.com',
-  'temp-mail.org', 'throwawaymail.com', 'yopmail.com', 'trashmail.com',
-  'getnada.com', 'fakeinbox.com', 'sharklasers.com', 'dispostable.com',
-  'maildrop.cc', 'mintemail.com', 'mailnesia.com',
-]);
-
-// Asset-filename "TLDs" that the email regex mistakes for a real domain suffix
-// — e.g. "logo@2x.png" (a retina image filename) parses as user=logo, domain=2x, tld=png.
-const NON_EMAIL_TLDS = new Set(['png','jpg','jpeg','gif','webp','svg','bmp','ico','pdf','css','js','mp4','mov','avi','woff','woff2','ttf']);
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -83,93 +69,12 @@ function parseCount(text) {
   return isNaN(n) ? 0 : Math.round(n * mult);
 }
 
-// Image/asset extensions that the email regex mistakes for a real TLD — e.g.
-// "logo@2x.png" (a retina image filename) parses as user=logo, domain=2x, tld=png.
-const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico', 'css', 'js']);
-
-// True if `domainFull` (the part after "@", e.g. "2x.png") is itself a
-// retina-density marker like "2x"/"3x" — the "@" here is a CSS/HTML asset
-// separator, not an email separator, regardless of what extension follows.
-function isRetinaMarkerDomain(domainFull) {
-  const firstLabel = domainFull.split('.')[0];
-  return /^\d+x$/i.test(firstLabel);
-}
-
-// True if the text immediately after the matched email is another ".ext"
-// token with no separating whitespace/punctuation — the "hash.png@1f.png"
-// shape (an emoji/flag sprite filename keyed by Unicode codepoint) matches
-// the email regex once, but leaves a second extension dangling right after,
-// which a real email address never would.
-function isFollowedByAnotherExtension(remainder) {
-  return /^\.[a-zA-Z]{2,6}(?![a-zA-Z0-9])/.test(remainder);
-}
-
-// True if this specific match is an image/asset-filename artifact (the bug
-// this file's TODO.md entry documents) rather than a real email — checked
-// against the *domain* half of an already-locally-sane candidate match.
-function isImageBugArtifact(domainFull, afterMatch) {
-  const tld = domainFull.split('.').pop()?.toLowerCase();
-  if (tld && (IMAGE_EXTENSIONS.has(tld) || NON_EMAIL_TLDS.has(tld))) return true;
-  if (isRetinaMarkerDomain(domainFull)) return true;
-  if (isFollowedByAnotherExtension(afterMatch)) return true;
-  return false;
-}
-
-const OBFUSCATION_NORMALIZE = (text) => String(text)
-  .replace(/\[at\]/gi, '@').replace(/\(at\)/gi, '@').replace(/\{at\}/gi, '@')
-  .replace(/\s+at\s+/gi, '@')
-  .replace(/\[dot\]/gi, '.').replace(/\(dot\)/gi, '.').replace(/\{dot\}/gi, '.')
-  .replace(/\s+dot\s+/gi, '.');
-
-const EMAIL_MATCH_RE = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g;
-const LOCAL_PART_SANITY_RE = /^[a-zA-Z0-9][a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
-
-function extractEmail(text) {
-  if (!text) return null;
-  const normalized = OBFUSCATION_NORMALIZE(text);
-  const matches = [...normalized.matchAll(EMAIL_MATCH_RE)];
-  for (const m of matches) {
-    const raw = m[0];
-    let e = raw;
-    e = e.replace(/^[^a-zA-Z0-9]+/, '').replace(/^[A-Z]{2,}-/i, '');
-    if (/^[a-z][A-Z]/.test(e)) e = e.slice(1);
-    if (!LOCAL_PART_SANITY_RE.test(e)) continue;
-
-    const domainFull = e.split('@')[1];
-    const afterMatch = normalized.slice(m.index + raw.length);
-    if (isImageBugArtifact(domainFull, afterMatch)) continue;
-
-    const domain = domainFull.toLowerCase();
-    if (SKIP_EMAIL_DOMAINS.has(domain)) continue;
-    return e.toLowerCase();
-  }
-  return null;
-}
-
-// For the one-time purge script (purgeCorruptEmails.js): true if `storedValue`
-// (an existing DB email column, treated as scraped text) contains at least
-// one otherwise-plausible email-shaped match that is rejected *specifically*
-// because of the image-extraction bug (asset-extension TLD, retina-density
-// marker, or a trailing second extension) — as opposed to being invalid for
-// any other, unrelated reason (e.g. malformed local part). This is what lets
-// the purge script fix exactly the rows this bug corrupted, nothing else.
-function isImageBugCorruptedEmail(storedValue) {
-  if (!storedValue) return false;
-  const normalized = OBFUSCATION_NORMALIZE(storedValue);
-  const matches = [...normalized.matchAll(EMAIL_MATCH_RE)];
-  for (const m of matches) {
-    const raw = m[0];
-    let e = raw;
-    e = e.replace(/^[^a-zA-Z0-9]+/, '').replace(/^[A-Z]{2,}-/i, '');
-    if (/^[a-z][A-Z]/.test(e)) e = e.slice(1);
-    if (!LOCAL_PART_SANITY_RE.test(e)) continue; // not a plausible match even under the old rules — not this bug
-
-    const domainFull = e.split('@')[1];
-    const afterMatch = normalized.slice(m.index + raw.length);
-    if (isImageBugArtifact(domainFull, afterMatch)) return true;
-  }
-  return false;
-}
+// extractEmail/isImageBugCorruptedEmail now live in utils/emailFilters.js —
+// consolidated single source of truth (previously duplicated here,
+// youtubeService.js, and backgroundSeeder.js, and drifting between copies).
+// Re-exported below under the same names for the two scripts that already
+// import them from this module.
+const { extractEmail, isImageBugCorruptedEmail } = emailFilters;
 
 async function scrapeEmailFromPage(channelId, handle) {
   const urls = [];

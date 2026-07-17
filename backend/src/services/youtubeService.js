@@ -2,6 +2,7 @@ const axios = require('axios');
 const path = require('path');
 const { scoreLeadFromYouTube, getTemperature } = require('../utils/scoring');
 const { detectPainPoints } = require('../utils/painPoints');
+const emailFilters = require('../utils/emailFilters');
 
 const YT_BASE = 'https://www.googleapis.com/youtube/v3';
 const ENV_PATH = path.join(__dirname, '../../../.env');
@@ -177,7 +178,7 @@ async function enrichChannels(channelIds, minSubs, maxSubs, maxResults, emailOnl
     //    If emailOnly=true and no email found → skip entirely (saves 2 API calls per channel)
     const emailChecked = [];
     for (const ch of subFiltered) {
-      const descEmail = extractEmail(ch.snippet?.description || '');
+      const descEmail = emailFilters.extractEmail(ch.snippet?.description || '');
       if (descEmail) {
         emailChecked.push({ ch, earlyEmail: descEmail });
         continue;
@@ -240,7 +241,7 @@ async function buildChannelProfile(ch, earlyEmail = null) {
     earlyEmail
       ? Promise.resolve(earlyEmail)
       : (async () => {
-          const fromDesc = extractEmail(ch.snippet?.description || '');
+          const fromDesc = emailFilters.extractEmail(ch.snippet?.description || '');
           if (fromDesc) return fromDesc;
           const website = extractWebsite(ch.snippet?.description || '', null);
           const [fromPage, fromSite] = await Promise.all([
@@ -330,52 +331,10 @@ async function buildChannelProfile(ch, earlyEmail = null) {
 
 // ─── Utilities ─────────────────────────────────────────────────────────────────
 
-const SKIP_EMAIL_DOMAINS = new Set([
-  'youtube.com', 'google.com', 'googlemail.com', 'googleapis.com',
-  'gstatic.com', 'ggpht.com', 'ytimg.com', 'sentry.io', 'example.com',
-  // Disposable/temp-mail domains — these often have valid MX records, so an MX
-  // check alone wouldn't catch them; a real send would just bounce or vanish.
-  'mailinator.com', '10minutemail.com', 'guerrillamail.com', 'tempmail.com',
-  'temp-mail.org', 'throwawaymail.com', 'yopmail.com', 'trashmail.com',
-  'getnada.com', 'fakeinbox.com', 'sharklasers.com', 'dispostable.com',
-  'maildrop.cc', 'mintemail.com', 'mailnesia.com',
-]);
-
-// Asset-filename "TLDs" that the email regex mistakes for a real domain suffix
-// — e.g. "logo@2x.png" (a retina image filename) parses as user=logo, domain=2x, tld=png.
-const NON_EMAIL_TLDS = new Set(['png','jpg','jpeg','gif','webp','svg','bmp','ico','pdf','css','js','mp4','mov','avi','woff','woff2','ttf']);
-
-function extractEmail(text) {
-  // Normalize obfuscated formats: [at], (at), {at}, " at ", [dot], (dot), " dot "
-  const normalized = String(text || '')
-    .replace(/\[at\]/gi, '@').replace(/\(at\)/gi, '@').replace(/\{at\}/gi, '@')
-    .replace(/\s+at\s+/gi, '@')
-    .replace(/\[dot\]/gi, '.').replace(/\(dot\)/gi, '.').replace(/\{dot\}/gi, '.')
-    .replace(/\s+dot\s+/gi, '.');
-  const all = [...normalized.matchAll(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g)].map(m => m[0]);
-  for (const raw of all) {
-    let email = raw;
-    email = email.replace(/^[^a-zA-Z0-9]+/, '');
-    email = email.replace(/^[A-Z]{2,}-/i, '');
-    if (/^[a-z][A-Z]/.test(email)) email = email.slice(1);
-    if (!/^[a-zA-Z0-9][a-zA-Z0-9._%+\-]{1,}@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/.test(email)) continue;
-    const domain = email.split('@')[1]?.toLowerCase();
-    if (domain && SKIP_EMAIL_DOMAINS.has(domain)) continue;
-    const tld = email.split('.').pop().toLowerCase();
-    if (NON_EMAIL_TLDS.has(tld)) continue;
-    return email.toLowerCase();
-  }
-  return null;
-}
-
-const SYSTEM_DOMAINS = [...SKIP_EMAIL_DOMAINS];
-
-// Shared guard against retina/asset-filename false positives like "logo@2x.png"
-// (see NON_EMAIL_TLDS above) when scraping raw HTML with the plain regex.
-function isRealEmail(e) {
-  const tld = e.split('.').pop()?.toLowerCase();
-  return !!tld && !NON_EMAIL_TLDS.has(tld);
-}
+// Email extraction/validation (obfuscation normalize, image-bug-artifact
+// guard, skip-domain check incl. link-shorteners) now lives in
+// utils/emailFilters.js — consolidated single source of truth (previously
+// duplicated here, innertubeService.js, and backgroundSeeder.js).
 
 async function scrapeEmailFromPage(handle, channelId) {
   const urls = [];
@@ -391,9 +350,8 @@ async function scrapeEmailFromPage(handle, channelId) {
         },
         timeout: 8000,
       });
-      const all = html.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g) || [];
-      const valid = [...new Set(all)].find(e => !SKIP_EMAIL_DOMAINS.has(e.toLowerCase().split('@')[1]) && isRealEmail(e));
-      if (valid) return valid;
+      const found = emailFilters.extractEmail(html);
+      if (found) return found;
     } catch {}
   }
   return null;
@@ -414,12 +372,11 @@ async function scrapeEmailFromWebsite(websiteUrl) {
     for (const link of linktreeLinks.slice(0, 3)) {
       if (link.startsWith('mailto:')) {
         const email = link.replace('mailto:', '').split('?')[0].trim().toLowerCase();
-        if (email.includes('@')) return email;
+        if (email.includes('@') && !emailFilters.isSkippedEmailDomain(email.split('@')[1])) return email;
       }
     }
     // Extract emails from page text
-    const all = html.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g) || [];
-    return [...new Set(all)].find(e => !SYSTEM_DOMAINS.some(d => e.toLowerCase().endsWith('@' + d)) && isRealEmail(e)) || null;
+    return emailFilters.extractEmail(html);
   } catch {
     return null;
   }
