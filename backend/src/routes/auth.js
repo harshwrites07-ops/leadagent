@@ -559,7 +559,14 @@ router.get('/admin/seeder-status', requireAdmin, asyncHandler(async (req, res) =
     if (process.env.YOUTUBE_API_KEY) keys.push(0);
     ytKeyCount = keys.length;
   } catch {}
-  res.json({ success: true, seederStatus, total, withEmail, ytKeyCount });
+  // scraperHealth (attempted/succeeded/failed per scraper, last 24h) — reused
+  // here rather than a new route, so degraded discovery is visible from the
+  // same admin surface that already shows seeder status. See
+  // scraperHealth.recordSeedCycleOutcome() for the consecutive-zero-lead-
+  // cycle trigger reflected in seederStatus.discoveryHealth above.
+  let scraperHealthSummary = [];
+  try { scraperHealthSummary = await require('../services/scraperHealth').getScraperHealthSummary(24); } catch {}
+  res.json({ success: true, seederStatus, total, withEmail, ytKeyCount, scraperHealthSummary });
 }));
 
 let seedNowRunning = false;

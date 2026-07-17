@@ -57,6 +57,12 @@ function markExhausted(key) {
       console.log('[YouTube] Quota reset — all keys re-enabled');
     }, 24 * 60 * 60 * 1000);
   }
+  // Write through to quotaTracker (the persisted, single source of truth —
+  // see quotaTracker.js) so backgroundSeeder.js's proactive per-key check
+  // learns about this exhaustion too, instead of only living in this
+  // process-local Set. Fire-and-forget: markExhausted() stays synchronous
+  // for its many existing call sites.
+  try { require('./quotaTracker').recordKeyExhausted(key).catch(() => {}); } catch {}
   const remaining = getAllKeys().filter(k => !exhaustedKeys.has(k)).length;
   console.log(`[YouTube] Key ${key.substring(0, 12)}... exhausted. ${remaining} key(s) remaining.`);
 }

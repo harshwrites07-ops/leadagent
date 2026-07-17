@@ -8,6 +8,16 @@ const axios = require('axios');
 const { getDb } = require('../models/database');
 const { scoreCloseability, getTemperature, detectTeamSignal } = require('../utils/scoring');
 const emailFilters = require('../utils/emailFilters');
+const { incrementQuotaUsage, isKeyBudgetNearlyExhausted, recordKeyExhausted, QUOTA_UNIT_COSTS } = require('./quotaTracker');
+
+// youtubeService's markExhausted() writes to its own in-memory exhaustedKeys
+// Set — calling it here (in addition to quotaTracker, the persisted source
+// of truth) means a key this proactive/reactive check discovers exhausted
+// is ALSO immediately reflected in every isQuotaExhausted()/getKeyPoolStatus()
+// call site across the app, not just on quotaTracker's next DB read.
+function markYoutubeServiceKeyExhausted(apiKey) {
+  try { require('./youtubeService').markExhausted(apiKey); } catch {}
+}
 
 const MIN_SUBS = 1000;
 const MAX_SUBS = 5000000;
@@ -22,6 +32,9 @@ const seederStatus = {
   currentKeyword: null,
   keysActive: 0,
   keysTotal: 0,
+  // Populated after each cycle by scraperHealth.recordSeedCycleOutcome() —
+  // see GET /api/admin/seeder-status.
+  discoveryHealth: { degraded: false, consecutiveZeroLeadCycles: 0, threshold: null, lastAlertAt: null },
 };
 
 // Each entry: [keyword, niche_id]
@@ -509,6 +522,22 @@ async function runKeyBatch(apiKey, keywords, db) {
     if (exhausted) return 0;
     seederStatus.currentKeyword = keyword;
 
+    // Proactive check (quotaTracker — the single source of truth for daily
+    // per-key spend) BEFORE spending this key on a search.list call. A key
+    // that's already near its own budget gets skipped for the rest of the
+    // day here, rather than burning it down to a live 429 like before.
+    // This is the piece that closes the cross-cycle memory gap: `exhausted`
+    // above is a fresh local var every runKeyBatch() call (every ~30-min
+    // cycle), but quotaTracker's persisted usage carries over, so a key
+    // exhausted in cycle 1 is correctly skipped again in cycle 2 onward —
+    // it's never silently retried.
+    if (await isKeyBudgetNearlyExhausted(apiKey)) {
+      exhausted = true;
+      markYoutubeServiceKeyExhausted(apiKey);
+      console.log(`[Seeder] Key near daily budget (proactive skip): ${apiKey.slice(-6)}`);
+      return 0;
+    }
+
     const stored = await db.get('SELECT next_page_token, pages_done, zero_result_streak FROM seeder_keyword_tokens WHERE keyword=? AND api_key_hash=?', [keyword, kh]);
     const pageToken = stored?.next_page_token || null;
     const pagesDone = stored?.pages_done || 0;
@@ -524,6 +553,7 @@ async function runKeyBatch(apiKey, keywords, db) {
       if (pageToken) params.pageToken = pageToken;
 
       const searchRes = await axios.get('https://www.googleapis.com/youtube/v3/search', { params, timeout: 10000 });
+      await incrementQuotaUsage(apiKey, QUOTA_UNIT_COSTS.SEARCH_LIST);
       const channelIds = [...new Set((searchRes.data.items || []).map(i => i.snippet?.channelId).filter(Boolean))];
       const nextToken = searchRes.data.nextPageToken || null;
       await db.run(UPSERT_TOKEN_SQL, [keyword, kh, nextToken, pagesDone + 1]);
@@ -534,6 +564,7 @@ async function runKeyBatch(apiKey, keywords, db) {
           params: { part: 'snippet,statistics,brandingSettings', id: channelIds.join(','), key: apiKey },
           timeout: 10000,
         });
+        await incrementQuotaUsage(apiKey, QUOTA_UNIT_COSTS.LIST);
 
         const channels = detailRes.data.items || [];
         for (let i = 0; i < channels.length; i += CONCURRENCY) {
@@ -551,6 +582,14 @@ async function runKeyBatch(apiKey, keywords, db) {
       if (reason === 'quotaExceeded' || reason === 'dailyLimitExceeded' || reason === 'rateLimitExceeded' || e.response?.status === 429) {
         exhausted = true;
         console.log(`[Seeder] Key exhausted (${reason || e.response?.status}): ${apiKey.slice(-6)}`);
+        // Reactive backstop: the proactive check above didn't catch this
+        // (our unit-cost accounting could be off, or a burst from another
+        // process spent it faster than expected) — persist it now so every
+        // OTHER path reading quotaTracker (including youtubeService.js's
+        // manual-lookup path) learns about it immediately too, not just
+        // this in-memory `exhausted` flag scoped to this one cycle.
+        recordKeyExhausted(apiKey).catch(() => {});
+        markYoutubeServiceKeyExhausted(apiKey);
       } else {
         console.log(`[Seeder] Key error (not quota, reason=${reason || 'none'}, status=${e.response?.status || 'n/a'}): ${apiKey.slice(-6)} — ${e.message}`);
       }
@@ -678,6 +717,11 @@ async function runSeedCycle() {
   const totalRow = await db.get('SELECT COUNT(*) as c FROM master_leads');
   const emailRow = await db.get("SELECT COUNT(*) as c FROM master_leads WHERE email IS NOT NULL AND email != ''");
   console.log(`[Seeder] Cycle done — +${totalSaved} new | DB: ${totalRow.c} total | ${emailRow.c} with email${usedInnerTube ? ' [InnerTube]' : ''}`);
+
+  try {
+    const { recordSeedCycleOutcome } = require('./scraperHealth');
+    seederStatus.discoveryHealth = await recordSeedCycleOutcome(totalSaved);
+  } catch (e) { console.error('[Seeder] recordSeedCycleOutcome failed:', e.message); }
 
   seederStatus.running = false;
   seederStatus.lastCycleAt = new Date().toISOString();
