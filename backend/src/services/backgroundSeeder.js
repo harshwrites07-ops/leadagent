@@ -6,6 +6,7 @@
 
 const axios = require('axios');
 const { getDb } = require('../models/database');
+const { scoreCloseability, getTemperature } = require('../utils/scoring');
 
 const MIN_SUBS = 1000;
 const MAX_SUBS = 5000000;
@@ -13,7 +14,6 @@ const CONCURRENCY = 20;
 // Only skip truly junk/internal domains — NOT gmail/yahoo/outlook.
 // Many real creators use gmail as their business inquiry email.
 const SKIP_DOMAINS = new Set(['youtube.com','google.com','googlemail.com','googleapis.com','gstatic.com','ggpht.com','ytimg.com','example.com','sentry.io']);
-const PERSONAL_DOMAINS = new Set(['gmail.com','yahoo.com','hotmail.com','outlook.com','icloud.com','me.com','live.com','aol.com','protonmail.com']);
 
 // Seeder status — readable by admin panel
 const seederStatus = {
@@ -455,22 +455,19 @@ async function processChannelBatch(db, channels, keyword) {
 
     const views = parseInt(ch.statistics?.viewCount || 0);
     const videos = Math.max(1, parseInt(ch.statistics?.videoCount || 1));
-    const isPersonalEmail = PERSONAL_DOMAINS.has(email.split('@')[1]);
+    const avgViews = Math.round(views / videos);
 
-    let score = 50;
-    if (subs > 10000) score += 10;
-    if (subs > 50000) score += 10;
-    if (subs > 100000) score += 10;
-    if (views > 100000) score += 5;
-    if (views > 1000000) score += 5;
-    score += 15;
-    if (isPersonalEmail) score -= 15;
+    const { score } = scoreCloseability({
+      subscriber_count: subs,
+      avg_views: avgViews,
+      channel_description: fullText,
+    });
 
     const r = await db.run(MASTER_INSERT_SQL, [
       ch.id, ch.snippet?.title || 'Unknown', ch.snippet?.customUrl || null,
-      subs, Math.round(views / videos), email, website,
+      subs, avgViews, email, website,
       desc.substring(0, 400) || null, score,
-      subs > 100000 ? 'warm' : 'cold',
+      getTemperature(score),
       ch.snippet?.country || null,
       kwNicheMap[keyword] || keyword.split(' ')[0].toLowerCase()
     ]);
@@ -595,11 +592,16 @@ async function runInnerTubeCycle(db, keywords) {
           const subs = ch.subscriberCount || 0;
           if (subs > 0 && (subs < MIN_SUBS || subs > MAX_SUBS)) continue;
           try {
+            const { score } = scoreCloseability({
+              subscriber_count: subs,
+              avg_views: 0, // InnerTube fast-search path has no view stats
+              channel_description: ch.description || '',
+            });
             const res = await db.run(MASTER_INSERT_SQL, [
               ch.channelId, ch.channelName, ch.handle || null,
               subs, 0, ch.email, null,
               (ch.description || '').substring(0, 400),
-              60, subs > 100000 ? 'warm' : 'cold',
+              score, getTemperature(score),
               ch.country || null, niche
             ]);
             if (res.changes > 0) totalSaved++;
