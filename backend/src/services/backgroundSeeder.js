@@ -430,7 +430,7 @@ function getApiKeys() {
   return keys;
 }
 
-const MASTER_INSERT_SQL = `INSERT OR IGNORE INTO master_leads (channel_id, channel_name, channel_handle, subscriber_count, avg_views, email, website, channel_description, lead_score, temperature, country, niche, has_team_confidence, team_evidence) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`;
+const MASTER_INSERT_SQL = `INSERT OR IGNORE INTO master_leads (channel_id, channel_name, channel_handle, subscriber_count, avg_views, email, website, channel_description, lead_score, temperature, country, niche, has_team_confidence, team_evidence, source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`;
 
 // Process one batch of channels for a given keyword+key
 async function processChannelBatch(db, channels, keyword) {
@@ -483,6 +483,7 @@ async function processChannelBatch(db, channels, keyword) {
       kwNicheMap[keyword] || keyword.split(' ')[0].toLowerCase(),
       teamConfidence,
       teamEvidence.length ? JSON.stringify(teamEvidence) : null,
+      'ytapi',
     ]);
     return r.changes > 0 ? 1 : 0;
   });
@@ -650,6 +651,7 @@ async function runInnerTubeCycle(db, keywords) {
               ch.country || null, niche,
               teamConfidence,
               teamEvidence.length ? JSON.stringify(teamEvidence) : null,
+              'innertube',
             ]);
             if (res.changes > 0) totalSaved++;
           } catch (e) { console.warn(`[Seeder] InnerTube insert failed for ${ch.channelId}: ${e.message}`); }

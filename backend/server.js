@@ -308,6 +308,8 @@ const isHttps = process.env.NODE_ENV === 'production' || !!(
       catch (e) { console.error('[Seeder/YT] Failed to start:', e.message); }
       try { const { startPodcastSeeder } = require('./src/services/podcastSeeder'); startPodcastSeeder(); }
       catch (e) { console.error('[Seeder/Podcast] Failed to start:', e.message); }
+      try { const { startYtJobsSeeder } = require('./src/services/ytJobsService'); startYtJobsSeeder(); }
+      catch (e) { console.error('[Seeder/YTJobs] Failed to start:', e.message); }
     }, 5000);
 
     // Periodic Turso sync (SQLite mode only)

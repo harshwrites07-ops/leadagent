@@ -1,6 +1,6 @@
 const { getDb, USE_PG } = require('../models/database');
 
-const VALID_SCRAPERS = new Set(['innertube', 'innertube_community', 'serp_signals', 'reddit', 'twitter', 'upwork', 'ytapi']);
+const VALID_SCRAPERS = new Set(['innertube', 'innertube_community', 'serp_signals', 'reddit', 'twitter', 'upwork', 'ytapi', 'ytjobs']);
 
 // ── Degraded-discovery thresholds ───────────────────────────────────────────
 // InnerTube functions degrade to empty results on parse failure BY DESIGN

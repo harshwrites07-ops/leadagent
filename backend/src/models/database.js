@@ -746,6 +746,16 @@ function _initSqliteSchema(db) {
   alterTry(`ALTER TABLE master_leads ADD COLUMN has_team_confidence REAL`);
   alterTry(`ALTER TABLE master_leads ADD COLUMN team_evidence TEXT`);
 
+  // Source attribution (audit found master_leads had no way to tell which
+  // scraper produced a row — needed for the future outcome-feedback loop to
+  // learn which sources produce closers). job_context carries YT Jobs (and
+  // future trigger-source) details so Marcus can reference the actual
+  // posting. Backfill existing rows once, here — new rows are tagged at
+  // insert time by each seeder going forward.
+  alterTry(`ALTER TABLE master_leads ADD COLUMN source TEXT`);
+  alterTry(`ALTER TABLE master_leads ADD COLUMN job_context TEXT`);
+  alterTry(`UPDATE master_leads SET source = 'legacy' WHERE source IS NULL`);
+
   // Per-service fit v1 (Session 2.4) — { editor, thumbnail, shorts, scriptwriter }, each 0-1.
   alterTry(`ALTER TABLE quality_leads ADD COLUMN service_fit TEXT DEFAULT '{}'`);
 

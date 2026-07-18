@@ -60,6 +60,15 @@ const TEAM_CONFIDENCE_THRESHOLDS = {
   MED:  0.3,
 };
 
+// A creator actively hiring for a specific role has, by definition, no
+// current incumbent for THAT role — a stated-intent source (YT Jobs, a
+// community "looking for an editor" post) should override any detected
+// has_team signal down to near-zero for scoring purposes, regardless of what
+// channel-branding/size-driven suspicion would otherwise suggest. Near-zero
+// rather than exactly 0 — "actively hiring" is strong evidence, not
+// absolute proof there's no OTHER team member handling other roles.
+const JOB_ROLE_TEAM_OVERRIDE_CONFIDENCE = 0.05;
+
 function noTeamSignal(hasTeamConfidence) {
   if (hasTeamConfidence === null || hasTeamConfidence === undefined) return 0; // unknown
   if (hasTeamConfidence >= TEAM_CONFIDENCE_THRESHOLDS.HIGH) return -1.0;
@@ -376,4 +385,5 @@ module.exports = {
   scoreLeadFromYouTube, scoreLeadFromReddit, getTemperature,
   scoreCloseability, CLOSEABILITY_WEIGHTS, CLOSEABILITY_TIERS, closeabilityTier,
   detectTeamSignal, TEAM_DETECTION_WEIGHTS, TEAM_CONFIDENCE_THRESHOLDS,
+  JOB_ROLE_TEAM_OVERRIDE_CONFIDENCE,
 };

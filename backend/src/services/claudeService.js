@@ -1848,6 +1848,17 @@ function buildVerifiedSignalPack(lead, user, voiceDNA, intelligencePack, angleRe
       proof:      voiceDNA.best_result || voiceDNA.socialProof || voiceDNA.caseStudy || user?.best_result || user?.case_study || null,
       offer:      voiceDNA.offer || offerByService,
     },
+    // A stated-intent trigger (YT Jobs posting, community-post ask, etc. —
+    // see utils/scoring.js has_buying_trigger). null when the lead has none,
+    // so the input-contract rule above ("null = does not exist, never
+    // invent") already covers it — no prompt-text change needed, this
+    // object is the whole contract.
+    job_posting: (() => {
+      try {
+        const jc = typeof lead.job_context === 'string' ? JSON.parse(lead.job_context) : lead.job_context;
+        return jc && Object.keys(jc).length ? jc : null;
+      } catch { return null; }
+    })(),
   };
 }
 
