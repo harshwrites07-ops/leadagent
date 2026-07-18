@@ -254,4 +254,10 @@ async function getConfirmedSignalStats() {
   return { total_confirmed: confirmed.count, description_hiring_signals: descriptionHits.count, business_emails: businessEmails.count, upwork_jobs: upworkJobs.count, twitter_signals: twitterSignals.count, community_signals: communitySignals.count, google_signals: googleSignals.count, by_platform: byPlatform };
 }
 
-module.exports = { runConfirmedSignalScan, getConfirmedSignalStats, deepScanDescriptions, scanCommunityPosts };
+module.exports = {
+  runConfirmedSignalScan, getConfirmedSignalStats, deepScanDescriptions, scanCommunityPosts,
+  // Exported so triggerDetectionService.js can reuse the SAME phrase lists
+  // for scoreCloseability's has_buying_trigger rather than duplicating them
+  // (see the Part 1 email-skip-list lesson — one source of truth per list).
+  findConfirmedHiringMatch, CONFIRMED_HIRING, APOLOGY_PATTERNS,
+};

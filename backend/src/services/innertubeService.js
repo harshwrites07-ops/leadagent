@@ -294,10 +294,15 @@ async function fetchCommunityPosts(channelId, limit = 10) {
       const postId = post.postId || post.contentId || null;
       const text = (post.contentText?.runs || []).map(run => run.text || '').join('') || post.contentText?.simpleText || '';
       if (!text) continue;
+      // Community posts only expose a RELATIVE time string in this API
+      // ("3 days ago"), never an absolute timestamp — stored as-is rather
+      // than guessed into a fabricated ISO date.
+      const publishedText = post.publishedTimeText?.runs?.[0]?.text || post.publishedTimeText?.simpleText || null;
       posts.push({
         postId,
         text,
         url: postId ? `https://www.youtube.com/post/${postId}` : null,
+        publishedText,
       });
       if (posts.length >= limit) break;
     }

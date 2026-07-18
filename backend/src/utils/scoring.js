@@ -239,7 +239,14 @@ function detectTeamSignal(data) {
 
 // Active buying-trigger stub (Phase 2 — job post / hiring signal / upload
 // break). Defaults false until wired to a real detector.
+// Accepts either a boolean (true == confirmed/stated trigger like a YT Jobs
+// posting -> full weight) or a 0-1 confidence float (implied/weaker triggers
+// like a community post or a schedule break, per triggerDetectionService.js
+// — when multiple triggers fire for one lead, the caller passes the
+// STRONGEST one's confidence rather than summing them, so this function
+// never needs to know about capping/multi-trigger logic itself).
 function buyingTriggerSignal(hasBuyingTrigger) {
+  if (typeof hasBuyingTrigger === 'number') return Math.max(0, Math.min(hasBuyingTrigger, 1));
   return hasBuyingTrigger ? 1.0 : 0;
 }
 
@@ -288,7 +295,7 @@ function scoreCloseability(data) {
   const signals = {
     icp_subs_band:  Math.round(icpSubsSignal(subs) * 100) / 100,
     no_team:        Math.round(noTeamSignal(data.has_team ?? null) * 100) / 100,
-    buying_trigger: Math.round(buyingTriggerSignal(!!data.has_buying_trigger) * 100) / 100,
+    buying_trigger: Math.round(buyingTriggerSignal(data.has_buying_trigger) * 100) / 100,
     quality_gap:    Math.round(qualityGapSignal(avgViews, subs) * 100) / 100,
     raw_size:       Math.round(rawSizeSignal(subs) * 100) / 100,
     keywords:       Math.round(keywordSignal(data.channel_description) * 100) / 100,
