@@ -823,6 +823,11 @@ async function initPostgres() {
     try { await query(`ALTER TABLE master_leads ADD COLUMN IF NOT EXISTS source TEXT`); } catch {}
     try { await query(`ALTER TABLE master_leads ADD COLUMN IF NOT EXISTS job_context TEXT`); } catch {}
     try { await query(`UPDATE master_leads SET source = 'legacy' WHERE source IS NULL`); } catch {}
+    // Budget/monetization signal (budget_signal input to scoreCloseability,
+    // see utils/scoring.js detectBudgetSignal). Nullable — same "unknown,
+    // not confirmed-absent" convention as has_team_confidence above.
+    try { await query(`ALTER TABLE master_leads ADD COLUMN IF NOT EXISTS budget_confidence REAL`); } catch {}
+    try { await query(`ALTER TABLE master_leads ADD COLUMN IF NOT EXISTS budget_evidence TEXT`); } catch {}
 
     await query(`
       CREATE TABLE IF NOT EXISTS scoring_weights (

@@ -168,7 +168,7 @@ async function fetchJobListingsHTML(url) {
 // buildChannelProfile(), which already runs emailFilters.extractEmail()
 // internally — see commit 8bd54c0). No parallel ingestion path. ──────────
 
-const MASTER_INSERT_SQL = `INSERT OR IGNORE INTO master_leads (channel_id, channel_name, channel_handle, subscriber_count, avg_views, email, website, channel_description, lead_score, temperature, country, niche, has_team_confidence, team_evidence, source, job_context) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`;
+const MASTER_INSERT_SQL = `INSERT OR IGNORE INTO master_leads (channel_id, channel_name, channel_handle, subscriber_count, avg_views, email, website, channel_description, lead_score, temperature, country, niche, has_team_confidence, team_evidence, source, job_context, budget_confidence, budget_evidence) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`;
 
 async function ingestJobListing({ card, detail }) {
   const fullText = [card.title, detail?.fullText].filter(Boolean).join('\n\n');
@@ -216,7 +216,7 @@ async function ingestJobListing({ card, detail }) {
   // Scoring uses the override: this listing is direct evidence the creator
   // lacks THIS role right now, regardless of what branding/size alone would
   // suggest about a team in general (see JOB_ROLE_TEAM_OVERRIDE_CONFIDENCE).
-  const { score, tier } = scoreCloseability({
+  const { score, tier, signals, budget_evidence } = scoreCloseability({
     subscriber_count: channelData.subscriber_count,
     avg_views: channelData.avg_views,
     channel_description: channelData.channel_description,
@@ -234,6 +234,8 @@ async function ingestJobListing({ card, detail }) {
     teamEvidence.length ? JSON.stringify(teamEvidence) : null,
     'ytjobs',
     JSON.stringify({ ...jobContext, team_override_applied: true, general_team_confidence: detectedTeamConfidence }),
+    signals.budget,
+    budget_evidence.length ? JSON.stringify(budget_evidence) : null,
   ]);
 
   return { inserted: r.changes > 0, channelId: channelData.channel_id, score, tier, roleType };

@@ -160,7 +160,7 @@ async function rescoreLeadWithTriggers(channelId) {
     trigger_detected_at: new Date().toISOString(),
   };
 
-  const { score, tier } = scoreCloseability({
+  const { score, tier, signals, budget_evidence } = scoreCloseability({
     subscriber_count: ml.subscriber_count,
     avg_views: ml.avg_views,
     channel_description: ml.channel_description,
@@ -169,11 +169,13 @@ async function rescoreLeadWithTriggers(channelId) {
   });
 
   await db.run(
-    `UPDATE master_leads SET lead_score = ?, temperature = ?, job_context = ?, break_severity = ?, schedule_break = ? WHERE channel_id = ?`,
+    `UPDATE master_leads SET lead_score = ?, temperature = ?, job_context = ?, break_severity = ?, schedule_break = ?, budget_confidence = ?, budget_evidence = ? WHERE channel_id = ?`,
     [
       score, getTemperature(score), JSON.stringify(newContext),
       scheduleBreak.breakInfo?.severity ?? null,
       scheduleBreak.breakInfo?.schedule_break ? 1 : 0,
+      signals.budget,
+      budget_evidence.length ? JSON.stringify(budget_evidence) : null,
       channelId,
     ]
   );

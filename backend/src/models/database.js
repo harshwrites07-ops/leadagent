@@ -756,6 +756,12 @@ function _initSqliteSchema(db) {
   alterTry(`ALTER TABLE master_leads ADD COLUMN job_context TEXT`);
   alterTry(`UPDATE master_leads SET source = 'legacy' WHERE source IS NULL`);
 
+  // Budget/monetization signal (budget_signal input to scoreCloseability, see
+  // utils/scoring.js detectBudgetSignal). Nullable — same "unknown, not
+  // confirmed-absent" convention as has_team_confidence above.
+  alterTry(`ALTER TABLE master_leads ADD COLUMN budget_confidence REAL`);
+  alterTry(`ALTER TABLE master_leads ADD COLUMN budget_evidence TEXT`);
+
   // Per-service fit v1 (Session 2.4) — { editor, thumbnail, shorts, scriptwriter }, each 0-1.
   alterTry(`ALTER TABLE quality_leads ADD COLUMN service_fit TEXT DEFAULT '{}'`);
 

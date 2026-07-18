@@ -8,6 +8,7 @@ const {
   scoreLeadFromYouTube, scoreLeadFromReddit, getTemperature,
   scoreCloseability, CLOSEABILITY_WEIGHTS,
   detectTeamSignal, TEAM_CONFIDENCE_THRESHOLDS,
+  detectBudgetSignal, BUDGET_DETECTION_WEIGHTS,
 } = require('../src/utils/scoring');
 
 test('legacy scoreLeadFromYouTube still clamps to 0-100', () => {
@@ -159,4 +160,72 @@ test('high has_team confidence applies the full negative weight in scoreCloseabi
   const confirmedTeam = scoreCloseability({ subscriber_count: 40000, avg_views: 15000, channel_description: '', has_team: 0.9 });
   assert.ok(confirmedTeam.score < noTeam.score);
   assert.ok(noTeam.score - confirmedTeam.score >= CLOSEABILITY_WEIGHTS.NO_TEAM, 'high-confidence team should swing the full NO_TEAM weight');
+});
+
+// ── Budget / monetization signal ─────────────────────────────────────────────
+
+test('a sponsor mention in the description is detected with evidence', () => {
+  const { confidence, evidence } = detectBudgetSignal({ channel_description: 'This video is sponsored by BrandCo!', subscriber_count: 40000 });
+  assert.ok(confidence >= BUDGET_DETECTION_WEIGHTS.SPONSOR_MENTION);
+  assert.ok(evidence.some(e => e.type === 'sponsor_mention'));
+});
+
+test('a merch/affiliate link and commerce keywords both contribute evidence', () => {
+  const { confidence, evidence } = detectBudgetSignal({
+    channel_description: 'Business inquiries: hi@example.com. Shop my merch at merch.example.com',
+    subscriber_count: 40000,
+  });
+  assert.ok(confidence > 0);
+  assert.ok(evidence.some(e => e.type === 'merch_affiliate_link'));
+  assert.ok(evidence.some(e => e.type === 'commerce_keywords'));
+});
+
+test('a lead with no monetization signals at all scores 0 confidence outside the monetizable-scale band', () => {
+  const { confidence, evidence } = detectBudgetSignal({ channel_description: '', subscriber_count: 500 });
+  assert.equal(confidence, 0);
+  assert.deepEqual(evidence, []);
+});
+
+test('produces a real spread across a varied sample, not flat 0/1', () => {
+  const sample = [
+    { channel_description: '', subscriber_count: 500 },
+    { channel_description: 'sponsored by BrandCo', subscriber_count: 40000 },
+    { channel_description: 'merch at shop.example.com', subscriber_count: 100000 },
+    { channel_description: 'business inquiries: x@x.com, sponsored by Y, merch.example.com', subscriber_count: 60000, has_membership: true, upload_frequency_days: 3 },
+    { channel_description: '', subscriber_count: 20000 },
+  ];
+  const scores = sample.map(d => detectBudgetSignal(d).confidence);
+  assert.ok(new Set(scores).size >= 3, `expected varied confidence values, got ${JSON.stringify(scores)}`);
+});
+
+test('budget weight lives in CLOSEABILITY_WEIGHTS and is moderate — smaller than QUALITY_GAP, far smaller than ICP_SUBS_BAND/NO_TEAM', () => {
+  assert.ok(CLOSEABILITY_WEIGHTS.BUDGET > 0);
+  assert.ok(CLOSEABILITY_WEIGHTS.BUDGET < CLOSEABILITY_WEIGHTS.QUALITY_GAP);
+  assert.ok(CLOSEABILITY_WEIGHTS.BUDGET < CLOSEABILITY_WEIGHTS.ICP_SUBS_BAND);
+  assert.ok(CLOSEABILITY_WEIGHTS.BUDGET < CLOSEABILITY_WEIGHTS.NO_TEAM);
+});
+
+test('between two otherwise-identical ICP-fit leads, sponsors/merch outranks none — but stays a tie-breaker, not a tier-mover', () => {
+  const base = { subscriber_count: 40000, avg_views: 12000, has_team: null, has_buying_trigger: false };
+  const withBudget = scoreCloseability({ ...base, channel_description: 'Sponsored by BrandCo this week!' });
+  const withoutBudget = scoreCloseability({ ...base, channel_description: '' });
+  assert.ok(withBudget.score > withoutBudget.score);
+  assert.equal(withBudget.tier, withoutBudget.tier, 'a single budget signal should not, by itself, move an already-strong lead to a different tier');
+});
+
+// REGRESSION GUARD — the original bug this whole rebuild fixed was one
+// strong signal (size) overwhelming everything else. budget_signal must
+// never reintroduce that shape from a different angle.
+test('REGRESSION GUARD: a mega-channel with a maxed budget signal still lands in C/D — budget does not resurrect it', () => {
+  const megaChannelMaxBudget = scoreCloseability({
+    subscriber_count: 2800000,
+    avg_views: 500000,
+    channel_description: 'Official news network. Sponsored by BrandCo this week. Shop our merch at merch.example.com. Business inquiries: press@example.com',
+    has_team: 0.9, // large org — a team is detected
+    has_buying_trigger: false,
+    has_membership: true,
+    upload_frequency_days: 1,
+  });
+  assert.equal(megaChannelMaxBudget.signals.budget, 1, 'sanity check: this fixture should actually max out the budget signal');
+  assert.ok(['C', 'D'].includes(megaChannelMaxBudget.tier), `expected C/D even with maxed budget signal, got ${megaChannelMaxBudget.tier} (score ${megaChannelMaxBudget.score})`);
 });

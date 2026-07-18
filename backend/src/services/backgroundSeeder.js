@@ -430,7 +430,7 @@ function getApiKeys() {
   return keys;
 }
 
-const MASTER_INSERT_SQL = `INSERT OR IGNORE INTO master_leads (channel_id, channel_name, channel_handle, subscriber_count, avg_views, email, website, channel_description, lead_score, temperature, country, niche, has_team_confidence, team_evidence, source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`;
+const MASTER_INSERT_SQL = `INSERT OR IGNORE INTO master_leads (channel_id, channel_name, channel_handle, subscriber_count, avg_views, email, website, channel_description, lead_score, temperature, country, niche, has_team_confidence, team_evidence, source, budget_confidence, budget_evidence) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`;
 
 // Process one batch of channels for a given keyword+key
 async function processChannelBatch(db, channels, keyword) {
@@ -467,7 +467,7 @@ async function processChannelBatch(db, channels, keyword) {
       subscriber_count: subs,
     });
 
-    const { score } = scoreCloseability({
+    const { score, signals, budget_evidence } = scoreCloseability({
       subscriber_count: subs,
       avg_views: avgViews,
       channel_description: fullText,
@@ -484,6 +484,8 @@ async function processChannelBatch(db, channels, keyword) {
       teamConfidence,
       teamEvidence.length ? JSON.stringify(teamEvidence) : null,
       'ytapi',
+      signals.budget,
+      budget_evidence.length ? JSON.stringify(budget_evidence) : null,
     ]);
     return r.changes > 0 ? 1 : 0;
   });
@@ -637,7 +639,7 @@ async function runInnerTubeCycle(db, keywords) {
               channel_description: ch.description || '',
               subscriber_count: subs,
             });
-            const { score } = scoreCloseability({
+            const { score, signals, budget_evidence } = scoreCloseability({
               subscriber_count: subs,
               avg_views: 0, // InnerTube fast-search path has no view stats
               channel_description: ch.description || '',
@@ -652,6 +654,8 @@ async function runInnerTubeCycle(db, keywords) {
               teamConfidence,
               teamEvidence.length ? JSON.stringify(teamEvidence) : null,
               'innertube',
+              signals.budget,
+              budget_evidence.length ? JSON.stringify(budget_evidence) : null,
             ]);
             if (res.changes > 0) totalSaved++;
           } catch (e) { console.warn(`[Seeder] InnerTube insert failed for ${ch.channelId}: ${e.message}`); }

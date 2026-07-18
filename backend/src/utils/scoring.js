@@ -24,6 +24,12 @@ const CLOSEABILITY_WEIGHTS = {
   NO_TEAM:         15,  // no in-house team/agency detected — strong positive
   BUYING_TRIGGER:  20,  // active hiring/job-post/upload-break signal — heaviest positive
   QUALITY_GAP:     12,  // performing content, proxy for weak packaging — moderate positive
+  BUDGET:          10,  // can-pay signal (sponsors/merch/membership) — moderate tie-breaker, NOT
+                         // dominant. Deliberately smaller than QUALITY_GAP and far smaller than
+                         // ICP_SUBS_BAND/NO_TEAM — a mega-channel's obvious budget must not
+                         // outweigh its size/team penalties (that was the original flat-105 bug's
+                         // shape: one strong signal overwhelming everything else). See
+                         // detectBudgetSignal()'s regression-guard test.
   RAW_SIZE:         3,  // sheer subscriber count — must NOT dominate
   KEYWORDS:         8,  // buying-intent keywords in description — capped at <=10% of total
 };
@@ -272,6 +278,83 @@ function keywordSignal(text) {
   return Math.min(count / 2, 1.0); // 2 matches = full credit
 }
 
+// ── Budget / monetization signal ────────────────────────────────────────────
+// Separates "will reply" (the rest of the score) from "will pay" — a creator
+// with a live buying trigger but no visible income can't actually close.
+// Combined into a confidence, not a boolean, and deliberately capped low
+// (CLOSEABILITY_WEIGHTS.BUDGET) — this must be a tie-breaker between
+// otherwise-similar leads, never enough on its own to pull a bad-fit lead
+// (wrong size, has a team) back into a top tier. See the regression-guard
+// test: a mega-channel with a maxed budget_signal still lands in C/D because
+// ICP_SUBS_BAND/NO_TEAM's penalties dominate it by a wide margin.
+const BUDGET_DETECTION_WEIGHTS = {
+  SPONSOR_MENTION:      0.35, // "sponsored by", promo codes, paid partnerships in description/video text
+  MERCH_AFFILIATE_LINK: 0.25, // linktr.ee/beacons.ai/merch/shop/affiliate-style links
+  COMMERCE_KEYWORDS:    0.25, // business inquiries / brand deals / sponsorship language
+  CHANNEL_MEMBERSHIP:   0.25, // membership enabled — stub input (Phase 2, like has_team/has_buying_trigger before it)
+  UPLOAD_CONSISTENCY:   0.15, // steady cadence implies a sustained, monetizable operation
+  MONETIZABLE_SCALE:    0.10, // sub/view count in a plausible ad-revenue band — weakest, corroborating only
+};
+
+const SPONSOR_MENTION_PATTERNS = [
+  /sponsored by/i, /thanks to [\w\s]+ for sponsoring/i, /this video is sponsored/i,
+  /use code [\w-]+ for/i, /promo code/i, /affiliate link/i, /paid partnership/i,
+];
+
+// data: { channel_description, recent_video_text (optional — sponsor
+// mentions live in video descriptions, not always the channel bio),
+// has_membership (stub, bool), upload_frequency_days (optional),
+// subscriber_count }
+function detectBudgetSignal(data) {
+  const text = [(data.channel_description || ''), (data.recent_video_text || '')].join(' ').toLowerCase();
+  const evidence = [];
+  let points = 0;
+
+  const sponsorPattern = SPONSOR_MENTION_PATTERNS.find(p => p.test(text));
+  if (sponsorPattern) {
+    points += BUDGET_DETECTION_WEIGHTS.SPONSOR_MENTION;
+    evidence.push({ type: 'sponsor_mention', match: (text.match(sponsorPattern) || [])[0]?.slice(0, 80) || null });
+  }
+
+  // Reuse intentService.js's MERCH_AFFILIATE_LINK_PATTERNS/COMMERCE_KEYWORDS
+  // rather than duplicating them — lazily required to avoid a permanent
+  // top-level utils->services dependency (this module is otherwise
+  // dependency-free by design). Degrades to skipping this half of the
+  // signal (never throws) if that module is unavailable for any reason.
+  try {
+    const { MERCH_AFFILIATE_LINK_PATTERNS, COMMERCE_KEYWORDS } = require('../services/intentService');
+    const linkPattern = MERCH_AFFILIATE_LINK_PATTERNS.find(p => p.test(text));
+    if (linkPattern) {
+      points += BUDGET_DETECTION_WEIGHTS.MERCH_AFFILIATE_LINK;
+      evidence.push({ type: 'merch_affiliate_link' });
+    }
+    const commerceHits = COMMERCE_KEYWORDS.filter(kw => text.includes(kw));
+    if (commerceHits.length) {
+      points += BUDGET_DETECTION_WEIGHTS.COMMERCE_KEYWORDS;
+      evidence.push({ type: 'commerce_keywords', matched: commerceHits });
+    }
+  } catch {}
+
+  if (data.has_membership === true) {
+    points += BUDGET_DETECTION_WEIGHTS.CHANNEL_MEMBERSHIP;
+    evidence.push({ type: 'channel_membership' });
+  }
+
+  if (data.upload_frequency_days != null && data.upload_frequency_days > 0 && data.upload_frequency_days <= 14) {
+    points += BUDGET_DETECTION_WEIGHTS.UPLOAD_CONSISTENCY;
+    evidence.push({ type: 'upload_consistency', upload_frequency_days: data.upload_frequency_days });
+  }
+
+  const subs = data.subscriber_count || 0;
+  if (subs >= 5000 && subs <= 2000000) {
+    points += BUDGET_DETECTION_WEIGHTS.MONETIZABLE_SCALE;
+    evidence.push({ type: 'monetizable_scale', subscriber_count: subs });
+  }
+
+  const confidence = Math.round(Math.max(0, Math.min(points, 1)) * 100) / 100;
+  return { confidence, evidence };
+}
+
 const CLOSEABILITY_TIERS = [
   { tier: 'S', min: 80 },
   { tier: 'A', min: 65 },
@@ -286,17 +369,22 @@ function closeabilityTier(score) {
 
 // data: { subscriber_count, avg_views, channel_description, has_team
 // (0.0-1.0 confidence from detectTeamSignal(), or null/undefined = unknown),
-// has_buying_trigger (stub, bool) }
+// has_buying_trigger (bool or 0-1 confidence — see buyingTriggerSignal()),
+// recent_video_text/has_membership/upload_frequency_days (all optional,
+// feed detectBudgetSignal() — see there for graceful degradation) }
 function scoreCloseability(data) {
   const subs = data.subscriber_count || 0;
   const avgViews = data.avg_views || 0;
   const w = CLOSEABILITY_WEIGHTS;
+
+  const budget = detectBudgetSignal(data);
 
   const signals = {
     icp_subs_band:  Math.round(icpSubsSignal(subs) * 100) / 100,
     no_team:        Math.round(noTeamSignal(data.has_team ?? null) * 100) / 100,
     buying_trigger: Math.round(buyingTriggerSignal(data.has_buying_trigger) * 100) / 100,
     quality_gap:    Math.round(qualityGapSignal(avgViews, subs) * 100) / 100,
+    budget:         budget.confidence,
     raw_size:       Math.round(rawSizeSignal(subs) * 100) / 100,
     keywords:       Math.round(keywordSignal(data.channel_description) * 100) / 100,
   };
@@ -306,11 +394,12 @@ function scoreCloseability(data) {
     + w.NO_TEAM        * signals.no_team
     + w.BUYING_TRIGGER * signals.buying_trigger
     + w.QUALITY_GAP    * signals.quality_gap
+    + w.BUDGET          * signals.budget
     + w.RAW_SIZE        * signals.raw_size
     + w.KEYWORDS        * signals.keywords;
 
   const score = Math.min(Math.max(Math.round(raw), 0), 100);
-  return { score, tier: closeabilityTier(score), signals };
+  return { score, tier: closeabilityTier(score), signals, budget_evidence: budget.evidence };
 }
 
 function scoreLeadFromYouTube(data) {
@@ -393,4 +482,5 @@ module.exports = {
   scoreCloseability, CLOSEABILITY_WEIGHTS, CLOSEABILITY_TIERS, closeabilityTier,
   detectTeamSignal, TEAM_DETECTION_WEIGHTS, TEAM_CONFIDENCE_THRESHOLDS,
   JOB_ROLE_TEAM_OVERRIDE_CONFIDENCE,
+  detectBudgetSignal, BUDGET_DETECTION_WEIGHTS, SPONSOR_MENTION_PATTERNS,
 };

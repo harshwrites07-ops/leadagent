@@ -723,4 +723,10 @@ module.exports = {
   classifyMetaChannel, detectScheduleBreak, classifyLeadType,
   signalViewGrowth, signalUploadFrequency,
   computeTier, computeEffectiveTier, TIER_REFRESH_CADENCE_DAYS,
+  // Exported so utils/scoring.js's budget-signal detector can reuse these
+  // rather than duplicating them (Part 1 email-skip-list lesson) — lazily
+  // required from there specifically to avoid a permanent top-level
+  // utils->services dependency (utils/scoring.js is otherwise dependency-free
+  // by design).
+  MERCH_AFFILIATE_LINK_PATTERNS, COMMERCE_KEYWORDS,
 };
