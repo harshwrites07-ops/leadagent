@@ -397,6 +397,17 @@ cron.schedule('0 */2 * * *', async () => {
   } catch (e) { console.error('[Scheduler] Job board scan error:', e.message); }
 });
 
+// Community-post + schedule-break buying-trigger detection — feeds
+// scoreCloseability's has_buying_trigger for existing master_leads rows
+// (see triggerDetectionService.js). Every 3 hours, bounded batch size.
+cron.schedule('30 */3 * * *', async () => {
+  try {
+    const { runTriggerDetectionCycle } = require('./triggerDetectionService');
+    const result = await runTriggerDetectionCycle();
+    console.log(`[Scheduler] Trigger detection — checked=${result.checked} triggered=${result.triggered} failed=${result.failed}`);
+  } catch (e) { console.error('[Scheduler] Trigger detection error:', e.message); }
+});
+
 // Mailbox verification batch — off-peak daily at 2am. Verifies 'unchecked'
 // emails in priority order (HOT quality_leads first), budget-capped by the
 // admin `daily_verify_limit` setting (default 500/day). No-op cost when no

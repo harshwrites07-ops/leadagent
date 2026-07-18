@@ -6,14 +6,62 @@
 
 const axios = require('axios');
 const { getDb } = require('../models/database');
+const { scoreCloseability, getTemperature, detectTeamSignal } = require('../utils/scoring');
+const emailFilters = require('../utils/emailFilters');
+const {
+  incrementQuotaUsage, isKeyBudgetNearlyExhausted, QUOTA_UNIT_COSTS,
+  classifyYoutubeApiError,
+} = require('./quotaTracker');
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// youtubeService's markExhausted() writes to its own in-memory exhaustedKeys
+// Set AND, internally, to quotaTracker (the persisted source of truth) — see
+// markExhausted() in youtubeService.js. This is the SINGLE call site
+// backgroundSeeder.js uses to mark a key exhausted for the day; nothing else
+// in this file calls recordKeyExhausted() directly, so one exhaustion event
+// writes the daily-budget penalty exactly once (previously it wrote twice —
+// once here via a direct recordKeyExhausted() call, and again inside
+// markExhausted() itself; confirmed live in an E2E run: 3 rate-limit events
+// recorded 60,505 units against a 10,000 budget).
+function markYoutubeServiceKeyExhausted(apiKey) {
+  try { require('./youtubeService').markExhausted(apiKey); } catch {}
+}
+
+// A rateLimitExceeded response is Google's short ~100-second burst throttle
+// — easily triggered by PARALLEL concurrent keyword requests — NOT a daily
+// quota exhaustion. Back off and retry a bounded number of times rather than
+// benching the key for the rest of the day over a transient condition.
+const RATE_LIMIT_RETRY = {
+  MAX_ATTEMPTS: 3,
+  BASE_BACKOFF_MS: 2000, // 2s, 4s, 8s
+};
+
+// Wraps a single YouTube Data API call. On a genuine rate-limit response,
+// backs off and retries up to MAX_ATTEMPTS times; any other error (including
+// genuine daily exhaustion) is rethrown immediately for the caller's catch
+// block to classify and handle — this function never marks a key exhausted
+// itself, it only decides whether to retry.
+async function withRateLimitBackoff(fn) {
+  let lastError;
+  for (let attempt = 0; attempt < RATE_LIMIT_RETRY.MAX_ATTEMPTS; attempt++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastError = e;
+      const { isRateLimit } = classifyYoutubeApiError(e);
+      if (!isRateLimit || attempt === RATE_LIMIT_RETRY.MAX_ATTEMPTS - 1) throw e;
+      const backoff = RATE_LIMIT_RETRY.BASE_BACKOFF_MS * Math.pow(2, attempt);
+      console.log(`[Seeder] Rate-limited — backing off ${backoff}ms (attempt ${attempt + 1}/${RATE_LIMIT_RETRY.MAX_ATTEMPTS})`);
+      await sleep(backoff);
+    }
+  }
+  throw lastError;
+}
 
 const MIN_SUBS = 1000;
 const MAX_SUBS = 5000000;
 const CONCURRENCY = 20;
-// Only skip truly junk/internal domains — NOT gmail/yahoo/outlook.
-// Many real creators use gmail as their business inquiry email.
-const SKIP_DOMAINS = new Set(['youtube.com','google.com','googlemail.com','googleapis.com','gstatic.com','ggpht.com','ytimg.com','example.com','sentry.io']);
-const PERSONAL_DOMAINS = new Set(['gmail.com','yahoo.com','hotmail.com','outlook.com','icloud.com','me.com','live.com','aol.com','protonmail.com']);
 
 // Seeder status — readable by admin panel
 const seederStatus = {
@@ -24,6 +72,9 @@ const seederStatus = {
   currentKeyword: null,
   keysActive: 0,
   keysTotal: 0,
+  // Populated after each cycle by scraperHealth.recordSeedCycleOutcome() —
+  // see GET /api/admin/seeder-status.
+  discoveryHealth: { degraded: false, consecutiveZeroLeadCycles: 0, threshold: null, lastAlertAt: null },
 };
 
 // Each entry: [keyword, niche_id]
@@ -327,21 +378,12 @@ const KEYWORD_NICHE_MAP = [
 
 const kwNicheMap = Object.fromEntries(KEYWORD_NICHE_MAP);
 
-function extractEmail(text) {
-  if (!text) return null;
-  // Normalize obfuscated formats: "name [at] domain [dot] com", "(at)", "{dot}", etc.
-  const normalized = text
-    .replace(/\[at\]/gi, '@').replace(/\(at\)/gi, '@').replace(/\{at\}/gi, '@')
-    .replace(/\s+at\s+/gi, '@')
-    .replace(/\[dot\]/gi, '.').replace(/\(dot\)/gi, '.').replace(/\{dot\}/gi, '.')
-    .replace(/\s+dot\s+/gi, '.');
-  const matches = [...normalized.matchAll(/[\w.+%-]+@[\w.-]+\.[a-zA-Z]{2,}/g)].map(m => m[0].toLowerCase());
-  for (const email of matches) {
-    const domain = email.split('@')[1];
-    if (domain && !SKIP_DOMAINS.has(domain)) return email;
-  }
-  return null;
-}
+// Email extraction/validation now lives in utils/emailFilters.js —
+// consolidated single source of truth (this file's copy was previously the
+// weakest of the three duplicates, with no image-bug-artifact guard at all —
+// the likely source of the ~650 historical rows with an image filename
+// stored as an email; see purgeCorruptEmails.js).
+const extractEmail = emailFilters.extractEmail;
 
 const SOCIAL_RE = /youtube\.com|youtu\.be|instagram\.com|twitter\.com|x\.com|facebook\.com|tiktok\.com|t\.co|snapchat\.com|pinterest\.com|linkedin\.com/;
 
@@ -396,7 +438,7 @@ async function scrapeEmailFromWebsite(url) {
     // mailto: link is the most reliable signal
     const mailto = (html.match(/href="mailto:([^"?]+)/gi) || [])
       .map(m => m.replace(/href="mailto:/i, '').toLowerCase().trim())
-      .find(e => e.includes('@') && !SKIP_DOMAINS.has(e.split('@')[1]));
+      .find(e => e.includes('@') && !emailFilters.isSkippedEmailDomain(e.split('@')[1]));
     if (mailto) return mailto;
     // Try contact/about sub-pages
     const subLinks = (html.match(/href="([^"]*(?:contact|about|hire|work-with)[^"]*)"/gi) || [])
@@ -428,7 +470,7 @@ function getApiKeys() {
   return keys;
 }
 
-const MASTER_INSERT_SQL = `INSERT OR IGNORE INTO master_leads (channel_id, channel_name, channel_handle, subscriber_count, avg_views, email, website, channel_description, lead_score, temperature, country, niche) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`;
+const MASTER_INSERT_SQL = `INSERT OR IGNORE INTO master_leads (channel_id, channel_name, channel_handle, subscriber_count, avg_views, email, website, channel_description, lead_score, temperature, country, niche, has_team_confidence, team_evidence, source, budget_confidence, budget_evidence) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`;
 
 // Process one batch of channels for a given keyword+key
 async function processChannelBatch(db, channels, keyword) {
@@ -455,24 +497,35 @@ async function processChannelBatch(db, channels, keyword) {
 
     const views = parseInt(ch.statistics?.viewCount || 0);
     const videos = Math.max(1, parseInt(ch.statistics?.videoCount || 1));
-    const isPersonalEmail = PERSONAL_DOMAINS.has(email.split('@')[1]);
+    const avgViews = Math.round(views / videos);
 
-    let score = 50;
-    if (subs > 10000) score += 10;
-    if (subs > 50000) score += 10;
-    if (subs > 100000) score += 10;
-    if (views > 100000) score += 5;
-    if (views > 1000000) score += 5;
-    score += 15;
-    if (isPersonalEmail) score -= 15;
+    const channelName = ch.snippet?.title || 'Unknown';
+    const { confidence: teamConfidence, evidence: teamEvidence } = detectTeamSignal({
+      channel_name: channelName,
+      channel_description: fullText,
+      urls,
+      subscriber_count: subs,
+    });
+
+    const { score, signals, budget_evidence } = scoreCloseability({
+      subscriber_count: subs,
+      avg_views: avgViews,
+      channel_description: fullText,
+      has_team: teamConfidence,
+    });
 
     const r = await db.run(MASTER_INSERT_SQL, [
-      ch.id, ch.snippet?.title || 'Unknown', ch.snippet?.customUrl || null,
-      subs, Math.round(views / videos), email, website,
+      ch.id, channelName, ch.snippet?.customUrl || null,
+      subs, avgViews, email, website,
       desc.substring(0, 400) || null, score,
-      subs > 100000 ? 'warm' : 'cold',
+      getTemperature(score),
       ch.snippet?.country || null,
-      kwNicheMap[keyword] || keyword.split(' ')[0].toLowerCase()
+      kwNicheMap[keyword] || keyword.split(' ')[0].toLowerCase(),
+      teamConfidence,
+      teamEvidence.length ? JSON.stringify(teamEvidence) : null,
+      'ytapi',
+      signals.budget,
+      budget_evidence.length ? JSON.stringify(budget_evidence) : null,
     ]);
     return r.changes > 0 ? 1 : 0;
   });
@@ -512,6 +565,22 @@ async function runKeyBatch(apiKey, keywords, db) {
     if (exhausted) return 0;
     seederStatus.currentKeyword = keyword;
 
+    // Proactive check (quotaTracker — the single source of truth for daily
+    // per-key spend) BEFORE spending this key on a search.list call. A key
+    // that's already near its own budget gets skipped for the rest of the
+    // day here, rather than burning it down to a live 429 like before.
+    // This is the piece that closes the cross-cycle memory gap: `exhausted`
+    // above is a fresh local var every runKeyBatch() call (every ~30-min
+    // cycle), but quotaTracker's persisted usage carries over, so a key
+    // exhausted in cycle 1 is correctly skipped again in cycle 2 onward —
+    // it's never silently retried.
+    if (await isKeyBudgetNearlyExhausted(apiKey)) {
+      exhausted = true;
+      markYoutubeServiceKeyExhausted(apiKey);
+      console.log(`[Seeder] Key near daily budget (proactive skip): ${apiKey.slice(-6)}`);
+      return 0;
+    }
+
     const stored = await db.get('SELECT next_page_token, pages_done, zero_result_streak FROM seeder_keyword_tokens WHERE keyword=? AND api_key_hash=?', [keyword, kh]);
     const pageToken = stored?.next_page_token || null;
     const pagesDone = stored?.pages_done || 0;
@@ -526,17 +595,23 @@ async function runKeyBatch(apiKey, keywords, db) {
       };
       if (pageToken) params.pageToken = pageToken;
 
-      const searchRes = await axios.get('https://www.googleapis.com/youtube/v3/search', { params, timeout: 10000 });
+      const searchRes = await withRateLimitBackoff(() =>
+        axios.get('https://www.googleapis.com/youtube/v3/search', { params, timeout: 10000 })
+      );
+      await incrementQuotaUsage(apiKey, QUOTA_UNIT_COSTS.SEARCH_LIST);
       const channelIds = [...new Set((searchRes.data.items || []).map(i => i.snippet?.channelId).filter(Boolean))];
       const nextToken = searchRes.data.nextPageToken || null;
       await db.run(UPSERT_TOKEN_SQL, [keyword, kh, nextToken, pagesDone + 1]);
 
       let kwSaved = 0;
       if (channelIds.length) {
-        const detailRes = await axios.get('https://www.googleapis.com/youtube/v3/channels', {
-          params: { part: 'snippet,statistics,brandingSettings', id: channelIds.join(','), key: apiKey },
-          timeout: 10000,
-        });
+        const detailRes = await withRateLimitBackoff(() =>
+          axios.get('https://www.googleapis.com/youtube/v3/channels', {
+            params: { part: 'snippet,statistics,brandingSettings', id: channelIds.join(','), key: apiKey },
+            timeout: 10000,
+          })
+        );
+        await incrementQuotaUsage(apiKey, QUOTA_UNIT_COSTS.LIST);
 
         const channels = detailRes.data.items || [];
         for (let i = 0; i < channels.length; i += CONCURRENCY) {
@@ -550,12 +625,23 @@ async function runKeyBatch(apiKey, keywords, db) {
       );
       return kwSaved;
     } catch (e) {
-      const reason = e.response?.data?.error?.errors?.[0]?.reason;
-      if (reason === 'quotaExceeded' || reason === 'dailyLimitExceeded' || reason === 'rateLimitExceeded' || e.response?.status === 429) {
+      const { isDailyExhaustion, isRateLimit, reason, status } = classifyYoutubeApiError(e);
+
+      if (isDailyExhaustion) {
         exhausted = true;
-        console.log(`[Seeder] Key exhausted (${reason || e.response?.status}): ${apiKey.slice(-6)}`);
+        console.log(`[Seeder] Key exhausted (${reason || status}): ${apiKey.slice(-6)}`);
+        // SINGLE call site for marking a key exhausted for the day — see
+        // markYoutubeServiceKeyExhausted()'s comment above. Do not also call
+        // recordKeyExhausted() here; that was the double-write bug.
+        markYoutubeServiceKeyExhausted(apiKey);
+      } else if (isRateLimit) {
+        // withRateLimitBackoff() already retried this MAX_ATTEMPTS times —
+        // still rate-limited. This is NOT a daily exhaustion: don't mark the
+        // key exhausted, don't record any quota penalty. Just skip this
+        // keyword for this cycle; the key stays active for the next one.
+        console.log(`[Seeder] Rate-limit retries exhausted for this keyword — key stays active (not a daily exhaustion): ${apiKey.slice(-6)}`);
       } else {
-        console.log(`[Seeder] Key error (not quota, reason=${reason || 'none'}, status=${e.response?.status || 'n/a'}): ${apiKey.slice(-6)} — ${e.message}`);
+        console.log(`[Seeder] Key error (not quota, reason=${reason || 'none'}, status=${status || 'n/a'}): ${apiKey.slice(-6)} — ${e.message}`);
       }
       return 0;
     }
@@ -595,12 +681,28 @@ async function runInnerTubeCycle(db, keywords) {
           const subs = ch.subscriberCount || 0;
           if (subs > 0 && (subs < MIN_SUBS || subs > MAX_SUBS)) continue;
           try {
+            const { confidence: teamConfidence, evidence: teamEvidence } = detectTeamSignal({
+              channel_name: ch.channelName,
+              channel_description: ch.description || '',
+              subscriber_count: subs,
+            });
+            const { score, signals, budget_evidence } = scoreCloseability({
+              subscriber_count: subs,
+              avg_views: 0, // InnerTube fast-search path has no view stats
+              channel_description: ch.description || '',
+              has_team: teamConfidence,
+            });
             const res = await db.run(MASTER_INSERT_SQL, [
               ch.channelId, ch.channelName, ch.handle || null,
               subs, 0, ch.email, null,
               (ch.description || '').substring(0, 400),
-              60, subs > 100000 ? 'warm' : 'cold',
-              ch.country || null, niche
+              score, getTemperature(score),
+              ch.country || null, niche,
+              teamConfidence,
+              teamEvidence.length ? JSON.stringify(teamEvidence) : null,
+              'innertube',
+              signals.budget,
+              budget_evidence.length ? JSON.stringify(budget_evidence) : null,
             ]);
             if (res.changes > 0) totalSaved++;
           } catch (e) { console.warn(`[Seeder] InnerTube insert failed for ${ch.channelId}: ${e.message}`); }
@@ -669,6 +771,11 @@ async function runSeedCycle() {
   const emailRow = await db.get("SELECT COUNT(*) as c FROM master_leads WHERE email IS NOT NULL AND email != ''");
   console.log(`[Seeder] Cycle done — +${totalSaved} new | DB: ${totalRow.c} total | ${emailRow.c} with email${usedInnerTube ? ' [InnerTube]' : ''}`);
 
+  try {
+    const { recordSeedCycleOutcome } = require('./scraperHealth');
+    seederStatus.discoveryHealth = await recordSeedCycleOutcome(totalSaved);
+  } catch (e) { console.error('[Seeder] recordSeedCycleOutcome failed:', e.message); }
+
   seederStatus.running = false;
   seederStatus.lastCycleAt = new Date().toISOString();
   seederStatus.lastCycleSaved = totalSaved;
@@ -710,4 +817,7 @@ async function startBackgroundSeeder() {
   }
 }
 
-module.exports = { startBackgroundSeeder, runSeedCycle, seederStatus };
+module.exports = {
+  startBackgroundSeeder, runSeedCycle, seederStatus,
+  runKeyBatch, withRateLimitBackoff, RATE_LIMIT_RETRY,
+};

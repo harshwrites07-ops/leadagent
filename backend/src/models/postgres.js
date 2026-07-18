@@ -811,6 +811,23 @@ async function initPostgres() {
     try { await query(`ALTER TABLE quality_leads ADD COLUMN IF NOT EXISTS tier TEXT`); } catch {}
     try { await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS hot_alert_digest_enabled INTEGER DEFAULT 1`); } catch {}
     try { await query(`ALTER TABLE quality_leads ADD COLUMN IF NOT EXISTS service_fit TEXT DEFAULT '{}'`); } catch {}
+    // Team/agency detection (has_team input to scoreCloseability, see
+    // utils/scoring.js detectTeamSignal). Nullable — null means genuinely
+    // insufficient data to judge, not a confirmed solo creator.
+    try { await query(`ALTER TABLE master_leads ADD COLUMN IF NOT EXISTS has_team_confidence REAL`); } catch {}
+    try { await query(`ALTER TABLE master_leads ADD COLUMN IF NOT EXISTS team_evidence TEXT`); } catch {}
+    // Source attribution (audit found master_leads had no way to tell which
+    // scraper produced a row) + job_context (YT Jobs / future trigger-source
+    // details, so Marcus can reference the actual posting). Backfill existing
+    // rows once, here — new rows are tagged at insert time going forward.
+    try { await query(`ALTER TABLE master_leads ADD COLUMN IF NOT EXISTS source TEXT`); } catch {}
+    try { await query(`ALTER TABLE master_leads ADD COLUMN IF NOT EXISTS job_context TEXT`); } catch {}
+    try { await query(`UPDATE master_leads SET source = 'legacy' WHERE source IS NULL`); } catch {}
+    // Budget/monetization signal (budget_signal input to scoreCloseability,
+    // see utils/scoring.js detectBudgetSignal). Nullable — same "unknown,
+    // not confirmed-absent" convention as has_team_confidence above.
+    try { await query(`ALTER TABLE master_leads ADD COLUMN IF NOT EXISTS budget_confidence REAL`); } catch {}
+    try { await query(`ALTER TABLE master_leads ADD COLUMN IF NOT EXISTS budget_evidence TEXT`); } catch {}
 
     await query(`
       CREATE TABLE IF NOT EXISTS scoring_weights (
