@@ -23,6 +23,35 @@ const QUOTA_UNIT_COSTS = {
   LIST: 1,             // channels.list / videos.list / etc.
 };
 
+// ── Error classification — genuine daily exhaustion vs. a short burst limit ─
+// A real bug this fixes: rateLimitExceeded (Google's short ~100-second burst
+// throttle, easily triggered by a handful of concurrent requests) was being
+// treated identically to quotaExceeded/dailyLimitExceeded (the hard daily
+// cap) — a single burst could bench a key for the entire rest of the day
+// over a transient condition that resolves in under two minutes. Confirmed
+// live: one E2E validation run recorded 60,505 "units used" against a
+// 10,000 daily budget from 3 rate-limit events alone.
+const QUOTA_ERROR_REASONS = {
+  DAILY_EXHAUSTION: new Set(['quotaExceeded', 'dailyLimitExceeded']),
+  RATE_LIMIT: new Set(['rateLimitExceeded', 'userRateLimitExceeded']),
+};
+
+// Classifies a YouTube Data API error response. isDailyExhaustion and
+// isRateLimit are mutually exclusive by construction (checked as an
+// else-if chain) — a caller should never see both true for one error.
+function classifyYoutubeApiError(e) {
+  const reason = e?.response?.data?.error?.errors?.[0]?.reason || null;
+  const status = e?.response?.status || null;
+
+  if (QUOTA_ERROR_REASONS.RATE_LIMIT.has(reason) || status === 429) {
+    return { isRateLimit: true, isDailyExhaustion: false, reason, status };
+  }
+  if (QUOTA_ERROR_REASONS.DAILY_EXHAUSTION.has(reason) || (status === 403 && !reason)) {
+    return { isRateLimit: false, isDailyExhaustion: true, reason, status };
+  }
+  return { isRateLimit: false, isDailyExhaustion: false, reason, status };
+}
+
 function hashKey(apiKey) {
   return crypto.createHash('sha256').update(apiKey || 'no-key').digest('hex').slice(0, 16);
 }
@@ -106,4 +135,5 @@ async function recordKeyExhausted(apiKey) {
 module.exports = {
   incrementQuotaUsage, isBudgetNearlyExhausted, isKeyBudgetNearlyExhausted,
   recordKeyExhausted, hashKey, QUOTA_CONSTANTS, QUOTA_UNIT_COSTS,
+  classifyYoutubeApiError, QUOTA_ERROR_REASONS,
 };

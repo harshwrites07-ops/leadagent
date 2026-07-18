@@ -8,15 +8,55 @@ const axios = require('axios');
 const { getDb } = require('../models/database');
 const { scoreCloseability, getTemperature, detectTeamSignal } = require('../utils/scoring');
 const emailFilters = require('../utils/emailFilters');
-const { incrementQuotaUsage, isKeyBudgetNearlyExhausted, recordKeyExhausted, QUOTA_UNIT_COSTS } = require('./quotaTracker');
+const {
+  incrementQuotaUsage, isKeyBudgetNearlyExhausted, QUOTA_UNIT_COSTS,
+  classifyYoutubeApiError,
+} = require('./quotaTracker');
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // youtubeService's markExhausted() writes to its own in-memory exhaustedKeys
-// Set — calling it here (in addition to quotaTracker, the persisted source
-// of truth) means a key this proactive/reactive check discovers exhausted
-// is ALSO immediately reflected in every isQuotaExhausted()/getKeyPoolStatus()
-// call site across the app, not just on quotaTracker's next DB read.
+// Set AND, internally, to quotaTracker (the persisted source of truth) — see
+// markExhausted() in youtubeService.js. This is the SINGLE call site
+// backgroundSeeder.js uses to mark a key exhausted for the day; nothing else
+// in this file calls recordKeyExhausted() directly, so one exhaustion event
+// writes the daily-budget penalty exactly once (previously it wrote twice —
+// once here via a direct recordKeyExhausted() call, and again inside
+// markExhausted() itself; confirmed live in an E2E run: 3 rate-limit events
+// recorded 60,505 units against a 10,000 budget).
 function markYoutubeServiceKeyExhausted(apiKey) {
   try { require('./youtubeService').markExhausted(apiKey); } catch {}
+}
+
+// A rateLimitExceeded response is Google's short ~100-second burst throttle
+// — easily triggered by PARALLEL concurrent keyword requests — NOT a daily
+// quota exhaustion. Back off and retry a bounded number of times rather than
+// benching the key for the rest of the day over a transient condition.
+const RATE_LIMIT_RETRY = {
+  MAX_ATTEMPTS: 3,
+  BASE_BACKOFF_MS: 2000, // 2s, 4s, 8s
+};
+
+// Wraps a single YouTube Data API call. On a genuine rate-limit response,
+// backs off and retries up to MAX_ATTEMPTS times; any other error (including
+// genuine daily exhaustion) is rethrown immediately for the caller's catch
+// block to classify and handle — this function never marks a key exhausted
+// itself, it only decides whether to retry.
+async function withRateLimitBackoff(fn) {
+  let lastError;
+  for (let attempt = 0; attempt < RATE_LIMIT_RETRY.MAX_ATTEMPTS; attempt++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastError = e;
+      const { isRateLimit } = classifyYoutubeApiError(e);
+      if (!isRateLimit || attempt === RATE_LIMIT_RETRY.MAX_ATTEMPTS - 1) throw e;
+      const backoff = RATE_LIMIT_RETRY.BASE_BACKOFF_MS * Math.pow(2, attempt);
+      console.log(`[Seeder] Rate-limited — backing off ${backoff}ms (attempt ${attempt + 1}/${RATE_LIMIT_RETRY.MAX_ATTEMPTS})`);
+      await sleep(backoff);
+    }
+  }
+  throw lastError;
 }
 
 const MIN_SUBS = 1000;
@@ -555,7 +595,9 @@ async function runKeyBatch(apiKey, keywords, db) {
       };
       if (pageToken) params.pageToken = pageToken;
 
-      const searchRes = await axios.get('https://www.googleapis.com/youtube/v3/search', { params, timeout: 10000 });
+      const searchRes = await withRateLimitBackoff(() =>
+        axios.get('https://www.googleapis.com/youtube/v3/search', { params, timeout: 10000 })
+      );
       await incrementQuotaUsage(apiKey, QUOTA_UNIT_COSTS.SEARCH_LIST);
       const channelIds = [...new Set((searchRes.data.items || []).map(i => i.snippet?.channelId).filter(Boolean))];
       const nextToken = searchRes.data.nextPageToken || null;
@@ -563,10 +605,12 @@ async function runKeyBatch(apiKey, keywords, db) {
 
       let kwSaved = 0;
       if (channelIds.length) {
-        const detailRes = await axios.get('https://www.googleapis.com/youtube/v3/channels', {
-          params: { part: 'snippet,statistics,brandingSettings', id: channelIds.join(','), key: apiKey },
-          timeout: 10000,
-        });
+        const detailRes = await withRateLimitBackoff(() =>
+          axios.get('https://www.googleapis.com/youtube/v3/channels', {
+            params: { part: 'snippet,statistics,brandingSettings', id: channelIds.join(','), key: apiKey },
+            timeout: 10000,
+          })
+        );
         await incrementQuotaUsage(apiKey, QUOTA_UNIT_COSTS.LIST);
 
         const channels = detailRes.data.items || [];
@@ -581,20 +625,23 @@ async function runKeyBatch(apiKey, keywords, db) {
       );
       return kwSaved;
     } catch (e) {
-      const reason = e.response?.data?.error?.errors?.[0]?.reason;
-      if (reason === 'quotaExceeded' || reason === 'dailyLimitExceeded' || reason === 'rateLimitExceeded' || e.response?.status === 429) {
+      const { isDailyExhaustion, isRateLimit, reason, status } = classifyYoutubeApiError(e);
+
+      if (isDailyExhaustion) {
         exhausted = true;
-        console.log(`[Seeder] Key exhausted (${reason || e.response?.status}): ${apiKey.slice(-6)}`);
-        // Reactive backstop: the proactive check above didn't catch this
-        // (our unit-cost accounting could be off, or a burst from another
-        // process spent it faster than expected) — persist it now so every
-        // OTHER path reading quotaTracker (including youtubeService.js's
-        // manual-lookup path) learns about it immediately too, not just
-        // this in-memory `exhausted` flag scoped to this one cycle.
-        recordKeyExhausted(apiKey).catch(() => {});
+        console.log(`[Seeder] Key exhausted (${reason || status}): ${apiKey.slice(-6)}`);
+        // SINGLE call site for marking a key exhausted for the day — see
+        // markYoutubeServiceKeyExhausted()'s comment above. Do not also call
+        // recordKeyExhausted() here; that was the double-write bug.
         markYoutubeServiceKeyExhausted(apiKey);
+      } else if (isRateLimit) {
+        // withRateLimitBackoff() already retried this MAX_ATTEMPTS times —
+        // still rate-limited. This is NOT a daily exhaustion: don't mark the
+        // key exhausted, don't record any quota penalty. Just skip this
+        // keyword for this cycle; the key stays active for the next one.
+        console.log(`[Seeder] Rate-limit retries exhausted for this keyword — key stays active (not a daily exhaustion): ${apiKey.slice(-6)}`);
       } else {
-        console.log(`[Seeder] Key error (not quota, reason=${reason || 'none'}, status=${e.response?.status || 'n/a'}): ${apiKey.slice(-6)} — ${e.message}`);
+        console.log(`[Seeder] Key error (not quota, reason=${reason || 'none'}, status=${status || 'n/a'}): ${apiKey.slice(-6)} — ${e.message}`);
       }
       return 0;
     }
@@ -770,4 +817,7 @@ async function startBackgroundSeeder() {
   }
 }
 
-module.exports = { startBackgroundSeeder, runSeedCycle, seederStatus };
+module.exports = {
+  startBackgroundSeeder, runSeedCycle, seederStatus,
+  runKeyBatch, withRateLimitBackoff, RATE_LIMIT_RETRY,
+};
