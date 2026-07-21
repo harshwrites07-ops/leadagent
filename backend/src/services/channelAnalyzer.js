@@ -2,6 +2,20 @@
 // Builds a rich, structured profile of a creator from existing lead data.
 
 const { classifyLeadType, signalViewGrowth, signalUploadFrequency } = require('./intentService');
+const { normalizeNiche } = require('./emailExamples');
+
+// Subscriber count bucketed into the coarse bands the sender's proof/tone
+// gets matched against (spec: "sub_band"). Purely a display label — never
+// used for scoring or gating.
+function formatSubBand(subs) {
+  const n = Number(subs) || 0;
+  if (n < 10000) return 'Under 10K';
+  if (n < 50000) return '10K-50K';
+  if (n < 100000) return '50K-100K';
+  if (n < 500000) return '100K-500K';
+  if (n < 1000000) return '500K-1M';
+  return '1M+';
+}
 
 function daysSince(dateStr) {
   if (!dateStr) return null;
@@ -190,6 +204,41 @@ function buildRecentVideoFact(recentVids, channelAvgViews) {
   return { title: latest.title, views: Math.round(views), avg_views: Math.round(avg), comparison };
 }
 
+// The best-vs-underperformer contrast the opener anchors on: the creator's
+// best recent video against their most recent upload, ONLY when that most
+// recent upload is a real, notable underperformer relative to the best one
+// — both with real view counts and real "days ago" timing. Null (never
+// fabricated) whenever there's nothing genuine to contrast: views unknown,
+// the most recent video IS the best one, or the gap isn't actually notable.
+function buildContrastPair(recentVids, channelAvgViews) {
+  const latest = recentVids[0];
+  if (!latest?.title || latest.views == null) return null;
+
+  const sorted = [...recentVids].sort((a, b) => (b.views || 0) - (a.views || 0));
+  const best = sorted[0];
+  if (!best?.title || best.views == null) return null;
+  if (best.title === latest.title) return null; // most recent IS the best — no gap to point at
+
+  const ratio = best.views > 0 ? latest.views / best.views : 1;
+  if (ratio > 0.65) return null; // not a notable enough gap to open on
+
+  // Trend: were the 1-2 uploads immediately before this one also low
+  // (a downward streak), or was this a one-off dip after normal uploads?
+  const priorTwo = recentVids.slice(1, 3).filter(v => v.views != null);
+  let trend = null;
+  if (priorTwo.length >= 1) {
+    const avg = channelAvgViews || best.views;
+    const priorLow = priorTwo.every(v => avg > 0 && v.views < avg * 0.7);
+    trend = priorLow ? 'downward_streak' : 'one_off_dip';
+  }
+
+  return {
+    best_recent_video:    { title: best.title, views: Math.round(best.views), days_ago: daysSince(best.date) },
+    underperformer_video: { title: latest.title, views: Math.round(latest.views), days_ago: daysSince(latest.date) },
+    trend,
+  };
+}
+
 function buildCreatorIntelligencePack(lead) {
   const recentVids = getRecentVideos(lead, 10);
   const days = daysSince(lead.last_upload_date);
@@ -230,7 +279,13 @@ function buildCreatorIntelligencePack(lead) {
     channel_name:  lead.channel_name,
     handle:        lead.channel_handle || null,
     subscribers:   subs,
+    sub_band:      formatSubBand(subs),
     niche:         lead.niche || 'general',
+    // Coarse category (gaming/finance/fitness/tech/...) — used to match the
+    // sender's niche-specific proof to this creator; kept separate from the
+    // raw `niche` field above so existing prose (angleEngine/subjectLine/
+    // followUp) that embeds the raw niche text is untouched.
+    niche_category: normalizeNiche(lead.niche || lead.channel_description || ''),
     sub_niche:     detectSubNiche(lead),
     country:       lead.country || null,
 
@@ -292,6 +347,9 @@ function buildCreatorIntelligencePack(lead) {
       // The two-fact anchor: most recent video's title + its views vs the
       // channel's recent average. See buildRecentVideoFact() above.
       recent_video_fact:        buildRecentVideoFact(recentVids, channelAvg),
+      // The stronger best-vs-underperformer opener, when there's a real gap
+      // to point at. See buildContrastPair() above.
+      contrast:                 buildContrastPair(recentVids, channelAvg),
     },
   };
 }

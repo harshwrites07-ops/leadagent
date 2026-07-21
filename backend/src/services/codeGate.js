@@ -133,6 +133,16 @@ const BANNED_PHRASES = [
   /we are a team of|we specialize in/i,
   // First-touch CTA bans — calendar links / "hop on a call" read as a stranger's ask, not a peer's.
   /calendly\.com|cal\.com\/|book(?:ing)? a call|hop on a call|quick 30[- ]?min(?:ute)?s?|schedule a call/i,
+  // UNBREAKABLE RULE — only public YouTube data is visible (views, titles,
+  // upload dates). Retention, watch-time, CTR, and impressions are
+  // channel-owner-only numbers Marcus can never actually see, so it can
+  // never claim them as fact.
+  /retention (?:is|drops?|rate|falls?)/i,
+  /you'?re losing (?:viewers|people) at/i,
+  /\bCTR\b/i,
+  /watch.?time/i,
+  /\bimpressions\b/i,
+  /\bAVD\b/i,
 ];
 
 const HARD_CHECKS = {
@@ -149,6 +159,12 @@ const HARD_CHECKS = {
   // Excludes the mandated "— [name]" sign-off's own dash, which isn't prose.
   tooManyEmDashes: (body) => ((stripTrailingSignOff(body) || '').match(/—|--/g) || []).length > 1,
   mentionsPricing: (body) => /\$\d|₹\d|\d+ ?(per|\/) ?(month|video|hour)/i.test(body || ''),
+  // Subject-line spam triggers: decides whether the email gets opened at
+  // all — no "free"/"$"/"!"/"guarantee"/"boost"/"offer", no shouting.
+  spamSubject: (_body, subject) => {
+    const s = subject || '';
+    return /\$|!|\bfree\b|\bguarantee(?:d)?\b|\bboost\b|\boffer\b/i.test(s) || /\b[A-Z]{4,}\b/.test(s);
+  },
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -246,6 +262,46 @@ function personalizationCheck(body, intelligencePack) {
   return hasTitleRef || hasStatRef;
 }
 
+// Every K/M-suffixed number the body claims (e.g. "210K views", "1.8M
+// average") — the shape a real, formatted view/sub count takes per this
+// app's convention. Doesn't match small counts like "90 seconds" or "4
+// months" (no K/M suffix), which is deliberate: those belong to the offer/
+// proof narrative, not a YouTube stat, and shouldn't need to trace to
+// hook_data.
+function extractClaimedNumbers(text) {
+  return [...(text || '').matchAll(/\b(\d+(?:\.\d+)?)\s*([KMkm])\b/g)].map(m => {
+    const n = parseFloat(m[1]);
+    return n * (/m/i.test(m[2]) ? 1_000_000 : 1_000);
+  });
+}
+
+// Every real number this app actually knows for this creator (hook_data +
+// subscriber count), plus any number in the sender's own proof line (their
+// real case study — a legitimate number, just not one about THIS creator).
+function factNumberPool(intelligencePack) {
+  const pack = intelligencePack || {};
+  const hook = pack.hook_data || {};
+  const nums = [pack.subscribers, hook.recent_avg_views, hook.channel_avg_views,
+    hook.best_video_views, hook.most_recent_video_views,
+    hook.recent_video_fact?.views, hook.recent_video_fact?.avg_views]
+    .filter(v => v != null && v !== 0);
+  nums.push(...extractClaimedNumbers(pack.sender_proof || ''));
+  return nums;
+}
+
+// "Every number in the email exists in the FACTS object" — the launch spec's
+// #1 quality-gate requirement. A claimed number passes only if it's within
+// rounding distance (~15%, covering double-rounded K/M formatting) of a real
+// fact or a sender-proof number; anything claimed with zero real facts on
+// file is definitely fabricated.
+function numberHallucinationCheck(body, intelligencePack) {
+  const claimed = extractClaimedNumbers(body);
+  if (!claimed.length) return true;
+  const pool = factNumberPool(intelligencePack);
+  if (!pool.length) return false;
+  return claimed.every(n => pool.some(f => Math.abs(n - f) / Math.max(f, 1) <= 0.15));
+}
+
 // Does the lead have a specific video title at all? Per the input contract
 // this is the strongest signal — generateWithMarcus tries a live YouTube
 // lookup when this is false before falling back to hasAnySignal below.
@@ -301,6 +357,14 @@ function runCodeGate(email, intelligencePack) {
     });
   }
 
+  if (!numberHallucinationCheck(body, intelligencePack)) {
+    violations.push({
+      type: 'unverifiedNumber',
+      severity: 'hard',
+      note: 'Body claims a K/M-formatted number that does not trace to a real fact or the sender\'s proof line',
+    });
+  }
+
   return {
     passed: violations.every(v => v.severity !== 'hard'),
     violations,
@@ -340,6 +404,8 @@ function describeViolation(violation) {
     case 'setupReveal': return 'used a setup-then-reveal construction ("here\'s what\'s happening:")';
     case 'emDashStack': return 'stacked multiple em-dashes in one sentence';
     case 'no_verifiable_personalization': return 'contained no real video title or stat from this creator\'s actual data — ratio math alone is not personalization';
+    case 'unverifiedNumber': return 'claimed a number that doesn\'t trace to a real fact — never invent a view/sub count';
+    case 'spamSubject': return 'subject line used a spam-trigger word ($, !, free, guarantee, boost, offer) or ALL-CAPS shouting';
     default: return violation.type;
   }
 }
@@ -347,6 +413,8 @@ function describeViolation(violation) {
 module.exports = {
   runCodeGate,
   personalizationCheck,
+  numberHallucinationCheck,
+  extractClaimedNumbers,
   hasWatchedSignal,
   hasAnySignal,
   describeViolation,

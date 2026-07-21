@@ -46,11 +46,11 @@ const CHECKS = [
   {
     name: 'ban_list_clean',
     points_possible: 20,
-    run: (subject, body) => {
-      const gate = runCodeGate({ subject, body }, {});
+    run: (subject, body, pack) => {
+      const gate = runCodeGate({ subject, body }, pack || {});
       const banHits = gate.violations.filter(v =>
         v.severity === 'hard' &&
-        ['banned_phrase', 'ruleOfThree', 'ingSentenceOpener', 'tooManyEmDashes', 'mentionsPricing'].includes(v.type));
+        ['banned_phrase', 'ruleOfThree', 'ingSentenceOpener', 'tooManyEmDashes', 'mentionsPricing', 'unverifiedNumber', 'spamSubject'].includes(v.type));
       const ok = banHits.length === 0;
       return {
         pass: ok,

@@ -374,7 +374,7 @@ const USER_COLS = [
   'target_niches', 'target_platforms', 'portfolio_url', 'daily_email_limit', 'auto_find_leads',
   'service_type', 'one_liner', 'experience_years', 'best_result', 'pricing_range',
   'personality_traits', 'outreach_goal', 'origin_story', 'unique_difference',
-  'profile_completed', 'voice_dna',
+  'profile_completed', 'voice_dna', 'angle', 'weightless_ask', 'niche_proofs',
   'trial_ends_at', 'custom_emails_limit', 'custom_leads_limit',
   'leads_used_this_month', 'emails_used_this_month', 'usage_reset_date',
 ];
@@ -415,6 +415,9 @@ async function ensureUsersSchema(cfg) {
       unique_difference TEXT,
       profile_completed INTEGER DEFAULT 0,
       voice_dna TEXT DEFAULT '{}',
+      angle TEXT,
+      weightless_ask TEXT,
+      niche_proofs TEXT DEFAULT '[]',
       trial_ends_at DATETIME,
       custom_emails_limit INTEGER,
       custom_leads_limit INTEGER,

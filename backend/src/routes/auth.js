@@ -36,6 +36,7 @@ const safeUser = (u) => u ? {
   pricing_range: u.pricing_range, personality_traits: u.personality_traits,
   outreach_goal: u.outreach_goal, origin_story: u.origin_story,
   unique_difference: u.unique_difference, profile_completed: u.profile_completed,
+  angle: u.angle, weightless_ask: u.weightless_ask, niche_proofs: u.niche_proofs,
   voice_dna: u.voice_dna,
   voice_sample_1: u.voice_sample_1 || null,
   voice_sample_2: u.voice_sample_2 || null,
@@ -283,6 +284,7 @@ router.put('/onboarding', requireAuth, asyncHandler(async (req, res) => {
     daily_email_limit, auto_find_leads,
     service_type, one_liner, experience_years, best_result, case_study, pricing_range,
     personality_traits, outreach_goal, origin_story, unique_difference, profile_completed,
+    angle, weightless_ask, niche_proofs,
   } = req.body;
   const db = getDb();
 
@@ -307,6 +309,9 @@ router.put('/onboarding', requireAuth, asyncHandler(async (req, res) => {
       origin_story=COALESCE(?,origin_story),
       unique_difference=COALESCE(?,unique_difference),
       profile_completed=COALESCE(?,profile_completed),
+      angle=COALESCE(?,angle),
+      weightless_ask=COALESCE(?,weightless_ask),
+      niche_proofs=COALESCE(?,niche_proofs),
       onboarding_completed=1
     WHERE id=?
   `, [
@@ -320,6 +325,8 @@ router.put('/onboarding', requireAuth, asyncHandler(async (req, res) => {
     personality_traits ? JSON.stringify(personality_traits) : null,
     outreach_goal || null, origin_story || null, unique_difference || null,
     profile_completed != null ? profile_completed : null,
+    angle || null, weightless_ask || null,
+    niche_proofs ? JSON.stringify(niche_proofs) : null,
     req.user.id,
   ]);
 
@@ -367,7 +374,7 @@ function checkSampleQuality(sampleKey, text) {
 router.put('/profile', requireAuth, asyncHandler(async (req, res) => {
   const allowed = ['full_name','service_type','one_liner','experience_years','best_result','case_study',
     'target_niches','pricing_range','personality_traits','outreach_goal','origin_story','unique_difference',
-    'voice_sample_1','voice_sample_2','voice_sample_3'];
+    'voice_sample_1','voice_sample_2','voice_sample_3','angle','weightless_ask','niche_proofs'];
   const db = getDb();
   const sets = [], vals = [];
   for (const key of allowed) {

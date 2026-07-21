@@ -378,6 +378,14 @@ function buildVoiceDNA(user) {
     emailTone,
     socialProof,
     caseStudy:          user.case_study        || null,
+    // Email system launch spec — the sender's one declared specialty, their
+    // free/no-commitment offer, a generic proof alias (case_study, falling
+    // back to best_result — no column rename), and optional per-niche proof
+    // overrides captured at onboarding/settings.
+    angle:              user.angle?.trim()          || null,
+    weightlessAsk:      user.weightless_ask?.trim() || null,
+    proof:              user.case_study?.trim() || user.best_result?.trim() || null,
+    nicheProofs:        (() => { try { return JSON.parse(user.niche_proofs || '[]'); } catch { return []; } })(),
     traits,
     targetNiches:       niches,
     outreachGoal:       user.outreach_goal    || 'get_reply',

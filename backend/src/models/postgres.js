@@ -829,6 +829,15 @@ async function initPostgres() {
     try { await query(`ALTER TABLE master_leads ADD COLUMN IF NOT EXISTS budget_confidence REAL`); } catch {}
     try { await query(`ALTER TABLE master_leads ADD COLUMN IF NOT EXISTS budget_evidence TEXT`); } catch {}
 
+    // Email system launch spec — sender's declared angle, free/no-commitment
+    // offer, and optional per-niche proof-point override list, captured at
+    // onboarding. facts_snapshot freezes the intelligence pack a pitch was
+    // generated from (see database.js for the full rationale).
+    try { await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS angle TEXT`); } catch {}
+    try { await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS weightless_ask TEXT`); } catch {}
+    try { await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS niche_proofs TEXT DEFAULT '[]'`); } catch {}
+    try { await query(`ALTER TABLE pitches ADD COLUMN IF NOT EXISTS facts_snapshot TEXT`); } catch {}
+
     await query(`
       CREATE TABLE IF NOT EXISTS scoring_weights (
         id SERIAL PRIMARY KEY,

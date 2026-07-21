@@ -684,4 +684,4 @@ function selectExamples(lead, count = 4) {
   )).join('\n\n---\n\n');
 }
 
-module.exports = { selectExamples, EXAMPLE_BANK };
+module.exports = { selectExamples, EXAMPLE_BANK, normalizeNiche };

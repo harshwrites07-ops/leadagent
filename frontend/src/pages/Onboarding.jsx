@@ -31,9 +31,11 @@ export default function Onboarding() {
   const [form, setForm] = useState({
     full_name: user?.full_name || '',
     service_type: '',
+    angle: '',
     one_liner: '',
     experience_years: '',
     best_result: '',
+    weightless_ask: '',
     target_niches: [],
     pricing_range: '',
     personality_traits: [],
@@ -54,7 +56,7 @@ export default function Onboarding() {
   };
 
   const canProceed = () => {
-    if (step === 0) return form.full_name.trim() && form.service_type.trim() && form.experience_years;
+    if (step === 0) return form.full_name.trim() && form.service_type.trim() && form.angle.trim() && form.experience_years;
     if (step === 1) return form.best_result.trim() && form.target_niches.length > 0 && form.pricing_range;
     if (step === 2) return form.personality_traits.length > 0 && form.outreach_goal;
     if (step === 3) return form.origin_story.trim() && form.unique_difference.trim();
@@ -68,9 +70,11 @@ export default function Onboarding() {
       await api.put('/auth/onboarding', {
         full_name: form.full_name,
         service_type: form.service_type,
+        angle: form.angle,
         one_liner: form.one_liner,
         experience_years: form.experience_years,
         best_result: form.best_result,
+        weightless_ask: form.weightless_ask,
         target_niches: form.target_niches,
         pricing_range: form.pricing_range,
         personality_traits: form.personality_traits,
@@ -224,6 +228,12 @@ export default function Onboarding() {
                     placeholder="e.g. video editing, thumbnail design, sponsorships, software, coaching..." />
                 </div>
                 <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: 'var(--text-2)' }}>What's the ONE thing you're known for?</label>
+                  <input className="input" value={form.angle} onChange={e => set('angle', e.target.value)}
+                    placeholder="e.g. pacing / cutting dead space, retention hooks, story structure — not 'full-service editing'" />
+                  <p className="muted" style={{ fontSize: 11, marginTop: 6 }}>Be specific. A single sharp specialty gets more replies than a generic pitch.</p>
+                </div>
+                <div>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4, color: 'var(--text-2)' }}>
                     Describe yourself in one sentence.
                     <span className="muted" style={{ fontWeight: 400, marginLeft: 6 }}>{form.one_liner.length}/150</span>
@@ -258,6 +268,12 @@ export default function Onboarding() {
                   </label>
                   <textarea className="input" rows={3} maxLength={300} value={form.best_result} onChange={e => set('best_result', e.target.value)} style={{ resize: 'none' }}
                     placeholder={'Be specific. Numbers work best.\ne.g. Helped a fitness channel increase watch time by 60% in 30 days\nNo results yet? Tell us what result you WANT to achieve.'} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: 'var(--text-2)' }}>What free, no-strings offer can you make on the first email?</label>
+                  <input className="input" value={form.weightless_ask} onChange={e => set('weightless_ask', e.target.value)}
+                    placeholder="e.g. a free re-edit of your first 90 seconds" />
+                  <p className="muted" style={{ fontSize: 11, marginTop: 6 }}>Zero commitment, no call required — this is what makes the first email easy to say yes to.</p>
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 10, color: 'var(--text-2)' }}>Which YouTube niches do you love working with?</label>

@@ -54,7 +54,7 @@ const SMART_MODEL = process.env.GEMINI_MODEL       || 'gemini-2.0-flash';
 
 // Claude models (used when ANTHROPIC_API_KEY is set)
 const CLAUDE_FAST  = 'claude-haiku-4-5-20251001';
-const CLAUDE_SMART = 'claude-sonnet-4-6';
+const CLAUDE_SMART = 'claude-sonnet-5';
 
 async function completeWithClaude(prompt, systemPrompt, maxTokens, model) {
   const key = process.env.ANTHROPIC_API_KEY;
@@ -64,6 +64,12 @@ async function completeWithClaude(prompt, systemPrompt, maxTokens, model) {
     model: model || CLAUDE_FAST,
     max_tokens: maxTokens || 1200,
     messages: [{ role: 'user', content: prompt }],
+    // Some models/keys default extended thinking to "enabled", which burns
+    // the entire max_tokens budget on thinking tokens with none left for
+    // the actual completion (stop_reason: "max_tokens", zero text blocks).
+    // These are short, cheap generation calls — thinking adds cost/latency
+    // without helping a pitch-writing task. Disable it explicitly.
+    thinking: { type: 'disabled' },
   };
   if (systemPrompt) body.system = systemPrompt;
   const { data } = await axios.post(
@@ -78,8 +84,10 @@ async function completeWithClaude(prompt, systemPrompt, maxTokens, model) {
       timeout: 30000,
     }
   );
-  const text = data.content?.[0]?.text;
-  if (!text) throw new Error('Empty response from Claude');
+  // Find the first text block rather than blindly indexing [0] — robust
+  // even if a thinking/tool-use block ever precedes it.
+  const text = data.content?.find(c => c.type === 'text')?.text;
+  if (!text) throw new Error(`Empty response from Claude (stop_reason: ${data.stop_reason || 'unknown'})`);
   return text;
 }
 
@@ -1760,25 +1768,13 @@ Open to seeing a one-page treatment for your next topic? Free, no strings — wo
 Nina
 LESSON: opens with a genuine compliment before the poke — "over-produced for your size" is a real strength, not flattery — which earns the room to name the actual bottleneck. Proof point is a specific before/after metric (AVD 52%→61%) tied directly to the service being pitched (scripts), not a generic result.`;
 
-// There is no contact_first_name column anywhere in the schema (SQLite or
-// Postgres) — it was referenced here but never collected, so it was always
-// null. Rather than add a new scrape/DB field, guess conservatively from the
-// channel name's first word: only when it reads as an actual personal name
-// (Title Case, alphabetic, not a common channel-name lead word like "The" or
-// "Official"). Returns null — never a bad guess — for brand/business/non-name
-// channels ("PageFly", "Fort Bend Tutoring", "AI와 No-Code 가이드").
-const NON_NAME_LEAD_WORDS = new Set([
-  'the', 'official', 'team', 'dr', 'mr', 'mrs', 'ms', 'prof', 'coach', 'chef',
-  'captain', 'king', 'queen', 'master', 'big', 'real', 'simply', 'just', 'ask',
-  'talk', 'learn', 'get', 'making', 'studio', 'media', 'digital', 'tech', 'app',
-  'shop', 'life', 'daily', 'living', 'author', 'credit', 'living', 'ai',
-]);
-function guessFirstNameFromChannel(channelName) {
-  const firstWord = (channelName || '').trim().split(/\s+/)[0] || '';
-  if (!/^[A-Z][a-z]{1,15}$/.test(firstWord)) return null;
-  if (NON_NAME_LEAD_WORDS.has(firstWord.toLowerCase())) return null;
-  return firstWord;
-}
+// contact_first_name is the only legitimate source for a real greeting name
+// — there is no reliable way to derive a person's actual first name from a
+// channel name (a guess like this used to run against the channel title,
+// but a guessed name is exactly the kind of fabricated personalization this
+// system exists to prevent). When contact_first_name isn't on file — which
+// is most leads today, since nothing currently collects it — the email
+// opens with no greeting at all rather than "Hey [ChannelName]".
 
 // Section 1 of the spec — input contract. The model may ONLY reference facts
 // present in this object; anything not in here cannot appear in the email.
@@ -1823,11 +1819,31 @@ function buildVerifiedSignalPack(lead, user, voiceDNA, intelligencePack, angleRe
     : /script|writ/i.test(serviceType) ? 'a free rewritten intro for one of your recent videos'
     : 'a free sample edit of one of your recent videos';
 
+  // Email system launch spec — niche-matched proof: prefer a per-niche
+  // override from the sender's onboarding niche_proofs list (matched via the
+  // same normalizeNiche() category used to tag this creator) before falling
+  // back to the sender's generic proof/case study. Never invents a proof —
+  // falls through to null if the sender genuinely hasn't set one.
+  const { normalizeNiche } = require('./emailExamples');
+  const nicheProofs = Array.isArray(voiceDNA.nicheProofs) ? voiceDNA.nicheProofs : [];
+  const nicheMatch = nicheProofs.find(np => np?.niche && (np.proof || '').trim() && normalizeNiche(np.niche) === p.niche_category);
+  const resolvedProof = nicheMatch?.proof?.trim()
+    || voiceDNA.proof || voiceDNA.best_result || voiceDNA.socialProof || voiceDNA.caseStudy || user?.best_result || user?.case_study || null;
+
+  // Stashed onto the intelligence pack (same object reference the caller
+  // threads through to codeGate/qualityGate) so the number-hallucination
+  // check can allow-list numbers that genuinely come from the sender's own
+  // proof line, not just this creator's YouTube facts.
+  p.sender_proof = resolvedProof;
+
   return {
     creator: {
-      first_name:   lead.contact_first_name || guessFirstNameFromChannel(p.channel_name || lead.channel_name),
+      // Real name only — never a guess derived from the channel title. Null
+      // means open with no greeting at all (see buildMARCUSPrompt).
+      first_name:   lead.contact_first_name || null,
       channel_name: p.channel_name || lead.channel_name,
       niche:        p.niche || lead.niche || 'general',
+      sub_band:     p.sub_band || null,
       subs:         p.subscribers || lead.subscriber_count || 0,
     },
     watched_signals: {
@@ -1839,6 +1855,17 @@ function buildVerifiedSignalPack(lead, user, voiceDNA, intelligencePack, angleRe
       video_vs_recent_average: hook.recent_video_fact?.comparison
         ? `"${hook.recent_video_fact.title}" got ${fmt(hook.recent_video_fact.views)} views — ${hook.recent_video_fact.comparison} (${fmt(hook.recent_video_fact.avg_views)})`
         : null,
+      // The strongest possible opener: the creator's best recent video
+      // named against their most recent upload, with real numbers and real
+      // "days ago" timing for both — only present when the most recent
+      // upload is a genuine, notable underperformer relative to the best
+      // one. Null (never manufactured) otherwise.
+      best_recent_video:    hook.contrast?.best_recent_video    || null,
+      underperformer_video: hook.contrast?.underperformer_video || null,
+      // 'one_off_dip' (surrounding uploads were normal) vs 'downward_streak'
+      // (the uploads before this one were also low) — null when there's no
+      // contrast to have a trend on, or too few videos to judge one.
+      underperformer_trend: hook.contrast?.trend || null,
       specific_moment:      null, // not collected yet — never fabricate
       packaging_note:       null, // not collected yet — never fabricate
       comment_theme:        null, // not collected yet — never fabricate
@@ -1852,8 +1879,11 @@ function buildVerifiedSignalPack(lead, user, voiceDNA, intelligencePack, angleRe
     },
     sender: {
       first_name: voiceDNA.name || user?.full_name?.split(' ')[0] || null,
-      proof:      voiceDNA.best_result || voiceDNA.socialProof || voiceDNA.caseStudy || user?.best_result || user?.case_study || null,
-      offer:      voiceDNA.offer || offerByService,
+      proof:      resolvedProof,
+      offer:      voiceDNA.weightlessAsk || voiceDNA.offer || offerByService,
+      // The ONE specific thing the sender is known for (e.g. "pacing / cutting
+      // dead space") — null if they haven't declared one yet.
+      angle:      voiceDNA.angle || null,
     },
     // A stated-intent trigger (YT Jobs posting, community-post ask, etc. —
     // see utils/scoring.js has_buying_trigger). null when the lead has none,
@@ -1878,6 +1908,13 @@ function buildMARCUSPrompt(lead, user, voiceDNA, intelligencePack, angleResult, 
   const serviceType = voiceDNA.service || user?.service_type || 'video editing';
   const register    = voiceDNA.confidence_register || voiceDNA.communicationStyle || 'direct';
   const voiceSummary = voiceDNA.voice_summary || voiceDNA.writingInstructions || `writes in a ${register} register`;
+  const fmt = (n) => {
+    const num = Number(n);
+    if (!Number.isFinite(num)) return null;
+    if (num >= 1000000) return `${+(num / 1000000).toFixed(1)}M`;
+    if (num >= 1000) return `${Math.round(num / 1000)}K`;
+    return String(Math.round(num));
+  };
 
   const signalPack = buildVerifiedSignalPack(lead, user, voiceDNA, intelligencePack, angleResult);
   const voiceSamples = [user?.voice_sample_1, user?.voice_sample_2]
@@ -1899,8 +1936,8 @@ ${JSON.stringify(signalPack, null, 2)}
 ${MARCUS_V2_EXAMPLES}
 
 ═══ OUTPUT SKELETON — 4 movements, 70-120 words ═══
-1. Insight opener (1-2 sentences): a specific, watched-it observation tied to a hypothesis. Pattern: "I saw X, I bet you're dealing with Y." Never flattery, never a stat they already know.
-2. Poke + superpower (1-2 sentences): name the gap as a neutral status-quo question or a "(result) without (thing that sucks)" line.
+1. The contrast (1-2 sentences): open with the gap between their best recent video and the underperformer when both are in the signal pack — name BOTH videos and BOTH real numbers, that contrast IS the hook. Otherwise fall back to whatever single verified fact the signal pack gives you. Never flattery, never a stat they already know.
+2. Frame the gap honestly (1-2 sentences): name only a general CATEGORY for the gap ("a packaging or editing thing, not the content") as a neutral truth about channels this size — never a specific diagnosis of this one video.
 3. Proof by showing (1 sentence + offer): a crisp credibility line, then the free-value offer — BEFORE the ask, not after.
 4. Soft close + P.S.: one interest-based question max ("worth a look?" / "want me to send it?"). Never a calendar link on first touch. P.S. = a genuine specific compliment tied to something in the signal pack.
 
@@ -1911,14 +1948,20 @@ ${MARCUS_V2_EXAMPLES}
 - Grade 3-5 reading level. Short words, short sentences, contractions on. One sentence fragment is fine.
 - Ban list (auto-fail if present): any 4+ digit raw number — use "${signalPack.pattern_signals.view_pattern ? 'the story form above, e.g. "' + signalPack.pattern_signals.view_pattern + '"' : 'a comparison, never a count'}"; "I hope this finds you well"; "it's worth noting"/"it's important to note"; leverage, navigate, delve, ensure, streamline, optimize, multifaceted, cutting-edge, tapestry; tricolons ("X, Y, and Z"); sentences starting with an "-ing" word; more than one em-dash total; calendar links or "hop on a call" as the ask.
 - ${signalPack.sender.proof ? `Use the sender's real proof point verbatim, don't invent a different one: "${signalPack.sender.proof}"` : `No proof on file — use soft-variable framing ("when I work with channels around your size…"), never invent a client or a number.`}
+- Greeting: ${signalPack.creator.first_name ? `open with "Hey ${signalPack.creator.first_name},".` : `no first name is on file — skip the greeting entirely and open straight into the contrast/observation. NEVER greet using the channel name (no "Hey ${signalPack.creator.channel_name},").`}
 - Sign-off: first name only, or "— [name]". No title, no signature block.
-- Subject: 3-5 words, lowercase-feeling, specific, no first name, no question mark. Good shapes: "your carbonara intro" / "quick thing on your last upload" / "the 4:12 moment".
-- Vocabulary: creator lingo where it fits naturally — retention, CTR, AVD, packaging, hook, the dip, browse/suggested.
-${signalPack.watched_signals.video_vs_recent_average
+- Subject: 3-5 words, lowercase-feeling, specific, no first name, no question mark, no spam words ("free"/"$"/"!"). Reference the contrast or the specific video. Good shapes: "your carbonara intro" / "quick thing on your last upload" / "the 4:12 moment".
+- Vocabulary: creator lingo where it fits naturally — packaging, hook, pacing, structure, the dip, browse/suggested.
+- UNBREAKABLE: we only ever see PUBLIC YouTube data (views, titles, upload dates). We can NEVER see retention, watch-time, CTR, or impressions — those are private, channel-owner-only numbers. Never state retention, watch-time, CTR, AVD, or impressions as a fact or a claimed number.
+- Never guess a specific internal flaw you can't actually see — no "your open runs long," no "you lose viewers around X," no naming a specific timestamp or edit choice as the cause. Movement 2 names only the general category (packaging/editing), phrased as "usually/often/almost always" — a general truth, not a diagnosis of this one video.
+${signalPack.sender.angle ? `- Movement 3 (proof) may mention the sender's specific angle — "${signalPack.sender.angle}" — as what they specialize in fixing. This is a description of the sender's service, never a claim about what's specifically wrong with THIS creator's video.` : ''}
+${signalPack.watched_signals.underperformer_video
+  ? `- Anchor movement 1 on the contrast in the signal pack: best recent video "${signalPack.watched_signals.best_recent_video.title}" — ${fmt(signalPack.watched_signals.best_recent_video.views)} views${signalPack.watched_signals.best_recent_video.days_ago != null ? `, ${signalPack.watched_signals.best_recent_video.days_ago} days ago` : ''} — against the most recent upload "${signalPack.watched_signals.underperformer_video.title}" — ${fmt(signalPack.watched_signals.underperformer_video.views)} views${signalPack.watched_signals.underperformer_video.days_ago != null ? `, ${signalPack.watched_signals.underperformer_video.days_ago} days ago` : ''}. Name BOTH titles and BOTH real numbers — never just one. ${signalPack.watched_signals.underperformer_trend === 'downward_streak' ? 'The uploads right before this one were also low — this reads as a streak, not a one-off, if it fits naturally.' : signalPack.watched_signals.underperformer_trend === 'one_off_dip' ? 'The uploads right before this one were normal — this looks like a one-off dip, not a pattern.' : ''}`
+  : signalPack.watched_signals.video_vs_recent_average
   ? `- Anchor movement 1 to the two verified facts in the signal pack: the specific recent video, named, and how its views compare to the channel's recent average — ${signalPack.watched_signals.video_vs_recent_average}. Use the real title and that real comparison; never state a raw view count outside the "X" format already given.`
-  : signalPack.watched_signals.specific_video_title
-    ? `- Anchor movement 1 to the specific video title in the signal pack: "${signalPack.watched_signals.specific_video_title}". Its view count isn't on file — reference the title only, don't state or estimate a number for it.`
-    : `- No specific video title is available for this lead — do NOT invent one. Anchor movement 1 on the strongest pattern signal instead: ${signalPack.pattern_signals.view_pattern || signalPack.pattern_signals.upload_cadence_shift || signalPack.pattern_signals.intent_signal || 'subscriber count vs. niche norms'}.`}
+    : signalPack.watched_signals.specific_video_title
+      ? `- Anchor movement 1 to the specific video title in the signal pack: "${signalPack.watched_signals.specific_video_title}". Its view count isn't on file — reference the title only, don't state or estimate a number for it.`
+      : `- No specific video title is available for this lead — do NOT invent one. Anchor movement 1 on the strongest pattern signal instead: ${signalPack.pattern_signals.view_pattern || signalPack.pattern_signals.upload_cadence_shift || signalPack.pattern_signals.intent_signal || 'subscriber count vs. niche norms'}.`}
 
 ═══ THE USER'S REAL VOICE (write like this person) ═══
 ${voiceSamples || '(no samples provided — default to the register and style above)'}

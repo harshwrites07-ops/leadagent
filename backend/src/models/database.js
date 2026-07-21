@@ -765,6 +765,18 @@ function _initSqliteSchema(db) {
   // Per-service fit v1 (Session 2.4) — { editor, thumbnail, shorts, scriptwriter }, each 0-1.
   alterTry(`ALTER TABLE quality_leads ADD COLUMN service_fit TEXT DEFAULT '{}'`);
 
+  // Email system launch spec — sender's declared angle (the ONE specific thing
+  // they're known for, e.g. "pacing"), their free/no-commitment offer, and an
+  // optional per-niche proof-point override list, all captured at onboarding.
+  // facts_snapshot freezes the intelligence pack a pitch was generated from, so
+  // {facts -> email -> sent -> opened -> replied} can be reconstructed later by
+  // joining pitches.facts_snapshot with emails.sent_at/opened_at/replied_at on
+  // lead_id, without a new table.
+  alterTry(`ALTER TABLE users ADD COLUMN angle TEXT`);
+  alterTry(`ALTER TABLE users ADD COLUMN weightless_ask TEXT`);
+  alterTry(`ALTER TABLE users ADD COLUMN niche_proofs TEXT DEFAULT '[]'`);
+  alterTry(`ALTER TABLE pitches ADD COLUMN facts_snapshot TEXT`);
+
   // Outcome learning v1 (Session 3.1) — scoring weights are versioned rows,
   // not hardcoded constants, so a proposed reweighting can be reviewed,
   // applied, and rolled back without a code deploy.

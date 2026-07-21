@@ -18,7 +18,8 @@ export default function Settings() {
 
   // Voice profile state
   const [voice, setVoice] = useState({
-    service_type: '', one_liner: '', experience_years: '', best_result: '', case_study: '',
+    service_type: '', angle: '', one_liner: '', experience_years: '', best_result: '', case_study: '',
+    weightless_ask: '', niche_proofs: [],
     target_niches: [], pricing_range: '', personality_traits: [],
     outreach_goal: '', origin_story: '', unique_difference: '',
     voice_sample_1: '', voice_sample_2: '', voice_sample_3: '',
@@ -105,10 +106,13 @@ export default function Settings() {
       const u = me.data.user;
       setVoice({
         service_type: u.service_type || '',
+        angle: u.angle || '',
         one_liner: u.one_liner || '',
         experience_years: u.experience_years || '',
         best_result: u.best_result || '',
         case_study: u.case_study || '',
+        weightless_ask: u.weightless_ask || '',
+        niche_proofs: (() => { try { return JSON.parse(u.niche_proofs || '[]'); } catch { return []; } })(),
         target_niches: (() => { try { return JSON.parse(u.target_niches || '[]'); } catch { return []; } })(),
         pricing_range: u.pricing_range || '',
         personality_traits: (() => { try { return JSON.parse(u.personality_traits || '[]'); } catch { return []; } })(),
@@ -124,6 +128,14 @@ export default function Settings() {
   };
 
   const setV = (k, v) => setVoice(prev => ({ ...prev, [k]: v }));
+
+  const setNicheProof = (niche, proof) => {
+    setVoice(prev => {
+      const rest = prev.niche_proofs.filter(np => np.niche !== niche);
+      return { ...prev, niche_proofs: proof.trim() ? [...rest, { niche, proof }] : rest };
+    });
+  };
+  const getNicheProof = (niche) => voice.niche_proofs.find(np => np.niche === niche)?.proof || '';
 
   const toggleVoiceChip = (key, val, max = 99) => {
     setVoice(prev => {
@@ -380,7 +392,8 @@ export default function Settings() {
                   { label: 'Writing style', value: voiceDNA.communicationStyle },
                   { label: 'Email tone', value: voiceDNA.emailTone },
                   { label: 'Social proof', value: voiceDNA.socialProof },
-                  { label: 'Your angle', value: voiceDNA.uniqueDifference || voiceDNA.identity },
+                  { label: 'Your angle', value: voiceDNA.angle },
+                  { label: 'What makes you different', value: voiceDNA.uniqueDifference || voiceDNA.identity },
                 ].map(row => row.value ? (
                   <div key={row.label} style={{ padding: '10px 14px', background: 'var(--surface-2)', borderRadius: 8, border: '1px solid var(--line)' }}>
                     <div className="muted mono" style={{ fontSize: 9, letterSpacing: '.1em', marginBottom: 4 }}>{row.label.toUpperCase()}</div>
@@ -447,6 +460,23 @@ export default function Settings() {
           </div>
 
           <div className="card">
+            <div className="card__head"><div className="card__title">Your angle &amp; offer</div></div>
+            <div className="card__body">
+              <div className="field">
+                <div className="field__label">What's the ONE thing you're known for?</div>
+                <input className="input" value={voice.angle} onChange={e => setV('angle', e.target.value)}
+                  placeholder="e.g. pacing / cutting dead space, retention hooks, story structure — not 'full-service editing'" />
+                <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Marcus anchors the diagnosis in every email on this one specialty.</div>
+              </div>
+              <div className="field" style={{ marginTop: 14 }}>
+                <div className="field__label">Your free, no-strings first-touch offer</div>
+                <input className="input" value={voice.weightless_ask} onChange={e => setV('weightless_ask', e.target.value)}
+                  placeholder="e.g. a free re-edit of your first 90 seconds" />
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
             <div className="card__head"><div className="card__title">Your best result</div></div>
             <div className="card__body">
               <div className="field">
@@ -462,6 +492,20 @@ export default function Settings() {
                   placeholder='e.g. Helped a gaming channel grow from 50K to 200K subs in 3 months with faster-paced edits' />
                 <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>The more specific, the higher your email quality scores. Marcus will quote this result directly when pitching.</div>
               </div>
+              {voice.target_niches.length > 0 && (
+                <div className="field" style={{ marginTop: 14 }}>
+                  <div className="field__label">Proof by niche <span className="muted" style={{ fontWeight: 400 }}>(optional — overrides the case study above when pitching that niche)</span></div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 6 }}>
+                    {voice.target_niches.map(n => (
+                      <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span className="muted mono" style={{ fontSize: 10, width: 90, flexShrink: 0 }}>{n.toUpperCase()}</span>
+                        <input className="input" value={getNicheProof(n)} onChange={e => setNicheProof(n, e.target.value)}
+                          placeholder={`e.g. Took a ${n.toLowerCase()} channel from 300K to 500K avg over 4 months`} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="field" style={{ marginTop: 14 }}>
                 <div className="field__label">Typical pricing <span className="muted" style={{ fontWeight: 400 }}>(never shown to creators)</span></div>
                 <select className="input" value={voice.pricing_range} onChange={e => setV('pricing_range', e.target.value)}>

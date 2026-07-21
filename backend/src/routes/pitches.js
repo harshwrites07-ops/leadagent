@@ -21,7 +21,7 @@ function parsePitch(pitch) {
   };
 }
 
-async function savePitch(db, leadId, userId, { email_subject, email_body, deep_study, custom_offer, subject_variants, pitch_score, pitch_feedback, reddit_dm, quality_score, quality_breakdown, quality_regenerated, quality_warning, generation_method, needs_human_reasons }) {
+async function savePitch(db, leadId, userId, { email_subject, email_body, deep_study, custom_offer, subject_variants, pitch_score, pitch_feedback, reddit_dm, quality_score, quality_breakdown, quality_regenerated, quality_warning, generation_method, needs_human_reasons, facts_snapshot }) {
   const existing = await db.get('SELECT id FROM pitches WHERE lead_id = ?', [leadId]);
   if (existing) {
     await db.run(`
@@ -31,6 +31,7 @@ async function savePitch(db, leadId, userId, { email_subject, email_body, deep_s
         quality_score=COALESCE(?,quality_score), quality_breakdown=COALESCE(?,quality_breakdown),
         quality_regenerated=COALESCE(?,quality_regenerated), quality_warning=COALESCE(?,quality_warning),
         generation_method=COALESCE(?,generation_method), needs_human_reasons=COALESCE(?,needs_human_reasons),
+        facts_snapshot=COALESCE(?,facts_snapshot),
         updated_at=CURRENT_TIMESTAMP
       WHERE lead_id=?
     `, [deep_study || null, custom_offer || null, email_body, email_subject,
@@ -41,11 +42,12 @@ async function savePitch(db, leadId, userId, { email_subject, email_body, deep_s
         quality_regenerated != null ? (quality_regenerated ? 1 : 0) : null,
         quality_warning != null ? (quality_warning ? 1 : 0) : null,
         generation_method || null, needs_human_reasons || null,
+        facts_snapshot || null,
         leadId]);
   } else {
     await db.run(`
-      INSERT INTO pitches (lead_id,user_id,deep_study,custom_offer,cold_email,email_subject,reddit_dm,subject_variants,pitch_score,pitch_feedback,quality_score,quality_breakdown,quality_regenerated,quality_warning,generation_method,needs_human_reasons)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      INSERT INTO pitches (lead_id,user_id,deep_study,custom_offer,cold_email,email_subject,reddit_dm,subject_variants,pitch_score,pitch_feedback,quality_score,quality_breakdown,quality_regenerated,quality_warning,generation_method,needs_human_reasons,facts_snapshot)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `, [leadId, userId, deep_study || null, custom_offer || null, email_body, email_subject,
         reddit_dm || null, JSON.stringify(subject_variants || []),
         pitch_score || null, pitch_feedback || null,
@@ -53,7 +55,8 @@ async function savePitch(db, leadId, userId, { email_subject, email_body, deep_s
         quality_breakdown ? JSON.stringify(quality_breakdown) : null,
         quality_regenerated ? 1 : 0,
         quality_warning ? 1 : 0,
-        generation_method || 'marcus', needs_human_reasons || null]);
+        generation_method || 'marcus', needs_human_reasons || null,
+        facts_snapshot || null]);
   }
 }
 
@@ -171,6 +174,7 @@ router.get('/generate-stream/:leadId', aiLimiter, asyncHandler(async (req, res) 
     quality_regenerated: gateResult?.regenerated ?? false,
     quality_warning:     gateResult?.warning ?? false,
     generation_method:   result.generation_method || 'marcus',
+    facts_snapshot:      JSON.stringify(result.intelligence_pack || {}),
   });
 
   await db.run(`UPDATE leads SET crm_stage='pitch_ready', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [lead.id]);
@@ -286,6 +290,7 @@ router.post('/generate/:leadId', aiLimiter, asyncHandler(async (req, res) => {
     quality_regenerated: gateResult?.regenerated ?? false,
     quality_warning:     gateResult?.warning ?? false,
     generation_method:   result.generation_method || 'marcus',
+    facts_snapshot:      JSON.stringify(result.intelligence_pack || {}),
   });
 
   await db.run(`UPDATE leads SET crm_stage='pitch_ready', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [lead.id]);
