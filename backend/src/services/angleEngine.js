@@ -181,9 +181,11 @@ function buildAngleCandidates(intelligencePack, user) {
     {
       matches: () => true,
       selectedAngle: 'honest_observation',
-      openingObservation: hook.most_recent_video_title
-        ? `"${hook.most_recent_video_title}" — ${formatNum(hook.recent_avg_views)} average views on ${formatNum(subs)} subscribers`
-        : `${formatNum(subs)} subscribers in the ${niche} space`,
+      openingObservation: hook.recent_video_fact?.comparison
+        ? `"${hook.recent_video_fact.title}" — ${formatNum(hook.recent_video_fact.views)} views, ${hook.recent_video_fact.comparison}`
+        : hook.most_recent_video_title
+          ? `"${hook.most_recent_video_title}" — ${formatNum(hook.recent_avg_views)} average views on ${formatNum(subs)} subscribers`
+          : `${formatNum(subs)} subscribers in the ${niche} space`,
       painAddressed: 'gap between current performance and channel potential',
       angleReasoning: 'No dominant pain signal — honest observation lets specificity do the work',
       ctaDirection: 'interest_check',

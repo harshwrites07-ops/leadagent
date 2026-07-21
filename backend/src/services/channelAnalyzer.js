@@ -157,6 +157,39 @@ function extractKeywords(desc) {
     .slice(0, 8);
 }
 
+// The two facts Marcus must always have when the data exists: the title of
+// the creator's most recent video, and how its views compare to the
+// channel's recent average — pure YouTube data, no transcript, no other
+// stats. `comparison` (and `views`/`avg_views`) stay null rather than
+// guessed whenever the most recent video's own view count isn't on file
+// (e.g. a lead backfilled only from the flat recent_video_title column) —
+// never invent a number to fill the gap.
+function buildRecentVideoFact(recentVids, channelAvgViews) {
+  const latest = recentVids[0];
+  if (!latest || !latest.title) return null;
+
+  const views = latest.views != null ? latest.views : null;
+  if (views == null) return { title: latest.title, views: null, avg_views: null, comparison: null };
+
+  // Average of the OTHER recent videos, so the latest video isn't compared
+  // against an average that includes itself. Falls back to the channel's
+  // stored recent average when there's nothing else to average against.
+  const others = recentVids.slice(1).filter(v => v.views != null);
+  const avg = others.length
+    ? others.reduce((s, v) => s + v.views, 0) / others.length
+    : (channelAvgViews || null);
+  if (!avg) return { title: latest.title, views, avg_views: null, comparison: null };
+
+  const ratio = views / avg;
+  const comparison = ratio >= 1.15
+    ? `${ratio.toFixed(1)}x the channel's recent average`
+    : ratio <= 0.85
+      ? `${Math.round((1 - ratio) * 100)}% below the channel's recent average`
+      : `roughly in line with the channel's recent average`;
+
+  return { title: latest.title, views: Math.round(views), avg_views: Math.round(avg), comparison };
+}
+
 function buildCreatorIntelligencePack(lead) {
   const recentVids = getRecentVideos(lead, 10);
   const days = daysSince(lead.last_upload_date);
@@ -256,6 +289,9 @@ function buildCreatorIntelligencePack(lead) {
       recent_avg_views:         Math.round(recentAvg),
       channel_avg_views:        Math.round(channelAvg),
       views_decline_pct:        viewsDeclinePct,
+      // The two-fact anchor: most recent video's title + its views vs the
+      // channel's recent average. See buildRecentVideoFact() above.
+      recent_video_fact:        buildRecentVideoFact(recentVids, channelAvg),
     },
   };
 }

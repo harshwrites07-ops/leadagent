@@ -1831,7 +1831,14 @@ function buildVerifiedSignalPack(lead, user, voiceDNA, intelligencePack, angleRe
       subs:         p.subscribers || lead.subscriber_count || 0,
     },
     watched_signals: {
-      specific_video_title: hook.best_video_title || hook.most_recent_video_title || null,
+      specific_video_title: hook.recent_video_fact?.title || hook.best_video_title || hook.most_recent_video_title || null,
+      // The two verified facts this app can always compute from pure
+      // YouTube data: the creator's specific recent video, named, and how
+      // its views compare to the channel's recent average. Null (never a
+      // guessed number) when the latest video's view count isn't on file.
+      video_vs_recent_average: hook.recent_video_fact?.comparison
+        ? `"${hook.recent_video_fact.title}" got ${fmt(hook.recent_video_fact.views)} views — ${hook.recent_video_fact.comparison} (${fmt(hook.recent_video_fact.avg_views)})`
+        : null,
       specific_moment:      null, // not collected yet — never fabricate
       packaging_note:       null, // not collected yet — never fabricate
       comment_theme:        null, // not collected yet — never fabricate
@@ -1907,9 +1914,11 @@ ${MARCUS_V2_EXAMPLES}
 - Sign-off: first name only, or "— [name]". No title, no signature block.
 - Subject: 3-5 words, lowercase-feeling, specific, no first name, no question mark. Good shapes: "your carbonara intro" / "quick thing on your last upload" / "the 4:12 moment".
 - Vocabulary: creator lingo where it fits naturally — retention, CTR, AVD, packaging, hook, the dip, browse/suggested.
-${signalPack.watched_signals.specific_video_title
-  ? `- Anchor movement 1 to the specific video title in the signal pack: "${signalPack.watched_signals.specific_video_title}".`
-  : `- No specific video title is available for this lead — do NOT invent one. Anchor movement 1 on the strongest pattern signal instead: ${signalPack.pattern_signals.view_pattern || signalPack.pattern_signals.upload_cadence_shift || signalPack.pattern_signals.intent_signal || 'subscriber count vs. niche norms'}.`}
+${signalPack.watched_signals.video_vs_recent_average
+  ? `- Anchor movement 1 to the two verified facts in the signal pack: the specific recent video, named, and how its views compare to the channel's recent average — ${signalPack.watched_signals.video_vs_recent_average}. Use the real title and that real comparison; never state a raw view count outside the "X" format already given.`
+  : signalPack.watched_signals.specific_video_title
+    ? `- Anchor movement 1 to the specific video title in the signal pack: "${signalPack.watched_signals.specific_video_title}". Its view count isn't on file — reference the title only, don't state or estimate a number for it.`
+    : `- No specific video title is available for this lead — do NOT invent one. Anchor movement 1 on the strongest pattern signal instead: ${signalPack.pattern_signals.view_pattern || signalPack.pattern_signals.upload_cadence_shift || signalPack.pattern_signals.intent_signal || 'subscriber count vs. niche norms'}.`}
 
 ═══ THE USER'S REAL VOICE (write like this person) ═══
 ${voiceSamples || '(no samples provided — default to the register and style above)'}
@@ -1979,13 +1988,18 @@ async function generateWithMarcus(lead, userId, onProgress) {
   intelligencePack.credit_diff_facts = await getCreditDiffFacts(lead.channel_id);
   console.log(`[Marcus] Intelligence pack built for ${lead.channel_name} — archetype: ${intelligencePack.archetype}`);
 
-  // Input contract, section 1: a specific video title is the strongest
-  // signal. Before giving up on one, try a live YouTube lookup — this is the
-  // safety net for leads the master-pool copy step (routes/leads.js) or the
-  // background backfill haven't reached yet.
-  const { hasWatchedSignal, hasAnySignal } = require('./codeGate');
+  // Input contract, section 1: the two-fact anchor (specific recent video +
+  // its views vs the channel's recent average) is the strongest signal.
+  // Before giving up on it, try a live YouTube lookup — this is the safety
+  // net for leads the master-pool copy step (routes/leads.js) or the
+  // background backfill haven't reached yet. Triggers not just when there's
+  // no title at all, but also when a title is on file with no view count
+  // (e.g. backfilled only from the flat recent_video_title column) — that
+  // still blocks fact #2 (views vs. average) from ever being computable.
+  const { hasAnySignal } = require('./codeGate');
   let videoFetchResult = null;
-  if (!hasWatchedSignal(intelligencePack) && lead.channel_id && lead.video_data_status !== 'channel_gone') {
+  const needsLiveVideoFetch = !intelligencePack.hook_data?.recent_video_fact?.comparison;
+  if (needsLiveVideoFetch && lead.channel_id && lead.video_data_status !== 'channel_gone') {
     onProgress?.('researching');
     try {
       const { fetchVideoData, applyVideoDataToLead } = require('./youtubeService');
