@@ -4,9 +4,29 @@ const { getDb, logActivity, USE_PG } = require('../models/database');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { aiLimiter } = require('../middleware/rateLimiter');
 const claude = require('../services/claudeService');
-const { runQualityGate, generateInitialDraft, buildCreatorData, getQualityStatus } = require('../qualityGate');
+const { runQualityGate, generateInitialDraft, buildCreatorData, getQualityStatus, classifyGateOutcome } = require('../qualityGate');
 const { checkAndRegister: dedupCheck, clearSession: dedupClear } = require('../services/ngramDedup');
 const { queueEmail } = require('../services/emailQueueService');
+const { logGenerationStage } = require('../services/generationLog');
+
+// Shared terminal-state handling for the residual case where runQualityGate's
+// server-side retries (initial + surgical + angle-switch — already exhausted
+// before this ever runs) still land under the send threshold. Never ships
+// that draft: nulls out the pitch and reports a clean, specific reason
+// instead of a weak email. Returns true if the caller should stop (a
+// terminal state was hit), false if the pitch is fine to save/send normally.
+async function handleGateOutcome(db, lead, userId, result, gateResult) {
+  const outcome = classifyGateOutcome(gateResult, result.intelligence_pack);
+  if (outcome.outcome === 'ok') return null;
+  await logGenerationStage(userId, lead.id, 'gate', false, outcome.message);
+  await db.run(`UPDATE leads SET crm_stage=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`, [outcome.outcome, lead.id]);
+  await savePitch(db, lead.id, userId, {
+    email_subject: null, email_body: null,
+    generation_method: outcome.outcome,
+    needs_human_reasons: JSON.stringify([{ reason: outcome.message }]),
+  });
+  return outcome;
+}
 
 function parsePitch(pitch) {
   if (!pitch) return null;
@@ -150,8 +170,10 @@ router.get('/generate-stream/:leadId', aiLimiter, asyncHandler(async (req, res) 
       creatorData, voiceDNA,
       async (attemptNum, _email, evalResult) => {
         await logQualityAttempt(db, req.user.id, lead, attemptNum, _email, evalResult);
-        send({ type: 'progress', attempt: attemptNum, max: 3, score: evalResult.score,
-               message: `Quality check ${attemptNum} of 3 — score ${evalResult.score}/100` });
+        // Retries happen invisibly server-side — no attempt/score numbers
+        // surfaced, just a generic "still working" beat so the UI doesn't
+        // look frozen during a multi-attempt gate run.
+        send({ type: 'status', message: 'Polishing final draft...' });
       },
       result.intelligence_pack,
       result.angle_result,
@@ -160,6 +182,15 @@ router.get('/generate-stream/:leadId', aiLimiter, asyncHandler(async (req, res) 
     finalEmailBody = gateResult.email;
   } catch (err) {
     console.error('[QualityGate] Gate failed, using MARCUS output directly:', err.message);
+  }
+
+  if (gateResult) {
+    const outcome = await handleGateOutcome(db, lead, req.user.id, result, gateResult);
+    if (outcome) {
+      logActivity('pitch_' + outcome.outcome, outcome.message, lead.id, {}, req.user.id);
+      send({ type: 'error', error: outcome.message, code: outcome.outcome.toUpperCase() });
+      return res.end();
+    }
   }
 
   await savePitch(db, lead.id, req.user.id, {
@@ -278,6 +309,14 @@ router.post('/generate/:leadId', aiLimiter, asyncHandler(async (req, res) => {
   }
   // ────────────────────────────────────────────────────────────────────────────
 
+  if (gateResult) {
+    const outcome = await handleGateOutcome(db, lead, req.user.id, result, gateResult);
+    if (outcome) {
+      logActivity('pitch_' + outcome.outcome, outcome.message, lead.id, {}, req.user.id);
+      return res.status(422).json({ success: false, error: outcome.message, code: outcome.outcome.toUpperCase() });
+    }
+  }
+
   await savePitch(db, lead.id, req.user.id, {
     email_subject:       result.email_subject || result.subject,
     email_body:          finalEmailBody,
@@ -387,6 +426,11 @@ router.post('/bulk-generate', aiLimiter, asyncHandler(async (req, res) => {
           console.error(`[BulkGate] FAILED lead=${id} channel="${lead.channel_name}" err="${gateErr.message}"`);
         }
 
+        if (gateResult) {
+          const outcome = await handleGateOutcome(db, lead, req.user.id, result, gateResult);
+          if (outcome) return { id, success: false, error: outcome.message, code: outcome.outcome.toUpperCase() };
+        }
+
         // N-gram dedup check — skip leads whose email is too similar to one already generated this session
         const dedup = dedupCheck(req.user.id, finalEmailBody);
         if (dedup.isDuplicate) {
@@ -471,6 +515,11 @@ router.post('/generate-and-send', aiLimiter, asyncHandler(async (req, res) => {
             result.angle_result,
             lead, userRow,
           );
+          // This route actually SENDS — never send a draft the server-side
+          // retries (already exhausted inside runQualityGate) still couldn't
+          // get above the send threshold.
+          const outcome = await handleGateOutcome(db, lead, req.user.id, result, gate);
+          if (outcome) return { id, success: false, error: outcome.message, code: outcome.outcome.toUpperCase() };
           emailBody = gate.email;
           gateScore = gate.quality?.score ?? null;
           gateBreakdown = gate.quality?.breakdown ?? null;
@@ -655,6 +704,17 @@ async function runPowerSendJob(jobId, { lead_ids, max_leads = 100, per_account_l
               result.angle_result,
               lead, userRow,
             );
+            // This job actually SENDS — never send a draft the server-side
+            // retries (already exhausted inside runQualityGate) still
+            // couldn't get above the send threshold. Throwing here (instead
+            // of handling inline) reuses the outer catch's existing
+            // NEEDS_RESEARCH/NEEDS_HUMAN error-code handling below.
+            const outcome = classifyGateOutcome(gate, result.intelligence_pack);
+            if (outcome.outcome !== 'ok') {
+              const err = new Error(outcome.message);
+              err.code = outcome.outcome.toUpperCase();
+              throw err;
+            }
             emailBody = gate.email;
             gateScore = gate.quality?.score ?? null;
             gateBreakdown = gate.quality?.breakdown ?? null;
@@ -671,6 +731,7 @@ async function runPowerSendJob(jobId, { lead_ids, max_leads = 100, per_account_l
               generation_method:   result.generation_method || 'marcus',
             });
           } catch (err) {
+            if (err.code === 'INSUFFICIENT_DATA' || err.code === 'NEEDS_HUMAN') throw err;
             console.error('[QualityGate] power-send gate failed:', err.message);
             await savePitch(db, lead.id, _userId, {
               email_subject:    result.email_subject || result.subject,
@@ -702,12 +763,16 @@ async function runPowerSendJob(jobId, { lead_ids, max_leads = 100, per_account_l
         } catch (err) {
           stats.failed++;
           await jobUpdate(db, jobId, { failed: stats.failed });
-          const label = err.code === 'NEEDS_RESEARCH' ? 'needs research' : err.code === 'INTAKE_BLOCKED' ? 'intake blocked' : err.code === 'NEEDS_HUMAN' ? 'needs human' : 'Failed';
+          const label = err.code === 'NEEDS_RESEARCH' ? 'needs research' : err.code === 'INTAKE_BLOCKED' ? 'intake blocked'
+            : err.code === 'NEEDS_HUMAN' ? 'needs human' : err.code === 'INSUFFICIENT_DATA' ? 'not enough public data' : 'Failed';
           await jobLog(db, jobId, 'failed', `${label}: ${lead.channel_name} — ${err.message?.substring(0, 100)}`);
-          const stage = err.code === 'NEEDS_RESEARCH' ? 'needs_research' : err.code === 'NEEDS_HUMAN' ? 'needs_human' : 'pitch_ready';
+          const stage = err.code === 'NEEDS_RESEARCH' ? 'needs_research' : err.code === 'NEEDS_HUMAN' ? 'needs_human'
+            : err.code === 'INSUFFICIENT_DATA' ? 'insufficient_data' : 'pitch_ready';
           try { await db.run(`UPDATE leads SET crm_stage=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`, [stage, lead.id]); } catch {}
           if (err.code === 'NEEDS_HUMAN') {
             try { await savePitch(db, lead.id, _userId, { email_subject: null, email_body: null, generation_method: 'needs_human', needs_human_reasons: JSON.stringify(err.attemptFailures || []) }); } catch {}
+          } else if (err.code === 'INSUFFICIENT_DATA') {
+            try { await savePitch(db, lead.id, _userId, { email_subject: null, email_body: null, generation_method: 'insufficient_data', needs_human_reasons: JSON.stringify([{ reason: err.message }]) }); } catch {}
           }
         }
       }));

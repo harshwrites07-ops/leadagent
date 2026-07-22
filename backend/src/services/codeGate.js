@@ -325,6 +325,21 @@ function hasAnySignal(intelligencePack) {
   return !!(p.subscribers || hook.recent_avg_views || hook.channel_avg_views || p.last_upload_days_ago != null);
 }
 
+// The minimum bar for a genuinely personalized pitch: a real video title OR
+// a real view stat (most-recent/best video views, or a recent/channel view
+// average). Deliberately narrower than hasAnySignal — subscriber count and
+// upload cadence alone don't count here. Those are enough to let generation
+// be *attempted* (hasAnySignal), but a pitch that ends up leaning on nothing
+// but subscriber count after every retry is exactly the generic-feeling
+// email the "not enough public data, skip it" terminal state exists to
+// prevent instead of shipping.
+function hasContrastPair(intelligencePack) {
+  const hook = (intelligencePack || {}).hook_data || {};
+  const hasTitle = !!(hook.most_recent_video_title || hook.best_video_title);
+  const hasViewStat = !!(hook.most_recent_video_views || hook.best_video_views || hook.recent_avg_views || hook.channel_avg_views);
+  return hasTitle || hasViewStat;
+}
+
 /**
  * Runs every deterministic check against a generated email.
  * @param {{subject: string, body: string}} email
@@ -417,6 +432,7 @@ module.exports = {
   extractClaimedNumbers,
   hasWatchedSignal,
   hasAnySignal,
+  hasContrastPair,
   describeViolation,
   fleschKincaidGrade,
   wordCount,

@@ -444,12 +444,41 @@ async function runQualityGate(emailText, creatorData, voiceDNA, onAttempt, fullI
   };
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// classifyGateOutcome — turns a runQualityGate() result into the terminal
+// state the route layer should surface. Retries already happened inside
+// runQualityGate (initial + surgical + angle-switch, server-side, before the
+// caller ever sees this) — this only fires for the residual case where the
+// best of those attempts still landed under the HARD_BLOCK_SCORE. Never ship
+// that draft: either the lead genuinely has no real video title or view stat
+// to personalize on (insufficient_data — a clean skip, not a weak email), or
+// it does and Marcus just couldn't write a passing draft from it (needs_human,
+// the same terminal state generateWithMarcus already uses when all 3 AI
+// attempts fail outright).
+// ═══════════════════════════════════════════════════════════════════════════
+function classifyGateOutcome(gateResult, intelligencePack) {
+  if (!gateResult || !gateResult.warning) return { outcome: 'ok' };
+  const { hasContrastPair } = require('./services/codeGate');
+  if (!hasContrastPair(intelligencePack)) {
+    return {
+      outcome: 'insufficient_data',
+      message: 'Not enough public data for this channel to write a real pitch — no video title or view stat on file. Skip it.',
+    };
+  }
+  const score = gateResult.quality?.score ?? '?';
+  return {
+    outcome: 'needs_human',
+    message: `Marcus generated ${gateResult.attempts} draft${gateResult.attempts === 1 ? '' : 's'} but none cleared the quality bar (best score ${score}/100) — needs a human rewrite.`,
+  };
+}
+
 module.exports = {
   runQualityGate,
   evaluateEmailQualityV2,
   generateInitialDraft,
   buildCreatorData,
   getQualityStatus,
+  classifyGateOutcome,
   CHECKS,
   runChecks,
 };

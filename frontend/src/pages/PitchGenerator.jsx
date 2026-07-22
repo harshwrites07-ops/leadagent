@@ -72,9 +72,6 @@ export default function PitchGenerator() {
 
   // Quality gate
   const [showQualityDetails, setShowQualityDetails] = useState(false);
-  const [qualityEnhancing, setQualityEnhancing] = useState(false);
-  const [qualityBlocked, setQualityBlocked] = useState(false);
-  const [blockDetails, setBlockDetails] = useState(null);
 
   // Pre-send checklist
   const [checklist, setChecklist] = useState(null);
@@ -147,9 +144,6 @@ export default function PitchGenerator() {
   const handleGenerate = async () => {
     if (!selectedLead) return;
     setGenerating(true);
-    setQualityEnhancing(false);
-    setQualityBlocked(false);
-    setBlockDetails(null);
     setPitch(null);
     setCompletedSteps(new Set());
     setCurrentStep(GEN_STEPS[0].key);
@@ -201,7 +195,6 @@ export default function PitchGenerator() {
             throw e;
           }
           if (event.type === 'status') setGeneratingStatus(event.message);
-          if (event.type === 'progress') setGeneratingStatus(`Quality check ${event.attempt} of ${event.max} — score ${event.score}/100`);
           if (event.type === 'result') data = event;
         }
       }
@@ -209,12 +202,6 @@ export default function PitchGenerator() {
 
       animCancelled = true;
       setGeneratingStatus('');
-
-      if (data.qualityRegenerated) {
-        setQualityEnhancing(true);
-        await new Promise(r => setTimeout(r, 800));
-        setQualityEnhancing(false);
-      }
 
       const p = normalizePitch(data.pitch ?? data);
       p.angle_used = data.angleUsed || p.signal_used || null;
@@ -227,20 +214,28 @@ export default function PitchGenerator() {
       if (selectedLead?.id) loadChecklist(selectedLead.id);
       setLeads(prev => prev.map(l => l.id === selectedLead.id ? { ...l, pitch_id: data.pitch?.id ?? true } : l));
       if (data.warning) toast(data.warning, { icon: '⚠️', duration: 6000 });
-      if (p.generation_method === 'needs_human') {
-        toast.error('AI generation failed 3x — no draft was produced. This needs a human rewrite.', { duration: 8000 });
-      } else if (data.qualityWarning) {
-        toast('Quality gate could not fully improve this pitch — review carefully.', { icon: '⚠️', duration: 5000 });
-      } else if (data.qualityRegenerated) {
-        toast.success(`Quality enhanced to ${data.qualityScore}/100`);
-      } else {
-        toast.success('Pitch generated!');
-      }
+      toast.success('Pitch generated!');
     } catch (err) {
       animCancelled = true;
       setGeneratingStatus('');
       toast.error(err.message ?? 'Generation failed');
       setCurrentStep(null);
+      // INSUFFICIENT_DATA / NEEDS_HUMAN land as a saved (subject/body-null)
+      // pitch row on the backend even though the stream errored — pull it in
+      // so the clean terminal-state banner shows immediately instead of only
+      // after the lead is reselected.
+      if ((err.code === 'INSUFFICIENT_DATA' || err.code === 'NEEDS_HUMAN') && selectedLead?.id) {
+        try {
+          const { data: byLead } = await api.get(`/pitches/by-lead/${selectedLead.id}`);
+          if (byLead?.pitch) {
+            const p = normalizePitch(byLead.pitch);
+            setPitch(p);
+            setEmailSubject(p.email_subject);
+            setEmailBody(p.cold_email_body);
+            setCompletedSteps(new Set(GEN_STEPS.map(s => s.key)));
+          }
+        } catch {}
+      }
     } finally {
       setGenerating(false);
     }
@@ -277,9 +272,7 @@ export default function PitchGenerator() {
     } catch (err) {
       const errData = err.response?.data;
       if (errData?.error === 'QUALITY_BLOCK') {
-        setQualityBlocked(true);
-        setBlockDetails({ score: errData.score, feedback: errData.feedback, message: errData.message });
-        toast.error(`Blocked — pitch scored ${errData.score}/100 (minimum 70 required)`);
+        toast.error(errData.message || `Blocked — pitch scored ${errData.score}/100 (minimum 70 required). Your edits dropped the score — undo them or regenerate.`, { duration: 6000 });
       } else if (errData?.code === 'FALLBACK_PITCH') {
         toast.error('This is a fallback template, not a Marcus draft — regenerate it before sending.', { duration: 6000 });
       } else {
@@ -386,7 +379,6 @@ export default function PitchGenerator() {
           throw e;
         }
         if (event.type === 'status' && onStatus) onStatus(event.message);
-        if (event.type === 'progress' && onStatus) onStatus(`Quality check ${event.attempt} of ${event.max} — score ${event.score}/100`);
         if (event.type === 'result') data = event;
       }
     }
@@ -696,8 +688,7 @@ export default function PitchGenerator() {
               {streamEmails.map(({ leadId, lead, status, data, error, code, videoDataStatus, statusMessage }) => {
                 const p = data?.pitch;
                 const qs = p?.quality_score ?? null;
-                const blocked = qs !== null && qs < 70;
-                const qsColor = qs === null ? 'var(--text-3)' : blocked ? 'var(--bad)' : qs >= 85 ? 'var(--lime)' : 'var(--text-2)';
+                const qsColor = qs === null ? 'var(--text-3)' : qs >= 85 ? 'var(--lime)' : 'var(--text-2)';
 
                 if (status === 'loading') {
                   return (
@@ -730,23 +721,26 @@ export default function PitchGenerator() {
                   const isNeedsResearch = code === 'NEEDS_RESEARCH';
                   const isIntakeBlocked = code === 'INTAKE_BLOCKED';
                   const isNeedsHuman = code === 'NEEDS_HUMAN';
+                  const isInsufficientData = code === 'INSUFFICIENT_DATA';
                   return (
                     <motion.div key={leadId} initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                       style={{ padding: 16, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)' }}>
                       <div style={{ fontSize: 12.5, fontWeight: 500, marginBottom: 4 }}>{lead.channel_name}</div>
-                      <div className="muted" style={{ fontSize: 11, color: 'var(--bad)', marginBottom: 10 }}>
-                        {isNeedsResearch || isIntakeBlocked || isNeedsHuman ? error : `Failed: ${error || 'Request failed — check Railway logs for details'}`}
+                      <div className="muted" style={{ fontSize: 11, color: isInsufficientData ? 'var(--text-3)' : 'var(--bad)', marginBottom: 10 }}>
+                        {isNeedsResearch || isIntakeBlocked || isNeedsHuman || isInsufficientData ? error : `Failed: ${error || 'Request failed — check Railway logs for details'}`}
                       </div>
                       <div className="row" style={{ gap: 6 }}>
-                        <button
-                          className="btn btn--ghost btn--sm"
-                          style={{ flex: 1 }}
-                          disabled={videoDataStatus === 'channel_gone'}
-                          title={videoDataStatus === 'channel_gone' ? 'Channel appears deleted or private — retry unlikely to help' : undefined}
-                          onClick={() => retryLeadGeneration(lead)}
-                        >
-                          {isNeedsResearch ? 'Retry research' : 'Retry'}
-                        </button>
+                        {!isInsufficientData && (
+                          <button
+                            className="btn btn--ghost btn--sm"
+                            style={{ flex: 1 }}
+                            disabled={videoDataStatus === 'channel_gone'}
+                            title={videoDataStatus === 'channel_gone' ? 'Channel appears deleted or private — retry unlikely to help' : undefined}
+                            onClick={() => retryLeadGeneration(lead)}
+                          >
+                            {isNeedsResearch ? 'Retry research' : 'Retry'}
+                          </button>
+                        )}
                         <button className="btn btn--ghost btn--sm" style={{ flex: 1 }} onClick={() => skipLead(leadId)}>
                           Skip this lead
                         </button>
@@ -774,12 +768,6 @@ export default function PitchGenerator() {
                     <div style={{ fontSize: 11.5, color: 'var(--text-2)', lineHeight: 1.6, marginBottom: 10, maxHeight: 80, overflow: 'hidden', position: 'relative' }}>
                       {(p?.cold_email_body || '').slice(0, 180)}{(p?.cold_email_body || '').length > 180 ? '…' : ''}
                     </div>
-                    {blocked && (
-                      <div style={{ fontSize: 10.5, color: 'var(--bad)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--bad)', flexShrink: 0 }} />
-                        Score too low to send — needs rewrite
-                      </div>
-                    )}
                     <div className="row" style={{ gap: 6 }}>
                       <button className="btn btn--ghost btn--sm" style={{ flex: 1 }} onClick={() => {
                         handleSelectLead(lead);
@@ -791,7 +779,7 @@ export default function PitchGenerator() {
                       }}>
                         Review
                       </button>
-                      {!blocked && p && (
+                      {p && (
                         <button className="btn btn--ghost btn--sm" style={{ flex: 1 }} onClick={async () => {
                           try {
                             await api.post('/emails/queue', { lead_id: lead.id, subject: p.email_subject, body: p.cold_email_body });
@@ -855,7 +843,7 @@ export default function PitchGenerator() {
 
           {/* Generating state — Marcus working, staged terminal lines */}
           <AnimatePresence>
-            {(generating || qualityEnhancing) && (
+            {generating && (
               <motion.div
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -894,12 +882,6 @@ export default function PitchGenerator() {
                       </div>
                     );
                   })}
-                  {qualityEnhancing && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--lime)' }}>
-                      <span className="dot dot--lime dot--pulse" style={{ width: 5, height: 5, flexShrink: 0 }} />
-                      quality gate — rewriting to score 75+…
-                    </div>
-                  )}
                   {generatingStatus && (
                     <div style={{
                       marginTop: 8, paddingTop: 10, borderTop: '1px dashed var(--line)',
@@ -1158,10 +1140,34 @@ export default function PitchGenerator() {
                           {pitch.needs_human_reasons?.length > 0 && (
                             <div style={{ fontSize: 10.5, fontWeight: 400, color: 'var(--text-3)', lineHeight: 1.5 }}>
                               {pitch.needs_human_reasons.map((f, i) => (
-                                <div key={i}>Attempt {f.attempt}: {f.reason}</div>
+                                <div key={i}>{f.attempt != null ? `Attempt ${f.attempt}: ` : ''}{f.reason}</div>
                               ))}
                             </div>
                           )}
+                        </div>
+                      )}
+
+                      {/* insufficient_data — no real video title or view stat existed to personalize
+                          on for this lead, even after server-side retries. Skip it, don't send generic filler. */}
+                      {pitch.generation_method === 'insufficient_data' && (
+                        <div style={{
+                          marginBottom: 14, padding: '10px 14px', borderRadius: 'var(--r-sm)',
+                          border: '1px solid var(--line-3)', color: 'var(--text-2)',
+                          fontSize: 12, fontFamily: 'var(--f-mono)',
+                          display: 'flex', flexDirection: 'column', gap: 8,
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700 }}>
+                              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--text-4)', flexShrink: 0 }} />
+                              Not enough public data for this channel — skip it
+                            </span>
+                            <button className="btn btn--ghost btn--sm" style={{ flexShrink: 0 }} onClick={() => navigate('/leads')}>
+                              Back to leads
+                            </button>
+                          </div>
+                          <div style={{ fontSize: 10.5, fontWeight: 400, color: 'var(--text-3)', lineHeight: 1.5 }}>
+                            No real video title or view stat is on file for {selectedLead?.channel_name} — Marcus won't write a generic filler email for it. Enrich this lead with real channel data before pitching again.
+                          </div>
                         </div>
                       )}
 
@@ -1302,62 +1308,12 @@ export default function PitchGenerator() {
                       <div className="mail">
                         <div className="mail__sub">{emailSubject || pitch.email_subject}</div>
                         <div className="mail__meta">
-                          To {selectedLead.email || `${selectedLead.channel_name}@...`} · AI-personalized ·{' '}
-                          {(() => {
-                            const qs = pitch.quality_score ?? pitch.pitch_score;
-                            return qs != null && qs < 70 ? 'needs polish before sending' : 'ready to send';
-                          })()}
+                          To {selectedLead.email || `${selectedLead.channel_name}@...`} · AI-personalized · ready to send
                         </div>
                         <div className="mail__body">
                           {emailBody || pitch.cold_email_body}
                         </div>
                       </div>
-
-                      {/* Quality block banner */}
-                      <AnimatePresence>
-                        {(qualityBlocked || (pitch.quality_score !== null && pitch.quality_score < 70)) && (
-                          <motion.div
-                            initial={{ opacity: 0, y: -6 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0 }}
-                            style={{
-                              marginTop: 14,
-                              padding: '14px 16px',
-                              background: 'var(--surface)',
-                              border: '1px solid var(--bad)',
-                              borderRadius: 'var(--r-md)',
-                              color: 'var(--text)',
-                            }}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, marginBottom: 4, color: 'var(--bad)' }}>
-                              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--bad)', flexShrink: 0 }} />
-                              Blocked — Score too low to send ({pitch.quality_score ?? blockDetails?.score ?? '?'}/100)
-                            </div>
-                            <div style={{ fontSize: 11, marginBottom: 10, color: 'var(--text-3)' }}>
-                              {blockDetails?.message || `This pitch scored below 70 and cannot be sent until rewritten. Click Rewrite to regenerate.`}
-                            </div>
-                            {Array.isArray(pitch.quality_breakdown) && pitch.quality_breakdown.length > 0 && (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 10 }}>
-                                {pitch.quality_breakdown
-                                  .filter(c => (c?.points_awarded ?? 0) < (c?.points_possible ?? 0))
-                                  .slice(0, 4)
-                                  .map((c) => (
-                                    <div key={c.name} style={{ fontSize: 10.5, color: 'var(--text-3)' }}>
-                                      · {(c.name || '').replace(/_/g, ' ')}: {c.detail}
-                                    </div>
-                                  ))}
-                              </div>
-                            )}
-                            <button
-                              className="btn btn--ghost btn--sm"
-                              onClick={handleGenerate}
-                              disabled={generating}
-                            >
-                              Rewrite pitch
-                            </button>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
 
                       <div className="field" style={{ marginTop: 14 }}>
                         <div className="field__label">Subject line</div>
@@ -1495,35 +1451,12 @@ export default function PitchGenerator() {
                     <button className="btn btn--ghost" onClick={() => navigate('/leads')}>Back</button>
                     <button className="btn btn--ghost">Save as draft</button>
                     <div style={{ flex: 1 }} />
-                    {(() => {
-                      const sendBlocked = qualityBlocked || (pitch.quality_score !== null && pitch.quality_score < 70);
-                      return sendBlocked ? (
-                        <div className="row" style={{ gap: 8 }}>
-                          <button
-                            className="btn btn--ghost"
-                            style={{ borderColor: 'var(--bad)', color: 'var(--bad)' }}
-                            onClick={handleGenerate}
-                            disabled={generating}
-                          >
-                            Rewrite
-                          </button>
-                          <button
-                            className="btn btn--ghost"
-                            style={{ opacity: 0.3, cursor: 'not-allowed', pointerEvents: 'none' }}
-                            disabled
-                          >
-                            Queue for sending
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          className="btn btn--primary"
-                          onClick={handleAddToQueue}
-                        >
-                          Queue for sending
-                        </button>
-                      );
-                    })()}
+                    <button
+                      className="btn btn--primary"
+                      onClick={handleAddToQueue}
+                    >
+                      Queue for sending
+                    </button>
                   </div>
                 </div>
               </div>
