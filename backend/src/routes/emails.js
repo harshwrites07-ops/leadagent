@@ -86,7 +86,14 @@ router.post('/test-send', requireAdmin, asyncHandler(async (req, res) => {
   const inboxes = getInboxes();
   const { pickAccountForUser } = require('../services/gmailService');
   const gmailAccount = await pickAccountForUser(req.user.id);
-  const diagnostics = { smtpInboxes: inboxes.map(i => ({ email: i.email, host: i.host, port: i.port })), gmailAccount: gmailAccount ? { email: gmailAccount.email, status: gmailAccount.status, sentToday: gmailAccount.emails_sent_today } : null, method: null, error: null, success: false };
+  const diagnostics = {
+    smtpInboxes: inboxes.map(i => ({ email: i.email, host: i.host, port: i.port })),
+    // hasRefreshToken answers P0-3's open engineering question directly —
+    // an account connected before access_type=offline/prompt=consent were
+    // both on the consent URL has a dead access-only token (root cause #1).
+    gmailAccount: gmailAccount ? { email: gmailAccount.email, status: gmailAccount.status, sentToday: gmailAccount.emails_sent_today, hasRefreshToken: !!gmailAccount.refresh_token } : null,
+    method: null, error: null, success: false,
+  };
   try {
     const result = await sendEmail({ to, subject: 'ContentCrafterzz — Test Email', body: `This is a test email sent at ${new Date().toISOString()}.\n\nIf you received this, email sending is working correctly.`, leadId: null, userId: req.user.id });
     diagnostics.success = true;
@@ -95,20 +102,27 @@ router.post('/test-send', requireAdmin, asyncHandler(async (req, res) => {
     diagnostics.messageId = result.messageId;
     res.json({ success: true, ...diagnostics });
   } catch (e) {
-    console.error('[Test Send] Failed:', e.message);
+    console.error('[Test Send] Failed:', e.message, e.code || '', e.providerMessage || '', e.stack);
     diagnostics.error = e.message;
+    diagnostics.code = e.code || null;
+    diagnostics.providerMessage = e.providerMessage || null;
     res.status(500).json({ success: false, ...diagnostics });
   }
 }));
 
 router.get('/queue', asyncHandler(async (req, res) => {
   const db = getDb();
+  // P0-3 — ?status=failed surfaces the Failed tab. A failed send is UPDATEd
+  // to status='failed', never deleted (see attemptQueueSend below), but this
+  // endpoint previously only ever selected pending/sending — the row was
+  // technically still there, just invisible everywhere in the UI.
+  const statusFilter = req.query.status === 'failed' ? `eq.status = 'failed'` : `eq.status IN ('pending', 'sending')`;
   const queue = await db.all(`
     SELECT eq.*, l.channel_name as lead_name, l.email as lead_email, l.thumbnail_url as thumbnail,
            p.generation_method as pitch_generation_method
     FROM email_queue eq JOIN leads l ON l.id = eq.lead_id
     LEFT JOIN pitches p ON p.lead_id = eq.lead_id
-    WHERE eq.status IN ('pending', 'sending') AND eq.user_id = ?
+    WHERE ${statusFilter} AND eq.user_id = ?
     ORDER BY eq.priority DESC, eq.created_at ASC
   `, [req.user.id]);
   const paused = getSetting('queue_paused') === '1';
@@ -222,6 +236,31 @@ router.delete('/queue/:id', asyncHandler(async (req, res) => {
   res.json({ success: true });
 }));
 
+// P0-3 — the single place that actually attempts a queue-row send, shared by
+// /send-now and /queue/:id/retry. On failure this UPDATEs the row (never
+// deletes it) with the classified error code, the raw provider detail, and
+// an incremented attempt count — the row stays visible in the Failed tab
+// with a specific, actionable reason instead of silently vanishing.
+async function attemptQueueSend(db, item, userId) {
+  await db.run(`UPDATE email_queue SET status = 'sending' WHERE id = ?`, [item.id]);
+  try {
+    const result = await sendEmail({ to: item.email, subject: item.subject, body: item.body, leadId: item.lead_id, userId, signalSnapshot: item.signal_snapshot || null });
+    await db.run(`UPDATE email_queue SET status='sent', sent_at=CURRENT_TIMESTAMP, email_id=?, last_attempt_at=CURRENT_TIMESTAMP WHERE id=?`, [result.emailId, item.id]);
+    return { success: true, result };
+  } catch (e) {
+    const code = e.code || null;
+    const message = e.message || 'Send failed';
+    const providerMessage = e.providerMessage || null;
+    console.error(`[EmailQueue] Send failed — queue_item_id=${item.id} lead_id=${item.lead_id} code=${code || '(none)'} message="${message}" provider="${providerMessage || '(none)'}"`);
+    console.error(e.stack);
+    await db.run(
+      `UPDATE email_queue SET status='failed', last_error=?, error_detail=?, attempts=COALESCE(attempts,0)+1, last_attempt_at=CURRENT_TIMESTAMP WHERE id=?`,
+      [code, providerMessage || message, item.id]
+    );
+    return { success: false, code, message, providerMessage };
+  }
+}
+
 router.post('/send-now/:queueId', asyncHandler(async (req, res) => {
   const db = getDb();
   const item = await db.get(`
@@ -229,16 +268,31 @@ router.post('/send-now/:queueId', asyncHandler(async (req, res) => {
     WHERE eq.id = ? AND eq.status = 'pending' AND eq.user_id = ?
   `, [req.params.queueId, req.user.id]);
   if (!item) return res.status(404).json({ success: false, error: 'Queue item not found or already sent' });
-  if (!item.email) return res.status(400).json({ success: false, error: 'Lead has no email address' });
-  await db.run(`UPDATE email_queue SET status = 'sending' WHERE id = ?`, [item.id]);
-  try {
-    const result = await sendEmail({ to: item.email, subject: item.subject, body: item.body, leadId: item.lead_id, userId: req.user.id, signalSnapshot: item.signal_snapshot || null });
-    await db.run(`UPDATE email_queue SET status='sent', sent_at=CURRENT_TIMESTAMP, email_id=? WHERE id=?`, [result.emailId, item.id]);
-    res.json({ success: true, result });
-  } catch (e) {
-    await db.run(`UPDATE email_queue SET status='failed' WHERE id=?`, [item.id]);
-    throw e;
+  if (!item.email) {
+    await db.run(`UPDATE email_queue SET status='failed', last_error=?, error_detail=?, attempts=COALESCE(attempts,0)+1, last_attempt_at=CURRENT_TIMESTAMP WHERE id=?`,
+      ['INVALID_RECIPIENT', 'Lead has no email address', item.id]);
+    return res.status(400).json({ success: false, code: 'INVALID_RECIPIENT', message: 'Recipient email is invalid.', queue_item_id: item.id });
   }
+
+  const outcome = await attemptQueueSend(db, item, req.user.id);
+  if (outcome.success) return res.json({ success: true, result: outcome.result });
+  res.status(502).json({ success: false, code: outcome.code, message: outcome.message, provider_message: outcome.providerMessage, queue_item_id: item.id });
+}));
+
+router.post('/queue/:id/retry', asyncHandler(async (req, res) => {
+  const db = getDb();
+  const item = await db.get(`
+    SELECT eq.*, l.email, l.channel_name FROM email_queue eq JOIN leads l ON l.id = eq.lead_id
+    WHERE eq.id = ? AND eq.status = 'failed' AND eq.user_id = ?
+  `, [req.params.id, req.user.id]);
+  if (!item) return res.status(404).json({ success: false, error: 'Failed queue item not found' });
+  if (!item.email) {
+    return res.status(400).json({ success: false, code: 'INVALID_RECIPIENT', message: 'Recipient email is invalid.', queue_item_id: item.id });
+  }
+
+  const outcome = await attemptQueueSend(db, item, req.user.id);
+  if (outcome.success) return res.json({ success: true, result: outcome.result });
+  res.status(502).json({ success: false, code: outcome.code, message: outcome.message, provider_message: outcome.providerMessage, queue_item_id: item.id, attempts: (item.attempts || 0) + 1 });
 }));
 
 router.get('/track/open/:trackingId', asyncHandler(async (req, res) => {

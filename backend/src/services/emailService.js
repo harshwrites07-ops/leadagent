@@ -1,6 +1,7 @@
 const nodemailer = require('nodemailer');
 const { getDb, getSetting, logActivity, USE_PG } = require('../models/database');
 const { v4: uuidv4 } = require('uuid');
+const { SendError } = require('./sendErrors');
 
 const transporters = new Map();
 let roundRobinIdx = 0;
@@ -105,9 +106,9 @@ function resetTransporter() {
 
 async function selectInbox(db, skipInboxes = []) {
   const allInboxes = getInboxes();
-  if (allInboxes.length === 0) throw new Error('SMTP not configured — add SMTP_USER_1/SMTP_PASS_1 to .env or configure in Settings');
+  if (allInboxes.length === 0) throw new SendError('NO_MAILBOX_CONNECTED', 'SMTP not configured — add SMTP_USER_1/SMTP_PASS_1 to .env or configure in Settings');
   const inboxes = skipInboxes.length ? allInboxes.filter(i => !skipInboxes.includes(i.email)) : allInboxes;
-  if (inboxes.length === 0) throw new Error('per_account_limit reached for all inboxes in this run');
+  if (inboxes.length === 0) throw new SendError('DAILY_LIMIT_REACHED', 'per_account_limit reached for all inboxes in this run');
 
   const perInboxLimit = parseInt(getSetting('daily_send_limit') || '150');
   const dateSql = USE_PG
@@ -126,7 +127,7 @@ async function selectInbox(db, skipInboxes = []) {
       return inbox;
     }
   }
-  throw new Error(`All ${inboxes.length} inbox(es) hit daily limit (${perInboxLimit}/inbox)`);
+  throw new SendError('DAILY_LIMIT_REACHED', `All ${inboxes.length} inbox(es) hit daily limit (${perInboxLimit}/inbox)`);
 }
 
 async function testSmtp(config) {
@@ -145,7 +146,7 @@ async function sendEmail({ to, subject, body, leadId, followUpNumber = 0, skipIn
     console.warn(`[Email] Invalid format rejected: ${to}`);
     if (leadId) await db.run(`UPDATE leads SET email_invalid=1, bounce_reason='invalid_format', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [leadId]);
     await markEmailInvalidPoolWide(db, to);
-    throw new Error(`Invalid email address skipped: ${to}`);
+    throw new SendError('INVALID_RECIPIENT', `Invalid email address skipped: ${to}`);
   }
 
   const emailDomain = to.split('@')[1]?.toLowerCase();
@@ -154,7 +155,7 @@ async function sendEmail({ to, subject, body, leadId, followUpNumber = 0, skipIn
     if (!mxOk) {
       if (leadId) await db.run(`UPDATE leads SET email_invalid=1, bounce_reason='no_mx_record', updated_at=CURRENT_TIMESTAMP WHERE id=?`, [leadId]);
       await markEmailInvalidPoolWide(db, to);
-      throw new Error(`Domain ${emailDomain} has no MX record — email would bounce`);
+      throw new SendError('INVALID_RECIPIENT', `Domain ${emailDomain} has no MX record — email would bounce`);
     }
   }
 
@@ -163,12 +164,15 @@ async function sendEmail({ to, subject, body, leadId, followUpNumber = 0, skipIn
   const trackingPixel = `<img src="${publicUrl}/api/track/open/${trackingId}" width="1" height="1" style="display:none" />`;
   const htmlBody = body.replace(/\n/g, '<br>') + trackingPixel;
   let fromEmail, messageId;
+  let gmailFailure = null;   // captured, not swallowed — surfaced if SMTP fallback also fails
+  let hadGmailAccount = false;
 
   if (userId) {
     try {
       const { pickAccountForUser, sendViaGmail } = require('./gmailService');
       const gmailAccount = await pickAccountForUser(userId);
       if (gmailAccount) {
+        hadGmailAccount = true;
         console.log(`[Email] Using Gmail OAuth: ${gmailAccount.email} (sent today: ${gmailAccount.emails_sent_today})`);
         const userRow = await db.get('SELECT full_name, agency_name FROM users WHERE id=?', [userId]);
         const fromName = userRow?.agency_name || userRow?.full_name || 'ContentCrafterzz';
@@ -188,12 +192,20 @@ async function sendEmail({ to, subject, body, leadId, followUpNumber = 0, skipIn
       }
     } catch (gmailErr) {
       console.warn(`[Email] Gmail send failed (${gmailErr.message}), falling back to SMTP`);
+      gmailFailure = gmailErr;
     }
   } else {
     console.log(`[Email] No userId provided, using SMTP directly`);
   }
 
   console.log(`[Email] Using SMTP — available inboxes: ${getInboxes().map(i => i.email).join(', ') || 'NONE'}`);
+  if (getInboxes().length === 0) {
+    // Nothing left to try. A specific Gmail failure (expired token, API
+    // error, daily limit) is more actionable than "SMTP not configured", so
+    // surface that instead when we have one.
+    if (gmailFailure) throw gmailFailure;
+    if (!hadGmailAccount) throw new SendError('NO_MAILBOX_CONNECTED', `No Gmail account and no SMTP configured for user ${userId || '(none)'}`);
+  }
   const inbox = await selectInbox(db, skipInboxes);
   fromEmail = inbox.email;
   const fromName = inbox.from_name || 'ContentCrafterzz';
@@ -214,7 +226,7 @@ async function sendEmail({ to, subject, body, leadId, followUpNumber = 0, skipIn
       await db.run(`INSERT INTO emails (lead_id, subject, body, status, sent_at, tracking_id, follow_up_number, from_email, bounce_reason, user_id, signal_snapshot) VALUES (?, ?, ?, 'bounced', CURRENT_TIMESTAMP, ?, ?, ?, 'hard_bounce', ?, ?)`, [leadId, subject, body, trackingId, followUpNumber, fromEmail, userId, signalSnapshot]);
       await markEmailInvalidPoolWide(db, to);
     }
-    throw smtpErr;
+    throw new SendError(isHardBounce ? 'INVALID_RECIPIENT' : 'GMAIL_API_ERROR', smtpErr.response || smtpErr.message);
   }
 
   const emailInsertSql = USE_PG
@@ -262,7 +274,8 @@ async function processQueue() {
   `);
   if (!item) return { processed: 0, reason: 'Queue empty' };
   if (!item.email) {
-    await db.run(`UPDATE email_queue SET status = 'failed' WHERE id = ?`, [item.id]);
+    await db.run(`UPDATE email_queue SET status='failed', last_error=?, error_detail=?, attempts=COALESCE(attempts,0)+1, last_attempt_at=CURRENT_TIMESTAMP WHERE id=?`,
+      ['INVALID_RECIPIENT', 'Lead has no email address', item.id]);
     return { processed: 0, reason: 'Lead has no email address' };
   }
 
@@ -271,12 +284,20 @@ async function processQueue() {
 
   try {
     const result = await sendEmail({ to: item.email, subject: item.subject, body: item.body, leadId: item.lead_id, userId: item.user_id || null, signalSnapshot: item.signal_snapshot || null });
-    await db.run(`UPDATE email_queue SET status = 'sent', sent_at = CURRENT_TIMESTAMP, email_id = ? WHERE id = ?`, [result.emailId, item.id]);
+    await db.run(`UPDATE email_queue SET status = 'sent', sent_at = CURRENT_TIMESTAMP, email_id = ?, last_attempt_at = CURRENT_TIMESTAMP WHERE id = ?`, [result.emailId, item.id]);
     await db.run(`UPDATE leads SET crm_stage = 'emailed', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND crm_stage IN ('new_lead', 'studying', 'pitch_ready')`, [item.lead_id]);
     const delay = delayMin + Math.random() * (delayMax - delayMin);
     return { processed: 1, nextDelayMs: Math.round(delay), result };
   } catch (e) {
-    await db.run(`UPDATE email_queue SET status = 'failed' WHERE id = ?`, [item.id]);
+    // P0-3 — persist the classified cause, never just a bare status flip, so
+    // a background-scheduler failure lands in the Failed tab with the same
+    // detail an interactive send-now failure would show.
+    console.error(`[Queue] Send failed — queue_item_id=${item.id} lead_id=${item.lead_id} code=${e.code || '(none)'} message="${e.message}" provider="${e.providerMessage || '(none)'}"`);
+    console.error(e.stack);
+    await db.run(
+      `UPDATE email_queue SET status='failed', last_error=?, error_detail=?, attempts=COALESCE(attempts,0)+1, last_attempt_at=CURRENT_TIMESTAMP WHERE id=?`,
+      [e.code || null, e.providerMessage || e.message, item.id]
+    );
     throw e;
   }
 }

@@ -413,6 +413,15 @@ function _initSqliteSchema(db) {
   alterTry(`ALTER TABLE email_queue ADD COLUMN gate_breakdown TEXT`);
   alterTry(`ALTER TABLE email_queue ADD COLUMN generation_attempts INTEGER`);
   alterTry(`ALTER TABLE email_queue ADD COLUMN generation_model TEXT`);
+  // P0-3 — a failed send must never delete the queue row (previously
+  // status='failed' rows just vanished from every view since GET /queue only
+  // selects pending/sending and there was no Failed tab). These columns let a
+  // failed row persist with the classified error code, the raw provider
+  // message, and a retry count so the UI can show *why* and a per-row Retry.
+  alterTry(`ALTER TABLE email_queue ADD COLUMN last_error TEXT`);
+  alterTry(`ALTER TABLE email_queue ADD COLUMN error_detail TEXT`);
+  alterTry(`ALTER TABLE email_queue ADD COLUMN attempts INTEGER DEFAULT 0`);
+  alterTry(`ALTER TABLE email_queue ADD COLUMN last_attempt_at DATETIME`);
   alterTry(`DROP TRIGGER IF EXISTS trg_email_queue_gate_guard`);
   alterTry(`
     CREATE TRIGGER trg_email_queue_gate_guard

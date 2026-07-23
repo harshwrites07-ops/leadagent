@@ -29,6 +29,39 @@ function StatusDot({ status }) {
   );
 }
 
+// P0-3 — the whole point of this ticket: never show the bare string "Failed
+// to send" again. The headline is always the specific, user-facing message
+// the backend classified (see sendErrors.js); the raw provider response
+// stays available but tucked behind a "Details" toggle instead of dumped
+// straight into a toast.
+function SendErrorToastContent({ message, providerMessage }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxWidth: 320 }}>
+      <div>{message}</div>
+      {providerMessage && (
+        <div>
+          <button
+            onClick={() => setOpen(v => !v)}
+            style={{ background: 'none', border: 'none', padding: 0, fontSize: 11, textDecoration: 'underline', cursor: 'pointer', color: 'inherit', opacity: 0.75 }}
+          >
+            {open ? 'Hide details' : 'Details'}
+          </button>
+          {open && (
+            <div style={{ fontSize: 11, opacity: 0.7, marginTop: 4, wordBreak: 'break-word' }}>{providerMessage}</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function showSendErrorToast(errData) {
+  const message = errData?.message || errData?.error || 'Send failed';
+  const providerMessage = errData?.provider_message || null;
+  toast.error(<SendErrorToastContent message={message} providerMessage={providerMessage} />, { duration: 8000 });
+}
+
 export default function EmailSender() {
   const navigate = useNavigate();
   const { refreshDashboard } = useApp();
@@ -44,6 +77,10 @@ export default function EmailSender() {
   const [stats, setStats] = useState(null);
   const [queue, setQueue] = useState([]);
   const [history, setHistory] = useState([]);
+  const [failedQueue, setFailedQueue] = useState([]);
+  const [failedLoading, setFailedLoading] = useState(false);
+  const [retryingId, setRetryingId] = useState(null);
+  const [expandedErrorId, setExpandedErrorId] = useState(null);
   const [paused, setPaused] = useState(false);
   const [statsLoading, setStatsLoading] = useState(true);
   const [queueLoading, setQueueLoading] = useState(true);
@@ -74,6 +111,18 @@ export default function EmailSender() {
     finally { setQueueLoading(false); }
   }, []);
 
+  // P0-3 — failed sends are UPDATEd (status='failed'), never deleted, but
+  // GET /emails/queue only ever selected pending/sending. This fetches the
+  // ones that fell out of every other view so the Failed tab can show them.
+  const fetchFailedQueue = useCallback(async () => {
+    setFailedLoading(true);
+    try {
+      const { data } = await api.get('/emails/queue', { params: { status: 'failed' } });
+      setFailedQueue(data.queue || []);
+    } catch { toast.error('Failed to load failed queue'); }
+    finally { setFailedLoading(false); }
+  }, []);
+
   const fetchHistory = useCallback(async (status) => {
     setHistoryLoading(true);
     try {
@@ -87,11 +136,13 @@ export default function EmailSender() {
   useEffect(() => {
     fetchStats();
     fetchQueue();
-  }, [fetchStats, fetchQueue]);
+    fetchFailedQueue();
+  }, [fetchStats, fetchQueue, fetchFailedQueue]);
 
   useEffect(() => {
-    if (tab !== 'queue') fetchHistory(tab === 'sent' ? 'sent' : tab === 'opened' ? 'opened' : tab === 'replied' ? 'replied' : tab === 'bounced' ? 'bounced' : 'all');
-  }, [tab, fetchHistory]);
+    if (tab === 'failed') fetchFailedQueue();
+    else if (tab !== 'queue') fetchHistory(tab === 'sent' ? 'sent' : tab === 'opened' ? 'opened' : tab === 'replied' ? 'replied' : tab === 'bounced' ? 'bounced' : 'all');
+  }, [tab, fetchHistory, fetchFailedQueue]);
 
   const handleTogglePause = async () => {
     try {
@@ -122,7 +173,27 @@ export default function EmailSender() {
       toast.success('Sent.');
       fetchQueue();
       fetchStats();
-    } catch { toast.error('Failed to send'); fetchQueue(); }
+    } catch (err) {
+      showSendErrorToast(err.response?.data);
+      fetchQueue();
+      fetchFailedQueue();
+    }
+  };
+
+  const handleRetryFailed = async id => {
+    setRetryingId(id);
+    try {
+      await api.post(`/emails/queue/${id}/retry`);
+      toast.success('Sent.');
+      fetchFailedQueue();
+      fetchQueue();
+      fetchStats();
+    } catch (err) {
+      showSendErrorToast(err.response?.data);
+      fetchFailedQueue();
+    } finally {
+      setRetryingId(null);
+    }
   };
 
   const queueCount = queue.length;
@@ -134,12 +205,18 @@ export default function EmailSender() {
   const animOpened  = useCountUp(stats?.opened_count ?? 0, 800, 200);
   const animReplied = useCountUp(stats?.replied_count ?? 0, 800, 300);
 
+  // P0-3 — the Sent tab must count ALL sent emails (matching the Opened/
+  // Replied/Bounced tabs, which are all-time), not just today's. It
+  // previously reused `sentToday` here — the same number the header's "Sent
+  // today" KPI card correctly shows — which is what produced "Opened 27,
+  // Sent 0": an all-time count being compared against a today-only one.
   const TABS = [
     { id: 'queue',   label: 'Queue',   count: queueCount },
-    { id: 'sent',    label: 'Sent',    count: sentToday },
+    { id: 'sent',    label: 'Sent',    count: stats?.total_sent ?? 0 },
     { id: 'opened',  label: 'Opened',  count: stats?.opened_count ?? 0 },
     { id: 'replied', label: 'Replied', count: stats?.replied_count ?? 0 },
     { id: 'bounced', label: 'Bounced', count: stats?.bounced_count ?? 0 },
+    { id: 'failed',  label: 'Failed',  count: failedQueue.length },
   ];
 
   const statDefs = [
@@ -308,6 +385,108 @@ export default function EmailSender() {
             </>
           )}
 
+          {/* Failed tab — P0-3: failed sends persist as status='failed' rows
+              instead of vanishing, with the classified error and a per-row
+              Retry. Rows with attempts >= 3 get a "needs attention" flag
+              rather than being auto-retried (there's no background retry
+              loop for failed rows — only this manual Retry). */}
+          {tab === 'failed' && (
+            <>
+              {failedLoading ? (
+                <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>
+                  Loading...
+                </div>
+              ) : failedQueue.length === 0 ? (
+                <div className="empty" style={{ border: '1px solid var(--line)', borderRadius: 12 }}>
+                  <div className="empty__desc">Nothing failed. Every send that's been attempted went through.</div>
+                </div>
+              ) : (
+                <div className="card" style={{ overflow: 'hidden' }}>
+                  <table className="tbl">
+                    <thead>
+                      <tr>
+                        <th>To</th>
+                        <th>Subject</th>
+                        <th>Reason</th>
+                        <th>Attempts</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {failedQueue.map((item, i) => {
+                        const needsAttention = (item.attempts || 0) >= 3;
+                        const isExpanded = expandedErrorId === item.id;
+                        return (
+                          <motion.tr
+                            key={item.id || i}
+                            initial={{ opacity: 0, y: 6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: i * 0.04, duration: 0.3 }}
+                          >
+                            <td>
+                              <div className="row" style={{ gap: 8 }}>
+                                <span className="ava" style={{ fontSize: 11, flexShrink: 0 }}>
+                                  {(item.lead_name || '?')[0].toUpperCase()}
+                                </span>
+                                <div>
+                                  <div style={{ fontSize: 13, fontWeight: 500 }}>{item.lead_name || 'Unknown'}</div>
+                                  <div className="mono muted" style={{ fontSize: 10.5 }}>{item.lead_email || ''}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td style={{ fontSize: 12.5, color: 'var(--text-2)', maxWidth: 240 }}>
+                              <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.subject}</div>
+                            </td>
+                            <td style={{ fontSize: 12, maxWidth: 320 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--bad)', flexShrink: 0 }} />
+                                <span style={{ color: 'var(--text)' }}>{item.last_error || 'Unknown error'}</span>
+                              </div>
+                              {item.error_detail && (
+                                <div>
+                                  <button
+                                    onClick={() => setExpandedErrorId(isExpanded ? null : item.id)}
+                                    style={{ background: 'none', border: 'none', padding: 0, marginTop: 2, fontSize: 10.5, textDecoration: 'underline', cursor: 'pointer', color: 'var(--text-4)' }}
+                                  >
+                                    {isExpanded ? 'Hide details' : 'Details'}
+                                  </button>
+                                  {isExpanded && (
+                                    <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-3)', marginTop: 4, wordBreak: 'break-word' }}>{item.error_detail}</div>
+                                  )}
+                                </div>
+                              )}
+                            </td>
+                            <td>
+                              <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+                                <span className="mono" style={{ fontSize: 12 }}>{item.attempts || 0}</span>
+                                {needsAttention && (
+                                  <span style={{ fontSize: 10, color: 'var(--warn)', fontWeight: 600 }} title="3+ failed attempts — check the underlying cause before retrying again">
+                                    needs attention
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td>
+                              <div className="row" style={{ gap: 4, justifyContent: 'flex-end' }}>
+                                <button
+                                  className="btn btn--ghost btn--sm"
+                                  disabled={retryingId === item.id}
+                                  onClick={() => { if (!requiresProfile()) handleRetryFailed(item.id); }}
+                                >
+                                  {retryingId === item.id ? 'Retrying...' : 'Retry'}
+                                </button>
+                              </div>
+                            </td>
+                          </motion.tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+
           {/* Replied tab */}
           {tab === 'replied' && (
             <>
@@ -362,7 +541,7 @@ export default function EmailSender() {
           )}
 
           {/* Sent / Opened / Bounced tabs */}
-          {tab !== 'queue' && tab !== 'replied' && (
+          {tab !== 'queue' && tab !== 'replied' && tab !== 'failed' && (
             <>
               {historyLoading ? (
                 <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>

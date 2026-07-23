@@ -1,6 +1,7 @@
 const { google } = require('googleapis');
 const crypto = require('crypto');
 const { getDb } = require('../models/database');
+const { SendError } = require('./sendErrors');
 
 // gmail.readonly was previously requested but never used anywhere in this
 // codebase (reply/bounce detection goes through IMAP in emailService.js,
@@ -82,7 +83,34 @@ async function exchangeCodeForTokens(code) {
   };
 }
 
+// Pulls Google's own error text out of whatever shape googleapis throws —
+// varies between a plain Error, an axios-style response, and the legacy
+// `errors` array — so callers always get the real provider message instead
+// of a generic "Request failed with status code 401".
+function extractGoogleErrorMessage(apiErr) {
+  return apiErr?.response?.data?.error?.message
+    || apiErr?.errors?.[0]?.message
+    || apiErr?.message
+    || 'Unknown Gmail API error';
+}
+
+function isAuthError(apiErr) {
+  const status = apiErr?.code || apiErr?.response?.status || apiErr?.status;
+  return status === 401 || status === '401';
+}
+
 async function getRefreshedAuth(account) {
+  // P0-3 root cause #1 — Google only issues a refresh_token when the consent
+  // URL includes access_type=offline AND prompt=consent (getAuthUrl() does
+  // both, but accounts connected before that fix don't have one on file).
+  // Without it the stored access_token is a dead end the instant it expires
+  // — fail loud and specific instead of letting oauth2Client silently try to
+  // refresh with a null token.
+  if (!account.refresh_token) {
+    await getDb().run(`UPDATE gmail_accounts SET status='revoked' WHERE id=?`, [account.id]);
+    throw new SendError('OAUTH_TOKEN_EXPIRED', `No refresh_token on file for ${account.email} — this account was connected before offline access was requested and must be reconnected.`);
+  }
+
   const oauth2Client = getOAuthClient();
   oauth2Client.setCredentials({
     access_token: account.access_token,
@@ -98,34 +126,41 @@ async function getRefreshedAuth(account) {
       oauth2Client.setCredentials(credentials);
     } catch (e) {
       await getDb().run(`UPDATE gmail_accounts SET status='revoked' WHERE id=?`, [account.id]);
-      throw new Error(`Gmail token revoked for ${account.email} — user must reconnect`);
+      throw new SendError('OAUTH_TOKEN_EXPIRED', `Refresh failed for ${account.email}: ${extractGoogleErrorMessage(e)}`);
     }
   }
 
   return oauth2Client;
 }
 
-async function sendViaGmail(account, { to, subject, htmlBody, fromName }) {
-  console.log(`[Gmail] Sending via ${account.email} → ${to}`);
-  // Reset daily counter if needed
-  const today = new Date().toISOString().split('T')[0];
-  if (account.last_reset_date !== today) {
-    await getDb().run(`UPDATE gmail_accounts SET emails_sent_today=0, last_reset_date=? WHERE id=?`, [today, account.id]);
-    account.emails_sent_today = 0;
+// Forces a refresh regardless of the cached expiry_date — used when Gmail
+// itself returns 401 mid-send, which happens when a token was revoked
+// server-side (user removed app access, password change, etc.) and the
+// locally cached expiry_date still looks valid. This is P0-3 root cause #2:
+// previously a 401 here just failed the send outright with no retry.
+async function forceRefresh(account) {
+  if (!account.refresh_token) {
+    await getDb().run(`UPDATE gmail_accounts SET status='revoked' WHERE id=?`, [account.id]);
+    throw new SendError('OAUTH_TOKEN_EXPIRED', `No refresh_token on file for ${account.email}.`);
   }
-
-  if (account.emails_sent_today >= GMAIL_DAILY_LIMIT) {
-    throw new Error(`Daily limit reached for ${account.email}`);
+  const oauth2Client = getOAuthClient();
+  oauth2Client.setCredentials({ refresh_token: account.refresh_token });
+  try {
+    const { credentials } = await oauth2Client.refreshAccessToken();
+    await getDb().run(`UPDATE gmail_accounts SET access_token=?, token_expiry=? WHERE id=?`,
+      [credentials.access_token, credentials.expiry_date, account.id]);
+    oauth2Client.setCredentials(credentials);
+    return oauth2Client;
+  } catch (e) {
+    await getDb().run(`UPDATE gmail_accounts SET status='revoked' WHERE id=?`, [account.id]);
+    throw new SendError('OAUTH_TOKEN_EXPIRED', `Forced refresh failed for ${account.email}: ${extractGoogleErrorMessage(e)}`);
   }
+}
 
-  const auth = await getRefreshedAuth(account);
-  console.log(`[Gmail] Token refreshed OK for ${account.email}`);
-  const gmail = google.gmail({ version: 'v1', auth });
-
+function buildGmailMime({ account, to, subject, htmlBody, fromName }) {
   const displayName = fromName || 'ContentCrafterzz';
   const boundary = `ccz_${Date.now()}`;
-
-  const mime = [
+  return [
     `From: "${displayName}" <${account.email}>`,
     `To: ${to}`,
     `Subject: =?UTF-8?B?${Buffer.from(subject).toString('base64')}?=`,
@@ -140,15 +175,49 @@ async function sendViaGmail(account, { to, subject, htmlBody, fromName }) {
     ``,
     `--${boundary}--`,
   ].join('\r\n');
+}
+
+async function sendViaGmail(account, { to, subject, htmlBody, fromName }) {
+  console.log(`[Gmail] Sending via ${account.email} → ${to}`);
+  // Reset daily counter if needed
+  const today = new Date().toISOString().split('T')[0];
+  if (account.last_reset_date !== today) {
+    await getDb().run(`UPDATE gmail_accounts SET emails_sent_today=0, last_reset_date=? WHERE id=?`, [today, account.id]);
+    account.emails_sent_today = 0;
+  }
+
+  if (account.emails_sent_today >= GMAIL_DAILY_LIMIT) {
+    throw new SendError('DAILY_LIMIT_REACHED', `${account.email} has sent ${account.emails_sent_today}/${GMAIL_DAILY_LIMIT} today.`);
+  }
+
+  let auth = await getRefreshedAuth(account);
+  console.log(`[Gmail] Token refreshed OK for ${account.email}`);
+
+  const mime = buildGmailMime({ account, to, subject, htmlBody, fromName });
+  const raw = Buffer.from(mime).toString('base64url');
+
+  const attemptSend = (authClient) => google.gmail({ version: 'v1', auth: authClient })
+    .users.messages.send({ userId: 'me', requestBody: { raw } });
 
   try {
-    await gmail.users.messages.send({
-      userId: 'me',
-      requestBody: { raw: Buffer.from(mime).toString('base64url') },
-    });
+    await attemptSend(auth);
   } catch (apiErr) {
-    console.error(`[Gmail] API send error for ${account.email}:`, apiErr.message, apiErr.errors || '');
-    throw apiErr;
+    if (isAuthError(apiErr)) {
+      // Cached expiry looked fine but Google says otherwise — force a fresh
+      // token and retry exactly once before giving up.
+      console.warn(`[Gmail] 401 from Google for ${account.email} despite cached token — forcing refresh and retrying once`);
+      try {
+        auth = await forceRefresh(account);
+        await attemptSend(auth);
+      } catch (retryErr) {
+        if (retryErr instanceof SendError) throw retryErr;
+        console.error(`[Gmail] Retry after forced refresh still failed for ${account.email}:`, retryErr.message, retryErr.errors || '');
+        throw new SendError(isAuthError(retryErr) ? 'OAUTH_TOKEN_EXPIRED' : 'GMAIL_API_ERROR', extractGoogleErrorMessage(retryErr));
+      }
+    } else {
+      console.error(`[Gmail] API send error for ${account.email}:`, apiErr.message, apiErr.errors || '');
+      throw new SendError('GMAIL_API_ERROR', extractGoogleErrorMessage(apiErr));
+    }
   }
 
   await getDb().run(`UPDATE gmail_accounts SET emails_sent_today=emails_sent_today+1 WHERE id=?`, [account.id]);

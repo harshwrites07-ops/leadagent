@@ -1058,6 +1058,13 @@ async function initPostgres() {
     await pgAlter(`ALTER TABLE email_queue ADD COLUMN generation_attempts INTEGER`);
     await pgAlter(`ALTER TABLE email_queue ADD COLUMN generation_model TEXT`);
     await pgAlter(`ALTER TABLE email_queue ADD CONSTRAINT chk_email_queue_gate CHECK (gate_score >= 70 AND gate_checks_complete = true)`);
+    // P0-3 — mirrors database.js: a failed send must never delete the queue
+    // row. These columns let a failed row persist with its classified error
+    // code, the raw provider message, and a retry count for the Failed tab.
+    await pgAlter(`ALTER TABLE email_queue ADD COLUMN last_error TEXT`);
+    await pgAlter(`ALTER TABLE email_queue ADD COLUMN error_detail TEXT`);
+    await pgAlter(`ALTER TABLE email_queue ADD COLUMN attempts INTEGER DEFAULT 0`);
+    await pgAlter(`ALTER TABLE email_queue ADD COLUMN last_attempt_at TIMESTAMP`);
     await pgAlter(`ALTER TABLE pitches ADD COLUMN user_id INTEGER REFERENCES users(id)`);
     // Distinguishes a real Marcus/AI-generated pitch from buildFallback()'s
     // canned template — see database.js for the incident this was added for.
