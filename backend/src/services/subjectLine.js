@@ -1,7 +1,7 @@
 // Section F — Subject Line Engine
 // Generates 3 subject line options using 5 patterns after the main email body is created.
 
-const { completeSmart } = require('./claudeService');
+const { completeSmart, extractJsonObject } = require('./claudeService');
 
 function buildSubjectLinePrompt(emailBody, intelligencePack, selectedAngle) {
   const hook = intelligencePack.hook_data || {};
@@ -83,7 +83,7 @@ async function generateSubjectLines(emailBody, intelligencePack, selectedAngle) 
     const prompt = buildSubjectLinePrompt(emailBody, intelligencePack, selectedAngle);
     const raw    = await completeSmart(prompt, '', 600);
     const cleaned = raw.replace(/```json|```/g, '').trim();
-    const parsed  = JSON.parse(cleaned.match(/\{[\s\S]*\}/)[0]);
+    const parsed  = JSON.parse(extractJsonObject(cleaned));
 
     return {
       options:      parsed.options || [],

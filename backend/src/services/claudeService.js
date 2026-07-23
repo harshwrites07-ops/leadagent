@@ -22,6 +22,42 @@ function getGeminiKey() {
   return keys[0] || null;
 }
 
+// Extracts the first balanced open/close-delimited span from text, tracking
+// string literals so a delimiter inside a quoted value can't confuse the
+// depth count. A plain greedy /\{[\s\S]*\}/ (or /\[.*\]/s) regex matches from
+// the FIRST open delimiter to the LAST close delimiter anywhere in the
+// string — if the model appends any trailing commentary after the JSON (a
+// sign-off, an aside) and that text happens to contain its own "}" or "]",
+// the regex silently swallows everything in between, producing a string
+// that's valid JSON followed by garbage. JSON.parse then throws "Unexpected
+// non-whitespace character after JSON at position N" right at the real
+// value's closing delimiter — the generation didn't fail, only the naive
+// extraction did. Returns null if no balanced span is found.
+function extractBalanced(text, open, close) {
+  const start = (text || '').indexOf(open);
+  if (start === -1) return null;
+  let depth = 0, inString = false, escaped = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === open) depth++;
+    else if (ch === close) {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+  return null; // unbalanced — truncated response, not a trailing-text problem
+}
+
+function extractJsonObject(text) { return extractBalanced(text, '{', '}'); }
+function extractJsonArray(text)  { return extractBalanced(text, '[', ']'); }
+
 async function completeWithGeminiRotating(prompt, systemPrompt, maxTokens, modelName) {
   const keys = getGeminiKeys();
   if (!keys.length) return null;
@@ -759,9 +795,9 @@ function scoreEmailDetailed(subject, body) {
 // ─── Parse AI response ────────────────────────────────────────────────────────
 function parsePitchResponseV2(text, lead) {
   try {
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('No JSON');
-    const p = JSON.parse(jsonMatch[0]);
+    const jsonStr = extractJsonObject(text);
+    if (!jsonStr) throw new Error('No JSON');
+    const p = JSON.parse(jsonStr);
     // Accept both old and new field names
     const subject = p.subject || p.email_subject;
     const body    = p.body    || p.email_body;
@@ -837,9 +873,9 @@ Return ONLY valid JSON:
 
       const raw = await complete(prompt, '', 600);
       if (raw) {
-        const match = raw.match(/\{[\s\S]*\}/);
-        if (match) {
-          const parsed = JSON.parse(match[0]);
+        const jsonStr = extractJsonObject(raw);
+        if (jsonStr) {
+          const parsed = JSON.parse(jsonStr);
           followUps.push({ day: step.day, subject: parsed.subject, body: parsed.body, angle: step.angle });
         }
       }
@@ -955,8 +991,8 @@ async function generateFullPitch(lead, userId = null) {
           }
           if (!raw) raw = await completeSmart(fallbackPrompt, '', 800);
           if (raw) {
-            const match = raw.match(/\{[\s\S]*\}/);
-            if (match) result = JSON.parse(match[0]);
+            const jsonStr = extractJsonObject(raw);
+            if (jsonStr) result = JSON.parse(jsonStr);
           }
         } catch {}
       }
@@ -1287,9 +1323,9 @@ Return ONLY valid JSON (no markdown, no backticks):
 
 function parsePitchResponse(text, lead) {
   try {
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('No JSON found');
-    const parsed = JSON.parse(jsonMatch[0]);
+    const jsonStr = extractJsonObject(text);
+    if (!jsonStr) throw new Error('No JSON found');
+    const parsed = JSON.parse(jsonStr);
     if (!parsed.email_subject || !parsed.email_body) throw new Error('Missing fields');
     return parsed;
   } catch {
@@ -1413,7 +1449,7 @@ Return JSON array: ["curiosity variant under 8 words", "result variant under 8 w
 Only return the JSON array, nothing else.`;
 
   const result = await complete(prompt, undefined, 300);
-  try { return JSON.parse(result.match(/\[.*\]/s)[0]); }
+  try { return JSON.parse(extractJsonArray(result)); }
   catch { return [mainSubject, mainSubject, mainSubject]; }
 }
 
@@ -1426,7 +1462,7 @@ Return JSON: { "score": <number>, "feedback": "<2-3 sentences: what works and wh
 Only return valid JSON.`;
 
   const result = await complete(prompt, undefined, 300);
-  try { return JSON.parse(result.match(/\{.*\}/s)[0]); }
+  try { return JSON.parse(extractJsonObject(result)); }
   catch { return { score: 7, feedback: 'Looks good.' }; }
 }
 
@@ -1643,7 +1679,7 @@ Return JSON array: ["curiosity variant", "result variant", "personal variant"]
 Only return the JSON array.`;
 
   const result = await complete(prompt, undefined, 250);
-  try { return JSON.parse(result.match(/\[.*\]/s)[0]); }
+  try { return JSON.parse(extractJsonArray(result)); }
   catch { return [mainSubject, `Quick question about ${channelData.channel_name}`, `Your ${(channelData.avg_views || 0).toLocaleString()} avg views`]; }
 }
 
@@ -2113,9 +2149,9 @@ async function generateWithMarcus(lead, userId, onProgress) {
     try {
       const raw = await completeSmart(prompt, '', 1200);
       const cleaned = raw.replace(/```json|```/g, '').trim();
-      const match = cleaned.match(/\{[\s\S]*\}/);
-      if (!match) throw new Error('No JSON in response');
-      const parsed = JSON.parse(match[0]);
+      const jsonStr = extractJsonObject(cleaned);
+      if (!jsonStr) throw new Error('No JSON in response');
+      const parsed = JSON.parse(jsonStr);
       if (!parsed.subject || !parsed.body) throw new Error('Missing subject/body fields');
 
       // Marcus V4 Stage 3 — Sanitizer runs on EVERY attempt's output before
@@ -2277,4 +2313,6 @@ module.exports = {
   getGeminiKey,
   getGeminiKeys,
   makeGeminiModel,
+  extractJsonObject,
+  extractJsonArray,
 };

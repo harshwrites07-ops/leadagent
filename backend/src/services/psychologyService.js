@@ -1,6 +1,6 @@
 // Psychology Analysis + 3-Angle Email Generation using Claude
 
-const { completeSmart, complete } = require('./claudeService');
+const { completeSmart, complete, extractJsonObject } = require('./claudeService');
 
 // ── Step 1: Analyze creator psychology from channel data ──────────────────────
 async function analyzePsychology(lead) {
@@ -35,9 +35,12 @@ Return ONLY valid JSON (no markdown, no backticks, no explanation):
 
   try {
     const raw = await completeSmart(prompt, 'Expert psychology analyst. You identify creator personality from content patterns with high accuracy.', 700);
-    const match = raw?.match(/\{[\s\S]*?\}/);
-    if (match) {
-      const parsed = JSON.parse(match[0]);
+    // Balanced-brace extraction, not a lazy /\{[\s\S]*?\}/ regex — this
+    // schema has a nested communication_style object, so a lazy match would
+    // stop at ITS closing brace and truncate before pain_points/voice_tone.
+    const jsonStr = extractJsonObject(raw);
+    if (jsonStr) {
+      const parsed = JSON.parse(jsonStr);
       if (parsed.personality_traits && parsed.pain_points) return parsed;
     }
   } catch {}
@@ -127,9 +130,9 @@ Return ONLY valid JSON:
 
   try {
     const raw = await completeSmart(prompt, 'Elite cold email copywriter. 5%+ reply rates. Every email is devastatingly specific, never template-like.', 1800);
-    const match = raw?.match(/\{[\s\S]*\}/);
-    if (match) {
-      const parsed = JSON.parse(match[0]);
+    const jsonStr = extractJsonObject(raw);
+    if (jsonStr) {
+      const parsed = JSON.parse(jsonStr);
       if (parsed.angles?.length === 3) return parsed.angles;
     }
   } catch {}

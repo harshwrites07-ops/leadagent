@@ -4,7 +4,7 @@
 // throws scores 0 with the error in `detail`, never a missing key. The array
 // is always length 7; if it's ever not, the caller must block the email.
 
-const { completeSmart } = require('./services/claudeService');
+const { completeSmart, extractJsonObject } = require('./services/claudeService');
 const { runCodeGate, describeViolation, wordCount, fleschKincaidGrade, BANNED_PHRASES } = require('./services/codeGate');
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -193,7 +193,7 @@ async function surgicalFix(subject, body, fixDirection) {
     const prompt = buildSurgicalFixPrompt(subject, body, fixDirection);
     const raw = await completeSmart(prompt, '', 400);
     const cleaned = raw.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(cleaned.match(/\{[\s\S]*\}/)[0]);
+    const parsed = JSON.parse(extractJsonObject(cleaned));
     return { subject: parsed.subject || subject, body: parsed.body || body };
   } catch (err) {
     console.error('[QualityGate] Surgical fix failed:', err.message);
@@ -227,7 +227,7 @@ async function angleSwitchRegenerate(lead, user, voiceDNA, intelligencePack, pre
   try {
     const raw = await completeSmart(prompt, '', 1200);
     const cleaned = raw.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(cleaned.match(/\{[\s\S]*\}/)[0]);
+    const parsed = JSON.parse(extractJsonObject(cleaned));
     if (!parsed.subject || !parsed.body) throw new Error('Missing subject/body');
 
     // Run the fresh draft through the code gate too — it's a genuinely new
@@ -316,7 +316,7 @@ async function generateInitialDraft(creatorData, voiceDNA) {
   try {
     const text = await completeSmart(prompt, '', 600);
     const cleaned = text.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(cleaned.match(/\{[\s\S]*\}/)[0]);
+    const parsed = JSON.parse(extractJsonObject(cleaned));
     return parsed.body || text;
   } catch {
     const text = await completeSmart(MARCUS_LEGACY_PROMPT(creatorData, voiceDNA), '', 500);
