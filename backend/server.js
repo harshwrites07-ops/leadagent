@@ -48,6 +48,19 @@ const PORT = process.env.PORT || 3001;
 
 app.set('trust proxy', 1);
 
+// ── Domain consolidation: app.quelro.com is a legacy host from before the
+// marketing/app split. 301 old bookmarked/linked pages to the canonical
+// quelro.com host so Google doesn't see duplicate content on two hostnames.
+// API calls are excluded — the SPA always calls /api on whatever host it
+// was loaded from, so redirecting those would break in-flight requests.
+app.use((req, res, next) => {
+  const host = (req.headers.host || '').split(':')[0];
+  if (host === 'app.quelro.com' && (req.method === 'GET' || req.method === 'HEAD') && !req.path.startsWith('/api')) {
+    return res.redirect(301, `https://quelro.com${req.originalUrl}`);
+  }
+  next();
+});
+
 const FRONTEND_DIST = path.join(__dirname, '../frontend/dist');
 const isProd = process.env.NODE_ENV === 'production' || require('fs').existsSync(FRONTEND_DIST + '/index.html');
 
