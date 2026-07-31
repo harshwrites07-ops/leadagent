@@ -8,6 +8,13 @@ const pool = new Pool({
   max: 10,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
+  // Without this, a stuck/locked query holds its connection forever — server.js
+  // sets server.setTimeout(0) for long AI-generation requests, so nothing else
+  // bounds it, and unrelated requests (e.g. login) queue behind it until the
+  // client's own axios timeout fires minutes later.
+  statement_timeout: 15000,
+  query_timeout: 15000,
+  idle_in_transaction_session_timeout: 15000,
 });
 
 pool.on('error', (err) => {
