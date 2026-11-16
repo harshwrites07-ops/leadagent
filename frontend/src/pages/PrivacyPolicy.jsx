@@ -10,7 +10,7 @@ const S = {
   wrap: { maxWidth: 720, width: '100%' },
   back: {
     display: 'inline-flex', alignItems: 'center', gap: 6,
-    color: 'var(--text-3)', fontSize: 13, textDecoration: 'none',
+    color: 'var(--text-3)', fontSize: 14, textDecoration: 'none',
     marginBottom: 36, transition: 'color 0.15s',
   },
   logo: {
@@ -20,16 +20,16 @@ const S = {
     width: 36, height: 36, borderRadius: 9, background: 'var(--lime)',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
   },
-  logoText: { fontWeight: 900, fontSize: 13, color: '#ffffff' },
+  logoText: { fontWeight: 900, fontSize: 14, color: '#ffffff' },
   logoName: { fontWeight: 700, fontSize: 15, color: 'var(--text)', margin: 0 },
-  logoSub: { fontSize: 9, letterSpacing: '0.12em', color: 'var(--text-3)', margin: 0, fontFamily: 'var(--f-mono)' },
+  logoSub: { fontSize: 12, letterSpacing: '0.12em', color: 'var(--text-3)', margin: 0, fontFamily: 'var(--f-mono)' },
   h1: { fontFamily: 'var(--f-heading)', fontWeight: 600, fontSize: 36, letterSpacing: '-0.04em', color: 'var(--text)', margin: '0 0 8px' },
-  updated: { color: 'var(--text-3)', fontSize: 13, margin: '0 0 40px' },
+  updated: { color: 'var(--text-3)', fontSize: 14, margin: '0 0 40px' },
   h2: { fontSize: 17, fontWeight: 700, color: 'var(--text)', margin: '32px 0 10px' },
-  p: { color: 'var(--text-2)', fontSize: 14, lineHeight: 1.75, margin: '0 0 16px' },
-  ul: { color: 'var(--text-2)', fontSize: 14, lineHeight: 1.75, paddingLeft: 20, margin: '0 0 16px' },
+  p: { color: 'var(--text-2)', fontSize: 15, lineHeight: 1.75, margin: '0 0 16px' },
+  ul: { color: 'var(--text-2)', fontSize: 15, lineHeight: 1.75, paddingLeft: 20, margin: '0 0 16px' },
   divider: { border: 'none', borderTop: '1px solid var(--line)', margin: '32px 0' },
-  footer: { color: 'var(--text-4)', fontSize: 12, marginTop: 48, display: 'flex', gap: 16, flexWrap: 'wrap' },
+  footer: { color: 'var(--text-4)', fontSize: 13, marginTop: 48, display: 'flex', gap: 16, flexWrap: 'wrap' },
 };
 
 export default function PrivacyPolicy() {

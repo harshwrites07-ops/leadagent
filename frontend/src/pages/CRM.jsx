@@ -142,7 +142,7 @@ export default function CRM() {
         className="page__head"
       >
         <div>
-          <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8, fontFamily: 'var(--f-mono)' }}>
+          <div className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8, fontFamily: 'var(--f-mono)' }}>
             Pipeline · {leads.length} creators{totalValue > 0 ? ` · $${(totalValue / 1000).toFixed(1)}k open value` : ''}
           </div>
           <h1 className="page__title" style={{ whiteSpace: 'nowrap' }}>CRM — <em>drag a creator from cold to closed.</em></h1>
@@ -161,7 +161,7 @@ export default function CRM() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            style={{ padding: '48px', textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}
+            style={{ padding: '48px', textAlign: 'center', color: 'var(--text-3)', fontSize: 14 }}
           >
             Loading pipeline...
           </motion.div>
@@ -210,7 +210,7 @@ export default function CRM() {
                     style={{ minHeight: 60 }}
                   >
                     {col.leads.length === 0 && isDropTarget && (
-                      <div style={{ border: '1px dashed var(--lime-border)', borderRadius: 8, padding: '14px', textAlign: 'center', color: 'var(--lime)', fontSize: 11.5 }}>
+                      <div style={{ border: '1px dashed var(--lime-border)', borderRadius: 8, padding: '14px', textAlign: 'center', color: 'var(--lime)', fontSize: 12.5 }}>
                         Drop to move here
                       </div>
                     )}
@@ -268,7 +268,7 @@ export default function CRM() {
                             {lead.thumbnail_url ? (
                               <img src={lead.thumbnail_url} alt="" style={{ width: 26, height: 26, minWidth: 26, borderRadius: '50%', objectFit: 'cover' }} onError={e => { e.target.style.display='none'; e.target.nextSibling.style.display='flex'; }} />
                             ) : null}
-                            <span className="ava" style={{ fontSize: 10, width: 26, height: 26, minWidth: 26, borderRadius: '50%', display: lead.thumbnail_url ? 'none' : 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-3)', color: 'var(--on-accent)' }}>
+                            <span className="ava" style={{ fontSize: 12, width: 26, height: 26, minWidth: 26, borderRadius: '50%', display: lead.thumbnail_url ? 'none' : 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-3)', color: 'var(--on-accent)' }}>
                               {(lead.channel_name || '?')[0].toUpperCase()}
                             </span>
                             <div style={{ flex: 1, minWidth: 0 }}>
@@ -282,7 +282,7 @@ export default function CRM() {
                             )}
                           </div>
                           <div className="kb__card-foot">
-                            <span style={{ fontSize: 11, color: 'var(--text-3)' }}>
+                            <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
                               {lead.niche || 'General'}
                             </span>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
@@ -297,7 +297,7 @@ export default function CRM() {
                                   onClick={e => e.stopPropagation()}
                                   title="Open YouTube channel"
                                   style={{
-                                    fontSize: 10.5, color: 'var(--text-3)', textDecoration: 'none',
+                                    fontSize: 12, color: 'var(--text-3)', textDecoration: 'none',
                                     whiteSpace: 'nowrap',
                                   }}
                                   onMouseEnter={e => { e.currentTarget.style.color = 'var(--text)'; }}
@@ -339,7 +339,7 @@ export default function CRM() {
               zIndex: 50,
             }}
           >
-            <span style={{ fontSize: 13, color: 'var(--text)', fontWeight: 600, whiteSpace: 'nowrap' }}>
+            <span style={{ fontSize: 14, color: 'var(--text)', fontWeight: 600, whiteSpace: 'nowrap' }}>
               {checkedLeads.size} lead{checkedLeads.size !== 1 ? 's' : ''} selected
             </span>
             <button
@@ -377,7 +377,7 @@ export default function CRM() {
               style={{ maxWidth: 400, padding: 28 }}
             >
               <h2 style={{ fontFamily: 'var(--f-heading)', fontSize: 20, fontWeight: 600, letterSpacing: '-0.04em', color: 'var(--text)', margin: '0 0 12px' }}>Add to Pipeline</h2>
-              <p style={{ fontSize: 13, color: 'var(--text-3)', margin: '0 0 20px' }}>Find a lead in your leads database and add them to the CRM pipeline.</p>
+              <p style={{ fontSize: 14, color: 'var(--text-3)', margin: '0 0 20px' }}>Find a lead in your leads database and add them to the CRM pipeline.</p>
               <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
                 <button className="btn btn--ghost" onClick={() => setShowAddModal(false)}>Cancel</button>
                 <button className="btn" onClick={() => { setShowAddModal(false); navigate('/leads'); }}>Browse Leads →</button>
@@ -427,21 +427,21 @@ export default function CRM() {
               {selected.thumbnail_url ? (
                 <img src={selected.thumbnail_url} alt="" style={{ width: 44, height: 44, minWidth: 44, borderRadius: '50%', objectFit: 'cover' }} />
               ) : (
-                <span className="ava" style={{ fontSize: 14, width: 44, height: 44, minWidth: 44, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-3)', color: 'var(--on-accent)' }}>
+                <span className="ava" style={{ fontSize: 15, width: 44, height: 44, minWidth: 44, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-3)', color: 'var(--on-accent)' }}>
                   {(selected.channel_name || '?')[0].toUpperCase()}
                 </span>
               )}
               <div>
                 <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: '-0.01em' }}>{selected.channel_name}</div>
-                <div className="mono muted" style={{ fontSize: 11.5 }}>
+                <div className="mono muted" style={{ fontSize: 12.5 }}>
                   {selected.channel_handle || ''} · {formatNumber(selected.subscriber_count ?? 0)}
                 </div>
                 <div className="row" style={{ gap: 10, marginTop: 6 }}>
-                  <span style={{ fontSize: 11, color: 'var(--text-3)' }}>
+                  <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
                     {selected.niche || 'General'}
                   </span>
                   {selected.email && (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text-2)' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--text-2)' }}>
                       <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--ok)', display: 'inline-block' }} />
                       email found
                     </span>
@@ -456,7 +456,7 @@ export default function CRM() {
                 className="input"
                 value={selected.crm_stage || selected.stage || 'new_lead'}
                 onChange={e => handleMoveStage(selected.id, e.target.value)}
-                style={{ fontSize: 12 }}
+                style={{ fontSize: 13 }}
               >
                 {STAGES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
               </select>
@@ -480,9 +480,9 @@ export default function CRM() {
               >
                 {detailTab === 'Timeline' && (
                   <>
-                    <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>Timeline</div>
+                    <div className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>Timeline</div>
                     {leadHistory.length === 0 ? (
-                      <div className="muted" style={{ fontSize: 12 }}>Nothing yet — activity shows up as soon as you start sending.</div>
+                      <div className="muted" style={{ fontSize: 13 }}>Nothing yet — activity shows up as soon as you start sending.</div>
                     ) : leadHistory.map((e, i) => (
                       <motion.div
                         key={i}
@@ -496,8 +496,8 @@ export default function CRM() {
                           width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
                           background: e.type === 'reply' ? 'var(--ok)' : e.type === 'open' ? 'var(--lime)' : 'var(--text-4)',
                         }} />
-                        <div style={{ flex: 1, fontSize: 12.5 }}>{e.description || e.event || '—'}</div>
-                        <span className="mono muted" style={{ fontSize: 10.5 }}>{formatDate(e.created_at || e.timestamp)}</span>
+                        <div style={{ flex: 1, fontSize: 13 }}>{e.description || e.event || '—'}</div>
+                        <span className="mono muted" style={{ fontSize: 12 }}>{formatDate(e.created_at || e.timestamp)}</span>
                       </motion.div>
                     ))}
                   </>
@@ -507,16 +507,16 @@ export default function CRM() {
                   <>
                     {leadPitch ? (
                       <>
-                        <div style={{ fontSize: 11, color: 'var(--lime)', fontFamily: 'var(--f-mono)', marginBottom: 8 }}>
+                        <div style={{ fontSize: 12, color: 'var(--lime)', fontFamily: 'var(--f-mono)', marginBottom: 8 }}>
                           Subject: {leadPitch.email_subject || '—'}
                         </div>
-                        <pre style={{ fontSize: 11, color: 'var(--text-2)', whiteSpace: 'pre-wrap', fontFamily: 'var(--f-mono)', lineHeight: 1.6, background: 'var(--bg-2)', borderRadius: 'var(--r-sm)', padding: '10px 12px', border: '1px solid var(--line)', maxHeight: 400, overflowY: 'auto' }}>
+                        <pre style={{ fontSize: 12, color: 'var(--text-2)', whiteSpace: 'pre-wrap', fontFamily: 'var(--f-mono)', lineHeight: 1.6, background: 'var(--bg-2)', borderRadius: 'var(--r-sm)', padding: '10px 12px', border: '1px solid var(--line)', maxHeight: 400, overflowY: 'auto' }}>
                           {leadPitch.cold_email || '—'}
                         </pre>
                       </>
                     ) : (
                       <div style={{ textAlign: 'center', padding: '24px 0' }}>
-                        <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>No pitch written yet.</div>
+                        <div className="muted" style={{ fontSize: 13, marginBottom: 10 }}>No pitch written yet.</div>
                         <button className="btn btn--ghost btn--sm" onClick={() => navigate(`/pitch?lead=${selected.id}`)}>
                           Write pitch
                         </button>
@@ -533,7 +533,7 @@ export default function CRM() {
                       placeholder="Add a note..."
                       value={newNote}
                       onChange={e => setNewNote(e.target.value)}
-                      style={{ fontFamily: 'var(--f-sans)', fontSize: 12, resize: 'vertical', width: '100%', boxSizing: 'border-box', marginBottom: 8 }}
+                      style={{ fontFamily: 'var(--f-sans)', fontSize: 13, resize: 'vertical', width: '100%', boxSizing: 'border-box', marginBottom: 8 }}
                     />
                     <button className="btn btn--ghost btn--sm" onClick={handleAddNote}>
                       Save note

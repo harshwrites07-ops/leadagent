@@ -22,8 +22,8 @@ function BentoCard({ title, description, children, span }) {
       }}
     >
       <div>
-        <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>{title}</h3>
-        <p style={{ fontSize: 12, color: 'var(--text-3)', lineHeight: 1.5, marginTop: 4, maxWidth: '92%' }}>
+        <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)', margin: 0 }}>{title}</h3>
+        <p style={{ fontSize: 13, color: 'var(--text-3)', lineHeight: 1.5, marginTop: 4, maxWidth: '92%' }}>
           {description}
         </p>
       </div>
@@ -85,7 +85,7 @@ function SignalMonitorCard() {
       <div style={{ display: 'flex', gap: 10 }}>
         {[{ label: 'Channels scanned', value: '1.2k/hr' }, { label: 'Vacancy hits', value: '14/hr' }].map(s => (
           <div key={s.label} style={{ flex: 1, border: '1px solid var(--line)', borderRadius: 'var(--r-sm)', padding: 10 }}>
-            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 9, color: 'var(--text-4)', textTransform: 'uppercase' }}>{s.label}</div>
+            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-4)', textTransform: 'uppercase' }}>{s.label}</div>
             <div style={{ fontFamily: 'var(--f-mono)', fontSize: 16, color: 'var(--text)', marginTop: 4 }}>{s.value}</div>
           </div>
         ))}
@@ -104,7 +104,7 @@ function SignalMonitorCard() {
       </div>
       <div style={{ display: 'flex', gap: 6 }}>
         {days.map(d => (
-          <span key={d} style={{ flex: 1, textAlign: 'center', fontFamily: 'var(--f-mono)', fontSize: 8, color: 'var(--text-4)' }}>{d}</span>
+          <span key={d} style={{ flex: 1, textAlign: 'center', fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-4)' }}>{d}</span>
         ))}
       </div>
     </div>
@@ -124,7 +124,7 @@ function ActivityFeedCard() {
   return (
     <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 8, height: '100%', justifyContent: 'center' }}>
       {logs.map((l) => (
-        <div key={l.stage} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
+        <div key={l.stage} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
           <span className={l.status === 'running' ? 'dot dot--lime dot--pulse' : 'dot'} style={{ width: 6, height: 6, background: COLORS[l.status], borderRadius: '50%', flexShrink: 0 }} />
           <span style={{ fontFamily: 'var(--f-mono)', color: 'var(--text)', width: 96, flexShrink: 0 }}>{l.stage}</span>
           <span style={{ color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.action}</span>
@@ -151,7 +151,7 @@ function LeadSourcesCard() {
             <div style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--surface-3)', color: s.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <Icon size={14} />
             </div>
-            <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--text-2)', width: 78, flexShrink: 0 }}>{s.name}</span>
+            <span style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-2)', width: 78, flexShrink: 0 }}>{s.name}</span>
             <div style={{ flex: 1, height: 6, borderRadius: 3, background: 'var(--surface-3)', overflow: 'hidden' }}>
               <motion.div
                 style={{ height: '100%', background: s.color, borderRadius: 3 }}
@@ -160,7 +160,7 @@ function LeadSourcesCard() {
                 transition={{ duration: 1, ease: 'easeOut' }}
               />
             </div>
-            <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10.5, color: 'var(--text-3)', width: 32, textAlign: 'right' }}>{s.hits}</span>
+            <span style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-3)', width: 32, textAlign: 'right' }}>{s.hits}</span>
           </div>
         );
       })}
@@ -186,9 +186,9 @@ function DetectorsCard() {
               <div style={{ width: 26, height: 26, borderRadius: 7, background: t.color, color: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Icon size={13} />
               </div>
-              <span style={{ fontFamily: 'var(--f-mono)', fontSize: 13, color: 'var(--text)' }}>{t.calls}</span>
+              <span style={{ fontFamily: 'var(--f-mono)', fontSize: 14, color: 'var(--text)' }}>{t.calls}</span>
             </div>
-            <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10.5, color: 'var(--text-3)', marginTop: 8 }}>{t.name}</span>
+            <span style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-3)', marginTop: 8 }}>{t.name}</span>
           </div>
         );
       })}

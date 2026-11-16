@@ -50,8 +50,8 @@ function FeedItem({ item }) {
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, minHeight: 18 }}>
       <div style={{ width: 5, height: 5, borderRadius: '50%', background: DOT_COLORS[item.type] || 'var(--text-4)', marginTop: 5, flexShrink: 0 }} />
-      <span style={{ flex: 1, fontSize: 11, fontFamily: 'var(--font-mono)', color, lineHeight: 1.5, wordBreak: 'break-all' }}>{item.message}</span>
-      <span style={{ fontSize: 9, color: 'var(--text-muted)', flexShrink: 0, fontFamily: 'var(--font-mono)' }}>{time}</span>
+      <span style={{ flex: 1, fontSize: 12, fontFamily: 'var(--font-mono)', color, lineHeight: 1.5, wordBreak: 'break-all' }}>{item.message}</span>
+      <span style={{ fontSize: 12, color: 'var(--text-muted)', flexShrink: 0, fontFamily: 'var(--font-mono)' }}>{time}</span>
     </div>
   );
 }
@@ -211,14 +211,14 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
             </div>
             <div>
               <h2 style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: 18, color: 'var(--text-primary)', margin: 0 }}>Power Email Mode</h2>
-              <p style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--accent-primary)', letterSpacing: '0.18em', marginTop: 2 }}>AI-POWERED BULK OUTREACH</p>
+              <p style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--accent-primary)', letterSpacing: '0.18em', marginTop: 2 }}>AI-POWERED BULK OUTREACH</p>
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {phase === 'running' && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(var(--ok-rgb),0.1)', border: '1px solid rgba(var(--ok-rgb),0.3)', borderRadius: 6, padding: '4px 10px' }}>
                 <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--ok)', animation: 'pulse 1.5s infinite' }} />
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--ok)', letterSpacing: '0.1em' }}>RUNNING IN BACKGROUND</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ok)', letterSpacing: '0.1em' }}>RUNNING IN BACKGROUND</span>
               </div>
             )}
             <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }}>
@@ -231,7 +231,7 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
         {phase === 'confirm' && (
           <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
           <div style={{ flex: 1, overflowY: 'auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.75, margin: 0 }}>
+            <p style={{ fontSize: 15, color: 'var(--text-secondary)', lineHeight: 1.75, margin: 0 }}>
               Generate hyper-personalized pitches with <strong style={{ color: 'var(--lime)' }}>Marcus AI</strong> and send across your connected inboxes. <strong style={{ color: 'var(--text-primary)' }}>Runs in background — close this window anytime.</strong>
             </p>
 
@@ -241,9 +241,9 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: warmup.color, boxShadow: `0 0 6px ${warmup.color}` }} />
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: warmup.color, letterSpacing: '0.12em' }}>{warmup.label.toUpperCase()}</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: warmup.color, letterSpacing: '0.12em' }}>{warmup.label.toUpperCase()}</span>
                   </div>
-                  <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>
+                  <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>
                     Safe max: <strong style={{ color: 'var(--text-primary)' }}>{warmup.perInbox * (inboxes.length || INBOX_COUNT)}/day</strong>
                     <span style={{ color: 'var(--text-muted)', margin: '0 6px' }}>·</span>
                     {warmup.desc}
@@ -256,33 +256,33 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
             {/* Count selector */}
             {!leadIds && (
               <div style={{ background: 'var(--bg-card)', border: '1px solid rgba(var(--lime-rgb),0.25)', borderRadius: 10, padding: '16px 18px' }}>
-                <p style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.14em', marginBottom: 10 }}>HOW MANY EMAILS TO SEND?</p>
+                <p style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', letterSpacing: '0.14em', marginBottom: 10 }}>HOW MANY EMAILS TO SEND?</p>
                 <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
                   {[10, 25, 50, 100, 200, 500].map(n => (
-                    <button key={n} onClick={() => setCount(n)} style={{ flex: 1, padding: '7px 0', borderRadius: 7, fontSize: 13, fontWeight: 700, cursor: 'pointer', background: count === n ? 'var(--lime)' : 'var(--bg-elevated)', border: count === n ? 'none' : '1px solid var(--border-default)', color: count === n ? 'var(--on-accent)' : 'var(--text-secondary)', boxShadow: count === n ? '0 0 14px rgba(var(--lime-rgb),0.3)' : 'none', transition: 'all 0.15s' }}>
+                    <button key={n} onClick={() => setCount(n)} style={{ flex: 1, padding: '7px 0', borderRadius: 7, fontSize: 14, fontWeight: 700, cursor: 'pointer', background: count === n ? 'var(--lime)' : 'var(--bg-elevated)', border: count === n ? 'none' : '1px solid var(--border-default)', color: count === n ? 'var(--on-accent)' : 'var(--text-secondary)', boxShadow: count === n ? '0 0 14px rgba(var(--lime-rgb),0.3)' : 'none', transition: 'all 0.15s' }}>
                       {n}
                     </button>
                   ))}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Custom:</span>
-                  <input type="number" min={1} max={600} value={count} onChange={e => setCount(Math.min(600, Math.max(1, parseInt(e.target.value) || 1)))} style={{ flex: 1, background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 7, padding: '7px 12px', color: 'var(--text-primary)', fontSize: 14, fontWeight: 700, outline: 'none', textAlign: 'center' }} />
-                  <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>max 600</span>
+                  <span style={{ fontSize: 13, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Custom:</span>
+                  <input type="number" min={1} max={600} value={count} onChange={e => setCount(Math.min(600, Math.max(1, parseInt(e.target.value) || 1)))} style={{ flex: 1, background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 7, padding: '7px 12px', color: 'var(--text-primary)', fontSize: 15, fontWeight: 700, outline: 'none', textAlign: 'center' }} />
+                  <span style={{ fontSize: 13, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>max 600</span>
                 </div>
               </div>
             )}
 
             {/* Quick delay selector */}
             <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 10, padding: '14px 16px' }}>
-              <p style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.12em', marginBottom: 10 }}>EMAIL DELAY TIMER</p>
+              <p style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', letterSpacing: '0.12em', marginBottom: 10 }}>EMAIL DELAY TIMER</p>
               <div style={{ display: 'flex', gap: 8 }}>
                 {QUICK_DELAYS.map(({ label, secs }) => (
-                  <button key={secs} onClick={() => setGapSeconds(secs)} style={{ flex: 1, padding: '8px 0', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer', background: gapSeconds === secs ? 'var(--lime)' : 'var(--bg-elevated)', border: gapSeconds === secs ? 'none' : '1px solid var(--border-default)', color: gapSeconds === secs ? 'var(--on-accent)' : 'var(--text-secondary)', boxShadow: gapSeconds === secs ? '0 0 10px rgba(var(--lime-rgb),0.25)' : 'none' }}>
+                  <button key={secs} onClick={() => setGapSeconds(secs)} style={{ flex: 1, padding: '8px 0', borderRadius: 7, fontSize: 13, fontWeight: 700, cursor: 'pointer', background: gapSeconds === secs ? 'var(--lime)' : 'var(--bg-elevated)', border: gapSeconds === secs ? 'none' : '1px solid var(--border-default)', color: gapSeconds === secs ? 'var(--on-accent)' : 'var(--text-secondary)', boxShadow: gapSeconds === secs ? '0 0 10px rgba(var(--lime-rgb),0.25)' : 'none' }}>
                     {label}
                   </button>
                 ))}
               </div>
-              <p style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', marginTop: 8 }}>
+              <p style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
                 {gapSeconds === 0 ? 'No delay — sends back to back' : `Wait ${gapSeconds < 60 ? `${gapSeconds}s` : `${gapSeconds / 60}min`} between each email`}
               </p>
             </div>
@@ -290,25 +290,25 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
             {/* Delivery Controls */}
             <div style={{ border: '1px solid rgba(var(--lime-rgb),0.2)', borderRadius: 10, overflow: 'hidden' }}>
               <button onClick={() => setShowAdvanced(v => !v)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 18px', background: 'rgba(var(--lime-rgb),0.05)', border: 'none', cursor: 'pointer' }}>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.14em', color: 'var(--accent-primary)' }}>DELIVERY CONTROLS</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.14em', color: 'var(--accent-primary)' }}>DELIVERY CONTROLS</span>
                 {showAdvanced ? <ChevronUp size={14} color="var(--text-muted)" /> : <ChevronDown size={14} color="var(--text-muted)" />}
               </button>
               {showAdvanced && (
                 <div style={{ padding: '16px 18px', background: 'var(--bg-card)', display: 'flex', flexDirection: 'column', gap: 16 }}>
                   <div>
-                    <p style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.12em', marginBottom: 8 }}>MAX EMAILS PER INBOX (0 = UNLIMITED)</p>
+                    <p style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', letterSpacing: '0.12em', marginBottom: 8 }}>MAX EMAILS PER INBOX (0 = UNLIMITED)</p>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <input type="number" min={0} max={150} value={perAccountLimit} onChange={e => setPerAccountLimit(Math.max(0, parseInt(e.target.value) || 0))} style={{ width: 80, background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 7, padding: '8px 12px', color: 'var(--text-primary)', fontSize: 14, fontWeight: 700, outline: 'none', textAlign: 'center' }} />
+                      <input type="number" min={0} max={150} value={perAccountLimit} onChange={e => setPerAccountLimit(Math.max(0, parseInt(e.target.value) || 0))} style={{ width: 80, background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 7, padding: '8px 12px', color: 'var(--text-primary)', fontSize: 15, fontWeight: 700, outline: 'none', textAlign: 'center' }} />
                       {perAccountLimit > 0
-                        ? <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{activeInboxCount} × {perAccountLimit} = <strong style={{ color: 'var(--accent-primary)' }}>{activeInboxCount * perAccountLimit} total max</strong></span>
-                        : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No per-inbox limit</span>}
+                        ? <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{activeInboxCount} × {perAccountLimit} = <strong style={{ color: 'var(--accent-primary)' }}>{activeInboxCount * perAccountLimit} total max</strong></span>
+                        : <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>No per-inbox limit</span>}
                     </div>
                   </div>
                   <div>
-                    <p style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.12em', marginBottom: 8 }}>GAP BETWEEN EMAILS</p>
+                    <p style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', letterSpacing: '0.12em', marginBottom: 8 }}>GAP BETWEEN EMAILS</p>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                       {GAP_PRESETS.map(({ label, secs }) => (
-                        <button key={secs} onClick={() => setGapSeconds(secs)} style={{ padding: '6px 12px', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer', background: gapSeconds === secs ? 'var(--lime)' : 'var(--bg-elevated)', border: gapSeconds === secs ? 'none' : '1px solid var(--border-default)', color: gapSeconds === secs ? 'var(--on-accent)' : 'var(--text-secondary)', boxShadow: gapSeconds === secs ? '0 0 10px rgba(var(--lime-rgb),0.25)' : 'none' }}>
+                        <button key={secs} onClick={() => setGapSeconds(secs)} style={{ padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer', background: gapSeconds === secs ? 'var(--lime)' : 'var(--bg-elevated)', border: gapSeconds === secs ? 'none' : '1px solid var(--border-default)', color: gapSeconds === secs ? 'var(--on-accent)' : 'var(--text-secondary)', boxShadow: gapSeconds === secs ? '0 0 10px rgba(var(--lime-rgb),0.25)' : 'none' }}>
                           {label}
                         </button>
                       ))}
@@ -316,7 +316,7 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
                   </div>
                   {inboxes.length > 0 && (
                     <div>
-                      <p style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.12em', marginBottom: 8 }}>SENDING INBOXES (UNCHECK TO SKIP)</p>
+                      <p style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', letterSpacing: '0.12em', marginBottom: 8 }}>SENDING INBOXES (UNCHECK TO SKIP)</p>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                         {inboxes.map((inbox, idx) => {
                           const skipped = skipInboxes.includes(inbox.email);
@@ -327,11 +327,11 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
                           return (
                             <div key={inbox.email} onClick={toggle} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 7, cursor: 'pointer', background: skipped ? 'var(--app-danger-soft)' : 'var(--bg-elevated)', border: `1px solid ${skipped ? 'var(--app-danger-border)' : 'var(--border-default)'}`, opacity: skipped ? 0.6 : 1, transition: 'all 0.15s' }}>
                               <div style={{ width: 16, height: 16, borderRadius: 4, border: `2px solid ${skipped ? 'var(--text-4)' : 'var(--accent-primary)'}`, background: skipped ? 'transparent' : 'var(--accent-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                {!skipped && <span style={{ color: 'var(--on-accent)', fontSize: 10, lineHeight: 1 }}>✓</span>}
+                                {!skipped && <span style={{ color: 'var(--on-accent)', fontSize: 12, lineHeight: 1 }}>✓</span>}
                               </div>
-                              <span style={{ flex: 1, fontSize: 12, color: skipped ? 'var(--text-muted)' : 'var(--text-primary)', fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inbox.email}</span>
+                              <span style={{ flex: 1, fontSize: 13, color: skipped ? 'var(--text-muted)' : 'var(--text-primary)', fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inbox.email}</span>
                               {inbox.sentCount > 0 && (
-                                <span style={{ fontSize: 10, color: riskColor, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                                <span style={{ fontSize: 12, color: riskColor, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
                                   {inbox.bounceRate}% bounce
                                   {inbox.bounceRate >= 8 && <span style={{ marginLeft: 4 }}>⚠</span>}
                                 </span>
@@ -354,8 +354,8 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
                 ['Est. time', `~${estMins} min${estMins !== 1 ? 's' : ''}`],
               ].map(([label, val]) => (
                 <div key={label} style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '12px 16px' }}>
-                  <p style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: 4 }}>{label.toUpperCase()}</p>
-                  <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>{val}</p>
+                  <p style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: 4 }}>{label.toUpperCase()}</p>
+                  <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>{val}</p>
                 </div>
               ))}
             </div>
@@ -363,10 +363,10 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
           </div>
           {/* Sticky send button */}
           <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-surface)', display: 'flex', gap: 10, flexShrink: 0 }}>
-            <button onClick={onClose} style={{ flex: 1, padding: '11px', borderRadius: 8, cursor: 'pointer', background: 'transparent', border: '1px solid var(--border-default)', color: 'var(--text-secondary)', fontSize: 13 }}>
+            <button onClick={onClose} style={{ flex: 1, padding: '11px', borderRadius: 8, cursor: 'pointer', background: 'transparent', border: '1px solid var(--border-default)', color: 'var(--text-secondary)', fontSize: 14 }}>
               Cancel
             </button>
-            <button onClick={startPowerSend} style={{ flex: 2, padding: '11px', borderRadius: 8, cursor: 'pointer', background: 'var(--lime)', color: 'var(--on-accent)', border: 'none', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 0 24px rgba(var(--lime-rgb),0.3)' }}>
+            <button onClick={startPowerSend} style={{ flex: 2, padding: '11px', borderRadius: 8, cursor: 'pointer', background: 'var(--lime)', color: 'var(--on-accent)', border: 'none', fontSize: 15, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 0 24px rgba(var(--lime-rgb),0.3)' }}>
               <Zap size={16} /> Fire {effectiveCount} Emails
             </button>
           </div>
@@ -379,14 +379,14 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
             <div style={{ width: 48, height: 48, borderRadius: 12, background: 'rgba(255,165,0,0.15)', border: '1px solid rgba(255,165,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>⚡</div>
             <div>
               <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 6px' }}>Job Interrupted</p>
-              <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 }}>
+              <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 }}>
                 The server restarted while the job was running.<br />
                 <strong style={{ color: 'var(--ok)' }}>{stats.sent} emails were already sent</strong> — they won't be re-sent.
               </p>
             </div>
             <div style={{ display: 'flex', gap: 10, width: '100%' }}>
-              <button onClick={dismissInterrupted} style={{ flex: 1, padding: '12px', borderRadius: 8, cursor: 'pointer', background: 'transparent', border: '1px solid var(--border-default)', color: 'var(--text-secondary)', fontSize: 13 }}>Close</button>
-              <button onClick={resumeJob} style={{ flex: 2, padding: '12px', borderRadius: 8, cursor: 'pointer', background: 'var(--lime)', color: 'var(--on-accent)', border: 'none', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 0 20px rgba(var(--lime-rgb),0.25)' }}>
+              <button onClick={dismissInterrupted} style={{ flex: 1, padding: '12px', borderRadius: 8, cursor: 'pointer', background: 'transparent', border: '1px solid var(--border-default)', color: 'var(--text-secondary)', fontSize: 14 }}>Close</button>
+              <button onClick={resumeJob} style={{ flex: 2, padding: '12px', borderRadius: 8, cursor: 'pointer', background: 'var(--lime)', color: 'var(--on-accent)', border: 'none', fontSize: 15, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 0 20px rgba(var(--lime-rgb),0.25)' }}>
                 <Zap size={16} /> Resume Remaining
               </button>
             </div>
@@ -407,7 +407,7 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
               ].map(({ label, val, color }) => (
                 <div key={label} style={{ background: 'var(--bg-card)', border: `1px solid ${color}30`, borderRadius: 8, padding: '14px 0', textAlign: 'center' }}>
                   <p style={{ fontFamily: 'var(--font-mono)', fontSize: 30, fontWeight: 700, color, lineHeight: 1, margin: 0 }}>{val}</p>
-                  <p style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: 'var(--text-muted)', letterSpacing: '0.14em', marginTop: 6 }}>{label}</p>
+                  <p style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', letterSpacing: '0.14em', marginTop: 6 }}>{label}</p>
                 </div>
               ))}
             </div>
@@ -417,7 +417,7 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
               <div style={{ height: '100%', background: 'var(--lime)', borderRadius: 99, width: `${pct}%`, transition: 'width 0.6s ease' }} />
             </div>
             {stats.total > 0 && (
-              <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', textAlign: 'center', marginTop: -8 }}>
+              <p style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', marginTop: -8 }}>
                 {stats.sent + stats.failed} / {stats.total} processed ({pct}%)
               </p>
             )}
@@ -425,7 +425,7 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
             {/* Live feed */}
             <div ref={feedRef} style={{ height: 200, overflowY: 'auto', background: 'var(--bg-card)', borderRadius: 8, border: '1px solid var(--border-subtle)', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 3 }}>
               {feed.length === 0 && phase === 'running' && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)', fontSize: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)', fontSize: 13 }}>
                   <Loader size={12} style={{ animation: 'spin 1s linear infinite' }} /> Starting job...
                 </div>
               )}
@@ -434,17 +434,17 @@ export default function PowerSendOverlay({ onClose, leadIds = null, maxLeads = 1
 
             {phase === 'running' && (
               <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={onClose} style={{ flex: 1, padding: '12px', borderRadius: 8, cursor: 'pointer', background: 'rgba(var(--ok-rgb),0.1)', border: '1px solid rgba(var(--ok-rgb),0.3)', color: 'var(--ok)', fontSize: 13, fontWeight: 600 }}>
+                <button onClick={onClose} style={{ flex: 1, padding: '12px', borderRadius: 8, cursor: 'pointer', background: 'rgba(var(--ok-rgb),0.1)', border: '1px solid rgba(var(--ok-rgb),0.3)', color: 'var(--ok)', fontSize: 14, fontWeight: 600 }}>
                   Close Window (job keeps running)
                 </button>
-                <button onClick={stopJob} style={{ flex: 1, padding: '12px', borderRadius: 8, cursor: 'pointer', background: 'var(--app-danger-soft)', border: '1px solid var(--app-danger-border)', color: 'var(--bad)', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                <button onClick={stopJob} style={{ flex: 1, padding: '12px', borderRadius: 8, cursor: 'pointer', background: 'var(--app-danger-soft)', border: '1px solid var(--app-danger-border)', color: 'var(--bad)', fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                   <Square size={13} /> Stop Job
                 </button>
               </div>
             )}
 
             {phase === 'done' && (
-              <button onClick={onClose} style={{ padding: '12px', borderRadius: 8, cursor: 'pointer', background: 'var(--lime)', color: 'var(--on-accent)', border: 'none', fontSize: 14, fontWeight: 700, boxShadow: '0 0 20px rgba(var(--lime-rgb),0.25)' }}>
+              <button onClick={onClose} style={{ padding: '12px', borderRadius: 8, cursor: 'pointer', background: 'var(--lime)', color: 'var(--on-accent)', border: 'none', fontSize: 15, fontWeight: 700, boxShadow: '0 0 20px rgba(var(--lime-rgb),0.25)' }}>
                 Done — Close
               </button>
             )}

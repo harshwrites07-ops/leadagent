@@ -19,7 +19,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             color: 'var(--text)',
             border: '1px solid var(--line-2)',
             borderRadius: '10px',
-            fontSize: '13px',
+            fontSize: '14px',
             fontFamily: 'var(--f-sans)',
             boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
             padding: '10px 14px',

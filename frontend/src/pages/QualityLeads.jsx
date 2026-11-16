@@ -51,7 +51,7 @@ function TierBar({ hot_pct, warm_pct, cold_pct }) {
           style={{ background: 'var(--text-3)' }}
         />
       </div>
-      <span className="t-mono t-lime" style={{ fontSize: 11, minWidth: 40 }}>HOT {hot_pct}%</span>
+      <span className="t-mono t-lime" style={{ fontSize: 12, minWidth: 40 }}>HOT {hot_pct}%</span>
     </div>
   );
 }
@@ -67,21 +67,21 @@ function ValidationBucket({ label, data }) {
   return (
     <div className="card" style={{ padding: '14px 18px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <span className="t-mono" style={{ fontSize: 11, color: 'var(--text-2)', textTransform: 'uppercase' }}>{label}</span>
-        <span className="t-mono" style={{ fontSize: 10, color: statusColor, textTransform: 'uppercase' }}>{data.status?.replace(/_/g, ' ')}</span>
+        <span className="t-mono" style={{ fontSize: 12, color: 'var(--text-2)', textTransform: 'uppercase' }}>{label}</span>
+        <span className="t-mono" style={{ fontSize: 12, color: statusColor, textTransform: 'uppercase' }}>{data.status?.replace(/_/g, ' ')}</span>
       </div>
       <div style={{ display: 'flex', gap: 16 }}>
         <div>
           <div className="t-mono" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>{data.reply_rate != null ? `${data.reply_rate}%` : '—'}</div>
-          <div className="t-mono t-muted" style={{ fontSize: 10 }}>reply rate</div>
+          <div className="t-mono t-muted" style={{ fontSize: 12 }}>reply rate</div>
         </div>
         <div>
           <div className="t-mono" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-3)' }}>{data.target}%</div>
-          <div className="t-mono t-muted" style={{ fontSize: 10 }}>target</div>
+          <div className="t-mono t-muted" style={{ fontSize: 12 }}>target</div>
         </div>
         <div>
           <div className="t-mono" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-2)' }}>{fmt(data.outreached)}</div>
-          <div className="t-mono t-muted" style={{ fontSize: 10 }}>outreached</div>
+          <div className="t-mono t-muted" style={{ fontSize: 12 }}>outreached</div>
         </div>
       </div>
     </div>
@@ -136,11 +136,11 @@ function SignalRow({ label, val }) {
   const pctVal = val != null ? Math.round(val * 100) : null;
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
-      <span className="t-mono t-muted" style={{ fontSize: 10, width: 140 }}>{label}</span>
+      <span className="t-mono t-muted" style={{ fontSize: 12, width: 140 }}>{label}</span>
       <div className="bar" style={{ flex: 1 }}>
         {pctVal != null && <motion.span initial={{ width: 0 }} animate={{ width: `${pctVal}%` }} transition={{ duration: 0.6, ease: [0.16,1,0.3,1] }} />}
       </div>
-      <span className="t-mono t-lime" style={{ fontSize: 10, width: 30, textAlign: 'right' }}>{pctVal != null ? `${pctVal}` : '—'}</span>
+      <span className="t-mono t-lime" style={{ fontSize: 12, width: 30, textAlign: 'right' }}>{pctVal != null ? `${pctVal}` : '—'}</span>
     </div>
   );
 }
@@ -319,7 +319,7 @@ export default function QualityLeads() {
           {loopStatus && (
             <div className="row" style={{ gap: 6 }}>
               <span className={`dot ${loopStatus.running ? 'dot--warn dot--pulse' : loopStatus.loop_active ? 'dot--ok dot--pulse' : 'dot--neutral'}`} />
-              <span className="t-mono t-muted" style={{ fontSize: 11 }}>
+              <span className="t-mono t-muted" style={{ fontSize: 12 }}>
                 {loopStatus.running ? 'RUNNING' : loopStatus.loop_active ? `ACTIVE · next ${nextRun}` : 'STOPPED'}
               </span>
             </div>
@@ -339,7 +339,7 @@ export default function QualityLeads() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             className="card"
-            style={{ borderColor: 'var(--lime)', marginBottom: 16, padding: '10px 16px', color: 'var(--lime)', fontFamily: 'var(--f-mono)', fontSize: 12 }}
+            style={{ borderColor: 'var(--lime)', marginBottom: 16, padding: '10px 16px', color: 'var(--lime)', fontFamily: 'var(--f-mono)', fontSize: 13 }}
           >
             {msg}
           </motion.div>
@@ -381,20 +381,20 @@ export default function QualityLeads() {
                   className="card"
                   style={{ padding: 20 }}
                 >
-                  <div className="t-mono t-muted" style={{ fontSize: 11, marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                  <div className="t-mono t-muted" style={{ fontSize: 12, marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
                     Proxy Score Distribution — {fmt(dist.total_scored)} scored of {fmt(dist.total_master)} total
                   </div>
                   <TierBar hot_pct={dist.hot_pct} warm_pct={dist.warm_pct} cold_pct={dist.cold_pct} />
-                  <div className="t-mono" style={{ display: 'flex', gap: 24, marginTop: 12, fontSize: 11 }}>
+                  <div className="t-mono" style={{ display: 'flex', gap: 24, marginTop: 12, fontSize: 12 }}>
                     <span className="t-lime">HOT ≥0.75 {fmt(dist.hot)} ({pct(dist.hot_pct)})</span>
                     <span style={{ color: 'var(--warn)' }}>WARM 0.50–0.75 {fmt(dist.warm)} ({pct(dist.warm_pct)})</span>
                     <span className="t-muted">COLD &lt;0.50 {fmt(dist.cold)} ({pct(dist.cold_pct)})</span>
                   </div>
-                  <div className="t-mono t-muted" style={{ marginTop: 10, fontSize: 11 }}>
+                  <div className="t-mono t-muted" style={{ marginTop: 10, fontSize: 12 }}>
                     HOT + WARM = {fmt((dist.hot || 0) + (dist.warm || 0))} quality leads ({pct(dist.quality_pct)}) · Scored by niche tier + subscriber count
                   </div>
                   {(dist.quality_pct || 0) >= 40 && (
-                    <div className="t-mono t-lime" style={{ marginTop: 6, fontSize: 11 }}>
+                    <div className="t-mono t-lime" style={{ marginTop: 6, fontSize: 12 }}>
                       ✓ {pct(dist.quality_pct)} quality rate — exceeds 40% target
                     </div>
                   )}
@@ -411,10 +411,10 @@ export default function QualityLeads() {
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
                   <div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>
                       Confirmed HOT Signal Sources
                     </div>
-                    <div style={{ fontSize: 11, color: 'var(--text-4)', fontFamily: 'var(--f-mono)', marginTop: 2 }}>
+                    <div style={{ fontSize: 12, color: 'var(--text-4)', fontFamily: 'var(--f-mono)', marginTop: 2 }}>
                       Creators who LITERALLY said they need help
                     </div>
                   </div>
@@ -507,10 +507,10 @@ export default function QualityLeads() {
                       }}
                     >
                       <div style={{ fontSize: 20, marginBottom: 8 }}>{icon}</div>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: active ? 'var(--text)' : 'var(--text-3)', marginBottom: 4, lineHeight: 1.3 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: active ? 'var(--text)' : 'var(--text-3)', marginBottom: 4, lineHeight: 1.3 }}>
                         {label}
                       </div>
-                      <div style={{ fontSize: 10, color: 'var(--text-4)', marginBottom: 10, lineHeight: 1.5 }}>
+                      <div style={{ fontSize: 12, color: 'var(--text-4)', marginBottom: 10, lineHeight: 1.5 }}>
                         {description}
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -518,7 +518,7 @@ export default function QualityLeads() {
                           {value.toLocaleString()}
                         </span>
                         <span style={{
-                          fontSize: 9, fontWeight: 700, fontFamily: 'var(--f-mono)',
+                          fontSize: 12, fontWeight: 700, fontFamily: 'var(--f-mono)',
                           background: active ? color + '18' : 'transparent',
                           color: active ? color : 'var(--text-4)',
                           padding: '2px 6px', borderRadius: 4, letterSpacing: '0.3px',
@@ -539,10 +539,10 @@ export default function QualityLeads() {
                   className="card"
                   style={{ padding: 20 }}
                 >
-                  <div className="t-mono t-muted" style={{ fontSize: 11, marginBottom: 14, textTransform: 'uppercase', letterSpacing: '0.1em' }}>HOT Leads by Niche</div>
+                  <div className="t-mono t-muted" style={{ fontSize: 12, marginBottom: 14, textTransform: 'uppercase', letterSpacing: '0.1em' }}>HOT Leads by Niche</div>
                   <div className="grid g-2">
                     {stats.by_niche.slice(0, 10).map(n => (
-                      <div key={n.niche} className="t-mono" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                      <div key={n.niche} className="t-mono" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
                         <span className="t-muted" style={{ textTransform: 'capitalize' }}>{n.niche}</span>
                         <span className="t-lime" style={{ fontWeight: 700 }}>{fmt(n.count)}</span>
                       </div>
@@ -553,7 +553,7 @@ export default function QualityLeads() {
 
               {validation && (
                 <div>
-                  <div className="t-mono t-muted" style={{ fontSize: 11, marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Algorithm Validation (reply rate vs target)</div>
+                  <div className="t-mono t-muted" style={{ fontSize: 12, marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Algorithm Validation (reply rate vs target)</div>
                   <div className="grid g-3">
                     <ValidationBucket label="HOT (target 60%)"  data={validation.hot} />
                     <ValidationBucket label="WARM (target 30%)" data={validation.warm} />
@@ -570,7 +570,7 @@ export default function QualityLeads() {
                   className="card"
                   style={{ padding: 20 }}
                 >
-                  <div className="t-mono t-muted" style={{ fontSize: 11, marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Daily HOT Lead Growth (last 7 days)</div>
+                  <div className="t-mono t-muted" style={{ fontSize: 12, marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Daily HOT Lead Growth (last 7 days)</div>
                   <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', height: 60 }}>
                     {stats.daily_growth.map((d, i) => {
                       const max = Math.max(...stats.daily_growth.map(x => x.added), 1);
@@ -582,7 +582,7 @@ export default function QualityLeads() {
                             transition={{ delay: i * 0.05, duration: 0.5, ease: [0.16,1,0.3,1] }}
                             style={{ width: '100%', background: 'var(--lime)', borderRadius: '2px 2px 0 0', minHeight: 2 }}
                           />
-                          <span className="t-mono t-muted" style={{ fontSize: 9 }}>{d.date.slice(5)}</span>
+                          <span className="t-mono t-muted" style={{ fontSize: 12 }}>{d.date.slice(5)}</span>
                         </div>
                       );
                     })}
@@ -604,14 +604,14 @@ export default function QualityLeads() {
                     {t.toUpperCase()}
                   </button>
                 ))}
-                <span className="t-mono" style={{ fontSize: 12, color: 'var(--text-2)' }}>{fmt(leadsTotal)} leads</span>
+                <span className="t-mono" style={{ fontSize: 13, color: 'var(--text-2)' }}>{fmt(leadsTotal)} leads</span>
                 <select value={nicheFilter} onChange={e => { setNicheFilter(e.target.value); setLeadsPage(1); }}
-                  className="input" style={{ height: 28, padding: '0 8px', fontSize: 11, width: 'auto' }}>
+                  className="input" style={{ height: 28, padding: '0 8px', fontSize: 12, width: 'auto' }}>
                   <option value="">All niches</option>
                   {niches.map(n => <option key={n.niche} value={n.niche}>{n.niche} ({n.count})</option>)}
                 </select>
                 <div style={{ flex: 1 }} />
-                <span className="t-mono t-muted" style={{ fontSize: 11 }}>Page {leadsPage}</span>
+                <span className="t-mono t-muted" style={{ fontSize: 12 }}>Page {leadsPage}</span>
                 <button onClick={() => setLeadsPage(p => Math.max(1, p - 1))} disabled={leadsPage === 1} className="btn btn--ghost btn--sm">←</button>
                 <button onClick={() => setLeadsPage(p => p + 1)} className="btn btn--ghost btn--sm">→</button>
               </div>
@@ -660,7 +660,7 @@ export default function QualityLeads() {
                 >
                   {busy ? 'Scanning...' : 'Scan Reddit Now'}
                 </motion.button>
-                <span className="t-mono t-muted" style={{ fontSize: 11 }}>
+                <span className="t-mono t-muted" style={{ fontSize: 12 }}>
                   Monitors r/YouTubers, r/YoutubeContent, r/CreatorEconomy, r/NewTubers, r/Filmmakers
                 </span>
               </div>
@@ -680,7 +680,7 @@ export default function QualityLeads() {
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: i * 0.04, duration: 0.3 }}
                       >
-                        <td className="mono" style={{ textTransform: 'uppercase', fontSize: 10 }}>{s.source}</td>
+                        <td className="mono" style={{ textTransform: 'uppercase', fontSize: 12 }}>{s.source}</td>
                         <td>r/{s.subreddit}</td>
                         <td>
                           <a href={s.post_url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text)', textDecoration: 'none' }}>
@@ -710,8 +710,8 @@ export default function QualityLeads() {
                 className="card"
                 style={{ padding: 20 }}
               >
-                <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)', marginBottom: 8 }}>Weight Calibration</div>
-                <p className="t-mono t-muted" style={{ fontSize: 11, margin: '0 0 16px' }}>
+                <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text)', marginBottom: 8 }}>Weight Calibration</div>
+                <p className="t-mono t-muted" style={{ fontSize: 12, margin: '0 0 16px' }}>
                   Tests 5 weight configurations against your leads. Finds which gets 40-50% HOT rate.
                 </p>
                 <div className="row">
@@ -730,17 +730,17 @@ export default function QualityLeads() {
                     className="card"
                     style={{ padding: 20 }}
                   >
-                    <div className="t-mono t-lime" style={{ fontSize: 12, fontWeight: 700, marginBottom: 12 }}>
+                    <div className="t-mono t-lime" style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>
                       Calibration Result — {fmt(calibResult.total)} leads tested
                     </div>
                     {calibResult.error
-                      ? <div className="t-coral t-mono" style={{ fontSize: 12 }}>{calibResult.error}</div>
+                      ? <div className="t-coral t-mono" style={{ fontSize: 13 }}>{calibResult.error}</div>
                       : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                           {Object.entries(calibResult.results || {}).map(([name, r]) => (
                             <div key={name} className="t-mono" style={{
                               display: 'grid', gridTemplateColumns: '140px 1fr 80px 80px 80px', gap: 12,
-                              padding: '10px 14px', borderRadius: 6, alignItems: 'center', fontSize: 11,
+                              padding: '10px 14px', borderRadius: 6, alignItems: 'center', fontSize: 12,
                               background: name === calibResult.recommended ? 'rgba(var(--lime-rgb),0.08)' : 'transparent',
                               border: name === calibResult.recommended ? '1px solid var(--lime)' : '1px solid var(--line)',
                             }}>
@@ -753,7 +753,7 @@ export default function QualityLeads() {
                               <span className="t-muted">COLD {pct(r.cold_pct)}</span>
                             </div>
                           ))}
-                          <div className="t-mono t-lime" style={{ fontSize: 11, marginTop: 8 }}>
+                          <div className="t-mono t-lime" style={{ fontSize: 12, marginTop: 8 }}>
                             ★ Recommended: {calibResult.recommended} — closest to 40-50% HOT target
                           </div>
                         </div>
@@ -772,7 +772,7 @@ export default function QualityLeads() {
                     className="card"
                     style={{ padding: 20 }}
                   >
-                    <div style={{ fontWeight: 700, fontSize: 12, color: 'var(--text)', marginBottom: 12 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)', marginBottom: 12 }}>
                       {popResult.dry_run ? 'Dry Run Result' : 'Population Complete'}
                     </div>
                     <div className="grid g-4">
@@ -782,7 +782,7 @@ export default function QualityLeads() {
                       <StatCard label="COLD Discarded" value={fmt(popResult.cold)} />
                     </div>
                     {popResult.hot_pct < 40 && (
-                      <div className="t-mono" style={{ marginTop: 12, fontSize: 11, color: 'var(--warn)' }}>
+                      <div className="t-mono" style={{ marginTop: 12, fontSize: 12, color: 'var(--warn)' }}>
                         ⚠ Only {popResult.hot_pct}% HOT (target 40-50%). Run calibration and try "option_a" or "option_b" weights.
                       </div>
                     )}
@@ -812,7 +812,7 @@ export default function QualityLeads() {
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: i * 0.03, duration: 0.3 }}
                       >
-                        <td className="mono" style={{ fontSize: 11 }}>{new Date(log.started_at).toLocaleString()}</td>
+                        <td className="mono" style={{ fontSize: 12 }}>{new Date(log.started_at).toLocaleString()}</td>
                         <td style={{ textTransform: 'capitalize' }}>{log.scraper_type?.replace(/_/g, ' ')}</td>
                         <td>
                           <StatusDot status={log.status} />
@@ -854,7 +854,7 @@ export default function QualityLeads() {
               <div className="modal__head" style={{ marginBottom: 4 }}>
                 <div>
                   <div className="modal__title">{signalDrill.label}</div>
-                  <div className="t-mono t-muted" style={{ fontSize: 11, marginTop: 2 }}>
+                  <div className="t-mono t-muted" style={{ fontSize: 12, marginTop: 2 }}>
                     {signalDrill.loading ? 'Loading…' : `${fmt(signalDrill.total)} matched lead${signalDrill.total === 1 ? '' : 's'}`}
                   </div>
                 </div>
@@ -878,7 +878,7 @@ export default function QualityLeads() {
 
               <div style={{ overflowY: 'auto', flex: 1, marginTop: 12 }}>
                 {signalDrill.loading ? (
-                  <div className="t-mono t-muted" style={{ padding: '24px 0', textAlign: 'center', fontSize: 12 }}>Loading matched leads…</div>
+                  <div className="t-mono t-muted" style={{ padding: '24px 0', textAlign: 'center', fontSize: 13 }}>Loading matched leads…</div>
                 ) : signalDrill.leads.length === 0 ? (
                   <div className="empty">
                     <div className="empty__title">No leads matched yet</div>

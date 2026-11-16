@@ -111,8 +111,8 @@ export default function Layout({ children }) {
           </svg>
         </div>
         <div>
-          <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: '-0.3px', color: 'var(--text)', lineHeight: 1.2 }}>Quelro</div>
-          <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--text-4)', fontFamily: 'var(--f-mono)' }}>OUTREACH OS</div>
+          <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.3px', color: 'var(--text)', lineHeight: 1.2 }}>Quelro</div>
+          <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--text-4)', fontFamily: 'var(--f-mono)' }}>OUTREACH OS</div>
         </div>
         {onClose && (
           <button onClick={onClose} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer', padding: 6, borderRadius: 6, display: 'flex' }}>
@@ -170,7 +170,7 @@ export default function Layout({ children }) {
             style={{ borderTop: '1px solid var(--line)', flexShrink: 0, overflow: 'hidden' }}
           >
             <div style={{ padding: '8px 8px 4px' }}>
-              <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--text-4)', fontFamily: 'var(--f-mono)', padding: '0 4px', marginBottom: 4 }}>RUNNING</div>
+              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--text-4)', fontFamily: 'var(--f-mono)', padding: '0 4px', marginBottom: 4 }}>RUNNING</div>
               {backgroundTasks.map(task => (
                 <motion.div
                   key={task.id}
@@ -178,7 +178,7 @@ export default function Layout({ children }) {
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -6 }}
                   onClick={() => task.page && (window.location.href = task.page)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 6, fontSize: 11, color: 'var(--text-2)', cursor: task.page ? 'pointer' : 'default', marginBottom: 4 }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 6, fontSize: 12, color: 'var(--text-2)', cursor: task.page ? 'pointer' : 'default', marginBottom: 4 }}
                 >
                   <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--lime)', boxShadow: '0 0 5px var(--lime)', animation: 'pulse-lime 2s infinite', flexShrink: 0 }} />
                   <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.label}</span>
@@ -196,11 +196,11 @@ export default function Layout({ children }) {
           style={{
             width: '100%', display: 'flex', alignItems: 'center', gap: 8,
             padding: '7px 2px', background: 'none', border: 'none',
-            color: 'var(--lime)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+            color: 'var(--lime)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
           }}
         >
           Ask Marcus
-          <span style={{ marginLeft: 'auto', fontFamily: 'var(--f-mono)', fontSize: 9, color: 'var(--text-4)' }}>⌘K</span>
+          <span style={{ marginLeft: 'auto', fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-4)' }}>⌘K</span>
         </button>
       </div>
 
@@ -208,9 +208,9 @@ export default function Layout({ children }) {
       {dashboardStats?.emails_month != null && (
         <div style={{ padding: '10px 10px 0' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
-            <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-4)' }}>Sends this month</span>
+            <span style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-4)' }}>Sends this month</span>
           </div>
-          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-2)', marginBottom: 6 }}>
+          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 13, color: 'var(--text-2)', marginBottom: 6 }}>
             {dashboardStats.emails_month.toLocaleString()}
             {settings?.daily_email_limit ? (
               <span style={{ color: 'var(--text-4)' }}> / {(settings.daily_email_limit * 30).toLocaleString()}</span>
@@ -234,17 +234,17 @@ export default function Layout({ children }) {
             width: 28, height: 28, borderRadius: '50%',
             background: 'var(--surface-3)', border: '1px solid var(--line-2)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 11, fontWeight: 700, color: 'var(--text-2)', flexShrink: 0,
+            fontSize: 12, fontWeight: 700, color: 'var(--text-2)', flexShrink: 0,
           }}>
             {displayName[0]?.toUpperCase() || 'U'}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName}</div>
-            <div style={{ fontSize: 9, color: 'var(--text-4)', fontFamily: 'var(--f-mono)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{userPlan}</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-4)', fontFamily: 'var(--f-mono)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{userPlan}</div>
           </div>
           <button
             onClick={handleLogout}
-            style={{ color: 'var(--text-4)', fontSize: 11, padding: '4px 6px', borderRadius: 6, transition: 'all 120ms', cursor: 'pointer', flexShrink: 0, background: 'none', border: 'none' }}
+            style={{ color: 'var(--text-4)', fontSize: 12, padding: '4px 6px', borderRadius: 6, transition: 'all 120ms', cursor: 'pointer', flexShrink: 0, background: 'none', border: 'none' }}
             onMouseEnter={e => { e.currentTarget.style.color = 'var(--bad)'; }}
             onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-4)'; }}
           >
@@ -351,13 +351,13 @@ export default function Layout({ children }) {
                 <path d="M8.5 1L3 7.5H7L5.5 13L11 6.5H7L8.5 1Z" fill="var(--on-accent)" strokeLinejoin="round"/>
               </svg>
             </div>
-            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>Quelro</span>
+            <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Quelro</span>
           </div>
         )}
 
         {/* Page label (desktop) */}
         {!isMobile && (
-          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
             {[...NAV_ITEMS, ...ADMIN_ITEMS].find(i => isActive(i.to))?.label || 'Quelro'}
           </span>
         )}
@@ -373,20 +373,20 @@ export default function Layout({ children }) {
         {/* Right actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginLeft: 'auto' }}>
           {!isMobile && (
-            <a href="#" style={{ fontSize: 12, color: 'var(--text-3)', fontWeight: 500 }}>Help</a>
+            <a href="#" style={{ fontSize: 13, color: 'var(--text-3)', fontWeight: 500 }}>Help</a>
           )}
 
           <button onClick={() => window.dispatchEvent(new CustomEvent('jack:open'))} style={{
             display: 'flex', alignItems: 'center', gap: 6,
             padding: '0 10px', height: 32, borderRadius: 8,
-            color: 'var(--text-2)', fontSize: 12, fontWeight: 600,
+            color: 'var(--text-2)', fontSize: 13, fontWeight: 600,
             cursor: 'pointer', background: 'var(--surface)',
             border: '1px solid var(--line-2)', transition: 'all 120ms',
             whiteSpace: 'nowrap',
           }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--ok)', flexShrink: 0 }} />
             Agent
-            {!isMobile && <span style={{ fontFamily: 'var(--f-mono)', fontSize: 9, color: 'var(--text-4)' }}>⌘J</span>}
+            {!isMobile && <span style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-4)' }}>⌘J</span>}
           </button>
         </div>
       </header>
@@ -473,7 +473,7 @@ export default function Layout({ children }) {
                           color: active ? 'var(--lime)' : 'var(--text-2)',
                         }}
                       >
-                        <span style={{ fontSize: 12, fontWeight: active ? 600 : 400 }}>{label}</span>
+                        <span style={{ fontSize: 13, fontWeight: active ? 600 : 400 }}>{label}</span>
                       </NavLink>
                     );
                   })}
@@ -504,7 +504,7 @@ export default function Layout({ children }) {
                   style={{
                     flex: 1,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 11,
+                    fontSize: 12,
                     color: active ? 'var(--lime)' : 'var(--text-4)',
                     fontWeight: active ? 600 : 400,
                     transition: 'color 150ms',
@@ -534,7 +534,7 @@ export default function Layout({ children }) {
               style={{
                 flex: 1,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 11,
+                fontSize: 12,
                 color: (moreOpen || MORE_NAV.some(n => isActive(n.to))) ? 'var(--lime)' : 'var(--text-4)',
                 fontWeight: (moreOpen || MORE_NAV.some(n => isActive(n.to))) ? 600 : 400,
                 background: 'none', border: 'none', cursor: 'pointer', position: 'relative',

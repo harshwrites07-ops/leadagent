@@ -36,12 +36,17 @@ export default {
           danger:           'var(--app-danger)',
         },
       },
+      fontSize: {
+        xs:   ['13px', { lineHeight: '1.5' }],
+        sm:   ['15px', { lineHeight: '1.55' }],
+        base: ['16px', { lineHeight: '1.6' }],
+      },
       fontFamily: {
-        sans:    ['Inter Variable', 'Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        heading: ['General Sans', 'Inter Variable', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        sans:    ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        heading: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
         mono:    ['JetBrains Mono', 'ui-monospace', 'monospace'],
-        serif:   ['General Sans', 'Inter Variable', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        'app-heading': ['Inter var', 'Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        serif:   ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        'app-heading': ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
         'app-body':    ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
       },
       borderRadius: {

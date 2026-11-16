@@ -316,7 +316,7 @@ export default function Settings() {
 
       <div className="page__head">
         <div>
-          <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>Workspace</div>
+          <div className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>Workspace</div>
           <h1 className="page__title">Settings</h1>
         </div>
         {dirty && (
@@ -353,10 +353,10 @@ export default function Settings() {
             return (
               <div style={{ padding: '12px 16px', background: 'rgba(var(--lime-rgb),0.06)', border: '1px solid var(--lime-border)', borderRadius: 'var(--r)', display: 'flex', alignItems: 'center', gap: 14 }}>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>
                     Your email system is {pct}% configured
                   </div>
-                  <div className="muted" style={{ fontSize: 11.5 }}>
+                  <div className="muted" style={{ fontSize: 12.5 }}>
                     Fill in all fields below for the best email quality. Missing: {[
                       !voice.service_type && 'what you sell',
                       !voice.best_result && 'best result',
@@ -379,7 +379,7 @@ export default function Settings() {
               <div className="card__head">
                 <div>
                   <div className="card__title">Your Voice Profile</div>
-                  <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+                  <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
                     Last updated: {voiceDNA.builtAt ? new Date(voiceDNA.builtAt).toLocaleDateString() : 'today'}
                   </div>
                 </div>
@@ -396,8 +396,8 @@ export default function Settings() {
                   { label: 'What makes you different', value: voiceDNA.uniqueDifference || voiceDNA.identity },
                 ].map(row => row.value ? (
                   <div key={row.label} style={{ padding: '10px 14px', background: 'var(--surface-2)', borderRadius: 8, border: '1px solid var(--line)' }}>
-                    <div className="muted mono" style={{ fontSize: 9, letterSpacing: '.1em', marginBottom: 4 }}>{row.label.toUpperCase()}</div>
-                    <div style={{ fontSize: 12.5, lineHeight: 1.5 }}>{row.value}</div>
+                    <div className="muted mono" style={{ fontSize: 12, letterSpacing: '.1em', marginBottom: 4 }}>{row.label.toUpperCase()}</div>
+                    <div style={{ fontSize: 13, lineHeight: 1.5 }}>{row.value}</div>
                   </div>
                 ) : null)}
               </div>
@@ -411,20 +411,20 @@ export default function Settings() {
                 <div style={{ padding: '18px 24px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
                     <div style={{ fontWeight: 600 }}>Preview — {previewEmail.lead.channel_name}</div>
-                    <div className="muted" style={{ fontSize: 11 }}>This is what your emails will sound like</div>
+                    <div className="muted" style={{ fontSize: 12 }}>This is what your emails will sound like</div>
                   </div>
                   <button className="btn btn--ghost btn--sm" onClick={() => setPreviewEmail(null)}>✕</button>
                 </div>
                 <div style={{ padding: 24 }}>
                   <div style={{ marginBottom: 12 }}>
-                    <span className="muted" style={{ fontSize: 11 }}>SUBJECT</span>
+                    <span className="muted" style={{ fontSize: 12 }}>SUBJECT</span>
                     <div style={{ fontWeight: 600, marginTop: 2 }}>{previewEmail.pitch?.email_subject}</div>
                   </div>
                   <div style={{ whiteSpace: 'pre-wrap', fontSize: 13.5, lineHeight: 1.8, padding: '16px 20px', background: 'var(--surface-2)', borderRadius: 8, border: '1px solid var(--line)' }}>
                     {previewEmail.pitch?.email_body || previewEmail.pitch?.cold_email || previewEmail.pitch?.body || '(no body generated)'}
                   </div>
                   {previewEmail.pitch?.word_count && (
-                    <div className="muted" style={{ fontSize: 11, marginTop: 10, display: 'flex', justifyContent: 'space-between' }}>
+                    <div className="muted" style={{ fontSize: 12, marginTop: 10, display: 'flex', justifyContent: 'space-between' }}>
                       <span>{previewEmail.pitch.word_count} words</span>
                       <span>Score: {previewEmail.pitch?.pitch_score || previewEmail.pitch?.quality_score || '—'}/100</span>
                     </div>
@@ -466,7 +466,7 @@ export default function Settings() {
                 <div className="field__label">What's the ONE thing you're known for?</div>
                 <input className="input" value={voice.angle} onChange={e => setV('angle', e.target.value)}
                   placeholder="e.g. pacing / cutting dead space, retention hooks, story structure — not 'full-service editing'" />
-                <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Marcus anchors the diagnosis in every email on this one specialty.</div>
+                <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>Marcus anchors the diagnosis in every email on this one specialty.</div>
               </div>
               <div className="field" style={{ marginTop: 14 }}>
                 <div className="field__label">Your free, no-strings first-touch offer</div>
@@ -490,7 +490,7 @@ export default function Settings() {
                 <textarea className="input" rows={2} maxLength={200} style={{ resize: 'none' }}
                   value={voice.case_study} onChange={e => setV('case_study', e.target.value)}
                   placeholder='e.g. Helped a gaming channel grow from 50K to 200K subs in 3 months with faster-paced edits' />
-                <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>The more specific, the higher your email quality scores. Marcus will quote this result directly when pitching.</div>
+                <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>The more specific, the higher your email quality scores. Marcus will quote this result directly when pitching.</div>
               </div>
               {voice.target_niches.length > 0 && (
                 <div className="field" style={{ marginTop: 14 }}>
@@ -498,7 +498,7 @@ export default function Settings() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 6 }}>
                     {voice.target_niches.map(n => (
                       <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span className="muted mono" style={{ fontSize: 10, width: 90, flexShrink: 0 }}>{n.toUpperCase()}</span>
+                        <span className="muted mono" style={{ fontSize: 12, width: 90, flexShrink: 0 }}>{n.toUpperCase()}</span>
                         <input className="input" value={getNicheProof(n)} onChange={e => setNicheProof(n, e.target.value)}
                           placeholder={`e.g. Took a ${n.toLowerCase()} channel from 300K to 500K avg over 4 months`} />
                       </div>
@@ -524,7 +524,7 @@ export default function Settings() {
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
                   {['Direct and no-nonsense','Warm and friendly','Analytical and data-driven','Creative and energetic','Calm and thoughtful','Funny and casual','Professional and polished','Bold and confident','Laid-back and approachable'].map(t => (
                     <button key={t} type="button" onClick={() => toggleVoiceChip('personality_traits', t, 3)}
-                      style={{ padding: '6px 12px', borderRadius: 99, fontSize: 12, cursor: 'pointer', border: `1px solid ${voice.personality_traits.includes(t) ? 'var(--lime-border)' : 'var(--line)'}`, background: voice.personality_traits.includes(t) ? 'var(--lime-soft)' : 'var(--surface-2)', color: voice.personality_traits.includes(t) ? 'var(--lime)' : 'var(--text-2)', fontWeight: voice.personality_traits.includes(t) ? 600 : 400 }}>
+                      style={{ padding: '6px 12px', borderRadius: 99, fontSize: 13, cursor: 'pointer', border: `1px solid ${voice.personality_traits.includes(t) ? 'var(--lime-border)' : 'var(--line)'}`, background: voice.personality_traits.includes(t) ? 'var(--lime-soft)' : 'var(--surface-2)', color: voice.personality_traits.includes(t) ? 'var(--lime)' : 'var(--text-2)', fontWeight: voice.personality_traits.includes(t) ? 600 : 400 }}>
                       {t}
                     </button>
                   ))}
@@ -535,7 +535,7 @@ export default function Settings() {
                 {[['get_reply','Start a conversation (get a reply)'],['book_call','Book a discovery call'],['close_deal','Close a deal directly']].map(([val, label]) => (
                   <label key={val} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', border: `1px solid ${voice.outreach_goal === val ? 'var(--lime-border)' : 'var(--line)'}`, borderRadius: 8, cursor: 'pointer', background: voice.outreach_goal === val ? 'var(--lime-soft)' : 'transparent', marginBottom: 6 }}>
                     <input type="radio" checked={voice.outreach_goal === val} onChange={() => setV('outreach_goal', val)} style={{ accentColor: 'var(--lime)' }} />
-                    <span style={{ fontSize: 13 }}>{label}</span>
+                    <span style={{ fontSize: 14 }}>{label}</span>
                   </label>
                 ))}
               </div>
@@ -563,11 +563,11 @@ export default function Settings() {
           <div className="card">
             <div className="card__head">
               <div>
-                <div className="card__title">Email voice samples <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>(optional but powerful)</span></div>
+                <div className="card__title">Email voice samples <span className="muted" style={{ fontWeight: 400, fontSize: 13 }}>(optional but powerful)</span></div>
               </div>
             </div>
             <div className="card__body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div className="muted" style={{ fontSize: 12, lineHeight: 1.6 }}>
+              <div className="muted" style={{ fontSize: 13, lineHeight: 1.6 }}>
                 Paste 1-3 emails you've actually written and sent. MARCUS will copy your exact vocabulary, sentence rhythm, and personality — not just your settings. The more real examples you give, the more the AI sounds like you.
               </div>
               {[1,2,3].map(n => (
@@ -577,14 +577,14 @@ export default function Settings() {
                     <span className="muted" style={{ fontWeight: 400 }}>{voice[`voice_sample_${n}`].length}/2000</span>
                   </div>
                   <textarea
-                    className="input" rows={5} maxLength={2000} style={{ resize: 'vertical', fontFamily: 'var(--f-sans)', fontSize: 12.5, lineHeight: 1.7 }}
+                    className="input" rows={5} maxLength={2000} style={{ resize: 'vertical', fontFamily: 'var(--f-sans)', fontSize: 13, lineHeight: 1.7 }}
                     value={voice[`voice_sample_${n}`]}
                     onChange={e => setV(`voice_sample_${n}`, e.target.value)}
                     placeholder={`Paste a real cold email you wrote and sent${n === 1 ? ' — ideally one that got a reply' : ''}...`}
                   />
                 </div>
               ))}
-              <div className="muted" style={{ fontSize: 11, padding: '8px 12px', background: 'rgba(var(--lime-rgb),0.04)', border: '1px solid var(--lime-border)', borderRadius: 8 }}>
+              <div className="muted" style={{ fontSize: 12, padding: '8px 12px', background: 'rgba(var(--lime-rgb),0.04)', border: '1px solid var(--lime-border)', borderRadius: 8 }}>
                 Your samples are only used to build your Voice DNA. They are never sent or shared.
               </div>
             </div>
@@ -634,7 +634,7 @@ export default function Settings() {
                 onChange={e => setP('best_result', e.target.value.slice(0, 200))}
                 placeholder="e.g. Helped a fitness channel grow from 2K to 50K views in 60 days"
               />
-              <div className="muted" style={{ fontSize: 10, textAlign: 'right', marginTop: 4 }}>
+              <div className="muted" style={{ fontSize: 12, textAlign: 'right', marginTop: 4 }}>
                 {(profile.best_result || '').length}/200
               </div>
             </div>
@@ -664,7 +664,7 @@ export default function Settings() {
             <div>
               {gmailAccounts.length === 0 ? (
                 <div style={{ padding: '24px 16px', textAlign: 'center' }}>
-                  <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>No mailboxes connected yet.</div>
+                  <div className="muted" style={{ fontSize: 13, marginBottom: 10 }}>No mailboxes connected yet.</div>
                   <button className="btn btn--sm" onClick={connectGmail} disabled={connectingGmail}>
                     Connect Gmail
                   </button>
@@ -680,29 +680,29 @@ export default function Settings() {
                     display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr 1fr 0.6fr', gap: 18, alignItems: 'center',
                   }}>
                     <div className="row" style={{ gap: 12 }}>
-                      <div style={{ width: 30, height: 30, borderRadius: 7, background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--text-3)' }}>
+                      <div style={{ width: 30, height: 30, borderRadius: 7, background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-3)' }}>
                         G
                       </div>
-                      <div className="mono" style={{ fontSize: 12 }}>{acc.email}</div>
+                      <div className="mono" style={{ fontSize: 13 }}>{acc.email}</div>
                     </div>
                     <div>
                       <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
-                        <span className="muted" style={{ fontSize: 10 }}>WARMTH</span>
-                        <span className="mono" style={{ fontSize: 11 }}>{warmth}%</span>
+                        <span className="muted" style={{ fontSize: 12 }}>WARMTH</span>
+                        <span className="mono" style={{ fontSize: 12 }}>{warmth}%</span>
                       </div>
                       <div className="bar"><span style={{ width: `${warmth}%` }} /></div>
                     </div>
                     <div>
                       <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
-                        <span className="muted" style={{ fontSize: 10 }}>TODAY</span>
-                        <span className="mono" style={{ fontSize: 11 }}>{sent} / {limit}</span>
+                        <span className="muted" style={{ fontSize: 12 }}>TODAY</span>
+                        <span className="mono" style={{ fontSize: 12 }}>{sent} / {limit}</span>
                       </div>
                       <div className="bar"><span style={{ width: `${Math.min((sent / limit) * 100, 100)}%`, background: 'var(--cream)' }} /></div>
                     </div>
                     <div className="row" style={{ gap: 8 }}>
                       {isActive
-                        ? <><span className="dot dot--pulse" /><span style={{ fontSize: 12, color: 'var(--ok)' }}>Sending</span></>
-                        : <><span className="dot dot--warn" /><span style={{ fontSize: 12, color: 'var(--warn)' }}>Revoked</span></>}
+                        ? <><span className="dot dot--pulse" /><span style={{ fontSize: 13, color: 'var(--ok)' }}>Sending</span></>
+                        : <><span className="dot dot--warn" /><span style={{ fontSize: 13, color: 'var(--warn)' }}>Revoked</span></>}
                     </div>
                     <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                       {!isActive && (
@@ -734,8 +734,8 @@ export default function Settings() {
                 { l: 'Rotate sender mailbox', v: 'Round-robin across healthy mailboxes', good: true },
               ].map((r, i) => (
                 <div key={i} className="row" style={{ justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px dashed var(--line)' }}>
-                  <span style={{ fontSize: 12.5, color: 'var(--text-2)' }}>{r.l}</span>
-                  <span className="mono" style={{ fontSize: 12, color: r.good ? 'var(--lime)' : 'var(--text)' }}>{r.v}</span>
+                  <span style={{ fontSize: 13, color: 'var(--text-2)' }}>{r.l}</span>
+                  <span className="mono" style={{ fontSize: 13, color: r.good ? 'var(--lime)' : 'var(--text)' }}>{r.v}</span>
                 </div>
               ))}
             </div>
@@ -750,27 +750,27 @@ export default function Settings() {
           {/* Railway persistence warning */}
           <div style={{ background: 'var(--amber-dim, rgba(255,180,0,.08))', border: '1px solid rgba(255,180,0,.25)', borderRadius: 10, padding: '12px 16px', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
             <span style={{ fontSize: 16, lineHeight: 1, marginTop: 1 }}>⚠</span>
-            <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>
-              <strong style={{ color: 'var(--text-1)' }}>API keys saved here are lost on every redeploy</strong> unless you have a Railway Volume attached at <code style={{ fontSize: 11, background: 'var(--surface-2)', padding: '1px 5px', borderRadius: 4 }}>/app/backend/data</code>.<br />
-              For permanent keys: set them in <strong>Railway dashboard → your service → Variables</strong> (e.g. <code style={{ fontSize: 11, background: 'var(--surface-2)', padding: '1px 5px', borderRadius: 4 }}>GEMINI_API_KEY</code>). Those survive all deploys.
+            <div style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6 }}>
+              <strong style={{ color: 'var(--text-1)' }}>API keys saved here are lost on every redeploy</strong> unless you have a Railway Volume attached at <code style={{ fontSize: 12, background: 'var(--surface-2)', padding: '1px 5px', borderRadius: 4 }}>/app/backend/data</code>.<br />
+              For permanent keys: set them in <strong>Railway dashboard → your service → Variables</strong> (e.g. <code style={{ fontSize: 12, background: 'var(--surface-2)', padding: '1px 5px', borderRadius: 4 }}>GEMINI_API_KEY</code>). Those survive all deploys.
             </div>
           </div>
 
           {/* AI / Gemini key */}
           <div className="card">
             <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>
-              <div className="muted" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em' }}>AI Keys</div>
+              <div className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.08em' }}>AI Keys</div>
             </div>
             <div className="card__body">
               <div className="row" style={{ gap: 10, marginBottom: 8 }}>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 2 }}>Gemini API Key</div>
-                  <div className="muted" style={{ fontSize: 11.5 }}>
+                  <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 2 }}>Gemini API Key</div>
+                  <div className="muted" style={{ fontSize: 12.5 }}>
                     Powers Marcus AI and pitch generation. Get a free key at{' '}
                     <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" style={{ color: 'var(--lime)' }}>aistudio.google.com</a>.
                   </div>
                   {geminiStatus && (
-                    <div style={{ marginTop: 6, fontSize: 11, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ marginTop: 6, fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{ width: 7, height: 7, borderRadius: '50%', background: geminiStatus.configured ? 'var(--lime)' : 'var(--coral)', display: 'inline-block' }} />
                       <span style={{ color: geminiStatus.configured ? 'var(--lime)' : 'var(--coral)' }}>
                         {geminiStatus.configured
@@ -789,37 +789,37 @@ export default function Settings() {
                   value={geminiKey}
                   onChange={e => setGeminiKey(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && saveGeminiKey()}
-                  style={{ flex: 1, fontSize: 12 }}
+                  style={{ flex: 1, fontSize: 13 }}
                 />
                 <button className="btn btn--sm" onClick={saveGeminiKey} disabled={savingGemini || !geminiKey.trim()} style={{ whiteSpace: 'nowrap' }}>
                   {savingGemini ? 'Saving…' : 'Save key'}
                 </button>
               </div>
-              <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
+              <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
                 Best practice: copy this key to <strong>Railway Variables</strong> so it survives redeploys without re-entering.
               </div>
             </div>
           </div>
           <div className="card">
             <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>
-              <div className="muted" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em' }}>Email & Outreach</div>
+              <div className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.08em' }}>Email & Outreach</div>
             </div>
             <div className="card__body" style={{ padding: 0 }}>
               {/* Gmail */}
               <div className="row" style={{ padding: 16, gap: 14, borderBottom: '1px solid var(--line)' }}>
-                <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-2)' }}>
+                <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', fontFamily: 'var(--f-mono)', fontSize: 13, color: 'var(--text-2)' }}>
                   G
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500 }}>Gmail</div>
-                  <div className="muted" style={{ fontSize: 11.5 }}>
+                  <div style={{ fontSize: 14, fontWeight: 500 }}>Gmail</div>
+                  <div className="muted" style={{ fontSize: 12.5 }}>
                     {gmailAccounts.length > 0
                       ? `${gmailAccounts.length} mailbox${gmailAccounts.length !== 1 ? 'es' : ''} connected — used for sending outreach emails`
                       : 'Connect your Gmail to send outreach emails directly from your account'}
                   </div>
                 </div>
                 {gmailAccounts.length > 0
-                  ? <span className="row" style={{ gap: 8 }}><span className="dot dot--ok" /><span style={{ fontSize: 12, color: 'var(--ok)' }}>Connected</span></span>
+                  ? <span className="row" style={{ gap: 8 }}><span className="dot dot--ok" /><span style={{ fontSize: 13, color: 'var(--ok)' }}>Connected</span></span>
                   : (
                     <button
                       className="btn btn--sm"
@@ -840,21 +840,21 @@ export default function Settings() {
               </div>
               {/* SMTP */}
               <div className="row" style={{ padding: 16, gap: 14 }}>
-                <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-3)' }}>
+                <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', fontFamily: 'var(--f-mono)', fontSize: 13, color: 'var(--text-3)' }}>
                   S
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500 }}>Custom SMTP</div>
-                  <div className="muted" style={{ fontSize: 11.5 }}>Connect any email provider via SMTP — Outlook, Zoho, SendGrid, etc.</div>
+                  <div style={{ fontSize: 14, fontWeight: 500 }}>Custom SMTP</div>
+                  <div className="muted" style={{ fontSize: 12.5 }}>Connect any email provider via SMTP — Outlook, Zoho, SendGrid, etc.</div>
                 </div>
-                <span className="muted" style={{ fontSize: 11.5, whiteSpace: 'nowrap' }}>Coming soon</span>
+                <span className="muted" style={{ fontSize: 12.5, whiteSpace: 'nowrap' }}>Coming soon</span>
               </div>
             </div>
           </div>
 
           <div className="card">
             <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>
-              <div className="muted" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em' }}>CRM & Productivity</div>
+              <div className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.08em' }}>CRM & Productivity</div>
             </div>
             <div className="card__body" style={{ padding: 0 }}>
               {[
@@ -864,14 +864,14 @@ export default function Settings() {
                 { name: 'Pipedrive', desc: 'Auto-create deals in Pipedrive when leads reply.' },
               ].map((item, i, arr) => (
                 <div key={item.name} className="row" style={{ padding: 16, gap: 14, borderBottom: i < arr.length - 1 ? '1px solid var(--line)' : 'none' }}>
-                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-3)' }}>
+                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', fontFamily: 'var(--f-mono)', fontSize: 13, color: 'var(--text-3)' }}>
                     {item.name[0]}
                   </div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 500 }}>{item.name}</div>
-                    <div className="muted" style={{ fontSize: 11.5 }}>{item.desc}</div>
+                    <div style={{ fontSize: 14, fontWeight: 500 }}>{item.name}</div>
+                    <div className="muted" style={{ fontSize: 12.5 }}>{item.desc}</div>
                   </div>
-                  <button className="btn btn--ghost btn--sm" onClick={() => toast('Coming soon — join the waitlist!')} style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
+                  <button className="btn btn--ghost btn--sm" onClick={() => toast('Coming soon — join the waitlist!')} style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
                     Request
                   </button>
                 </div>
@@ -881,7 +881,7 @@ export default function Settings() {
 
           <div className="card">
             <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>
-              <div className="muted" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em' }}>Automation & Webhooks</div>
+              <div className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.08em' }}>Automation & Webhooks</div>
             </div>
             <div className="card__body" style={{ padding: 0 }}>
               {[
@@ -889,14 +889,14 @@ export default function Settings() {
                 { name: 'Webhook', desc: 'Send real-time events (reply, open, bounce) to your own URL.' },
               ].map((item, i, arr) => (
                 <div key={item.name} className="row" style={{ padding: 16, gap: 14, borderBottom: i < arr.length - 1 ? '1px solid var(--line)' : 'none' }}>
-                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-3)' }}>
+                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', fontFamily: 'var(--f-mono)', fontSize: 13, color: 'var(--text-3)' }}>
                     {item.name[0]}
                   </div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 500 }}>{item.name}</div>
-                    <div className="muted" style={{ fontSize: 11.5 }}>{item.desc}</div>
+                    <div style={{ fontSize: 14, fontWeight: 500 }}>{item.name}</div>
+                    <div className="muted" style={{ fontSize: 12.5 }}>{item.desc}</div>
                   </div>
-                  <button className="btn btn--ghost btn--sm" onClick={() => toast('Coming soon — join the waitlist!')} style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
+                  <button className="btn btn--ghost btn--sm" onClick={() => toast('Coming soon — join the waitlist!')} style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
                     Request
                   </button>
                 </div>
@@ -912,16 +912,16 @@ export default function Settings() {
           <div className="card__body" style={{ padding: 0 }}>
             <div className="row" style={{ padding: 14, borderBottom: '1px solid var(--line)', gap: 14 }}>
               <div style={{ position: 'relative' }}>
-                <span className="ava" style={{ width: 32, height: 32, fontSize: 12, minWidth: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-3)', color: 'var(--on-accent)' }}>
+                <span className="ava" style={{ width: 32, height: 32, fontSize: 13, minWidth: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-3)', color: 'var(--on-accent)' }}>
                   {(user?.email || 'Y')[0].toUpperCase()}
                 </span>
                 <span style={{ position: 'absolute', bottom: -1, right: -1, width: 8, height: 8, borderRadius: '50%', background: 'var(--lime)', border: '2px solid var(--surface)' }} />
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 500 }}>{user?.email?.split('@')[0] || 'You'}</div>
-                <div className="mono muted" style={{ fontSize: 11 }}>{user?.email || ''}</div>
+                <div style={{ fontSize: 14, fontWeight: 500 }}>{user?.email?.split('@')[0] || 'You'}</div>
+                <div className="mono muted" style={{ fontSize: 12 }}>{user?.email || ''}</div>
               </div>
-              <span className="muted" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>Owner</span>
+              <span className="muted" style={{ fontSize: 13, whiteSpace: 'nowrap' }}>Owner</span>
             </div>
             <div style={{ padding: 16, borderTop: '1px solid var(--line)' }}>
               <button className="btn btn--sm" disabled>Invite teammate</button>
@@ -937,9 +937,9 @@ export default function Settings() {
             <div className="row" style={{ gap: 14, marginBottom: 14 }}>
               <span className="row" style={{ gap: 8 }}>
                 <span className="dot dot--lime" />
-                <span style={{ fontSize: 12, fontWeight: 500, textTransform: 'capitalize' }}>{planName} plan</span>
+                <span style={{ fontSize: 13, fontWeight: 500, textTransform: 'capitalize' }}>{planName} plan</span>
               </span>
-              <span className="mono muted" style={{ fontSize: 11 }}>
+              <span className="mono muted" style={{ fontSize: 12 }}>
                 {billing?.price ? `$${billing.price} / month` : ''}{billing?.reset_date ? ` · renews ${billing.reset_date}` : ''}
               </span>
             </div>
@@ -965,8 +965,8 @@ export default function Settings() {
                   return (
                     <div key={i} style={{ padding: 14, background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 8 }}>
                       <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
-                        <span className="muted" style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.06em' }}>{m.l}</span>
-                        <span className="mono" style={{ fontSize: 11 }}>{m.v.toLocaleString()} / {m.max === Infinity ? '∞' : m.max.toLocaleString()}</span>
+                        <span className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.06em' }}>{m.l}</span>
+                        <span className="mono" style={{ fontSize: 12 }}>{m.v.toLocaleString()} / {m.max === Infinity ? '∞' : m.max.toLocaleString()}</span>
                       </div>
                       <div className="bar"><span style={{ width: `${pct}%`, background: m.c }} /></div>
                     </div>
@@ -995,14 +995,14 @@ export default function Settings() {
                   border: current ? '1px solid var(--line-3)' : '1px solid var(--line)',
                   background: 'var(--surface)',
                 }}>
-                  <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 6 }}>{plan.n}</div>
+                  <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 6 }}>{plan.n}</div>
                   <div className="row" style={{ alignItems: 'baseline', gap: 4, marginBottom: 10 }}>
                     <span className="serif" style={{ fontSize: 32, letterSpacing: '-0.02em' }}>{plan.p}</span>
-                    <span className="muted" style={{ fontSize: 11 }}>/ mo</span>
+                    <span className="muted" style={{ fontSize: 12 }}>/ mo</span>
                   </div>
-                  <div className="muted" style={{ fontSize: 12, marginBottom: 14 }}>{plan.leads}</div>
+                  <div className="muted" style={{ fontSize: 13, marginBottom: 14 }}>{plan.leads}</div>
                   {current
-                    ? <span className="row" style={{ gap: 8 }}><span className="dot dot--lime" /><span style={{ fontSize: 12, color: 'var(--text-2)' }}>Current</span></span>
+                    ? <span className="row" style={{ gap: 8 }}><span className="dot dot--lime" /><span style={{ fontSize: 13, color: 'var(--text-2)' }}>Current</span></span>
                     : (
                       <button
                         className="btn btn--sm"

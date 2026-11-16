@@ -31,7 +31,7 @@ const DEFAULT_SUBREDDITS = [
 function ScorePill({ score }) {
   const color = score >= 90 ? 'var(--lime)' : 'var(--text-3)';
   return (
-    <span style={{ fontFamily: 'var(--f-mono)', fontSize: 12.5, fontWeight: 500, color }}>
+    <span style={{ fontFamily: 'var(--f-mono)', fontSize: 13, fontWeight: 500, color }}>
       {score}
     </span>
   );
@@ -339,7 +339,7 @@ export default function LeadFinder() {
         ].map(t => (
           <div key={t.id} className={`tab ${tab === t.id ? 'is-active' : ''}`} onClick={() => setTab(t.id)} style={{ padding: '10px 16px' }}>
             <div style={{ fontWeight: 500 }}>{t.label}</div>
-            <div className="muted" style={{ fontSize: 10.5, marginTop: 1 }}>{t.sub}</div>
+            <div className="muted" style={{ fontSize: 12, marginTop: 1 }}>{t.sub}</div>
           </div>
         ))}
       </div>
@@ -387,7 +387,7 @@ export default function LeadFinder() {
                   </div>
                 </div>
 
-                <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', marginTop: 18, marginBottom: 8 }}>Pick niches</div>
+                <div className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.06em', marginTop: 18, marginBottom: 8 }}>Pick niches</div>
                 <div className="pm__niches">
                   {NICHES.map((n, i) => (
                     <motion.button
@@ -421,11 +421,11 @@ export default function LeadFinder() {
                       style={{ width: 100, fontFamily: 'var(--f-mono)', textAlign: 'center' }}
                       disabled={pmRunning}
                     />
-                    <span className="muted" style={{ fontSize: 12 }}>
+                    <span className="muted" style={{ fontSize: 13 }}>
                       leads with an email found · max {(PLAN_RUN_LIMITS[user?.plan || 'free'] ?? 100).toLocaleString()} on {user?.plan || 'free'} plan
                     </span>
                   </div>
-                  <div className="muted" style={{ fontSize: 11.5, marginTop: 6, lineHeight: 1.5 }}>
+                  <div className="muted" style={{ fontSize: 12.5, marginTop: 6, lineHeight: 1.5 }}>
                     We'll keep searching until we find exactly <strong style={{ color: 'var(--lime)' }}>{pmTargetCount}</strong> leads with an email found.
                   </div>
                 </div>
@@ -458,11 +458,11 @@ export default function LeadFinder() {
                       {/* Progress */}
                       <div style={{ marginBottom: 12 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
-                          <span className="mono" style={{ fontSize: 13, fontWeight: 700 }}>
+                          <span className="mono" style={{ fontSize: 14, fontWeight: 700 }}>
                             <span style={{ color: 'var(--ok)', fontSize: 22 }}>{pmStatus.stats?.withEmail ?? 0}</span>
                             <span className="muted"> / {pmStatus.targetCount} leads with emails</span>
                           </span>
-                          <span className="muted mono" style={{ fontSize: 10 }}>
+                          <span className="muted mono" style={{ fontSize: 12 }}>
                             {pmDone
                               ? (pmStatus.targetReached ? 'Complete' : pmStatus.quotaExhausted ? 'Quota reached' : 'Done')
                               : (() => {
@@ -491,7 +491,7 @@ export default function LeadFinder() {
                       </div>
 
                       {/* Status line */}
-                      <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                      <div style={{ fontSize: 13, color: 'var(--text-3)' }}>
                         {pmDone ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                             <span>
@@ -524,7 +524,7 @@ export default function LeadFinder() {
                             )}
                           </div>
                         ) : (
-                          <span className="muted mono" style={{ fontSize: 10 }}>
+                          <span className="muted mono" style={{ fontSize: 12 }}>
                             {pmStatus.currentKeywords?.[0] ? `Searching "${pmStatus.currentKeywords[0]}"...` : 'Starting up...'}
                             {pmStatus.keywordsTotal > 0 && <span style={{ marginLeft: 8 }}>{pmStatus.keywordsDone ?? 0}/{pmStatus.keywordsTotal} keywords</span>}
                           </span>
@@ -544,7 +544,7 @@ export default function LeadFinder() {
                 style={{ marginBottom: 20 }}
               >
                 <form onSubmit={handleYtSearch}>
-                  <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 12 }}>Manual keyword search</div>
+                  <div className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 12 }}>Manual keyword search</div>
                   <div className="grid" style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr', gap: 10, marginBottom: 12 }}>
                     <div className="field"><div className="field__label">Keyword *</div><input className="input" value={ytForm.keyword} onChange={e => setYtForm(f => ({ ...f, keyword: e.target.value }))} placeholder="e.g. business automation" required /></div>
                     <div className="field"><div className="field__label">Min Subs</div><input className="input" type="number" value={ytForm.min_subs} onChange={e => setYtForm(f => ({ ...f, min_subs: Number(e.target.value) }))} /></div>
@@ -556,7 +556,7 @@ export default function LeadFinder() {
                   <div className="row" style={{ justifyContent: 'space-between' }}>
                     <label className="row" style={{ gap: 8, cursor: 'pointer' }}>
                       <input type="checkbox" checked={ytForm.emailOnly} onChange={e => setYtForm(f => ({ ...f, emailOnly: e.target.checked }))} />
-                      <span style={{ fontSize: 12 }}>Email required</span>
+                      <span style={{ fontSize: 13 }}>Email required</span>
                     </label>
                     <motion.button
                       whileHover={{ scale: 1.02 }}
@@ -584,8 +584,8 @@ export default function LeadFinder() {
                     <div className="row" style={{ gap: 12 }}>
                       <span className="dot" style={{ background: 'var(--warn)', flexShrink: 0 }} />
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>YouTube API quota reached for today</div>
-                        <div className="muted" style={{ fontSize: 12 }}>Daily limit resets at midnight Pacific Time. Add more API keys in Settings to continue.</div>
+                        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>YouTube API quota reached for today</div>
+                        <div className="muted" style={{ fontSize: 13 }}>Daily limit resets at midnight Pacific Time. Add more API keys in Settings to continue.</div>
                       </div>
                       <button className="btn btn--ghost btn--sm" onClick={() => navigate('/settings')}>Add API Key</button>
                     </div>
@@ -607,7 +607,7 @@ export default function LeadFinder() {
               <div className="pm__head">
                 <div style={{ flex: 1 }}>
                   <div className="pm__title">Upload CSV</div>
-                  <div className="pm__sub">Import your own list. Required column: <span className="mono" style={{ fontSize: 11 }}>channel_name</span>. Optional: <span className="mono" style={{ fontSize: 11 }}>email, subscriber_count, channel_url, niche</span></div>
+                  <div className="pm__sub">Import your own list. Required column: <span className="mono" style={{ fontSize: 12 }}>channel_name</span>. Optional: <span className="mono" style={{ fontSize: 12 }}>email, subscriber_count, channel_url, niche</span></div>
                 </div>
               </div>
 
@@ -628,13 +628,13 @@ export default function LeadFinder() {
                     onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--line-3)'}
                     onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--line)'}
                   >
-                    <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>Drag & drop a CSV or click to browse</div>
-                    <div className="muted" style={{ fontSize: 11 }}>Required: channel_name · Optional: email, subscriber_count, channel_url, niche</div>
+                    <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 4 }}>Drag & drop a CSV or click to browse</div>
+                    <div className="muted" style={{ fontSize: 12 }}>Required: channel_name · Optional: email, subscriber_count, channel_url, niche</div>
                   </motion.div>
                 ) : csvRows.length > 0 && !csvDone ? (
                   <motion.div key="preview" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
                     <div style={{ marginTop: 14, marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: 13 }}><strong style={{ color: 'var(--lime)' }}>{csvRows.length}</strong> leads ready to import · {csvRows.filter(r => r.email).length} have emails</span>
+                      <span style={{ fontSize: 14 }}><strong style={{ color: 'var(--lime)' }}>{csvRows.length}</strong> leads ready to import · {csvRows.filter(r => r.email).length} have emails</span>
                       <button className="btn btn--ghost btn--sm" onClick={() => { setCsvRows([]); setCsvFile(null); }}>
                         Clear
                       </button>
@@ -647,13 +647,13 @@ export default function LeadFinder() {
                         <tbody>
                           {csvRows.slice(0, 50).map((r, i) => (
                             <tr key={i}>
-                              <td style={{ fontSize: 12.5 }}>{r.channel_name || '—'}</td>
-                              <td className="mono" style={{ fontSize: 11, color: r.email ? 'var(--ok)' : 'var(--text-3)' }}>{r.email || '—'}</td>
-                              <td className="num" style={{ fontSize: 12 }}>{r.subscriber_count ? r.subscriber_count.toLocaleString() : '—'}</td>
-                              <td style={{ fontSize: 12 }}>{r.niche || '—'}</td>
+                              <td style={{ fontSize: 13 }}>{r.channel_name || '—'}</td>
+                              <td className="mono" style={{ fontSize: 12, color: r.email ? 'var(--ok)' : 'var(--text-3)' }}>{r.email || '—'}</td>
+                              <td className="num" style={{ fontSize: 13 }}>{r.subscriber_count ? r.subscriber_count.toLocaleString() : '—'}</td>
+                              <td style={{ fontSize: 13 }}>{r.niche || '—'}</td>
                             </tr>
                           ))}
-                          {csvRows.length > 50 && <tr><td colSpan={4} className="muted" style={{ textAlign: 'center', fontSize: 12 }}>+{csvRows.length - 50} more</td></tr>}
+                          {csvRows.length > 50 && <tr><td colSpan={4} className="muted" style={{ textAlign: 'center', fontSize: 13 }}>+{csvRows.length - 50} more</td></tr>}
                         </tbody>
                       </table>
                     </div>
@@ -677,11 +677,11 @@ export default function LeadFinder() {
                     animate={{ opacity: 1, scale: 1 }}
                     style={{ marginTop: 14, padding: '14px 16px', background: 'transparent', border: '1px solid var(--line)', borderRadius: 'var(--r)' }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text)', fontWeight: 600, marginBottom: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: 'var(--text)', fontWeight: 600, marginBottom: 4 }}>
                       <span className="dot" style={{ background: 'var(--ok)' }} />
                       Import complete — {csvDone?.added} leads added to CRM
                     </div>
-                    <div className="muted" style={{ fontSize: 12 }}>{csvDone?.skipped} skipped (duplicates or missing name)</div>
+                    <div className="muted" style={{ fontSize: 13 }}>{csvDone?.skipped} skipped (duplicates or missing name)</div>
                     <button className="btn btn--ghost btn--sm" style={{ marginTop: 8 }} onClick={() => { setCsvRows([]); setCsvFile(null); setCsvDone(null); }}>
                       Import another file
                     </button>
@@ -700,7 +700,7 @@ export default function LeadFinder() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            style={{ padding: '32px', textAlign: 'center', color: 'var(--text-3)', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}
+            style={{ padding: '32px', textAlign: 'center', color: 'var(--text-3)', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}
           >
             <span className="dot dot--pulse" />
             {ytProgress || 'Scanning YouTube channels...'}
@@ -769,24 +769,24 @@ export default function LeadFinder() {
                       </td>
                       <td>
                         <div className="row" style={{ cursor: 'pointer', gap: 8 }} onClick={() => navigate(`/leads/${lead.id}`)}>
-                          <span className="ava" style={{ fontSize: 11, flexShrink: 0 }}>
+                          <span className="ava" style={{ fontSize: 12, flexShrink: 0 }}>
                             {(lead.channel_name || '?')[0].toUpperCase()}
                           </span>
                           <div>
-                            <div style={{ fontSize: 13, fontWeight: 500 }}>{lead.channel_name}</div>
-                            {lead.email && <span className="mono" style={{ fontSize: 9, color: 'var(--ok)', letterSpacing: '.08em' }}>EMAIL FOUND</span>}
+                            <div style={{ fontSize: 14, fontWeight: 500 }}>{lead.channel_name}</div>
+                            {lead.email && <span className="mono" style={{ fontSize: 12, color: 'var(--ok)', letterSpacing: '.08em' }}>EMAIL FOUND</span>}
                           </div>
                         </div>
                       </td>
                       <td>
-                        <span style={{ fontSize: 12, color: 'var(--text-2)' }}>
+                        <span style={{ fontSize: 13, color: 'var(--text-2)' }}>
                           {lead.niche || 'General'}
                         </span>
                       </td>
                       <td className="num">{formatNumber(lead.subscriber_count ?? 0)}</td>
                       <td className="num" style={{ color: 'var(--lime)' }}>{lead.cpm ? `$${lead.cpm}` : '—'}</td>
-                      <td className="muted" style={{ fontSize: 11.5 }}>{lead.days_since_upload ? `${lead.days_since_upload}d ago` : '—'}</td>
-                      <td className="mono" style={{ color: lead.email ? 'var(--ok)' : 'var(--text-3)', fontSize: 13 }}>
+                      <td className="muted" style={{ fontSize: 12.5 }}>{lead.days_since_upload ? `${lead.days_since_upload}d ago` : '—'}</td>
+                      <td className="mono" style={{ color: lead.email ? 'var(--ok)' : 'var(--text-3)', fontSize: 14 }}>
                         {lead.email ? '✓' : '–'}
                       </td>
                       <td className="num"><ScorePill score={lead.lead_score ?? 0} /></td>
@@ -817,7 +817,7 @@ export default function LeadFinder() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
             className="card"
-            style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--text-3)', fontSize: 13 }}
+            style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--text-3)', fontSize: 14 }}
           >
             Nothing came back. Try a different keyword, drop the subscriber floor, or turn off "email only".
           </motion.div>

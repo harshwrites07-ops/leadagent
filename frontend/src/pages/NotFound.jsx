@@ -18,7 +18,7 @@ export default function NotFound() {
       </div>
 
       <div style={{
-        fontFamily: 'var(--f-mono)', fontSize: 11, letterSpacing: '0.14em',
+        fontFamily: 'var(--f-mono)', fontSize: 12, letterSpacing: '0.14em',
         color: 'var(--text-3)', marginBottom: 12,
       }}>ERROR 404</div>
 
@@ -37,14 +37,14 @@ export default function NotFound() {
           style={{
             background: 'var(--surface-2)', border: '1px solid var(--line-2)',
             color: 'var(--text-2)', borderRadius: 8, padding: '10px 20px',
-            fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--f-sans)',
+            fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--f-sans)',
           }}
         >
           ← Go back
         </button>
         <Link to="/" style={{
           background: 'var(--lime)', color: 'var(--on-accent)', borderRadius: 8,
-          padding: '10px 20px', fontSize: 13, fontWeight: 700,
+          padding: '10px 20px', fontSize: 14, fontWeight: 700,
           textDecoration: 'none', fontFamily: 'var(--f-sans)',
         }}>
           Go to Dashboard

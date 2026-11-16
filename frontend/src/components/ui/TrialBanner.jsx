@@ -28,7 +28,7 @@ export default function TrialBanner() {
       alignItems: 'center',
       justifyContent: 'space-between',
       gap: 12,
-      fontSize: 13,
+      fontSize: 14,
       color: urgent ? 'var(--coral)' : 'var(--lime)',
       flexShrink: 0,
     }}>
@@ -47,7 +47,7 @@ export default function TrialBanner() {
             borderRadius: 7,
             padding: '5px 14px',
             fontWeight: 700,
-            fontSize: 12,
+            fontSize: 13,
             cursor: 'pointer',
             fontFamily: 'var(--f-sans)',
             letterSpacing: '0.02em',
