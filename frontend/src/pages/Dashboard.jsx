@@ -150,12 +150,12 @@ export default function Dashboard() {
             >
               <span style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.09em', color: 'var(--text-4)', fontWeight: 500 }}>{stat.label}</span>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                <span style={{ fontFamily: 'var(--f-mono)', fontSize: isMobile ? 26 : 34, fontWeight: 500, letterSpacing: '-0.03em', lineHeight: 1, color: 'var(--text)' }}>{stat.value}</span>
-                {stat.unit && <span style={{ fontFamily: 'var(--f-mono)', fontSize: 14, color: 'var(--text-4)' }}>{stat.unit}</span>}
+                <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: isMobile ? 26 : 34, fontWeight: 500, letterSpacing: '-0.03em', lineHeight: 1, color: 'var(--text)' }}>{stat.value}</span>
+                {stat.unit && <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 14, color: 'var(--text-4)' }}>{stat.unit}</span>}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 {stat.delta && (
-                  <span style={{ fontFamily: 'var(--f-mono)', fontSize: 12, fontWeight: 500, color: 'var(--ok)' }}>{stat.delta} {stat.deltaSub}</span>
+                  <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, fontWeight: 500, color: 'var(--ok)' }}>{stat.delta} {stat.deltaSub}</span>
                 )}
                 {!stat.delta && stat.sub && (
                   <span style={{ fontSize: 12.5, color: 'var(--text-4)' }}>{stat.sub}</span>
@@ -173,7 +173,7 @@ export default function Dashboard() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
           <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--text)' }}>Leads</h2>
-          <span style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-4)' }}>{formatNumber(leadsTotal)} total</span>
+          <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-4)' }}>{formatNumber(leadsTotal)} total</span>
           <div style={{ flex: 1 }} />
           <div style={{ display: 'flex', gap: 6 }}>
             {['All', 'High intent', 'Replied'].map(f => {
@@ -243,14 +243,14 @@ export default function Dashboard() {
                           <span style={{ fontSize: 13.5, fontWeight: 500, letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--text)' }}>
                             {lead.channel_name || 'Unknown'}
                           </span>
-                          <span style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-4)' }}>{lead.channel_handle || ''}</span>
+                          <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-4)' }}>{lead.channel_handle || ''}</span>
                         </div>
                       </div>
-                      <span style={{ fontFamily: 'var(--f-mono)', fontSize: 13, color: 'var(--text-2)', textAlign: 'right' }}>
+                      <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 13, color: 'var(--text-2)', textAlign: 'right' }}>
                         {formatNumber(lead.subscriber_count ?? 0)}
                       </span>
                       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                        <span style={{ fontFamily: 'var(--f-mono)', fontSize: 13, fontWeight: 500, color: (lead.lead_score ?? 0) >= 70 ? 'var(--lime)' : 'var(--text-3)' }}>
+                        <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 13, fontWeight: 500, color: (lead.lead_score ?? 0) >= 70 ? 'var(--lime)' : 'var(--text-3)' }}>
                           {lead.lead_score ?? 0}
                         </span>
                       </div>
@@ -258,7 +258,7 @@ export default function Dashboard() {
                         <span style={{ width: 6, height: 6, flexShrink: 0, borderRadius: '50%', background: meta.dot, display: 'inline-block' }} />
                         <span style={{ fontSize: 13, color: 'var(--text-2)', letterSpacing: '-0.01em' }}>{meta.label}</span>
                       </div>
-                      <span style={{ fontFamily: 'var(--f-mono)', fontSize: 13, color: 'var(--text-4)', textAlign: 'right' }}>
+                      <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 13, color: 'var(--text-4)', textAlign: 'right' }}>
                         {lead.last_email_date ? formatDate(lead.last_email_date) : '—'}
                       </span>
                     </div>
@@ -269,7 +269,7 @@ export default function Dashboard() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 20px' }}>
-            <span style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-4)' }}>
+            <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-4)' }}>
               Showing {filteredLeads.length === 0 ? 0 : page * PAGE_SIZE + 1}–{Math.min(filteredLeads.length, page * PAGE_SIZE + PAGE_SIZE)} of {filteredLeads.length}
             </span>
             <div style={{ display: 'flex', gap: 6 }}>

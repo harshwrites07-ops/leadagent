@@ -31,7 +31,7 @@ const DEFAULT_SUBREDDITS = [
 function ScorePill({ score }) {
   const color = score >= 90 ? 'var(--lime)' : 'var(--text-3)';
   return (
-    <span style={{ fontFamily: 'var(--f-mono)', fontSize: 13, fontWeight: 500, color }}>
+    <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 13, fontWeight: 500, color }}>
       {score}
     </span>
   );
@@ -418,7 +418,7 @@ export default function LeadFinder() {
                       max={PLAN_RUN_LIMITS[user?.plan || 'free'] ?? 100}
                       value={pmTargetCount}
                       onChange={e => setPmTargetCount(Math.max(10, Math.min(parseInt(e.target.value) || 10, PLAN_RUN_LIMITS[user?.plan || 'free'] ?? 100)))}
-                      style={{ width: 100, fontFamily: 'var(--f-mono)', textAlign: 'center' }}
+                      style={{ width: 100, fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', textAlign: 'center' }}
                       disabled={pmRunning}
                     />
                     <span className="muted" style={{ fontSize: 13 }}>

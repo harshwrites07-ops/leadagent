@@ -368,7 +368,7 @@ export default function Settings() {
                     ].filter(Boolean).join(', ')}
                   </div>
                 </div>
-                <div style={{ fontSize: 22, fontWeight: 800, fontFamily: 'var(--f-mono)', color: 'var(--lime)' }}>{pct}%</div>
+                <div style={{ fontSize: 22, fontWeight: 800, fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', color: 'var(--lime)' }}>{pct}%</div>
               </div>
             );
           })()}
@@ -680,7 +680,7 @@ export default function Settings() {
                     display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr 1fr 0.6fr', gap: 18, alignItems: 'center',
                   }}>
                     <div className="row" style={{ gap: 12 }}>
-                      <div style={{ width: 30, height: 30, borderRadius: 7, background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-3)' }}>
+                      <div style={{ width: 30, height: 30, borderRadius: 7, background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-3)' }}>
                         G
                       </div>
                       <div className="mono" style={{ fontSize: 13 }}>{acc.email}</div>
@@ -807,7 +807,7 @@ export default function Settings() {
             <div className="card__body" style={{ padding: 0 }}>
               {/* Gmail */}
               <div className="row" style={{ padding: 16, gap: 14, borderBottom: '1px solid var(--line)' }}>
-                <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', fontFamily: 'var(--f-mono)', fontSize: 13, color: 'var(--text-2)' }}>
+                <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 13, color: 'var(--text-2)' }}>
                   G
                 </div>
                 <div style={{ flex: 1 }}>
@@ -840,7 +840,7 @@ export default function Settings() {
               </div>
               {/* SMTP */}
               <div className="row" style={{ padding: 16, gap: 14 }}>
-                <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', fontFamily: 'var(--f-mono)', fontSize: 13, color: 'var(--text-3)' }}>
+                <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 13, color: 'var(--text-3)' }}>
                   S
                 </div>
                 <div style={{ flex: 1 }}>
@@ -864,7 +864,7 @@ export default function Settings() {
                 { name: 'Pipedrive', desc: 'Auto-create deals in Pipedrive when leads reply.' },
               ].map((item, i, arr) => (
                 <div key={item.name} className="row" style={{ padding: 16, gap: 14, borderBottom: i < arr.length - 1 ? '1px solid var(--line)' : 'none' }}>
-                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', fontFamily: 'var(--f-mono)', fontSize: 13, color: 'var(--text-3)' }}>
+                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 13, color: 'var(--text-3)' }}>
                     {item.name[0]}
                   </div>
                   <div style={{ flex: 1 }}>
@@ -889,7 +889,7 @@ export default function Settings() {
                 { name: 'Webhook', desc: 'Send real-time events (reply, open, bounce) to your own URL.' },
               ].map((item, i, arr) => (
                 <div key={item.name} className="row" style={{ padding: 16, gap: 14, borderBottom: i < arr.length - 1 ? '1px solid var(--line)' : 'none' }}>
-                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', fontFamily: 'var(--f-mono)', fontSize: 13, color: 'var(--text-3)' }}>
+                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 13, color: 'var(--text-3)' }}>
                     {item.name[0]}
                   </div>
                   <div style={{ flex: 1 }}>

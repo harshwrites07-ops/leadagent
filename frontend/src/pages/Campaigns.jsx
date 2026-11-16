@@ -30,7 +30,7 @@ function IntentBar({ score }) {
           style={{ height: '100%', background: color, borderRadius: 99 }}
         />
       </div>
-      <span style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color, minWidth: 36, textAlign: 'right' }}>{pct}%</span>
+      <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color, minWidth: 36, textAlign: 'right' }}>{pct}%</span>
     </div>
   );
 }
@@ -46,8 +46,8 @@ function SignalGrid({ signals }) {
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginTop: 10 }}>
       {Object.entries(signals).map(([key, val]) => (
         <div key={key} style={{ background: 'var(--bg)', borderRadius: 6, padding: '6px 8px' }}>
-          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-4)', letterSpacing: '0.08em', marginBottom: 2 }}>{labels[key] || key}</div>
-          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 14, color: val >= 0.7 ? 'var(--lime)' : val >= 0.4 ? 'var(--warn)' : 'var(--text-3)' }}>{Math.round(val * 100)}%</div>
+          <div style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-4)', letterSpacing: '0.08em', marginBottom: 2 }}>{labels[key] || key}</div>
+          <div style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 14, color: val >= 0.7 ? 'var(--lime)' : val >= 0.4 ? 'var(--warn)' : 'var(--text-3)' }}>{Math.round(val * 100)}%</div>
         </div>
       ))}
     </div>
@@ -73,8 +73,8 @@ function AngleCard({ angle, selected, onSelect }) {
         </span>
         {isSelected && <CheckCircle size={13} style={{ color: 'var(--lime)' }} />}
       </div>
-      <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>{angle.description}</div>
-      <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-4)', marginBottom: 8 }}>SUBJECT: {angle.subject}</div>
+      <div style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>{angle.description}</div>
+      <div style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-4)', marginBottom: 8 }}>SUBJECT: {angle.subject}</div>
       <div style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6, whiteSpace: 'pre-wrap', fontFamily: 'var(--f-sans)', borderTop: '1px solid var(--line)', paddingTop: 8 }}>
         {angle.full_email}
       </div>
@@ -160,13 +160,13 @@ function LeadRow({ cl, campaignId, onUpdate }) {
             {clientClosed && <span className="badge badge--coral">CLIENT ✓</span>}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-3)' }}>{(cl.subscriber_count || 0).toLocaleString()} subs</span>
-            <span style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-4)' }}>{(cl.avg_views || 0).toLocaleString()} avg views</span>
+            <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-3)' }}>{(cl.subscriber_count || 0).toLocaleString()} subs</span>
+            <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-4)' }}>{(cl.avg_views || 0).toLocaleString()} avg views</span>
           </div>
         </div>
         <div style={{ width: 140, flexShrink: 0 }}>
           <IntentBar score={cl.intent_score} />
-          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-4)', marginTop: 3, textAlign: 'right' }}>
+          <div style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-4)', marginTop: 3, textAlign: 'right' }}>
             {cl.intent_confidence?.toUpperCase()} CONFIDENCE
           </div>
         </div>
@@ -183,7 +183,7 @@ function LeadRow({ cl, campaignId, onUpdate }) {
             exit={{ opacity: 0, height: 0 }}
             style={{ borderTop: '1px solid var(--line)', padding: '16px 16px 20px' }}
           >
-            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>
+            <div style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>
               REASON: {cl.intent_reason || '—'}
             </div>
             <SignalGrid signals={cl.intent_signals || {}} />
@@ -203,7 +203,7 @@ function LeadRow({ cl, campaignId, onUpdate }) {
 
             {angles.length > 0 && (
               <div style={{ marginTop: 16 }}>
-                <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-4)', letterSpacing: '0.1em', marginBottom: 10 }}>SELECT AN ANGLE</div>
+                <div style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-4)', letterSpacing: '0.1em', marginBottom: 10 }}>SELECT AN ANGLE</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {angles.map(a => <AngleCard key={a.angle_name} angle={a} selected={selectedAngle} onSelect={selectAngle} />)}
                 </div>
@@ -212,15 +212,15 @@ function LeadRow({ cl, campaignId, onUpdate }) {
 
             {selectedAngle && (
               <div style={{ marginTop: 16 }}>
-                <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-4)', letterSpacing: '0.1em', marginBottom: 10 }}>EDIT EMAIL</div>
+                <div style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-4)', letterSpacing: '0.1em', marginBottom: 10 }}>EDIT EMAIL</div>
                 <label className="field__label">SUBJECT</label>
                 <input className="input" style={{ marginBottom: 10 }} value={editSubject} onChange={e => setEditSubject(e.target.value)} onBlur={saveEdits} placeholder="Email subject..." />
                 <label className="field__label">BODY</label>
                 <textarea className="input" style={{ minHeight: 160, resize: 'vertical', lineHeight: 1.6 }} value={editBody} onChange={e => setEditBody(e.target.value)} onBlur={saveEdits} placeholder="Email body..." />
                 {cl.email_quality_score > 0 && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
-                    <span style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-4)' }}>EMAIL QUALITY</span>
-                    <span style={{ fontFamily: 'var(--f-mono)', fontSize: 12, fontWeight: 600, color: cl.email_quality_score >= 70 ? 'var(--ok)' : cl.email_quality_score >= 50 ? 'var(--warn)' : 'var(--bad)' }}>
+                    <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-4)' }}>EMAIL QUALITY</span>
+                    <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, fontWeight: 600, color: cl.email_quality_score >= 70 ? 'var(--ok)' : cl.email_quality_score >= 50 ? 'var(--warn)' : 'var(--bad)' }}>
                       {cl.email_quality_score}/100
                     </span>
                   </div>
@@ -229,7 +229,7 @@ function LeadRow({ cl, campaignId, onUpdate }) {
             )}
 
             <div style={{ marginTop: 16, padding: 12, background: 'var(--bg)', borderRadius: 'var(--r)', border: '1px solid var(--line)' }}>
-              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-4)', letterSpacing: '0.1em', marginBottom: 10 }}>OUTCOME TRACKING</div>
+              <div style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-4)', letterSpacing: '0.1em', marginBottom: 10 }}>OUTCOME TRACKING</div>
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 <button
                   onClick={() => { setCallBooked(v => !v); trackEvent({ call_booked: !callBooked }); }}
@@ -385,7 +385,7 @@ function AddLeadsModal({ campaign, onClose, onDone }) {
               initial={{ scale: 0.5, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ type: 'spring', stiffness: 200 }}
-              style={{ fontFamily: 'var(--f-mono)', fontSize: 40, color: 'var(--lime)', marginBottom: 12 }}
+              style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 40, color: 'var(--lime)', marginBottom: 12 }}
             >
               {result.added}
             </motion.div>
@@ -393,8 +393,8 @@ function AddLeadsModal({ campaign, onClose, onDone }) {
             <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginBottom: 24 }}>
               {[{ label: 'HOT', val: result.hot, color: 'var(--coral)' }, { label: 'WARM', val: result.warm, color: 'var(--warn)' }, { label: 'COLD', val: result.cold, color: 'var(--text-3)' }].map(({ label, val, color }) => (
                 <div key={label} style={{ textAlign: 'center' }}>
-                  <div style={{ fontFamily: 'var(--f-mono)', fontSize: 20, color }}>{val}</div>
-                  <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-4)' }}>{label}</div>
+                  <div style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 20, color }}>{val}</div>
+                  <div style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-4)' }}>{label}</div>
                 </div>
               ))}
             </div>
@@ -441,7 +441,7 @@ function CampaignCard({ campaign, onSelect }) {
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
         <div>
           <div style={{ fontFamily: 'var(--f-sans)', fontWeight: 600, fontSize: 15, color: 'var(--text)', marginBottom: 3 }}>{campaign.name}</div>
-          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-4)' }}>
+          <div style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-4)' }}>
             {campaign.niche ? `#${campaign.niche} · ` : ''}{campaign.service_type || 'video editing'}
             {campaign.ab_test_enabled ? ' · A/B TEST' : ''}
           </div>
@@ -459,8 +459,8 @@ function CampaignCard({ campaign, onSelect }) {
           { label: 'CLIENTS', value: campaign.clients_closed || 0, color: campaign.clients_closed > 0 ? 'var(--lime)' : 'var(--text-3)' },
         ].map(({ label, value, color }) => (
           <div key={label} style={{ textAlign: 'center' }}>
-            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 18, fontWeight: 500, color }}>{value}</div>
-            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-4)', letterSpacing: '0.08em' }}>{label}</div>
+            <div style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 18, fontWeight: 500, color }}>{value}</div>
+            <div style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-4)', letterSpacing: '0.08em' }}>{label}</div>
           </div>
         ))}
       </div>
@@ -516,7 +516,7 @@ function CampaignDetail({ campaign: initialCampaign, onBack }) {
         <button onClick={onBack} className="btn btn--ghost btn--sm">← Back</button>
         <div>
           <h2 style={{ fontFamily: 'var(--f-heading)', fontSize: 22, fontWeight: 600, letterSpacing: '-0.04em', color: 'var(--text)', margin: 0 }}>{campaign.name}</h2>
-          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>{campaign.niche ? `#${campaign.niche}` : ''} {campaign.service_type}</div>
+          <div style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>{campaign.niche ? `#${campaign.niche}` : ''} {campaign.service_type}</div>
         </div>
       </motion.div>
 
@@ -545,7 +545,7 @@ function CampaignDetail({ campaign: initialCampaign, onBack }) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-        <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-4)' }}>
+        <div style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-4)' }}>
           AVG INTENT SCORE: {Math.round((campaign.avg_intent_score || 0) * 100)}%
           {campaign.avg_intent_score >= 0.75 && <span style={{ color: 'var(--ok)', marginLeft: 6 }}>✓ Above 75% target</span>}
         </div>
@@ -587,20 +587,20 @@ function CampaignDetail({ campaign: initialCampaign, onBack }) {
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             {accuracy.overall_passing ? <CheckCircle size={14} style={{ color: 'var(--lime)' }} /> : <AlertCircle size={14} style={{ color: 'var(--coral)' }} />}
-            <span style={{ fontFamily: 'var(--f-mono)', fontSize: 12, fontWeight: 600, color: accuracy.overall_passing ? 'var(--lime)' : 'var(--coral)' }}>
+            <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, fontWeight: 600, color: accuracy.overall_passing ? 'var(--lime)' : 'var(--coral)' }}>
               ALGORITHM {accuracy.overall_passing ? 'PERFORMING WELL' : 'NEEDS ADJUSTMENT'}
             </span>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
             {Object.entries(accuracy.buckets).map(([key, b]) => b.total > 0 && (
               <div key={key} style={{ background: 'var(--bg)', borderRadius: 'var(--r)', padding: 10 }}>
-                <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-4)', letterSpacing: '0.08em', marginBottom: 4 }}>{key.toUpperCase()} LEADS</div>
-                <div style={{ fontFamily: 'var(--f-mono)', fontSize: 16, color: b.passing ? 'var(--ok)' : 'var(--bad)' }}>{b.reply_rate}%</div>
-                <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-4)' }}>target: {b.target}% · {b.replied}/{b.total}</div>
+                <div style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-4)', letterSpacing: '0.08em', marginBottom: 4 }}>{key.toUpperCase()} LEADS</div>
+                <div style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 16, color: b.passing ? 'var(--ok)' : 'var(--bad)' }}>{b.reply_rate}%</div>
+                <div style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-4)' }}>target: {b.target}% · {b.replied}/{b.total}</div>
               </div>
             ))}
           </div>
-          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-3)', marginTop: 10 }}>{accuracy.recommendation}</div>
+          <div style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-3)', marginTop: 10 }}>{accuracy.recommendation}</div>
         </motion.div>
       )}
 
@@ -613,7 +613,7 @@ function CampaignDetail({ campaign: initialCampaign, onBack }) {
           transition={{ duration: 0.2 }}
         >
           {loading ? (
-            <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-4)', fontFamily: 'var(--f-mono)', fontSize: 13 }}>Loading leads…</div>
+            <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-4)', fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 13 }}>Loading leads…</div>
           ) : displayed.length === 0 ? (
             <div className="empty">
               <div className="empty__title">{leads.length === 0 ? 'No leads yet' : `No ${tab} leads`}</div>
@@ -716,7 +716,7 @@ export default function Campaigns() {
       <AnimatePresence mode="wait">
         {loading ? (
           <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            style={{ textAlign: 'center', padding: 60, color: 'var(--text-4)', fontFamily: 'var(--f-mono)', fontSize: 13 }}>
+            style={{ textAlign: 'center', padding: 60, color: 'var(--text-4)', fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 13 }}>
             Loading campaigns…
           </motion.div>
         ) : campaigns.length === 0 ? (

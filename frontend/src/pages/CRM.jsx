@@ -142,7 +142,7 @@ export default function CRM() {
         className="page__head"
       >
         <div>
-          <div className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8, fontFamily: 'var(--f-mono)' }}>
+          <div className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8, fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums' }}>
             Pipeline · {leads.length} creators{totalValue > 0 ? ` · $${(totalValue / 1000).toFixed(1)}k open value` : ''}
           </div>
           <h1 className="page__title" style={{ whiteSpace: 'nowrap' }}>CRM — <em>drag a creator from cold to closed.</em></h1>
@@ -507,10 +507,10 @@ export default function CRM() {
                   <>
                     {leadPitch ? (
                       <>
-                        <div style={{ fontSize: 12, color: 'var(--lime)', fontFamily: 'var(--f-mono)', marginBottom: 8 }}>
+                        <div style={{ fontSize: 12, color: 'var(--lime)', fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', marginBottom: 8 }}>
                           Subject: {leadPitch.email_subject || '—'}
                         </div>
-                        <pre style={{ fontSize: 12, color: 'var(--text-2)', whiteSpace: 'pre-wrap', fontFamily: 'var(--f-mono)', lineHeight: 1.6, background: 'var(--bg-2)', borderRadius: 'var(--r-sm)', padding: '10px 12px', border: '1px solid var(--line)', maxHeight: 400, overflowY: 'auto' }}>
+                        <pre style={{ fontSize: 12, color: 'var(--text-2)', whiteSpace: 'pre-wrap', fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', lineHeight: 1.6, background: 'var(--bg-2)', borderRadius: 'var(--r-sm)', padding: '10px 12px', border: '1px solid var(--line)', maxHeight: 400, overflowY: 'auto' }}>
                           {leadPitch.cold_email || '—'}
                         </pre>
                       </>

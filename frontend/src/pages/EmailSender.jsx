@@ -274,7 +274,7 @@ export default function EmailSender() {
             }}
           >
             <span style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.09em', color: 'var(--text-4)', fontWeight: 500, whiteSpace: 'nowrap' }}>{stat.label}</span>
-            <span style={{ fontFamily: 'var(--f-mono)', fontSize: 32, fontWeight: 500, letterSpacing: '-0.03em', lineHeight: 1, color: 'var(--text)' }}>{stat.value}</span>
+            <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 32, fontWeight: 500, letterSpacing: '-0.03em', lineHeight: 1, color: 'var(--text)' }}>{stat.value}</span>
             <span style={{ fontSize: 12.5, color: 'var(--text-3)' }}>{stat.sub}</span>
           </motion.div>
         ))}

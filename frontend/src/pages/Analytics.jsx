@@ -171,7 +171,7 @@ export default function Analytics() {
                   }}
                 >
                   <span style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.09em', color: 'var(--text-4)', fontWeight: 500, whiteSpace: 'nowrap' }}>{stat.label}</span>
-                  <span style={{ fontFamily: 'var(--f-mono)', fontSize: 34, fontWeight: 500, letterSpacing: '-0.03em', lineHeight: 1, color: stat.color }}>{stat.value}</span>
+                  <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 34, fontWeight: 500, letterSpacing: '-0.03em', lineHeight: 1, color: stat.color }}>{stat.value}</span>
                   <span style={{ fontSize: 12.5, color: 'var(--text-3)' }}>{stat.sub}</span>
                   <div style={{ marginTop: 6 }}>
                     <Sparkline data={stat.spark} color={stat.color} height={36} />
@@ -342,7 +342,7 @@ export default function Analytics() {
                     <div className="row" style={{ gap: 12 }}>
                       {top3.map((t, i) => (
                         <div key={i} style={{ flex: 1, padding: '14px 16px', background: i === 0 ? 'rgba(var(--lime-rgb),0.06)' : 'var(--bg-2)', border: `1px solid ${i === 0 ? 'var(--lime-border)' : 'var(--line)'}`, borderRadius: 10, textAlign: 'center' }}>
-                          <div style={{ fontSize: 22, fontWeight: 800, fontFamily: 'var(--f-mono)', color: i === 0 ? 'var(--lime)' : 'var(--text)', marginBottom: 4 }}>{fmt(Number(t.hour))}</div>
+                          <div style={{ fontSize: 22, fontWeight: 800, fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', color: i === 0 ? 'var(--lime)' : 'var(--text)', marginBottom: 4 }}>{fmt(Number(t.hour))}</div>
                           <div className="muted" style={{ fontSize: 12 }}>{t.sent} sent · {t.open_rate?.toFixed(0) || '—'}% open</div>
                           {i === 0 && <div style={{ fontSize: 12, color: 'var(--lime)', fontWeight: 600, marginTop: 4 }}>Best window</div>}
                         </div>
