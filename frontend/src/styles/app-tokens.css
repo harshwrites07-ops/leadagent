@@ -8,53 +8,53 @@
    ═══════════════════════════════════════════════════════════ */
 :root {
   /* ── Backgrounds ── */
-  --app-bg:         #0A0A0D;
-  --app-surface-1:  #0D0E12;  /* surface / card / input fill */
-  --app-surface-2:  #0D0E12;
-  --app-danger:     #f87171;
+  --app-bg:         #1b1a18;
+  --app-surface-1:  #232220;  /* surface / card / input fill */
+  --app-surface-2:  #2b2a27;
+  --app-danger:     #e94d68;
 
   /* ── Text — white at fixed opacity tiers, no gray hex values ── */
-  --app-text-primary:   rgba(255, 255, 255, 1);
-  --app-text-secondary: rgba(255, 255, 255, 0.84);
-  --app-text-soft:      rgba(255, 255, 255, 0.84);
-  --app-text-muted:     rgba(255, 255, 255, 0.66);
-  --app-text-ghost:     rgba(255, 255, 255, 0.54);
-  --app-text-faint:     rgba(255, 255, 255, 0.46);
+  --app-text-primary:   #fefdfb;
+  --app-text-secondary: rgba(254, 253, 251, 0.84);
+  --app-text-soft:      rgba(254, 253, 251, 0.84);
+  --app-text-muted:     rgba(254, 253, 251, 0.66);
+  --app-text-ghost:     rgba(254, 253, 251, 0.54);
+  --app-text-faint:     rgba(254, 253, 251, 0.46);
   /* Content tone — email/draft body text only, never UI chrome. */
-  --app-text-content:   rgba(255, 255, 255, 0.88);
+  --app-text-content:   rgba(254, 253, 251, 0.88);
 
   /* ── Accent — champagne, the only chromatic accent, used sparingly:
      one primary button per screen, active nav text, active tab
      underline, progress fill, intent scores ≥90. ── */
-  --app-accent:         #E8DCC0;
-  --app-accent-hover:   #f0e6ce;
-  --app-accent-pressed: #d9caa3;
-  --app-warning:        #FBBF24;
-  --app-success:        #4ADE80;
+  --app-accent:         #f4f3f0;
+  --app-accent-hover:   #ffffff;
+  --app-accent-pressed: #d1cdc7;
+  --app-warning:        #fcbe11;
+  --app-success:        #84e7a5;
 
   /* Alpha tints derived from --app-accent / --app-warning / --app-danger for
      soft fills, borders, and glows (badges, focus glows, hero gradients).
      Not new base colors — computed tints of the sanctioned tokens above. */
-  --app-accent-soft:    rgba(232, 220, 192, 0.12);
-  --app-accent-border:  rgba(232, 220, 192, 0.32);
-  --app-accent-glow:    rgba(232, 220, 192, 0.35);
-  --app-accent-rgb:     232, 220, 192;
-  --app-warning-soft:   rgba(251, 191, 36, 0.14);
-  --app-warning-border: rgba(251, 191, 36, 0.38);
-  --app-warning-rgb:    251, 191, 36;
-  --app-danger-soft:    rgba(248, 113, 113, 0.14);
-  --app-danger-border:  rgba(248, 113, 113, 0.38);
-  --app-danger-rgb:     248, 113, 113;
-  --app-success-soft:   rgba(74, 222, 128, 0.14);
-  --app-success-border: rgba(74, 222, 128, 0.38);
-  --app-success-rgb:    74, 222, 128;
+  --app-accent-soft:    rgba(244, 243, 240, 0.12);
+  --app-accent-border:  rgba(244, 243, 240, 0.32);
+  --app-accent-glow:    rgba(244, 243, 240, 0.35);
+  --app-accent-rgb:     244, 243, 240;
+  --app-warning-soft:   rgba(252, 190, 17, 0.14);
+  --app-warning-border: rgba(252, 190, 17, 0.38);
+  --app-warning-rgb:    252, 190, 17;
+  --app-danger-soft:    rgba(233, 77, 104, 0.14);
+  --app-danger-border:  rgba(233, 77, 104, 0.38);
+  --app-danger-rgb:     233, 77, 104;
+  --app-success-soft:   rgba(132, 231, 165, 0.14);
+  --app-success-border: rgba(132, 231, 165, 0.38);
+  --app-success-rgb:    132, 231, 165;
 
   /* Borders — hairline only, no drop shadows anywhere. Single tier plus
      its hover state (both driven by opacity on white, not a new hex). */
-  --app-divider:      rgba(255, 255, 255, 0.08);
-  --app-border:       rgba(255, 255, 255, 0.08);
-  --app-border-hover: rgba(255, 255, 255, 0.16);
-  --app-border-soft:  rgba(255, 255, 255, 0.08);
+  --app-divider:      rgba(254, 253, 251, 0.10);
+  --app-border:       rgba(254, 253, 251, 0.10);
+  --app-border-hover: rgba(254, 253, 251, 0.20);
+  --app-border-soft:  rgba(254, 253, 251, 0.10);
 
   /* ── Border radius ── */
   --app-radius-sm:   8px;    /* buttons / inputs */
@@ -83,6 +83,56 @@
   --app-font-heading: 'Inter', 'Segoe UI', Roboto, ui-sans-serif, system-ui, sans-serif;
   --app-font-body:    'Inter', 'Segoe UI', Roboto, ui-sans-serif, system-ui, sans-serif;
 }
+
+
+/* ═══════════════════════════════════════════════════════════
+   LIGHT THEME — warm "oat" neutrals + ink text. Toggled with
+   <html data-theme="light">. Dark (above) is the default.
+   Every component reads these tokens, so nothing else changes.
+   ═══════════════════════════════════════════════════════════ */
+:root[data-theme="light"] {
+  --app-bg:         #fefdfb;
+  --app-surface-1:  #ffffff;
+  --app-surface-2:  #f4f3f0;
+
+  --app-text-primary:   #1b1a18;
+  --app-text-secondary: #55534e;
+  --app-text-soft:      #55534e;
+  --app-text-muted:     #6b6862;
+  --app-text-ghost:     #85817a;
+  --app-text-faint:     #9f9b93;
+  --app-text-content:   #3c3a36;
+
+  --app-accent:         #1b1a18;
+  --app-accent-hover:   #000000;
+  --app-accent-pressed: #000000;
+  --app-warning:        #d08a11;
+  --app-success:        #078a52;
+  --app-danger:         #dd2c53;
+
+  --app-accent-soft:    rgba(27, 26, 24, 0.06);
+  --app-accent-border:  rgba(27, 26, 24, 0.24);
+  --app-accent-glow:    rgba(27, 26, 24, 0.12);
+  --app-accent-rgb:     27, 26, 24;
+  --app-warning-soft:   rgba(208, 138, 17, 0.14);
+  --app-warning-border: rgba(208, 138, 17, 0.40);
+  --app-warning-rgb:    208, 138, 17;
+  --app-danger-soft:    rgba(221, 44, 83, 0.10);
+  --app-danger-border:  rgba(221, 44, 83, 0.36);
+  --app-danger-rgb:     221, 44, 83;
+  --app-success-soft:   rgba(7, 138, 82, 0.12);
+  --app-success-border: rgba(7, 138, 82, 0.36);
+  --app-success-rgb:    7, 138, 82;
+
+  --app-divider:      #e0dedc;
+  --app-border:       #e0dedc;
+  --app-border-hover: #d1cdc7;
+  --app-border-soft:  #eee9df;
+
+  --on-accent: #fefdfb;
+  color-scheme: light;
+}
+:root:not([data-theme="light"]) { color-scheme: dark; }
 
 /* ═══════════════════════════════════════════════════════════
    TYPE SCALE — the only 9 text styles used in the app.

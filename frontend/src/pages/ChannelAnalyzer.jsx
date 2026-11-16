@@ -51,7 +51,7 @@ function ResultDossier({ result, navigate, motionIndex = 0 }) {
 
   const scoreNum = channel.lead_score ?? 0;
   const scoreColor = scoreNum >= 90 ? 'var(--lime)' : 'var(--text-3)';
-  const tempDot = channel.temperature === 'hot' ? 'var(--ok)' : channel.temperature === 'warm' ? 'var(--warn)' : 'rgba(255,255,255,0.3)';
+  const tempDot = channel.temperature === 'hot' ? 'var(--ok)' : channel.temperature === 'warm' ? 'var(--warn)' : 'var(--text-5)';
 
   return (
     <motion.div

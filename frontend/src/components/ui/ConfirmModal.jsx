@@ -40,7 +40,7 @@ export default function ConfirmModal({ title, message, confirmLabel = 'Confirm',
           <button
             onClick={onConfirm}
             className="type-button"
-            style={{ padding: '8px var(--app-space-2)', borderRadius: 'var(--app-radius-pill)', border: 'none', background: danger ? 'var(--app-danger)' : 'var(--app-accent)', color: '#ffffff', cursor: 'pointer' }}
+            style={{ padding: '8px var(--app-space-2)', borderRadius: 'var(--app-radius-pill)', border: 'none', background: danger ? 'var(--app-danger)' : 'var(--app-accent)', color: 'var(--on-accent)', cursor: 'pointer' }}
           >
             {confirmLabel}
           </button>

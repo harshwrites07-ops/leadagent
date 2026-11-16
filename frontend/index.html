@@ -7,6 +7,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400..700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+    <script>
+      /* Apply the saved light/dark choice before first paint (signed-in app only; public pages stay dark). */
+      (function () {
+        try {
+          var pub = ['/', '/login', '/signup', '/phone-login', '/forgot-password', '/reset-password', '/verify', '/verify-email', '/privacy', '/terms'];
+          if (pub.indexOf(location.pathname) !== -1) return;
+          var t = localStorage.getItem('quelro-theme');
+          if (!t && window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) t = 'light';
+          if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
+        } catch (e) {}
+      })();
+    </script>
     <title>Quelro — AI Outreach OS for Freelancers Selling to YouTube Creators</title>
     <meta name="description" content="Quelro automates outreach for freelancers and agencies selling services to YouTube creators — AI-personalized emails grounded in real channel data, booked calls on autopilot." />
     <link rel="canonical" href="https://quelro.com/" />

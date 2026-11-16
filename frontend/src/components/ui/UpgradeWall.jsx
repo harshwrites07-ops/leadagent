@@ -139,7 +139,7 @@ export default function UpgradeWall() {
               {plan.highlight && (
                 <div className="type-body-12" style={{
                   position: 'absolute', top: -11, left: '50%', transform: 'translateX(-50%)',
-                  background: 'var(--app-accent)', color: '#ffffff',
+                  background: 'var(--app-accent)', color: 'var(--on-accent)',
                   letterSpacing: '0.1em', textTransform: 'uppercase',
                   padding: '3px var(--app-space-2)', borderRadius: 'var(--app-radius-pill)',
                 }}>Most popular</div>

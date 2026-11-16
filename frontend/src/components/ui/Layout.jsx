@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
 import AssistantChat from './AssistantChat';
+import ThemeToggle, { useAppTheme } from './ThemeToggle';
 import { Menu, X } from 'lucide-react';
 
 /* Grouped by the journey — same narrative as the landing page.
@@ -72,6 +73,7 @@ export default function Layout({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
   const isMobile = useMobile();
+  const [theme, toggleTheme] = useAppTheme();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
 
@@ -375,6 +377,8 @@ export default function Layout({ children }) {
           {!isMobile && (
             <a href="#" style={{ fontSize: 13, color: 'var(--text-3)', fontWeight: 500 }}>Help</a>
           )}
+
+          <ThemeToggle theme={theme} onToggle={toggleTheme} />
 
           <button onClick={() => window.dispatchEvent(new CustomEvent('jack:open'))} style={{
             display: 'flex', alignItems: 'center', gap: 6,

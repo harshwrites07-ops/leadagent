@@ -1437,7 +1437,7 @@ export default function PitchGenerator() {
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                         {checklist.items.map((item, i) => (
                           <div key={i} className="row" style={{ gap: 8, alignItems: 'flex-start' }}>
-                            <span style={{ width: 6, height: 6, borderRadius: '50%', marginTop: 5, flexShrink: 0, background: item.pass ? 'var(--ok)' : item.critical ? 'var(--bad)' : 'rgba(255,255,255,0.3)' }} />
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', marginTop: 5, flexShrink: 0, background: item.pass ? 'var(--ok)' : item.critical ? 'var(--bad)' : 'var(--text-5)' }} />
                             <span style={{ fontSize: 13, color: item.pass ? 'var(--text-2)' : item.critical ? 'var(--bad)' : 'var(--text-3)', lineHeight: 1.6 }}>{item.label}</span>
                             {!item.pass && <span className="muted" style={{ fontSize: 12, lineHeight: 1.6 }}>— {item.detail}</span>}
                           </div>

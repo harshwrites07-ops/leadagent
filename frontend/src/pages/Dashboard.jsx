@@ -8,7 +8,7 @@ import api, { formatNumber, formatDate } from '../utils/api';
 const PAGE_SIZE = 10;
 
 const STAGE_META = {
-  new_lead:    { label: 'Not contacted',   dot: 'rgba(255,255,255,0.25)' },
+  new_lead:    { label: 'Not contacted',   dot: 'var(--text-5)' },
   studying:    { label: 'Researching',     dot: 'var(--sky)' },
   pitch_ready: { label: 'Pitch ready',     dot: 'var(--violet)' },
   emailed:     { label: 'Sequence active', dot: 'var(--lime)' },

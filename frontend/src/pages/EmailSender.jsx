@@ -10,7 +10,7 @@ import { useApp } from '../context/AppContext';
 import { useCountUp } from '../hooks/useCountUp';
 
 const STATUS_META = {
-  pending:  { label: 'Pending',  dot: 'rgba(255,255,255,0.3)' },
+  pending:  { label: 'Pending',  dot: 'var(--text-5)' },
   sending:  { label: 'Sending',  dot: 'var(--warn)' },
   sent:     { label: 'Sent',     dot: 'var(--ok)' },
   failed:   { label: 'Failed',   dot: 'var(--bad)' },

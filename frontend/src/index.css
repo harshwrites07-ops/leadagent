@@ -35,7 +35,7 @@
   --text-4:       var(--app-text-ghost);
   --text-5:       var(--app-text-faint);
   --text-content: var(--app-text-content);
-  --on-accent:    #0A0A0D;   /* dark text on champagne fills */
+  --on-accent:    #1b1a18;   /* dark text on light accent fills (overridden in light theme) */
 
   /* ── Accent (single accent: buttons, links, focus, live indicators).
      Used sparingly (≤5 chromatic touches per screen) — everything else
