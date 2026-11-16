@@ -303,7 +303,6 @@ function VisualSend() {
         </div>
       ))}
       <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-        <span className="badge badge--ok">deliverability 98.2%</span>
         <span className="badge badge--neutral">auto-pause on bounce spike</span>
       </div>
     </div>
@@ -405,12 +404,6 @@ const JOURNEY = [
     points: ['Reply intelligence sorts by heat', 'Marcus drafts your response', 'Kanban pipeline to closed-won'],
     Visual: VisualClose,
   },
-];
-
-const TESTIMONIALS = [
-  { quote: 'Sent 20 pitches in week 1. Got 14 replies. Booked 4 calls. Closed 2 clients at $2,000/month each. The targeting is not a gimmick — it actually works.', name: 'Rohan M.', role: 'Video Editor · Mumbai', metric: '$4,000', metricLabel: 'added in week 1', color: 'var(--lime)' },
-  { quote: "Before Quelro: 100 pitches, 2 replies, 0 clients. After: 20 pitches, 13 replies, 3 calls, 1 client. I genuinely don't understand how it works but it does.", name: 'Priya S.', role: 'Thumbnail Designer · Delhi', metric: '65%', metricLabel: 'reply rate', color: 'var(--sky)' },
-  { quote: 'The Reddit signal feature paid for 6 months of subscription in one deal. Creator posted they needed a scriptwriter. I was in their inbox 3 minutes later.', name: 'Arjun K.', role: 'Scriptwriter · Bangalore', metric: '3 min', metricLabel: 'signal to pitch', color: 'var(--coral)' },
 ];
 
 const PLANS = [
@@ -678,14 +671,14 @@ export default function Landing() {
           gap: 'var(--sp-4)', padding: 'var(--sp-8) var(--sp-6)',
         }}>
           {[
-            { v: 60, suffix: '%+', label: 'average reply rate' },
-            { v: 100000, suffix: '+', label: 'creators scored daily' },
-            { v: 90, suffix: '+', label: 'quality gate minimum' },
-            { v: 3, suffix: ' min', label: 'signal to pitch' },
+            { v: 29, prefix: '$', suffix: '/mo', label: 'plans start at' },
+            { v: 5000, suffix: '', label: 'emails / month on Agency' },
+            { v: 10, suffix: '', label: 'Gmail accounts on Agency' },
+            { v: 3, suffix: '', label: 'simple plans' },
           ].map(s => (
             <div key={s.label} style={{ textAlign: 'center' }}>
               <div style={{ fontFamily: 'var(--f-mono)', fontSize: 'var(--fs-2xl)', letterSpacing: '-0.02em', color: 'var(--lime)' }}>
-                <StatInView value={s.v} suffix={s.suffix} />
+                <StatInView value={s.v} prefix={s.prefix} suffix={s.suffix} />
               </div>
               <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-3)', marginTop: 4, letterSpacing: '.04em', textTransform: 'uppercase' }}>
                 {s.label}
@@ -754,45 +747,13 @@ export default function Landing() {
         })}
       </div>
 
-      {/* ══ TESTIMONIALS ══ */}
-      <div style={{ borderTop: '1px solid var(--line)', background: 'var(--bg-2)' }}>
-        <div className="lp-container" style={{ padding: 'var(--sp-16) var(--sp-6)' }}>
-          <motion.div variants={fadeUp} initial="hidden" whileInView="visible" viewport={viewportOnce} style={{ textAlign: 'center', marginBottom: 'var(--sp-10)' }}>
-            <div className="lp-eyebrow" style={{ justifyContent: 'center' }}>RESULTS</div>
-            <h2 className="lp-h2">Real freelancers. Real clients.</h2>
-          </motion.div>
-
-          <motion.div
-            variants={stagger} initial="hidden" whileInView="visible" viewport={viewportOnce}
-            style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 'var(--sp-4)' }}
-          >
-            {TESTIMONIALS.map(t => (
-              <motion.div key={t.name} variants={fadeUp} className="card" style={{ padding: 'var(--sp-6)', background: 'var(--surface)' }}>
-                <div style={{ fontFamily: 'var(--f-mono)', fontSize: 'var(--fs-xl)', color: t.color, letterSpacing: '-0.02em' }}>
-                  {t.metric}
-                </div>
-                <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-3)', marginBottom: 'var(--sp-4)' }}>{t.metricLabel}</div>
-                <p style={{ fontSize: 14, color: 'var(--text-2)', lineHeight: 1.7, marginBottom: 'var(--sp-5)' }}>"{t.quote}"</p>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
-                  <span className="ava" style={{ background: 'var(--surface-3)', color: 'var(--text-2)' }}>{t.name[0]}</span>
-                  <div>
-                    <div style={{ fontSize: 12, fontWeight: 500 }}>{t.name}</div>
-                    <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-3)' }}>{t.role}</div>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </motion.div>
-        </div>
-      </div>
-
       {/* ══ PRICING ══ */}
       <div id="pricing" className="lp-container" style={{ padding: 'var(--sp-16) var(--sp-6)' }}>
         <motion.div variants={fadeUp} initial="hidden" whileInView="visible" viewport={viewportOnce} style={{ textAlign: 'center', marginBottom: 'var(--sp-10)' }}>
           <div className="lp-eyebrow" style={{ justifyContent: 'center' }}>PRICING</div>
           <h2 className="lp-h2">One client pays for a year of Quelro.</h2>
           <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-2)' }}>
-            The average creator client is worth $2,000–5,000/month. Quelro starts at $29.
+            Land one creator client and Quelro pays for itself. Plans start at $29.
           </p>
         </motion.div>
 
