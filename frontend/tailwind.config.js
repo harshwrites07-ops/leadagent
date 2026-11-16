@@ -37,8 +37,8 @@ export default {
         },
       },
       fontSize: {
-        xs:   ['12px', { lineHeight: '16px' }],
-        sm:   ['14px', { lineHeight: '20px' }],
+        xs:   ['13px', { lineHeight: '18px' }],
+        sm:   ['15px', { lineHeight: '22px' }],
         base: ['16px', { lineHeight: '24px' }],
       },
       fontFamily: {

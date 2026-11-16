@@ -99,7 +99,7 @@ function ConversationView({ reply, onBack, onReplySent }) {
         </div>
         <div className="text-right flex-shrink-0">
           {classification && CLASSIFICATION_LABELS[classification] && (
-            <div style={{ fontSize: 12, fontWeight: 700, color: CLASSIFICATION_LABELS[classification].color, border: `1px solid ${CLASSIFICATION_LABELS[classification].color}44`, padding: '2px 8px', borderRadius: 99, marginBottom: 2 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: CLASSIFICATION_LABELS[classification].color, border: `1px solid ${CLASSIFICATION_LABELS[classification].color}44`, padding: '2px 8px', borderRadius: 99, marginBottom: 2 }}>
               {CLASSIFICATION_LABELS[classification].label}
             </div>
           )}
@@ -186,11 +186,11 @@ function ConversationView({ reply, onBack, onReplySent }) {
             >
               <div style={{ background: 'var(--lime-soft)', border: '1px solid var(--lime-border)', borderRadius: 12, padding: 12 }}>
                 <div className="flex items-center gap-2" style={{ marginBottom: 6 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--lime)', fontFamily: 'var(--f-mono)' }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--lime)', fontFamily: 'var(--f-mono)' }}>
                     ✦ Marcus suggests
                   </span>
                   {classification && CLASSIFICATION_LABELS[classification] && (
-                    <span style={{ fontSize: 12, color: CLASSIFICATION_LABELS[classification].color }}>
+                    <span style={{ fontSize: 13, color: CLASSIFICATION_LABELS[classification].color }}>
                       · {CLASSIFICATION_LABELS[classification].label}
                     </span>
                   )}
@@ -223,7 +223,7 @@ function ConversationView({ reply, onBack, onReplySent }) {
             className="flex-shrink-0 p-3 rounded-xl transition-colors"
             style={{ background: showSuggestion ? 'var(--lime)' : 'var(--surface-2)', border: '1px solid var(--lime-border)', color: showSuggestion ? 'var(--on-accent)' : 'var(--lime)', opacity: loadingSuggestion ? 0.5 : 1 }}
           >
-            <span style={{ fontSize: 14 }}>{loadingSuggestion ? '…' : '✦'}</span>
+            <span style={{ fontSize: 15 }}>{loadingSuggestion ? '…' : '✦'}</span>
           </button>
           <button
             onClick={sendReply}
@@ -272,7 +272,7 @@ function ReplyRow({ reply, onOpen, isHot }) {
           <p className="text-sm font-semibold truncate" style={{ color: 'var(--text)' }}>{reply.channel_name || reply.lead_email}</p>
           <span className={`badge text-xs flex-shrink-0 ${isHot ? 'badge--coral' : 'badge--neutral'}`}>REPLIED</span>
           {reply.classification && CLASSIFICATION_LABELS[reply.classification] && (
-            <span style={{ fontSize: 12, fontWeight: 600, color: CLASSIFICATION_LABELS[reply.classification].color, flexShrink: 0 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: CLASSIFICATION_LABELS[reply.classification].color, flexShrink: 0 }}>
               · {CLASSIFICATION_LABELS[reply.classification].label}
             </span>
           )}

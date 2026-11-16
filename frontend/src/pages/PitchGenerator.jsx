@@ -475,7 +475,7 @@ export default function PitchGenerator() {
                 initial={{ opacity: 0, y: -6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
-                style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-3)', marginBottom: 8, whiteSpace: 'nowrap' }}
+                style={{ fontFamily: 'var(--f-mono)', fontSize: 13, color: 'var(--text-3)', marginBottom: 8, whiteSpace: 'nowrap' }}
               >
                 FOR · {selectedLead.channel_name} · {formatNumber(selectedLead.subscriber_count ?? 0)} subs
               </motion.div>
@@ -511,7 +511,7 @@ export default function PitchGenerator() {
                 <div className="card__title">Select leads</div>
                 <div className="row" style={{ gap: 8 }}>
                   {selectedLeads.size > 0 && (
-                    <span style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--lime)' }}>{selectedLeads.size} selected</span>
+                    <span style={{ fontFamily: 'var(--f-mono)', fontSize: 13, color: 'var(--lime)' }}>{selectedLeads.size} selected</span>
                   )}
                   <button className="btn btn--ghost btn--sm" onClick={() => setShowLeadPicker(false)}>
                     Close
@@ -530,14 +530,14 @@ export default function PitchGenerator() {
                         setSelectedLeads(e.target.checked ? new Set(filteredLeads.map(l => l.id)) : new Set());
                       }}
                     />
-                    <span className="muted" style={{ fontSize: 12 }}>Select all ({filteredLeads.length})</span>
+                    <span className="muted" style={{ fontSize: 13 }}>Select all ({filteredLeads.length})</span>
                   </div>
                 )}
                 <div style={{ maxHeight: 320, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
                   {leadsLoading ? (
-                    <div className="muted" style={{ padding: '16px', textAlign: 'center', fontSize: 14 }}>Loading leads...</div>
+                    <div className="muted" style={{ padding: '16px', textAlign: 'center', fontSize: 15 }}>Loading leads...</div>
                   ) : filteredLeads.length === 0 ? (
-                    <div className="muted" style={{ padding: '16px', textAlign: 'center', fontSize: 14 }}>No leads found.</div>
+                    <div className="muted" style={{ padding: '16px', textAlign: 'center', fontSize: 15 }}>No leads found.</div>
                   ) : filteredLeads.map((lead, i) => (
                     <motion.div
                       key={lead.id}
@@ -557,10 +557,10 @@ export default function PitchGenerator() {
                     >
                       <input type="checkbox" checked={selectedLeads.has(lead.id)} onChange={() => toggleLeadSelect(lead.id)}
                         onClick={e => e.stopPropagation()} style={{ flexShrink: 0 }} />
-                      <span className="ava" style={{ fontSize: 12, flexShrink: 0 }}>{(lead.channel_name || '?')[0].toUpperCase()}</span>
+                      <span className="ava" style={{ fontSize: 13, flexShrink: 0 }}>{(lead.channel_name || '?')[0].toUpperCase()}</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 14, fontWeight: 500 }}>{lead.channel_name}</div>
-                        <div className="muted" style={{ fontSize: 12 }}>{formatNumber(lead.subscriber_count ?? 0)} subs · {lead.temperature || 'cold'}{lead.email ? ' · has email' : ''}</div>
+                        <div style={{ fontSize: 15, fontWeight: 500 }}>{lead.channel_name}</div>
+                        <div className="muted" style={{ fontSize: 13 }}>{formatNumber(lead.subscriber_count ?? 0)} subs · {lead.temperature || 'cold'}{lead.email ? ' · has email' : ''}</div>
                       </div>
                       {lead.pitch_id && <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--ok)', flexShrink: 0 }} />}
                     </motion.div>
@@ -576,11 +576,11 @@ export default function PitchGenerator() {
                       exit={{ opacity: 0, y: 8 }}
                       style={{ marginTop: 14, padding: '12px 16px', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--r)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}
                     >
-                      <span style={{ fontSize: 14, fontWeight: 500, whiteSpace: 'nowrap' }}>{selectedLeads.size} lead{selectedLeads.size !== 1 ? 's' : ''} selected</span>
+                      <span style={{ fontSize: 15, fontWeight: 500, whiteSpace: 'nowrap' }}>{selectedLeads.size} lead{selectedLeads.size !== 1 ? 's' : ''} selected</span>
                       <div style={{ flex: 1 }} />
                       <div className="field" style={{ margin: 0 }}>
-                        <div className="field__label" style={{ fontSize: 12 }}>Delay between sends</div>
-                        <select className="input" style={{ padding: '4px 8px', fontSize: 12, width: 110 }} value={timeGap} onChange={e => setTimeGap(Number(e.target.value))}>
+                        <div className="field__label" style={{ fontSize: 13 }}>Delay between sends</div>
+                        <select className="input" style={{ padding: '4px 8px', fontSize: 13, width: 110 }} value={timeGap} onChange={e => setTimeGap(Number(e.target.value))}>
                           <option value={0}>No delay</option>
                           <option value={30}>30 seconds</option>
                           <option value={60}>1 minute</option>
@@ -637,7 +637,7 @@ export default function PitchGenerator() {
                     style={{ height: '100%', background: 'var(--lime)', borderRadius: 2 }}
                   />
                 </div>
-                <div className="muted" style={{ fontSize: 12 }}>Generating pitch for lead {bulkProgress.current}/{bulkProgress.total}…</div>
+                <div className="muted" style={{ fontSize: 13 }}>Generating pitch for lead {bulkProgress.current}/{bulkProgress.total}…</div>
               </div>
             )}
             <div style={{ padding: '0 16px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -651,8 +651,8 @@ export default function PitchGenerator() {
                 >
                   <span style={{ width: 6, height: 6, flexShrink: 0, borderRadius: '50%', background: r.status === 'error' ? 'var(--bad)' : 'var(--ok)' }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 500 }}>{r.lead.channel_name}</div>
-                    <div className="muted" style={{ fontSize: 12 }}>{r.status === 'error' ? r.error : r.status}</div>
+                    <div style={{ fontSize: 13, fontWeight: 500 }}>{r.lead.channel_name}</div>
+                    <div className="muted" style={{ fontSize: 13 }}>{r.status === 'error' ? r.error : r.status}</div>
                   </div>
                   {r.pitch && (
                     <button className="btn btn--ghost btn--sm" onClick={() => { handleSelectLead(r.lead); setPitch(normalizePitch(r.pitch)); setEmailSubject(r.pitch.email_subject || ''); setEmailBody(r.pitch.cold_email || ''); setCompletedSteps(new Set(GEN_STEPS.map(s => s.key))); setShowLeadPicker(false); }}>
@@ -676,7 +676,7 @@ export default function PitchGenerator() {
             style={{ marginBottom: 20 }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>
+              <div style={{ fontSize: 15, fontWeight: 600 }}>
                 {streamEmails.filter(e => e.status === 'done').length}/{streamEmails.length} pitches ready
               </div>
               <div style={{ flex: 1 }} />
@@ -699,10 +699,10 @@ export default function PitchGenerator() {
                       style={{ padding: 16, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)' }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                        <span className="ava" style={{ fontSize: 12 }}>{(lead.channel_name || '?')[0].toUpperCase()}</span>
+                        <span className="ava" style={{ fontSize: 13 }}>{(lead.channel_name || '?')[0].toUpperCase()}</span>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 12, fontWeight: 500 }}>{lead.channel_name}</div>
-                          <div className="muted" style={{ fontSize: 12 }}>{formatNumber(lead.subscriber_count ?? 0)} subs</div>
+                          <div style={{ fontSize: 13, fontWeight: 500 }}>{lead.channel_name}</div>
+                          <div className="muted" style={{ fontSize: 13 }}>{formatNumber(lead.subscriber_count ?? 0)} subs</div>
                         </div>
                       </div>
                       {[80, 60, 40].map((w, i) => (
@@ -711,7 +711,7 @@ export default function PitchGenerator() {
                       ))}
                       <div className="row" style={{ gap: 6, marginTop: 10, justifyContent: 'center' }}>
                         <span className="dot dot--pulse" style={{ width: 6, height: 6 }} />
-                        <span className="muted" style={{ fontSize: 12 }}>{statusMessage || 'Generating...'}</span>
+                        <span className="muted" style={{ fontSize: 13 }}>{statusMessage || 'Generating...'}</span>
                       </div>
                     </motion.div>
                   );
@@ -725,8 +725,8 @@ export default function PitchGenerator() {
                   return (
                     <motion.div key={leadId} initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                       style={{ padding: 16, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)' }}>
-                      <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 4 }}>{lead.channel_name}</div>
-                      <div className="muted" style={{ fontSize: 12, color: isInsufficientData ? 'var(--text-3)' : 'var(--bad)', marginBottom: 10 }}>
+                      <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>{lead.channel_name}</div>
+                      <div className="muted" style={{ fontSize: 13, color: isInsufficientData ? 'var(--text-3)' : 'var(--bad)', marginBottom: 10 }}>
                         {isNeedsResearch || isIntakeBlocked || isNeedsHuman || isInsufficientData ? error : `Failed: ${error || 'Request failed — check Railway logs for details'}`}
                       </div>
                       <div className="row" style={{ gap: 6 }}>
@@ -753,19 +753,19 @@ export default function PitchGenerator() {
                   <motion.div key={leadId} initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}
                     style={{ padding: 16, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                      <span className="ava" style={{ fontSize: 12 }}>{(lead.channel_name || '?')[0].toUpperCase()}</span>
+                      <span className="ava" style={{ fontSize: 13 }}>{(lead.channel_name || '?')[0].toUpperCase()}</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 12, fontWeight: 500 }}>{lead.channel_name}</div>
-                        <div className="muted" style={{ fontSize: 12 }}>{formatNumber(lead.subscriber_count ?? 0)} subs</div>
+                        <div style={{ fontSize: 13, fontWeight: 500 }}>{lead.channel_name}</div>
+                        <div className="muted" style={{ fontSize: 13 }}>{formatNumber(lead.subscriber_count ?? 0)} subs</div>
                       </div>
                       {qs !== null && (
                         <span style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
                           <span style={{ width: 6, height: 6, borderRadius: '50%', background: qsColor }} />
-                          <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'var(--f-mono)', color: qsColor }}>{qs}/100</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'var(--f-mono)', color: qsColor }}>{qs}/100</span>
                         </span>
                       )}
                     </div>
-                    <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6, marginBottom: 10, maxHeight: 80, overflow: 'hidden', position: 'relative' }}>
+                    <div style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6, marginBottom: 10, maxHeight: 80, overflow: 'hidden', position: 'relative' }}>
                       {(p?.cold_email_body || '').slice(0, 180)}{(p?.cold_email_body || '').length > 180 ? '…' : ''}
                     </div>
                     <div className="row" style={{ gap: 6 }}>
@@ -809,8 +809,8 @@ export default function PitchGenerator() {
             className="card"
             style={{ textAlign: 'center', padding: '64px 24px' }}
           >
-            <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 8 }}>Select one or multiple leads to generate pitches</div>
-            <div className="muted" style={{ fontSize: 14, marginBottom: 16 }}>Use checkboxes for bulk generation. Single lead = full edit mode.</div>
+            <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 8 }}>Select one or multiple leads to generate pitches</div>
+            <div className="muted" style={{ fontSize: 15, marginBottom: 16 }}>Use checkboxes for bulk generation. Single lead = full edit mode.</div>
             <button
               className="btn btn--primary"
               onClick={() => setShowLeadPicker(true)}
@@ -835,7 +835,7 @@ export default function PitchGenerator() {
                     {isDone ? '✓' : s.n}
                   </span>
                   <span>{s.label}</span>
-                  {i < GEN_STEPS.length - 1 && <span className="muted" style={{ marginLeft: 'auto', fontSize: 12 }}>→</span>}
+                  {i < GEN_STEPS.length - 1 && <span className="muted" style={{ marginLeft: 'auto', fontSize: 13 }}>→</span>}
                 </div>
               );
             })}
@@ -858,10 +858,10 @@ export default function PitchGenerator() {
                   background: 'var(--surface)',
                 }}>
                   <span className="dot dot--lime dot--pulse" style={{ width: 6, height: 6 }} />
-                  <span style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-3)' }}>
+                  <span style={{ fontFamily: 'var(--f-mono)', fontSize: 13, color: 'var(--text-3)' }}>
                     Marcus is working
                   </span>
-                  <span style={{ marginLeft: 'auto', fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-4)' }}>
+                  <span style={{ marginLeft: 'auto', fontFamily: 'var(--f-mono)', fontSize: 13, color: 'var(--text-4)' }}>
                     ~60–120s
                   </span>
                 </div>
@@ -873,7 +873,7 @@ export default function PitchGenerator() {
                     return (
                       <div key={s.key} style={{
                         display: 'flex', alignItems: 'center', gap: 10,
-                        fontFamily: 'var(--f-mono)', fontSize: 12,
+                        fontFamily: 'var(--f-mono)', fontSize: 13,
                         color: isDone ? 'var(--text-2)' : isCurrent ? 'var(--lime)' : 'var(--text-4)',
                         transition: 'color 200ms ease',
                       }}>
@@ -885,7 +885,7 @@ export default function PitchGenerator() {
                   {generatingStatus && (
                     <div style={{
                       marginTop: 8, paddingTop: 10, borderTop: '1px dashed var(--line)',
-                      fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-3)',
+                      fontFamily: 'var(--f-mono)', fontSize: 13, color: 'var(--text-3)',
                     }}>
                       {generatingStatus}
                     </div>
@@ -905,8 +905,8 @@ export default function PitchGenerator() {
                 className="card"
                 style={{ textAlign: 'center', padding: '48px 24px', marginBottom: 20 }}
               >
-                <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 8 }}>Ready to generate</div>
-                <div className="muted" style={{ fontSize: 14, marginBottom: 20 }}>
+                <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 8 }}>Ready to generate</div>
+                <div className="muted" style={{ fontSize: 15, marginBottom: 20 }}>
                   Click <strong style={{ color: 'var(--lime)' }}>Study & Generate</strong> to run deep channel analysis, craft a custom offer, and write the cold email.
                 </div>
                 <button
@@ -942,8 +942,8 @@ export default function PitchGenerator() {
                 >
                   <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--warn)', flexShrink: 0 }} />
                   <div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--warn)' }}>Voice profile incomplete</div>
-                    <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--warn)' }}>Voice profile incomplete</div>
+                    <div style={{ fontSize: 13, color: 'var(--text-3)' }}>
                       Pitches won't have your name or style.{' '}
                       <a href="/settings" style={{ color: 'var(--lime)' }}>Set up Voice Profile →</a>
                     </div>
@@ -962,21 +962,21 @@ export default function PitchGenerator() {
                   >
                     <div className="card__head">
                       <div className="card__title">Brief</div>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-3)' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-3)' }}>
                         <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--ok)' }} />Compiled
                       </span>
                     </div>
                     <div className="card__body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                       <div className="field">
                         <div className="field__label">Goal</div>
-                        <div style={{ padding: '8px 11px', background: 'var(--surface)', borderRadius: 'var(--r-sm)', fontSize: 12, border: '1px solid var(--line)' }}>
+                        <div style={{ padding: '8px 11px', background: 'var(--surface)', borderRadius: 'var(--r-sm)', fontSize: 13, border: '1px solid var(--line)' }}>
                           Book a call to discuss sponsorship
                         </div>
                       </div>
                       {pitch.custom_offer && (
                         <div className="field">
                           <div className="field__label">Custom offer</div>
-                          <div style={{ padding: '8px 11px', background: 'var(--surface)', borderRadius: 'var(--r-sm)', fontSize: 12, border: '1px solid var(--line)', lineHeight: 1.55 }}>
+                          <div style={{ padding: '8px 11px', background: 'var(--surface)', borderRadius: 'var(--r-sm)', fontSize: 13, border: '1px solid var(--line)', lineHeight: 1.55 }}>
                             {pitch.custom_offer.slice(0, 120)}
                           </div>
                         </div>
@@ -991,7 +991,7 @@ export default function PitchGenerator() {
                               animate={{ opacity: 1, x: 0 }}
                               transition={{ delay: i * 0.06 + 0.1 }}
                               className="row"
-                              style={{ fontSize: 12, color: 'var(--text-2)', gap: 8 }}
+                              style={{ fontSize: 13, color: 'var(--text-2)', gap: 8 }}
                             >
                               <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--ok)', flexShrink: 0 }} />{s}
                             </motion.div>
@@ -1014,7 +1014,7 @@ export default function PitchGenerator() {
                     >
                       <div className="card__head">
                         <div className="card__title">{subjects.length} subject variants</div>
-                        <span style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-4)' }}>click to use</span>
+                        <span style={{ fontFamily: 'var(--f-mono)', fontSize: 13, color: 'var(--text-4)' }}>click to use</span>
                       </div>
                       <div style={{ padding: 8 }}>
                         {subjects.map((s, i) => (
@@ -1033,10 +1033,10 @@ export default function PitchGenerator() {
                             }}
                           >
                             <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
-                              <span style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-4)' }}>VARIANT {String.fromCharCode(65 + i)}</span>
-                              {i === 0 && <span style={{ fontSize: 12, color: 'var(--lime)' }}>Recommended</span>}
+                              <span style={{ fontFamily: 'var(--f-mono)', fontSize: 13, color: 'var(--text-4)' }}>VARIANT {String.fromCharCode(65 + i)}</span>
+                              {i === 0 && <span style={{ fontSize: 13, color: 'var(--lime)' }}>Recommended</span>}
                             </div>
-                            <div style={{ fontSize: 12, fontWeight: 500 }}>{s}</div>
+                            <div style={{ fontSize: 13, fontWeight: 500 }}>{s}</div>
                           </motion.button>
                         ))}
                       </div>
@@ -1055,7 +1055,7 @@ export default function PitchGenerator() {
                     <div className="card__head">
                       <div className="row">
                         <div className="card__title">Preview</div>
-                        <span className="chan" style={{ fontSize: 12, padding: '3px 10px' }}>
+                        <span className="chan" style={{ fontSize: 13, padding: '3px 10px' }}>
                           {selectedLead.channel_name} · {formatNumber(selectedLead.subscriber_count ?? 0)}
                         </span>
                       </div>
@@ -1098,7 +1098,7 @@ export default function PitchGenerator() {
                               display: 'inline-flex', alignItems: 'center', gap: 6,
                               border: '1px solid var(--line)',
                               borderRadius: 'var(--r-sm)', padding: '4px 10px',
-                              fontSize: 12, fontWeight: 700,
+                              fontSize: 13, fontWeight: 700,
                               color: 'var(--lime)',
                               fontFamily: 'var(--f-mono)',
                               letterSpacing: '0.5px',
@@ -1106,7 +1106,7 @@ export default function PitchGenerator() {
                               {label}
                             </div>
                             {elements.length > 0 && (
-                              <div style={{ fontSize: 12, color: 'var(--text-4)', marginTop: 5 }}>
+                              <div style={{ fontSize: 13, color: 'var(--text-4)', marginTop: 5 }}>
                                 Generated from: {elements.join(' + ')}
                               </div>
                             )}
@@ -1120,7 +1120,7 @@ export default function PitchGenerator() {
                         <div style={{
                           marginBottom: 14, padding: '10px 14px', borderRadius: 'var(--r-sm)',
                           border: '1px solid var(--bad)', color: 'var(--bad)',
-                          fontSize: 12, fontWeight: 700, fontFamily: 'var(--f-mono)',
+                          fontSize: 13, fontWeight: 700, fontFamily: 'var(--f-mono)',
                           display: 'flex', flexDirection: 'column', gap: 8,
                         }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
@@ -1138,7 +1138,7 @@ export default function PitchGenerator() {
                             </button>
                           </div>
                           {pitch.needs_human_reasons?.length > 0 && (
-                            <div style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-3)', lineHeight: 1.5 }}>
+                            <div style={{ fontSize: 13, fontWeight: 400, color: 'var(--text-3)', lineHeight: 1.5 }}>
                               {pitch.needs_human_reasons.map((f, i) => (
                                 <div key={i}>{f.attempt != null ? `Attempt ${f.attempt}: ` : ''}{f.reason}</div>
                               ))}
@@ -1153,7 +1153,7 @@ export default function PitchGenerator() {
                         <div style={{
                           marginBottom: 14, padding: '10px 14px', borderRadius: 'var(--r-sm)',
                           border: '1px solid var(--line-3)', color: 'var(--text-2)',
-                          fontSize: 12, fontFamily: 'var(--f-mono)',
+                          fontSize: 13, fontFamily: 'var(--f-mono)',
                           display: 'flex', flexDirection: 'column', gap: 8,
                         }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
@@ -1165,7 +1165,7 @@ export default function PitchGenerator() {
                               Back to leads
                             </button>
                           </div>
-                          <div style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-3)', lineHeight: 1.5 }}>
+                          <div style={{ fontSize: 13, fontWeight: 400, color: 'var(--text-3)', lineHeight: 1.5 }}>
                             No real video title or view stat is on file for {selectedLead?.channel_name} — Marcus won't write a generic filler email for it. Enrich this lead with real channel data before pitching again.
                           </div>
                         </div>
@@ -1192,7 +1192,7 @@ export default function PitchGenerator() {
                                   transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                                   style={{
                                     display: 'inline-flex', alignItems: 'center', gap: 6,
-                                    fontSize: 12, fontWeight: 600, fontFamily: 'var(--f-mono)',
+                                    fontSize: 13, fontWeight: 600, fontFamily: 'var(--f-mono)',
                                     color,
                                   }}
                                 >
@@ -1202,14 +1202,14 @@ export default function PitchGenerator() {
                               );
                             })()}
                             {pitch.quality_regenerated && (
-                              <span style={{ fontSize: 12, color: 'var(--lime)', fontFamily: 'var(--f-mono)' }}>
+                              <span style={{ fontSize: 13, color: 'var(--lime)', fontFamily: 'var(--f-mono)' }}>
                                 ENHANCED
                               </span>
                             )}
                             <button
                               onClick={() => setShowQualityDetails(v => !v)}
                               style={{
-                                fontSize: 12, color: 'var(--text-3)', background: 'none',
+                                fontSize: 13, color: 'var(--text-3)', background: 'none',
                                 border: 'none', cursor: 'pointer', padding: '2px 4px',
                                 textDecoration: 'underline',
                               }}
@@ -1244,17 +1244,17 @@ export default function PitchGenerator() {
                                     return (
                                       <div key={name}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-                                          <span style={{ fontSize: 12, fontFamily: 'var(--f-mono)', color: 'var(--text-3)' }}>
+                                          <span style={{ fontSize: 13, fontFamily: 'var(--f-mono)', color: 'var(--text-3)' }}>
                                             {(name || '').replace(/_/g, ' ')}
                                           </span>
-                                          <span style={{ fontSize: 12, fontFamily: 'var(--f-mono)', color: barColor }}>
+                                          <span style={{ fontSize: 13, fontFamily: 'var(--f-mono)', color: barColor }}>
                                             {points_awarded}/{points_possible}
                                           </span>
                                         </div>
                                         <div style={{ height: 3, background: 'var(--surface-3)', borderRadius: 2, overflow: 'hidden', marginBottom: 2 }}>
                                           <div style={{ width: `${pct}%`, height: '100%', borderRadius: 2, background: barColor, transition: 'width 0.4s ease' }} />
                                         </div>
-                                        <div style={{ fontSize: 12, color: 'var(--text-4)', lineHeight: 1.4 }}>{detail}</div>
+                                        <div style={{ fontSize: 13, color: 'var(--text-4)', lineHeight: 1.4 }}>{detail}</div>
                                       </div>
                                     );
                                   })}
@@ -1268,7 +1268,7 @@ export default function PitchGenerator() {
                       {/* Legacy quality score (pitch_score from old system) */}
                       {pitch.quality_score == null && pitch.pitch_score != null && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                          <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Quality Score</span>
+                          <span style={{ fontSize: 13, color: 'var(--text-3)' }}>Quality Score</span>
                           <span style={{
                             fontSize: 20, fontWeight: 700,
                             fontFamily: 'var(--f-mono)',
@@ -1278,11 +1278,11 @@ export default function PitchGenerator() {
                           }}>
                             {pitch.pitch_score}
                           </span>
-                          <span style={{ fontSize: 12, color: 'var(--text-4)' }}>/100</span>
+                          <span style={{ fontSize: 13, color: 'var(--text-4)' }}>/100</span>
                         </div>
                       )}
 
-                      <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
+                      <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>
                         Subject {subjects.length > 1 ? `(${subjects.length} A/B variants)` : ''}
                       </div>
                       {subjects.length > 0 && (
@@ -1293,7 +1293,7 @@ export default function PitchGenerator() {
                               onClick={() => { setSelectedSubj(i); setEmailSubject(s); }}
                               className="chan"
                               style={{
-                                cursor: 'pointer', padding: '6px 11px', fontSize: 12,
+                                cursor: 'pointer', padding: '6px 11px', fontSize: 13,
                                 background: selectedSubj === i ? 'var(--surface-2)' : 'var(--surface)',
                                 borderColor: selectedSubj === i ? 'var(--line-3)' : 'var(--line)',
                                 color: selectedSubj === i ? 'var(--lime)' : 'var(--text-2)',
@@ -1327,7 +1327,7 @@ export default function PitchGenerator() {
                           rows={8}
                           value={emailBody}
                           onChange={e => setEmailBody(e.target.value)}
-                          style={{ resize: 'vertical', fontFamily: 'var(--f-mono)', fontSize: 12, lineHeight: 1.7, width: '100%', boxSizing: 'border-box' }}
+                          style={{ resize: 'vertical', fontFamily: 'var(--f-mono)', fontSize: 13, lineHeight: 1.7, width: '100%', boxSizing: 'border-box' }}
                         />
                       </div>
 
@@ -1335,7 +1335,7 @@ export default function PitchGenerator() {
                       {pitch.alt_subjects?.length > 0 && (
                         <div style={{ marginTop: 16 }}>
                           <div style={{
-                            fontSize: 12, fontWeight: 700,
+                            fontSize: 13, fontWeight: 700,
                             color: 'var(--text-4)', fontFamily: 'var(--f-mono)',
                             letterSpacing: '0.5px', marginBottom: 8,
 
@@ -1349,7 +1349,7 @@ export default function PitchGenerator() {
                                 background: 'var(--surface-2)',
                                 border: '1px solid var(--line)',
                                 borderRadius: 'var(--r-sm)', marginBottom: 6,
-                                fontSize: 12, color: 'var(--text-2)',
+                                fontSize: 13, color: 'var(--text-2)',
                                 cursor: 'pointer',
                                 transition: 'all 150ms',
                               }}
@@ -1357,7 +1357,7 @@ export default function PitchGenerator() {
                               onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--line-3)'}
                               onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--line)'}
                             >
-                              {s} <span style={{ fontSize: 12, color: 'var(--text-4)' }}>(click to copy)</span>
+                              {s} <span style={{ fontSize: 13, color: 'var(--text-4)' }}>(click to copy)</span>
                             </div>
                           ))}
                         </div>
@@ -1369,8 +1369,8 @@ export default function PitchGenerator() {
                           animate={{ opacity: 1 }}
                           style={{ marginTop: 12, padding: 12, background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-sm)' }}
                         >
-                          <div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>AI Feedback</div>
-                          <div style={{ fontSize: 12, color: 'var(--text-2)' }}>{pitch.pitch_feedback}</div>
+                          <div className="muted" style={{ fontSize: 13, marginBottom: 4 }}>AI Feedback</div>
+                          <div style={{ fontSize: 13, color: 'var(--text-2)' }}>{pitch.pitch_feedback}</div>
                         </motion.div>
                       )}
 
@@ -1390,7 +1390,7 @@ export default function PitchGenerator() {
                               borderRight: i === 2 ? 'none' : '1px solid var(--line)',
                             }}
                           >
-                            <div style={{ fontSize: 12, color: 'var(--text-4)' }}>{m.l}</div>
+                            <div style={{ fontSize: 13, color: 'var(--text-4)' }}>{m.l}</div>
                             <div style={{ fontFamily: 'var(--f-mono)', fontSize: 18, fontWeight: 500, color: m.c, marginTop: 4 }}>{m.v}</div>
                           </motion.div>
                         ))}
@@ -1407,7 +1407,7 @@ export default function PitchGenerator() {
                   >
                     <div className="card__head">
                       <div className="card__title">Followups</div>
-                      <span style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-4)' }}>3 steps · skips on reply</span>
+                      <span style={{ fontFamily: 'var(--f-mono)', fontSize: 13, color: 'var(--text-4)' }}>3 steps · skips on reply</span>
                     </div>
                     <div className="card__body" style={{ padding: 0 }}>
                       {[
@@ -1416,10 +1416,10 @@ export default function PitchGenerator() {
                         { d: 'Day 9', l: 'Final break-up',     prev: '"Last note — happy to never bother you again, just say the word."' },
                       ].map((f, i) => (
                         <div key={i} style={{ padding: '14px 16px', borderBottom: i < 2 ? '1px solid var(--line)' : 'none', display: 'flex', gap: 14 }}>
-                          <div style={{ width: 50, color: 'var(--text-3)', fontFamily: 'var(--f-mono)', fontSize: 12, paddingTop: 2, flexShrink: 0 }}>{f.d}</div>
+                          <div style={{ width: 50, color: 'var(--text-3)', fontFamily: 'var(--f-mono)', fontSize: 13, paddingTop: 2, flexShrink: 0 }}>{f.d}</div>
                           <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 2 }}>{f.l}</div>
-                            <div className="muted" style={{ fontSize: 12, fontStyle: 'italic' }}>{f.prev}</div>
+                            <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 2 }}>{f.l}</div>
+                            <div className="muted" style={{ fontSize: 13, fontStyle: 'italic' }}>{f.prev}</div>
                           </div>
                           <button className="btn btn--ghost btn--sm">Edit</button>
                         </div>
@@ -1430,7 +1430,7 @@ export default function PitchGenerator() {
                   {/* Pre-send checklist */}
                   {checklist && (
                     <div style={{ padding: '12px 14px', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)', marginBottom: 4 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 700, color: checklist.canSend ? 'var(--lime)' : 'var(--bad)', marginBottom: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, color: checklist.canSend ? 'var(--lime)' : 'var(--bad)', marginBottom: 8 }}>
                         <span style={{ width: 6, height: 6, borderRadius: '50%', background: checklist.canSend ? 'var(--ok)' : 'var(--bad)', flexShrink: 0 }} />
                         {checklist.canSend ? 'Ready to send' : 'Issues found'}
                       </div>
@@ -1438,8 +1438,8 @@ export default function PitchGenerator() {
                         {checklist.items.map((item, i) => (
                           <div key={i} className="row" style={{ gap: 8, alignItems: 'flex-start' }}>
                             <span style={{ width: 6, height: 6, borderRadius: '50%', marginTop: 5, flexShrink: 0, background: item.pass ? 'var(--ok)' : item.critical ? 'var(--bad)' : 'var(--text-5)' }} />
-                            <span style={{ fontSize: 12, color: item.pass ? 'var(--text-2)' : item.critical ? 'var(--bad)' : 'var(--text-3)', lineHeight: 1.6 }}>{item.label}</span>
-                            {!item.pass && <span className="muted" style={{ fontSize: 12, lineHeight: 1.6 }}>— {item.detail}</span>}
+                            <span style={{ fontSize: 13, color: item.pass ? 'var(--text-2)' : item.critical ? 'var(--bad)' : 'var(--text-3)', lineHeight: 1.6 }}>{item.label}</span>
+                            {!item.pass && <span className="muted" style={{ fontSize: 13, lineHeight: 1.6 }}>— {item.detail}</span>}
                           </div>
                         ))}
                       </div>

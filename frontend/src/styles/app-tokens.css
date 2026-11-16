@@ -17,12 +17,12 @@
 
   /* ── Text ── */
   --app-text-primary:   #ffffff;   /* content-primary */
-  --app-text-secondary: #eff1f3;   /* content-secondary */
-  --app-text-soft:      #eff1f3;
-  --app-text-muted:     #e6e8ec;   /* content-tertiary */
-  --app-text-ghost:     #bfc4cd;   /* icon-subtle */
-  --app-text-faint:     #979da9;   /* content-placeholder */
-  --app-text-content:   #eff1f3;
+  --app-text-secondary: #ffffff;   /* content-secondary */
+  --app-text-soft:      #ffffff;
+  --app-text-muted:     #f3f5f7;   /* content-tertiary */
+  --app-text-ghost:     #e6e8ec;   /* icon-subtle */
+  --app-text-faint:     #bfc4cd;   /* content-placeholder */
+  --app-text-content:   #ffffff;
 
   /* ── Accent: Clay's action blue ── */
   --app-accent:         #3ea2fd;   /* bg-action-inverse */
@@ -87,12 +87,12 @@
   --app-raised:     #ffffff;
 
   --app-text-primary:   #000000;
-  --app-text-secondary: #3c414d;
-  --app-text-soft:      #3c414d;
-  --app-text-muted:     #525a69;
-  --app-text-ghost:     #979da9;
-  --app-text-faint:     #bfc4cd;
-  --app-text-content:   #3c414d;
+  --app-text-secondary: #0a0c10;
+  --app-text-soft:      #0a0c10;
+  --app-text-muted:     #1b1f27;
+  --app-text-ghost:     #2f3541;
+  --app-text-faint:     #525a69;
+  --app-text-content:   #0a0c10;
 
   --app-accent:         #0382f7;
   --app-accent-hover:   #0667d9;
@@ -158,31 +158,31 @@
 }
 .type-body-sm {
   font-family: var(--app-font-body);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 500;
   line-height: 1.43;
 }
 .type-body-14 {
   font-family: var(--app-font-heading);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 400;
   line-height: 1.43;
 }
 .type-button {
   font-family: var(--app-font-body);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   line-height: 1.33;
 }
 .type-button-12 {
   font-family: var(--app-font-body);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   line-height: 1.67;
 }
 .type-body-12 {
   font-family: var(--app-font-heading);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   line-height: 1.33;
 }

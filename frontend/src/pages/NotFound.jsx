@@ -18,7 +18,7 @@ export default function NotFound() {
       </div>
 
       <div style={{
-        fontFamily: 'var(--f-mono)', fontSize: 12, letterSpacing: '0.14em',
+        fontFamily: 'var(--f-mono)', fontSize: 13, letterSpacing: '0.14em',
         color: 'var(--text-3)', marginBottom: 12,
       }}>ERROR 404</div>
 
@@ -27,7 +27,7 @@ export default function NotFound() {
         color: 'var(--text)', margin: '0 0 12px',
       }}>Page not found.</h1>
 
-      <p style={{ color: 'var(--text-2)', fontSize: 14, margin: '0 0 32px', maxWidth: 360 }}>
+      <p style={{ color: 'var(--text-2)', fontSize: 15, margin: '0 0 32px', maxWidth: 360 }}>
         The page you're looking for doesn't exist or has been moved.
       </p>
 
@@ -37,14 +37,14 @@ export default function NotFound() {
           style={{
             background: 'var(--surface-2)', border: '1px solid var(--line-2)',
             color: 'var(--text-2)', borderRadius: 8, padding: '10px 20px',
-            fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--f-sans)',
+            fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--f-sans)',
           }}
         >
           ← Go back
         </button>
         <Link to="/" style={{
           background: 'var(--lime)', color: 'var(--on-accent)', borderRadius: 8,
-          padding: '10px 20px', fontSize: 14, fontWeight: 700,
+          padding: '10px 20px', fontSize: 15, fontWeight: 700,
           textDecoration: 'none', fontFamily: 'var(--f-sans)',
         }}>
           Go to Dashboard

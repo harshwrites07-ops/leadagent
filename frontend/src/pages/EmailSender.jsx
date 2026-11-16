@@ -24,7 +24,7 @@ function StatusDot({ status }) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
       <span style={{ width: 6, height: 6, borderRadius: '50%', background: meta.dot, flexShrink: 0, display: 'inline-block' }} />
-      <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{meta.label}</span>
+      <span style={{ fontSize: 13, color: 'var(--text-2)' }}>{meta.label}</span>
     </span>
   );
 }
@@ -43,12 +43,12 @@ function SendErrorToastContent({ message, providerMessage }) {
         <div>
           <button
             onClick={() => setOpen(v => !v)}
-            style={{ background: 'none', border: 'none', padding: 0, fontSize: 12, textDecoration: 'underline', cursor: 'pointer', color: 'inherit', opacity: 0.75 }}
+            style={{ background: 'none', border: 'none', padding: 0, fontSize: 13, textDecoration: 'underline', cursor: 'pointer', color: 'inherit', opacity: 0.75 }}
           >
             {open ? 'Hide details' : 'Details'}
           </button>
           {open && (
-            <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4, wordBreak: 'break-word' }}>{providerMessage}</div>
+            <div style={{ fontSize: 13, opacity: 0.7, marginTop: 4, wordBreak: 'break-word' }}>{providerMessage}</div>
           )}
         </div>
       )}
@@ -273,9 +273,9 @@ export default function EmailSender() {
               borderRight: i === statDefs.length - 1 ? 'none' : '1px solid var(--line)',
             }}
           >
-            <span style={{ fontSize: 12, color: 'var(--text-4)', fontWeight: 500, whiteSpace: 'nowrap' }}>{stat.label}</span>
+            <span style={{ fontSize: 13, color: 'var(--text-4)', fontWeight: 500, whiteSpace: 'nowrap' }}>{stat.label}</span>
             <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 32, fontWeight: 500, letterSpacing: '-0.03em', lineHeight: 1, color: 'var(--text)' }}>{stat.value}</span>
-            <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{stat.sub}</span>
+            <span style={{ fontSize: 13, color: 'var(--text-3)' }}>{stat.sub}</span>
           </motion.div>
         ))}
       </div>
@@ -285,7 +285,7 @@ export default function EmailSender() {
         {TABS.map(t => (
           <div key={t.id} className={`tab ${tab === t.id ? 'is-active' : ''}`} onClick={() => setTab(t.id)}>
             {t.label}{' '}
-            <span className="mono" style={{ marginLeft: 6, fontSize: 12, color: 'var(--text-3)' }}>
+            <span className="mono" style={{ marginLeft: 6, fontSize: 13, color: 'var(--text-3)' }}>
               {t.count}
             </span>
           </div>
@@ -305,7 +305,7 @@ export default function EmailSender() {
           {tab === 'queue' && (
             <>
               {queueLoading ? (
-                <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-3)', fontSize: 14 }}>
+                <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-3)', fontSize: 15 }}>
                   Loading queue...
                 </div>
               ) : queue.length === 0 ? (
@@ -340,25 +340,25 @@ export default function EmailSender() {
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: i * 0.04, duration: 0.3 }}
                         >
-                          <td><span style={{ cursor: 'grab', color: 'var(--text-4)', fontSize: 14, letterSpacing: '-1px' }}>⋮⋮</span></td>
+                          <td><span style={{ cursor: 'grab', color: 'var(--text-4)', fontSize: 15, letterSpacing: '-1px' }}>⋮⋮</span></td>
                           <td><input type="checkbox" defaultChecked /></td>
                           <td>
                             <div className="row" style={{ gap: 8 }}>
-                              <span className="ava" style={{ fontSize: 12, flexShrink: 0 }}>
+                              <span className="ava" style={{ fontSize: 13, flexShrink: 0 }}>
                                 {(item.lead_name || '?')[0].toUpperCase()}
                               </span>
                               <div>
-                                <div style={{ fontSize: 14, fontWeight: 500 }}>{item.lead_name || 'Unknown'}</div>
-                                <div className="mono muted" style={{ fontSize: 12 }}>{item.email || ''}</div>
+                                <div style={{ fontSize: 15, fontWeight: 500 }}>{item.lead_name || 'Unknown'}</div>
+                                <div className="mono muted" style={{ fontSize: 13 }}>{item.email || ''}</div>
                               </div>
                             </div>
                           </td>
-                          <td style={{ fontSize: 12, color: 'var(--text-2)', maxWidth: 280 }}>
+                          <td style={{ fontSize: 13, color: 'var(--text-2)', maxWidth: 280 }}>
                             <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.subject}</div>
                           </td>
-                          <td className="mono" style={{ fontSize: 12 }}>{item.mailbox || item.from_email || '—'}</td>
+                          <td className="mono" style={{ fontSize: 13 }}>{item.mailbox || item.from_email || '—'}</td>
                           <td><StatusDot status={item.status} /></td>
-                          <td className="muted" style={{ fontSize: 12 }}>
+                          <td className="muted" style={{ fontSize: 13 }}>
                             {item.scheduled_at ? formatDate(item.scheduled_at) : '—'}
                           </td>
                           <td>
@@ -393,7 +393,7 @@ export default function EmailSender() {
           {tab === 'failed' && (
             <>
               {failedLoading ? (
-                <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-3)', fontSize: 14 }}>
+                <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-3)', fontSize: 15 }}>
                   Loading...
                 </div>
               ) : failedQueue.length === 0 ? (
@@ -425,19 +425,19 @@ export default function EmailSender() {
                           >
                             <td>
                               <div className="row" style={{ gap: 8 }}>
-                                <span className="ava" style={{ fontSize: 12, flexShrink: 0 }}>
+                                <span className="ava" style={{ fontSize: 13, flexShrink: 0 }}>
                                   {(item.lead_name || '?')[0].toUpperCase()}
                                 </span>
                                 <div>
-                                  <div style={{ fontSize: 14, fontWeight: 500 }}>{item.lead_name || 'Unknown'}</div>
-                                  <div className="mono muted" style={{ fontSize: 12 }}>{item.lead_email || ''}</div>
+                                  <div style={{ fontSize: 15, fontWeight: 500 }}>{item.lead_name || 'Unknown'}</div>
+                                  <div className="mono muted" style={{ fontSize: 13 }}>{item.lead_email || ''}</div>
                                 </div>
                               </div>
                             </td>
-                            <td style={{ fontSize: 12, color: 'var(--text-2)', maxWidth: 240 }}>
+                            <td style={{ fontSize: 13, color: 'var(--text-2)', maxWidth: 240 }}>
                               <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.subject}</div>
                             </td>
-                            <td style={{ fontSize: 12, maxWidth: 320 }}>
+                            <td style={{ fontSize: 13, maxWidth: 320 }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--bad)', flexShrink: 0 }} />
                                 <span style={{ color: 'var(--text)' }}>{item.last_error || 'Unknown error'}</span>
@@ -446,21 +446,21 @@ export default function EmailSender() {
                                 <div>
                                   <button
                                     onClick={() => setExpandedErrorId(isExpanded ? null : item.id)}
-                                    style={{ background: 'none', border: 'none', padding: 0, marginTop: 2, fontSize: 12, textDecoration: 'underline', cursor: 'pointer', color: 'var(--text-4)' }}
+                                    style={{ background: 'none', border: 'none', padding: 0, marginTop: 2, fontSize: 13, textDecoration: 'underline', cursor: 'pointer', color: 'var(--text-4)' }}
                                   >
                                     {isExpanded ? 'Hide details' : 'Details'}
                                   </button>
                                   {isExpanded && (
-                                    <div className="mono" style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4, wordBreak: 'break-word' }}>{item.error_detail}</div>
+                                    <div className="mono" style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 4, wordBreak: 'break-word' }}>{item.error_detail}</div>
                                   )}
                                 </div>
                               )}
                             </td>
                             <td>
                               <div className="row" style={{ gap: 6, alignItems: 'center' }}>
-                                <span className="mono" style={{ fontSize: 12 }}>{item.attempts || 0}</span>
+                                <span className="mono" style={{ fontSize: 13 }}>{item.attempts || 0}</span>
                                 {needsAttention && (
-                                  <span style={{ fontSize: 12, color: 'var(--warn)', fontWeight: 600 }} title="3+ failed attempts — check the underlying cause before retrying again">
+                                  <span style={{ fontSize: 13, color: 'var(--warn)', fontWeight: 600 }} title="3+ failed attempts — check the underlying cause before retrying again">
                                     needs attention
                                   </span>
                                 )}
@@ -491,7 +491,7 @@ export default function EmailSender() {
           {tab === 'replied' && (
             <>
               {historyLoading ? (
-                <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-3)', fontSize: 14 }}>
+                <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-3)', fontSize: 15 }}>
                   Loading...
                 </div>
               ) : history.length === 0 ? (
@@ -513,9 +513,9 @@ export default function EmailSender() {
                       </span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div className="row" style={{ gap: 8, marginBottom: 2 }}>
-                          <span style={{ fontSize: 14, fontWeight: 500 }}>{h.lead_name || h.to_name || 'Unknown'}</span>
+                          <span style={{ fontSize: 15, fontWeight: 500 }}>{h.lead_name || h.to_name || 'Unknown'}</span>
                           {h.reply_sentiment && (
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12 }}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13 }}>
                               <span style={{
                                 width: 6, height: 6, borderRadius: '50%', display: 'inline-block',
                                 background: h.reply_sentiment === 'positive' ? 'var(--ok)' : h.reply_sentiment === 'question' ? 'var(--warn)' : 'var(--bad)',
@@ -524,9 +524,9 @@ export default function EmailSender() {
                             </span>
                           )}
                         </div>
-                        <div className="muted" style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.subject}</div>
+                        <div className="muted" style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.subject}</div>
                       </div>
-                      <div className="muted mono" style={{ fontSize: 12, flexShrink: 0 }}>{h.sent_at ? formatDate(h.sent_at) : '—'}</div>
+                      <div className="muted mono" style={{ fontSize: 13, flexShrink: 0 }}>{h.sent_at ? formatDate(h.sent_at) : '—'}</div>
                       <button
                         className="btn btn--sm"
                         onClick={() => navigate('/email')}
@@ -544,7 +544,7 @@ export default function EmailSender() {
           {tab !== 'queue' && tab !== 'replied' && tab !== 'failed' && (
             <>
               {historyLoading ? (
-                <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-3)', fontSize: 14 }}>
+                <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-3)', fontSize: 15 }}>
                   Loading...
                 </div>
               ) : history.length === 0 ? (
@@ -573,20 +573,20 @@ export default function EmailSender() {
                         >
                           <td>
                             <div className="row" style={{ gap: 8 }}>
-                              <span className="ava" style={{ fontSize: 12 }}>
+                              <span className="ava" style={{ fontSize: 13 }}>
                                 {(h.lead_name || h.to_name || '?')[0].toUpperCase()}
                               </span>
                               <div>
-                                <div style={{ fontSize: 14, fontWeight: 500 }}>{h.lead_name || h.to_name}</div>
-                                <div className="mono muted" style={{ fontSize: 12 }}>{h.to_email || ''}</div>
+                                <div style={{ fontSize: 15, fontWeight: 500 }}>{h.lead_name || h.to_name}</div>
+                                <div className="mono muted" style={{ fontSize: 13 }}>{h.to_email || ''}</div>
                               </div>
                             </div>
                           </td>
-                          <td style={{ fontSize: 12, color: 'var(--text-2)', maxWidth: 280 }}>
+                          <td style={{ fontSize: 13, color: 'var(--text-2)', maxWidth: 280 }}>
                             <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.subject}</div>
                           </td>
                           <td><StatusDot status={h.status} /></td>
-                          <td className="muted" style={{ fontSize: 12 }}>{h.sent_at ? formatDate(h.sent_at) : '—'}</td>
+                          <td className="muted" style={{ fontSize: 13 }}>{h.sent_at ? formatDate(h.sent_at) : '—'}</td>
                           <td>
                             <div className="row" style={{ gap: 4, justifyContent: 'flex-end' }}>
                               <button className="btn btn--ghost btn--sm">Preview</button>
@@ -622,17 +622,17 @@ export default function EmailSender() {
               style={{ maxWidth: 540 }}
             >
               <div style={{ padding: '28px 32px 8px' }}>
-                <div className="muted" style={{ fontSize: 12, marginBottom: 14 }}>Power send · about to launch</div>
+                <div className="muted" style={{ fontSize: 13, marginBottom: 14 }}>Power send · about to launch</div>
                 <h2 className="page__title" style={{ fontSize: 28 }}>
                   Send <em style={{ fontStyle: 'normal', color: 'var(--lime)' }}>{queueCount} emails</em> across <em style={{ fontStyle: 'normal' }}>your mailboxes?</em>
                 </h2>
               </div>
               <div style={{ padding: '20px 32px 24px' }}>
                 <div style={{ padding: 16, background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 10, marginBottom: 16 }}>
-                  <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>Send plan</div>
-                  <div className="muted" style={{ fontSize: 12 }}>{queueCount} emails scheduled across active mailboxes · smart timing</div>
+                  <div className="muted" style={{ fontSize: 13, marginBottom: 10 }}>Send plan</div>
+                  <div className="muted" style={{ fontSize: 13 }}>{queueCount} emails scheduled across active mailboxes · smart timing</div>
                 </div>
-                <div className="muted" style={{ fontSize: 12, marginBottom: 18, lineHeight: 1.55 }}>
+                <div className="muted" style={{ fontSize: 13, marginBottom: 18, lineHeight: 1.55 }}>
                   Each mailbox sends within its safe daily limit. Random 30-90s gaps between sends. Auto-pause if bounce rate exceeds 2%.
                 </div>
                 <div className="row" style={{ gap: 8 }}>
@@ -682,12 +682,12 @@ export default function EmailSender() {
                 <h2 style={{ fontFamily: 'var(--f-heading)', fontSize: 22, fontWeight: 700, marginBottom: 8 }}>
                   Complete your voice profile first
                 </h2>
-                <p className="muted" style={{ fontSize: 14, lineHeight: 1.7, marginBottom: 0 }}>
+                <p className="muted" style={{ fontSize: 15, lineHeight: 1.7, marginBottom: 0 }}>
                   Quelro writes emails that sound exactly like <strong style={{ color: 'var(--text)' }}>you</strong>. Without your voice profile, every email will sound generic — and generic emails don't get replies.
                 </p>
               </div>
               <div style={{ padding: '20px 32px 28px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div style={{ padding: '12px 16px', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 10, fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>
+                <div style={{ padding: '12px 16px', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 10, fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6 }}>
                   Takes <strong style={{ color: 'var(--lime)' }}>~2 minutes</strong> · 4 short questions · unlocks personalized AI pitches for every creator
                 </div>
                 <button
@@ -729,17 +729,17 @@ export default function EmailSender() {
               style={{ maxWidth: 480 }}
             >
               <div style={{ padding: '28px 32px 8px' }}>
-                <div className="muted" style={{ fontSize: 12, marginBottom: 14 }}>Auto Follow-up</div>
+                <div className="muted" style={{ fontSize: 13, marginBottom: 14 }}>Auto Follow-up</div>
                 <h2 className="page__title" style={{ fontSize: 22, marginBottom: 8 }}>
                   Set up <em style={{ fontStyle: 'normal' }}>automatic follow-ups</em>
                 </h2>
-                <p className="muted" style={{ fontSize: 14, lineHeight: 1.6, marginBottom: 0 }}>
+                <p className="muted" style={{ fontSize: 15, lineHeight: 1.6, marginBottom: 0 }}>
                   Marcus AI will send a personalised follow-up to everyone who hasn't replied — automatically, at your chosen interval — until they respond or opt out.
                 </p>
               </div>
               <div style={{ padding: '20px 32px 28px', display: 'flex', flexDirection: 'column', gap: 18 }}>
                 <div>
-                  <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>Follow-up interval</div>
+                  <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>Follow-up interval</div>
                   <div style={{ display: 'flex', gap: 8 }}>
                     {[1, 2, 3, 5, 7].map(d => (
                       <button key={d} onClick={() => setFollowUpDays(d)} className={`btn btn--sm${followUpDays === d ? ' btn--primary' : ''}`} style={{ flex: 1, justifyContent: 'center' }}>
@@ -747,10 +747,10 @@ export default function EmailSender() {
                       </button>
                     ))}
                   </div>
-                  <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>Send a follow-up every <strong style={{ color: 'var(--text)' }}>{followUpDays} day{followUpDays > 1 ? 's' : ''}</strong> to non-responders</div>
+                  <div className="muted" style={{ fontSize: 13, marginTop: 6 }}>Send a follow-up every <strong style={{ color: 'var(--text)' }}>{followUpDays} day{followUpDays > 1 ? 's' : ''}</strong> to non-responders</div>
                 </div>
                 <div>
-                  <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>Max follow-ups per lead</div>
+                  <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>Max follow-ups per lead</div>
                   <div style={{ display: 'flex', gap: 8 }}>
                     {[1, 2, 3, 4].map(n => (
                       <button key={n} onClick={() => setFollowUpCount(n)} className={`btn btn--sm${followUpCount === n ? ' btn--primary' : ''}`} style={{ flex: 1, justifyContent: 'center' }}>
@@ -758,10 +758,10 @@ export default function EmailSender() {
                       </button>
                     ))}
                   </div>
-                  <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>Stop after <strong style={{ color: 'var(--text)' }}>{followUpCount} follow-up{followUpCount > 1 ? 's' : ''}</strong> with no reply</div>
+                  <div className="muted" style={{ fontSize: 13, marginTop: 6 }}>Stop after <strong style={{ color: 'var(--text)' }}>{followUpCount} follow-up{followUpCount > 1 ? 's' : ''}</strong> with no reply</div>
                 </div>
                 <div style={{ padding: 14, background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 10 }}>
-                  <div className="muted" style={{ fontSize: 12, lineHeight: 1.6 }}>
+                  <div className="muted" style={{ fontSize: 13, lineHeight: 1.6 }}>
                     Marcus AI will write a <strong style={{ color: 'var(--text)' }}>unique follow-up</strong> for each creator based on your original pitch. Auto-stops when they reply.
                   </div>
                 </div>

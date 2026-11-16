@@ -115,7 +115,7 @@ export default function Login() {
           Don't have an account?{' '}
           <Link to="/signup" style={styles.link}>Create one</Link>
         </p>
-        <p style={{ ...styles.footer, fontSize: 12, color: 'var(--text-4)', marginTop: 8 }}>
+        <p style={{ ...styles.footer, fontSize: 13, color: 'var(--text-4)', marginTop: 8 }}>
           <Link to="/terms" style={{ color: 'var(--text-3)', textDecoration: 'none' }}>Terms</Link>
           {' · '}
           <Link to="/privacy" style={{ color: 'var(--text-3)', textDecoration: 'none' }}>Privacy</Link>
@@ -130,25 +130,25 @@ const styles = {
   card: { width: '100%', maxWidth: 400, background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--r-lg)', padding: '36px 32px' },
   logo: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 28 },
   logoIcon: { width: 36, height: 36, borderRadius: 'var(--r-md)', background: 'linear-gradient(135deg, var(--lime), var(--coral))', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  logoText: { fontFamily: 'var(--f-sans)', fontSize: 14, fontWeight: 700, color: 'var(--on-accent)', letterSpacing: '-0.03em' },
-  logoName: { fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 800, color: 'var(--text-primary)', margin: 0, lineHeight: 1.2 },
-  logoSub: { fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600, letterSpacing: '0.14em', color: 'var(--text-muted)', margin: 0 },
+  logoText: { fontFamily: 'var(--f-sans)', fontSize: 15, fontWeight: 700, color: 'var(--on-accent)', letterSpacing: '-0.03em' },
+  logoName: { fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', margin: 0, lineHeight: 1.2 },
+  logoSub: { fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600, letterSpacing: '0.14em', color: 'var(--text-muted)', margin: 0 },
   title: { fontFamily: 'var(--font-heading)', fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 4px', letterSpacing: '-0.02em' },
-  subtitle: { fontSize: 14, color: 'var(--text-muted)', margin: '0 0 20px' },
-  errorBox: { background: 'rgba(var(--app-danger-rgb),0.12)', border: '1px solid rgba(var(--app-danger-rgb),0.3)', borderRadius: 8, padding: '10px 12px', fontSize: 14, color: 'var(--bad)', marginBottom: 16 },
+  subtitle: { fontSize: 15, color: 'var(--text-muted)', margin: '0 0 20px' },
+  errorBox: { background: 'rgba(var(--app-danger-rgb),0.12)', border: '1px solid rgba(var(--app-danger-rgb),0.3)', borderRadius: 8, padding: '10px 12px', fontSize: 15, color: 'var(--bad)', marginBottom: 16 },
   form: { display: 'flex', flexDirection: 'column', gap: 4 },
-  label: { fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginTop: 12, marginBottom: 4 },
+  label: { fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginTop: 12, marginBottom: 4 },
   inputWrap: { position: 'relative', display: 'flex', alignItems: 'center' },
   inputIcon: { position: 'absolute', left: 11, color: 'var(--text-muted)', pointerEvents: 'none' },
-  input: { width: '100%', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '9px 12px 9px 34px', fontSize: 14, color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box', fontFamily: 'var(--font-body)' },
+  input: { width: '100%', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '9px 12px 9px 34px', fontSize: 15, color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box', fontFamily: 'var(--font-body)' },
   eyeBtn: { position: 'absolute', right: 10, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 2 },
   row: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, marginBottom: 4 },
-  checkLabel: { display: 'flex', alignItems: 'center', fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer' },
-  link: { fontSize: 12, color: 'var(--accent-primary)', textDecoration: 'none', fontWeight: 600 },
-  btn: { marginTop: 16, padding: '11px', background: 'var(--lime)', border: 'none', borderRadius: 8, color: 'var(--on-accent)', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--f-sans)' },
+  checkLabel: { display: 'flex', alignItems: 'center', fontSize: 13, color: 'var(--text-secondary)', cursor: 'pointer' },
+  link: { fontSize: 13, color: 'var(--accent-primary)', textDecoration: 'none', fontWeight: 600 },
+  btn: { marginTop: 16, padding: '11px', background: 'var(--lime)', border: 'none', borderRadius: 8, color: 'var(--on-accent)', fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--f-sans)' },
   divider: { display: 'flex', alignItems: 'center', margin: '20px 0', gap: 12 },
-  dividerText: { fontSize: 12, color: 'var(--text-muted)', background: 'var(--bg-surface)', padding: '0 8px', whiteSpace: 'nowrap' },
-  googleBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px', border: '1px solid var(--border-strong)', borderRadius: 8, background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 14, fontWeight: 600, textDecoration: 'none', cursor: 'pointer', marginBottom: 8, fontFamily: 'var(--font-body)' },
-  phoneBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px', border: '1px solid var(--border-strong)', borderRadius: 8, background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 14, fontWeight: 600, textDecoration: 'none', cursor: 'pointer', marginBottom: 20, fontFamily: 'var(--font-body)' },
-  footer: { textAlign: 'center', fontSize: 14, color: 'var(--text-muted)', margin: 0 },
+  dividerText: { fontSize: 13, color: 'var(--text-muted)', background: 'var(--bg-surface)', padding: '0 8px', whiteSpace: 'nowrap' },
+  googleBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px', border: '1px solid var(--border-strong)', borderRadius: 8, background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 15, fontWeight: 600, textDecoration: 'none', cursor: 'pointer', marginBottom: 8, fontFamily: 'var(--font-body)' },
+  phoneBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px', border: '1px solid var(--border-strong)', borderRadius: 8, background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 15, fontWeight: 600, textDecoration: 'none', cursor: 'pointer', marginBottom: 20, fontFamily: 'var(--font-body)' },
+  footer: { textAlign: 'center', fontSize: 15, color: 'var(--text-muted)', margin: 0 },
 };

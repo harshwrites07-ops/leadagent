@@ -6,7 +6,7 @@ export default function DarkTooltip({ active, payload, label }) {
     <div style={{
       background: 'var(--bg-2)', border: '1px solid var(--line)',
       borderRadius: 'var(--r)', padding: '8px 12px',
-      fontFamily: 'var(--f-mono)', fontSize: 12,
+      fontFamily: 'var(--f-mono)', fontSize: 13,
     }}>
       {label && <div style={{ color: 'var(--text-2)', marginBottom: 4 }}>{label}</div>}
       {payload.map((entry, i) => (

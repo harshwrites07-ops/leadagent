@@ -1,23 +1,9 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import PowerSendOverlay from '../components/ui/PowerSendOverlay';
 import { useApp } from '../context/AppContext';
-import api, { formatNumber, formatDate } from '../utils/api';
-
-const PAGE_SIZE = 10;
-
-const STAGE_META = {
-  new_lead:    { label: 'Not contacted',   dot: 'var(--text-5)' },
-  studying:    { label: 'Researching',     dot: 'var(--sky)' },
-  pitch_ready: { label: 'Pitch ready',     dot: 'var(--violet)' },
-  emailed:     { label: 'Sequence active', dot: 'var(--lime)' },
-  opened:      { label: 'Opened',          dot: 'var(--warn)' },
-  replied:     { label: 'Replied',         dot: 'var(--ok)' },
-  call_booked: { label: 'Call booked',     dot: 'var(--ok)' },
-  closed_won:  { label: 'Closed won',      dot: 'var(--ok)' },
-  closed_lost: { label: 'Not interested',  dot: 'var(--bad)' },
-};
+import api, { formatNumber } from '../utils/api';
 
 function useMobile() {
   const [m, setM] = useState(() => window.innerWidth < 860);
@@ -35,8 +21,6 @@ export default function Dashboard() {
   const [leads, setLeads] = useState([]);
   const [leadsTotal, setLeadsTotal] = useState(0);
   const [loadingLeads, setLoadingLeads] = useState(true);
-  const [filter, setFilter] = useState('All');
-  const [page, setPage] = useState(0);
 
   useEffect(() => {
     api.get('/analytics/hot-alerts').then(({ data }) => setHotAlerts(data.alerts || [])).catch(() => {});
@@ -45,7 +29,7 @@ export default function Dashboard() {
   const loadLeads = useCallback(async () => {
     setLoadingLeads(true);
     try {
-      const { data } = await api.get('/crm?limit=500');
+      const { data } = await api.get('/crm?limit=2000');
       setLeads(Array.isArray(data.leads) ? data.leads : []);
       setLeadsTotal(data.total ?? (data.leads?.length || 0));
     } catch { /* leave leads empty */ }
@@ -80,18 +64,25 @@ export default function Dashboard() {
     { label: 'Active leads', value: formatNumber(stats.totalLeads), delta: `+${stats.leadsToday}`, deltaSub: 'today', sub: `${hotLeadsCount} high intent` },
   ];
 
-  const filteredLeads = useMemo(() => {
-    if (filter === 'High intent') return leads.filter(l => (l.lead_score ?? 0) >= 70);
-    if (filter === 'Replied') return leads.filter(l => l.crm_stage === 'replied');
-    return leads;
-  }, [leads, filter]);
-
-  useEffect(() => { setPage(0); }, [filter]);
-
-  const pageLeads = filteredLeads.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
-  const maxPage = Math.max(0, Math.ceil(filteredLeads.length / PAGE_SIZE) - 1);
-
-  const avatarBgs = ['var(--surface-2)'];
+  const countStage = (...ids) => leads.filter(l => ids.includes(l.crm_stage || 'new_lead')).length;
+  const pipeline = [
+    { label: 'Discovered',  count: countStage('new_lead', 'studying'), color: 'var(--text-4)' },
+    { label: 'Pitch ready', count: countStage('pitch_ready'),          color: 'var(--violet)' },
+    { label: 'Contacted',   count: countStage('emailed', 'opened'),    color: 'var(--lime)' },
+    { label: 'Replied',     count: countStage('replied'),              color: 'var(--ok)' },
+    { label: 'Call booked', count: countStage('call_booked'),          color: 'var(--warn)' },
+    { label: 'Won',         count: countStage('closed_won'),           color: 'var(--ok)' },
+  ];
+  const pipelineMax = Math.max(1, ...pipeline.map(r => r.count));
+  const plural = (n, one, many) => `${formatNumber(n)} ${n === 1 ? one : many}`;
+  const newLeads = countStage('new_lead', 'studying');
+  const pitchReady = countStage('pitch_ready');
+  const repliedCount = countStage('replied');
+  const nextSteps = [];
+  if (repliedCount > 0) nextSteps.push({ title: `${plural(repliedCount, 'reply is', 'replies are')} waiting`, desc: 'Answer them while they are warm', to: '/crm' });
+  if (pitchReady > 0) nextSteps.push({ title: `Send ${plural(pitchReady, 'ready pitch', 'ready pitches')}`, desc: 'These leads already have a pitch written', to: '/email' });
+  if (newLeads > 0) nextSteps.push({ title: `Write pitches for ${plural(newLeads, 'new lead', 'new leads')}`, desc: 'Marcus drafts one for each channel', to: '/pitch' });
+  nextSteps.push({ title: leadsTotal === 0 ? 'Find your first leads' : 'Find more leads', desc: 'Search YouTube creators by niche', to: '/leads' });
 
   return (
     <div style={{ padding: isMobile ? '14px 14px 60px' : '28px 32px 40px', maxWidth: 1200, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 28 }}>
@@ -102,10 +93,10 @@ export default function Dashboard() {
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontWeight: 700, fontSize: 14 }}>
+            <span style={{ fontWeight: 700, fontSize: 15 }}>
               {hotAlerts.length} new HOT lead{hotAlerts.length !== 1 ? 's' : ''} matched your niche
             </span>
-            <span className="mono" style={{ fontSize: 12, opacity: 0.85 }}>
+            <span className="mono" style={{ fontSize: 13, opacity: 0.85 }}>
               {hotAlerts.slice(0, 3).map(a => a.channel_name).join(', ')}{hotAlerts.length > 3 ? ` +${hotAlerts.length - 3} more` : ''}
             </span>
           </div>
@@ -126,42 +117,33 @@ export default function Dashboard() {
         <button className="btn btn--primary" onClick={() => navigate('/campaigns')}>New campaign</button>
       </div>
 
-      {/* Stats row */}
+      {/* Stats row: four cards */}
       {loadingDash ? (
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: 12 }}>
-          {[0, 1, 2, 3].map(i => <div key={i} className="skeleton" style={{ height: 90, borderRadius: 12 }} />)}
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: 16 }}>
+          {[0, 1, 2, 3].map(i => <div key={i} className="skeleton" style={{ height: 96, borderRadius: 8 }} />)}
         </div>
       ) : (
-        <div style={{
-          display: 'flex', flexWrap: isMobile ? 'wrap' : 'nowrap', alignItems: 'flex-start', gap: 0,
-          paddingBottom: 24, borderBottom: '1px solid var(--line)',
-        }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: 16 }}>
           {statDefs.map((stat, i) => (
             <motion.div
               key={stat.label}
+              className="card"
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.35, delay: i * 0.05, ease: [0.16, 1, 0.3, 1] }}
-              style={{
-                flex: isMobile ? '1 1 45%' : 1, display: 'flex', flexDirection: 'column', gap: 8,
-                paddingRight: 32, marginRight: 32, minWidth: isMobile ? '40%' : 0,
-                borderRight: i === statDefs.length - 1 ? 'none' : '1px solid var(--line)',
-              }}
+              style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 16, minWidth: 0 }}
             >
-              <span style={{ fontSize: 12, color: 'var(--text-4)', fontWeight: 500 }}>{stat.label}</span>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: isMobile ? 26 : 34, fontWeight: 500, letterSpacing: '-0.03em', lineHeight: 1, color: 'var(--text)' }}>{stat.value}</span>
-                {stat.unit && <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 14, color: 'var(--text-4)' }}>{stat.unit}</span>}
+              <span style={{ fontSize: 13, color: 'var(--text-3)', fontWeight: 600 }}>{stat.label}</span>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: isMobile ? 24 : 28, fontWeight: 700, letterSpacing: '-0.02em', lineHeight: 1.1, color: 'var(--text)' }}>{stat.value}</span>
+                {stat.unit && <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-3)' }}>{stat.unit}</span>}
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                 {stat.delta && (
-                  <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, fontWeight: 500, color: 'var(--ok)' }}>{stat.delta} {stat.deltaSub}</span>
+                  <span style={{ fontVariantNumeric: 'tabular-nums', fontSize: 13, fontWeight: 600, color: 'var(--ok)' }}>{stat.delta} {stat.deltaSub}</span>
                 )}
-                {!stat.delta && stat.sub && (
-                  <span style={{ fontSize: 12, color: 'var(--text-4)' }}>{stat.sub}</span>
-                )}
-                {stat.delta && stat.sub && (
-                  <span style={{ fontSize: 12, color: 'var(--text-4)' }}>· {stat.sub}</span>
+                {stat.sub && (
+                  <span style={{ fontSize: 13, color: 'var(--text-3)' }}>{stat.delta ? '· ' : ''}{stat.sub}</span>
                 )}
               </div>
             </motion.div>
@@ -169,123 +151,54 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Leads table */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
-          <h2 style={{ margin: 0, fontSize: 14, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--text)' }}>Leads</h2>
-          <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-4)' }}>{formatNumber(leadsTotal)} total</span>
-          <div style={{ flex: 1 }} />
-          <div style={{ display: 'flex', gap: 6 }}>
-            {['All', 'High intent', 'Replied'].map(f => {
-              const on = f === filter;
-              return (
-                <button
-                  key={f}
-                  onClick={() => setFilter(f)}
-                  style={{
-                    fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
-                    color: on ? 'var(--text)' : 'var(--text-4)',
-                    background: on ? 'var(--surface-2)' : 'transparent',
-                    border: `1px solid ${on ? 'var(--line-3)' : 'var(--line)'}`,
-                    borderRadius: 7, padding: '5px 11px', cursor: 'pointer',
-                  }}
-                >
-                  {f}
-                </button>
-              );
-            })}
-          </div>
+      {/* Pipeline + next steps (real counts from your CRM) */}
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.5fr 1fr', gap: 16, alignItems: 'start' }}>
+        <div className="card" style={{ padding: 20 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.01em' }}>Your pipeline</div>
+          <div style={{ fontSize: 15, color: 'var(--text-3)', marginTop: 2, marginBottom: 16 }}>Where every lead you have found sits right now</div>
+          {loadingLeads ? (
+            [0, 1, 2, 3].map(i => <div key={i} className="skeleton" style={{ height: 28, marginBottom: 10 }} />)
+          ) : leadsTotal === 0 ? (
+            <div className="empty" style={{ padding: '24px 0' }}>
+              <div className="empty__title">No leads yet</div>
+              <div className="empty__desc">Find YouTube creators to start your pipeline.</div>
+              <button className="btn btn--primary btn--sm" style={{ marginTop: 12 }} onClick={() => navigate('/leads')}>Find leads</button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {pipeline.map(row => (
+                <div key={row.label} onClick={() => navigate('/crm')} style={{ cursor: 'pointer' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, marginBottom: 6 }}>
+                    <span style={{ fontWeight: 600, color: 'var(--text)' }}>{row.label}</span>
+                    <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700, color: 'var(--text)' }}>{formatNumber(row.count)}</span>
+                  </div>
+                  <div style={{ height: 8, borderRadius: 4, background: 'var(--surface-2)', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${Math.max(row.count ? 2 : 0, (row.count / pipelineMax) * 100)}%`, background: row.color, borderRadius: 4 }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        <div style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 12, overflow: 'hidden' }}>
-          <div style={{ overflowX: 'auto' }}>
-            <div style={{ minWidth: 720 }}>
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px,2fr) 100px 80px 140px 120px', gap: 16, padding: '10px 20px', borderBottom: '1px solid var(--line)', alignItems: 'center' }}>
-                <span style={{ fontSize: 12, color: 'var(--text-4)', fontWeight: 500 }}>Channel</span>
-                <span style={{ fontSize: 12, color: 'var(--text-4)', fontWeight: 500, textAlign: 'right' }}>Subscribers</span>
-                <span style={{ fontSize: 12, color: 'var(--text-4)', fontWeight: 500, textAlign: 'right' }}>Intent</span>
-                <span style={{ fontSize: 12, color: 'var(--text-4)', fontWeight: 500 }}>Status</span>
-                <span style={{ fontSize: 12, color: 'var(--text-4)', fontWeight: 500, textAlign: 'right' }}>Last contacted</span>
-              </div>
-
-              {loadingLeads ? (
-                [0, 1, 2].map(i => <div key={i} className="skeleton" style={{ height: 52, margin: '8px 20px' }} />)
-              ) : pageLeads.length === 0 ? (
-                <div className="empty" style={{ padding: '32px 20px' }}>
-                  <div className="empty__title">No leads yet</div>
-                  <div className="empty__desc">Import leads to see them here.</div>
-                  <button className="btn btn--primary btn--sm" style={{ marginTop: 12 }} onClick={() => navigate('/leads')}>
-                    Import leads →
-                  </button>
-                </div>
-              ) : (
-                pageLeads.map((lead, i) => {
-                  const meta = STAGE_META[lead.crm_stage] || STAGE_META.new_lead;
-                  const initials = (lead.channel_name || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
-                  return (
-                    <div
-                      key={lead.id}
-                      onClick={() => navigate('/crm')}
-                      style={{
-                        display: 'grid', gridTemplateColumns: 'minmax(180px,2fr) 100px 80px 140px 120px', gap: 16,
-                        padding: '12px 20px', borderBottom: '1px solid var(--line)', alignItems: 'center', cursor: 'pointer',
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-                        <div style={{
-                          width: 28, height: 28, flexShrink: 0, borderRadius: '50%',
-                          background: avatarBgs[i % avatarBgs.length], border: '1px solid var(--line)',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: 12, fontWeight: 600, color: 'var(--text-2)',
-                        }}>{initials}</div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
-                          <span style={{ fontSize: 14, fontWeight: 500, letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--text)' }}>
-                            {lead.channel_name || 'Unknown'}
-                          </span>
-                          <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-4)' }}>{lead.channel_handle || ''}</span>
-                        </div>
-                      </div>
-                      <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-2)', textAlign: 'right' }}>
-                        {formatNumber(lead.subscriber_count ?? 0)}
-                      </span>
-                      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                        <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, fontWeight: 500, color: (lead.lead_score ?? 0) >= 70 ? 'var(--lime)' : 'var(--text-3)' }}>
-                          {lead.lead_score ?? 0}
-                        </span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ width: 6, height: 6, flexShrink: 0, borderRadius: '50%', background: meta.dot, display: 'inline-block' }} />
-                        <span style={{ fontSize: 12, color: 'var(--text-2)', letterSpacing: '-0.01em' }}>{meta.label}</span>
-                      </div>
-                      <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-4)', textAlign: 'right' }}>
-                        {lead.last_email_date ? formatDate(lead.last_email_date) : '—'}
-                      </span>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 20px' }}>
-            <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-4)' }}>
-              Showing {filteredLeads.length === 0 ? 0 : page * PAGE_SIZE + 1}–{Math.min(filteredLeads.length, page * PAGE_SIZE + PAGE_SIZE)} of {filteredLeads.length}
-            </span>
-            <div style={{ display: 'flex', gap: 6 }}>
+        <div className="card" style={{ padding: 20 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.01em' }}>Do this next</div>
+          <div style={{ fontSize: 15, color: 'var(--text-3)', marginTop: 2, marginBottom: 12 }}>Based on what is in your pipeline</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {nextSteps.map(step => (
               <button
-                className="btn btn--ghost btn--sm"
-                disabled={page === 0}
-                onClick={() => setPage(p => Math.max(0, p - 1))}
-                style={{ opacity: page === 0 ? 0.4 : 1 }}
-              >prev</button>
-              <button
-                className="btn btn--ghost btn--sm"
-                disabled={page >= maxPage}
-                onClick={() => setPage(p => Math.min(maxPage, p + 1))}
-                style={{ opacity: page >= maxPage ? 0.4 : 1 }}
-              >next</button>
-            </div>
+                key={step.title}
+                onClick={() => navigate(step.to)}
+                style={{
+                  textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit',
+                  background: 'var(--bg)', border: '1px solid var(--line-2)', borderRadius: 6,
+                  padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 2,
+                }}
+              >
+                <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)' }}>{step.title}</span>
+                <span style={{ fontSize: 13, color: 'var(--text-3)' }}>{step.desc}</span>
+              </button>
+            ))}
           </div>
         </div>
       </div>

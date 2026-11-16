@@ -97,7 +97,7 @@ export default function Analytics() {
         className="page__head"
       >
         <div>
-          <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
+          <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>
             Last {dateRange}
           </div>
           <h1 className="page__title">Analytics — <em>the truth about your outreach.</em></h1>
@@ -119,7 +119,7 @@ export default function Analytics() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            style={{ padding: '48px', textAlign: 'center', color: 'var(--text-3)', fontSize: 14 }}
+            style={{ padding: '48px', textAlign: 'center', color: 'var(--text-3)', fontSize: 15 }}
           >
             <span className="dot dot--pulse" style={{ marginRight: 8, display: 'inline-block' }} />Loading analytics...
           </motion.div>
@@ -170,9 +170,9 @@ export default function Analytics() {
                     borderRight: i === arr.length - 1 ? 'none' : '1px solid var(--line)',
                   }}
                 >
-                  <span style={{ fontSize: 12, color: 'var(--text-4)', fontWeight: 500, whiteSpace: 'nowrap' }}>{stat.label}</span>
+                  <span style={{ fontSize: 13, color: 'var(--text-4)', fontWeight: 500, whiteSpace: 'nowrap' }}>{stat.label}</span>
                   <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 34, fontWeight: 500, letterSpacing: '-0.03em', lineHeight: 1, color: stat.color }}>{stat.value}</span>
-                  <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{stat.sub}</span>
+                  <span style={{ fontSize: 13, color: 'var(--text-3)' }}>{stat.sub}</span>
                   <div style={{ marginTop: 6 }}>
                     <Sparkline data={stat.spark} color={stat.color} height={36} />
                   </div>
@@ -190,7 +190,7 @@ export default function Analytics() {
               >
                 <div className="card__head">
                   <div className="card__title">Funnel</div>
-                  <span className="mono muted" style={{ fontSize: 12 }}>conversion at each stage</span>
+                  <span className="mono muted" style={{ fontSize: 13 }}>conversion at each stage</span>
                 </div>
                 <div className="card__body">
                   {funnelRows.length === 0 ? (
@@ -204,10 +204,10 @@ export default function Analytics() {
                     return (
                       <div key={i} style={{ marginBottom: 14 }}>
                         <div className="row" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
-                          <span style={{ fontSize: 14 }}>{STAGE_LABELS[row.stage] || row.stage}</span>
+                          <span style={{ fontSize: 15 }}>{STAGE_LABELS[row.stage] || row.stage}</span>
                           <div className="row" style={{ gap: 12 }}>
-                            <span className="mono muted" style={{ fontSize: 12 }}>{pct}%</span>
-                            <span className="mono" style={{ fontSize: 14 }}>{formatNumber(row.count)}</span>
+                            <span className="mono muted" style={{ fontSize: 13 }}>{pct}%</span>
+                            <span className="mono" style={{ fontSize: 15 }}>{formatNumber(row.count)}</span>
                           </div>
                         </div>
                         <div className="bar" style={{ height: 6 }}>
@@ -235,12 +235,12 @@ export default function Analytics() {
                   {deliveredPct != null ? (
                     <span className="row" style={{ gap: 8 }}>
                       <span className={`dot ${deliveredPct >= 95 ? 'dot--ok' : 'dot--warn'}`} />
-                      <span style={{ fontSize: 12, color: deliveredPct >= 95 ? 'var(--ok)' : 'var(--warn)' }}>{deliveredPct >= 95 ? 'Healthy' : 'Watch closely'}</span>
+                      <span style={{ fontSize: 13, color: deliveredPct >= 95 ? 'var(--ok)' : 'var(--warn)' }}>{deliveredPct >= 95 ? 'Healthy' : 'Watch closely'}</span>
                     </span>
                   ) : (
                     <span className="row" style={{ gap: 8 }}>
                       <span className="dot dot--neutral" />
-                      <span style={{ fontSize: 12, color: 'var(--text-3)' }}>No data yet</span>
+                      <span style={{ fontSize: 13, color: 'var(--text-3)' }}>No data yet</span>
                     </span>
                   )}
                 </div>
@@ -250,8 +250,8 @@ export default function Analytics() {
                       <span className="mono" style={{ fontSize: 18 }}>{deliveredPct != null ? `${deliveredPct}%` : '—'}</span>
                     </div>
                     <div>
-                      <div style={{ fontSize: 14, marginBottom: 6 }}>Inbox placement</div>
-                      <div className="muted" style={{ fontSize: 12 }}>Across connected mailboxes over the last {dateRange}.</div>
+                      <div style={{ fontSize: 15, marginBottom: 6 }}>Inbox placement</div>
+                      <div className="muted" style={{ fontSize: 13 }}>Across connected mailboxes over the last {dateRange}.</div>
                     </div>
                   </div>
                   {[
@@ -262,8 +262,8 @@ export default function Analytics() {
                     { l: 'Bounce rate', v: emailData?.bounce_rate != null ? `${emailData.bounce_rate}%` : '—', good: (emailData?.bounce_rate ?? 0) < 5 },
                   ].map((row, i) => (
                     <div key={i} className="row" style={{ justifyContent: 'space-between', padding: '8px 0', borderTop: i > 0 ? '1px dashed var(--line)' : 'none' }}>
-                      <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{row.l}</span>
-                      <span className="mono" style={{ fontSize: 12, color: row.good ? 'var(--ok)' : 'var(--bad)' }}>{row.v}</span>
+                      <span style={{ fontSize: 13, color: 'var(--text-2)' }}>{row.l}</span>
+                      <span className="mono" style={{ fontSize: 13, color: row.good ? 'var(--ok)' : 'var(--bad)' }}>{row.v}</span>
                     </div>
                   ))}
                 </div>
@@ -290,13 +290,13 @@ export default function Analytics() {
                     <div style={{ display: 'grid', gridTemplateColumns: '24px repeat(24, 1fr)', gap: 3 }}>
                       <div />
                       {HOURS.map(h => (
-                        <div key={h} className="mono muted" style={{ fontSize: 12, textAlign: 'center' }}>
+                        <div key={h} className="mono muted" style={{ fontSize: 13, textAlign: 'center' }}>
                           {h % 3 === 0 ? `${h}` : ''}
                         </div>
                       ))}
                       {DAYS.map((day, di) => (
                         <React.Fragment key={di}>
-                          <div className="mono muted" style={{ fontSize: 12, lineHeight: '20px' }}>{day}</div>
+                          <div className="mono muted" style={{ fontSize: 13, lineHeight: '20px' }}>{day}</div>
                           {HOURS.map(h => {
                             const v = heat[di][h];
                             return (
@@ -311,11 +311,11 @@ export default function Analytics() {
                       ))}
                     </div>
                     <div className="row" style={{ marginTop: 14, gap: 12, justifyContent: 'flex-end' }}>
-                      <span className="muted" style={{ fontSize: 12 }}>Low</span>
+                      <span className="muted" style={{ fontSize: 13 }}>Low</span>
                       {[0.1, 0.3, 0.5, 0.7, 0.9].map(v => (
                         <div key={v} style={{ width: 18, height: 12, borderRadius: 2, background: `oklch(${(0.18 + v * 0.6).toFixed(3)} ${(v * 0.15).toFixed(3)} 130)` }} />
                       ))}
-                      <span className="muted" style={{ fontSize: 12 }}>High</span>
+                      <span className="muted" style={{ fontSize: 13 }}>High</span>
                     </div>
                   </>
                 )}
@@ -336,19 +336,19 @@ export default function Analytics() {
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.32, duration: 0.4 }} className="card" style={{ marginBottom: 16 }}>
                   <div className="card__head">
                     <div className="card__title">Optimal send windows</div>
-                    <span className="muted" style={{ fontSize: 12 }}>based on your reply data</span>
+                    <span className="muted" style={{ fontSize: 13 }}>based on your reply data</span>
                   </div>
                   <div className="card__body">
                     <div className="row" style={{ gap: 12 }}>
                       {top3.map((t, i) => (
                         <div key={i} style={{ flex: 1, padding: '14px 16px', background: i === 0 ? 'rgba(var(--lime-rgb),0.06)' : 'var(--bg-2)', border: `1px solid ${i === 0 ? 'var(--lime-border)' : 'var(--line)'}`, borderRadius: 10, textAlign: 'center' }}>
                           <div style={{ fontSize: 22, fontWeight: 800, fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', color: i === 0 ? 'var(--lime)' : 'var(--text)', marginBottom: 4 }}>{fmt(Number(t.hour))}</div>
-                          <div className="muted" style={{ fontSize: 12 }}>{t.sent} sent · {t.open_rate?.toFixed(0) || '—'}% open</div>
-                          {i === 0 && <div style={{ fontSize: 12, color: 'var(--lime)', fontWeight: 600, marginTop: 4 }}>Best window</div>}
+                          <div className="muted" style={{ fontSize: 13 }}>{t.sent} sent · {t.open_rate?.toFixed(0) || '—'}% open</div>
+                          {i === 0 && <div style={{ fontSize: 13, color: 'var(--lime)', fontWeight: 600, marginTop: 4 }}>Best window</div>}
                         </div>
                       ))}
                     </div>
-                    <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
+                    <div className="muted" style={{ fontSize: 13, marginTop: 10 }}>
                       Schedule bulk sends to start at your top window for the highest open rate.
                     </div>
                   </div>
@@ -370,7 +370,7 @@ export default function Analytics() {
                 </div>
                 <div className="card__body" style={{ padding: 0 }}>
                   {subjects.length === 0 ? (
-                    <div className="muted" style={{ fontSize: 12, padding: '16px' }}>No subject data yet.</div>
+                    <div className="muted" style={{ fontSize: 13, padding: '16px' }}>No subject data yet.</div>
                   ) : subjects.slice(0, 5).map((r, i) => (
                     <motion.div
                       key={i}
@@ -379,11 +379,11 @@ export default function Analytics() {
                       transition={{ delay: i * 0.05 + 0.4 }}
                       style={{ padding: '12px 16px', borderBottom: i < Math.min(subjects.length, 5) - 1 ? '1px solid var(--line)' : 'none' }}
                     >
-                      <div style={{ fontSize: 12, marginBottom: 4 }}>{r.subject}</div>
+                      <div style={{ fontSize: 13, marginBottom: 4 }}>{r.subject}</div>
                       <div className="row" style={{ gap: 16 }}>
-                        <span className="mono muted" style={{ fontSize: 12 }}>{r.sent} sent</span>
-                        <span className="mono muted" style={{ fontSize: 12 }}>{r.open_rate?.toFixed(0) ?? '—'}% open</span>
-                        <span className="mono" style={{ fontSize: 12, color: 'var(--coral)' }}>{r.reply_rate?.toFixed(0) ?? '—'}% reply</span>
+                        <span className="mono muted" style={{ fontSize: 13 }}>{r.sent} sent</span>
+                        <span className="mono muted" style={{ fontSize: 13 }}>{r.open_rate?.toFixed(0) ?? '—'}% open</span>
+                        <span className="mono" style={{ fontSize: 13, color: 'var(--coral)' }}>{r.reply_rate?.toFixed(0) ?? '—'}% reply</span>
                       </div>
                     </motion.div>
                   ))}
@@ -398,11 +398,11 @@ export default function Analytics() {
               >
                 <div className="card__head">
                   <div className="card__title">Niche performance</div>
-                  <span className="mono muted" style={{ fontSize: 12 }}>reply rate</span>
+                  <span className="mono muted" style={{ fontSize: 13 }}>reply rate</span>
                 </div>
                 <div className="card__body">
                   {niches.length === 0 ? (
-                    <div className="muted" style={{ fontSize: 12 }}>No niche data yet.</div>
+                    <div className="muted" style={{ fontSize: 13 }}>No niche data yet.</div>
                   ) : niches.slice(0, 7).map((row, i) => {
                     const color = NICHE_COLORS[row.niche] || 'var(--text-3)';
                     const pctVal = ((row.close_rate || row.reply_rate || 0) * 100);
@@ -411,9 +411,9 @@ export default function Analytics() {
                         <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
                           <span className="row" style={{ gap: 8 }}>
                             <span className="dot" style={{ background: color }} />
-                            <span style={{ fontSize: 12 }}>{row.niche}</span>
+                            <span style={{ fontSize: 13 }}>{row.niche}</span>
                           </span>
-                          <span className="mono" style={{ fontSize: 12 }}>{pctVal.toFixed(1)}%</span>
+                          <span className="mono" style={{ fontSize: 13 }}>{pctVal.toFixed(1)}%</span>
                         </div>
                         <div className="bar">
                           <motion.span

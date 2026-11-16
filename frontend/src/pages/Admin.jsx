@@ -141,9 +141,9 @@ export default function Admin() {
           marginBottom: 16, padding: '12px 18px', background: 'var(--coral)', color: 'var(--on-accent)',
           display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
         }}>
-          <span style={{ fontWeight: 700, fontSize: 14 }}>⚠ Scraper(s) degraded (last 24h):</span>
+          <span style={{ fontWeight: 700, fontSize: 15 }}>⚠ Scraper(s) degraded (last 24h):</span>
           {scraperHealth.scrapers.filter(s => s.degraded).map(s => (
-            <span key={s.scraper} className="mono" style={{ fontSize: 12 }}>
+            <span key={s.scraper} className="mono" style={{ fontSize: 13 }}>
               {s.scraper} ({s.success_rate}% success, {s.attempted} attempted)
             </span>
           ))}
@@ -172,12 +172,12 @@ export default function Admin() {
         <div className="row row--between" style={{ justifyContent: 'space-between' }}>
           <div>
             <div className="row" style={{ gap: 8, marginBottom: 4 }}>
-              <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>Lead Seeder</span>
+              <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Lead Seeder</span>
               <span className={`badge ${isSeeding ? 'badge--warn' : 'badge--neutral'}`}>
                 {isSeeding ? '● RUNNING' : '○ IDLE'}
               </span>
             </div>
-            <div className="t-mono t-muted" style={{ fontSize: 12 }}>
+            <div className="t-mono t-muted" style={{ fontSize: 13 }}>
               {seederInfo ? (
                 <>
                   DB: <b style={{ color: 'var(--text-2)' }}>{seederInfo.withEmail?.toLocaleString()}</b> leads with email
@@ -201,7 +201,7 @@ export default function Admin() {
       </div>
 
       {error && (
-        <div style={{ background: 'rgba(var(--app-danger-rgb),0.12)', border: '1px solid rgba(var(--app-danger-rgb),0.3)', borderRadius: 8, padding: '10px 12px', fontSize: 14, color: 'var(--bad)', marginBottom: 16 }}>
+        <div style={{ background: 'rgba(var(--app-danger-rgb),0.12)', border: '1px solid rgba(var(--app-danger-rgb),0.3)', borderRadius: 8, padding: '10px 12px', fontSize: 15, color: 'var(--bad)', marginBottom: 16 }}>
           {error}
         </div>
       )}
@@ -216,7 +216,7 @@ export default function Admin() {
       </div>
 
       {loading ? (
-        <p className="t-muted" style={{ fontSize: 14 }}>Loading users…</p>
+        <p className="t-muted" style={{ fontSize: 15 }}>Loading users…</p>
       ) : (
         <div className="card" style={{ padding: 0 }}>
           <table className="tbl">
@@ -235,17 +235,17 @@ export default function Admin() {
                     <tr>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <span className="ava ava--lg" style={{ background: 'var(--surface-3)', color: 'var(--text-2)', fontSize: 14 }}>
+                          <span className="ava ava--lg" style={{ background: 'var(--surface-3)', color: 'var(--text-2)', fontSize: 15 }}>
                             {(u.full_name || u.email || '?')[0].toUpperCase()}
                           </span>
                           <div>
-                            <div style={{ fontWeight: 600, color: 'var(--text)', fontSize: 14 }}>{u.full_name || '—'}</div>
+                            <div style={{ fontWeight: 600, color: 'var(--text)', fontSize: 15 }}>{u.full_name || '—'}</div>
                             <div className="t-xs t-muted">{u.email}</div>
                             <div className="row" style={{ gap: 10, marginTop: 3, flexWrap: 'wrap' }}>
-                              <span className="t-mono t-muted" style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <span className="t-mono t-muted" style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 4 }}>
                                 <Target size={10} />{u.leads_used_this_month ?? 0} leads
                               </span>
-                              <span className="t-mono t-muted" style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <span className="t-mono t-muted" style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 4 }}>
                                 <Mail size={10} />{u.emails_used_this_month ?? 0} emails
                               </span>
                             </div>
@@ -263,7 +263,7 @@ export default function Admin() {
                       <td>
                         <div className="row" style={{ gap: 6 }}>
                           <select value={u.plan} onChange={e => setPlan(u.id, e.target.value)} disabled={!!actionLoading}
-                            className="input" style={{ height: 28, padding: '0 8px', fontSize: 12, width: 'auto' }}>
+                            className="input" style={{ height: 28, padding: '0 8px', fontSize: 13, width: 'auto' }}>
                             {ALL_PLANS.map(p => <option key={p}>{p}</option>)}
                           </select>
                           <button onClick={() => resetUsage(u.id)} disabled={!!actionLoading} title="Reset usage" className="btn btn--ghost btn--sm"><RefreshCw size={12} /></button>
@@ -286,7 +286,7 @@ export default function Admin() {
                       <tr>
                         <td colSpan={6} style={{ padding: 0 }}>
                           <div style={{ background: 'rgba(0,0,0,0.2)', borderTop: '1px solid var(--line)', padding: '14px 16px 16px' }}>
-                            <div className="t-mono" style={{ fontSize: 12, color: 'var(--text-2)', fontWeight: 700, marginBottom: 12 }}>
+                            <div className="t-mono" style={{ fontSize: 13, color: 'var(--text-2)', fontWeight: 700, marginBottom: 12 }}>
                               Custom Limits <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>(overrides plan defaults)</span>
                             </div>
                             <div className="row" style={{ flexWrap: 'wrap', alignItems: 'flex-end', gap: 12 }}>
@@ -302,7 +302,7 @@ export default function Admin() {
                                     type="number" placeholder={`Plan default`}
                                     value={edits[key] !== undefined ? edits[key] : (val ?? '')}
                                     onChange={e => editLimit(u.id, key, e.target.value)}
-                                    className="input" style={{ width: 130, padding: '6px 10px', fontSize: 12 }}
+                                    className="input" style={{ width: 130, padding: '6px 10px', fontSize: 13 }}
                                   />
                                 </div>
                               ))}
@@ -310,7 +310,7 @@ export default function Admin() {
                                 <Zap size={11} /> Save
                               </button>
                             </div>
-                            <div className="t-muted" style={{ marginTop: 8, fontSize: 12 }}>
+                            <div className="t-muted" style={{ marginTop: 8, fontSize: 13 }}>
                               Leave blank to use plan default · Set to 0 to block access · Set to 999999 for unlimited
                             </div>
                           </div>
@@ -321,7 +321,7 @@ export default function Admin() {
                 );
               })}
               {filtered.length === 0 && (
-                <tr><td colSpan={6} style={{ textAlign: 'center', padding: 24, color: 'var(--text-3)', fontSize: 14 }}>No users found</td></tr>
+                <tr><td colSpan={6} style={{ textAlign: 'center', padding: 24, color: 'var(--text-3)', fontSize: 15 }}>No users found</td></tr>
               )}
             </tbody>
           </table>

@@ -27,7 +27,7 @@ router.get('/', asyncHandler(async (req, res) => {
       (SELECT MAX(sent_at) FROM emails e WHERE e.lead_id = l.id) as last_email_date
     FROM leads l
     WHERE ${where.join(' AND ')}
-    ORDER BY l.lead_score DESC
+    ORDER BY l.created_at DESC, l.lead_score DESC
     LIMIT ? OFFSET ?
   `, [...params, limitNum, offset]);
 

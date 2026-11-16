@@ -125,18 +125,18 @@ export default function PowerFollowUpOverlay({ onClose }) {
             <div style={{ fontFamily: 'var(--f-mono)', fontSize: 48, fontWeight: 500, color: 'var(--lime)', marginBottom: 8 }}>
               {pending === null ? '–' : pending}
             </div>
-            <p style={{ color: 'var(--text-2)', marginBottom: 4, fontFamily: 'var(--f-sans)', fontSize: 14 }}>leads due for follow-up</p>
-            <p style={{ color: 'var(--text-3)', fontSize: 12, marginBottom: 24, fontFamily: 'var(--f-mono)' }}>
+            <p style={{ color: 'var(--text-2)', marginBottom: 4, fontFamily: 'var(--f-sans)', fontSize: 15 }}>leads due for follow-up</p>
+            <p style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 24, fontFamily: 'var(--f-mono)' }}>
               FU1 Day 3 · FU2 Day 6 · FU3 Day 9 · FU4 Day 12 · FU5 Day 15 → no_response
             </p>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-              <button onClick={onClose} style={{ padding: '8px 20px', background: 'var(--surface-2)', border: '1px solid var(--line)', borderRadius: 'var(--app-radius-pill)', color: 'var(--text-2)', cursor: 'pointer', fontFamily: 'var(--f-sans)', fontSize: 14 }}>
+              <button onClick={onClose} style={{ padding: '8px 20px', background: 'var(--surface-2)', border: '1px solid var(--line)', borderRadius: 'var(--app-radius-pill)', color: 'var(--text-2)', cursor: 'pointer', fontFamily: 'var(--f-sans)', fontSize: 15 }}>
                 Cancel
               </button>
               <button
                 onClick={start}
                 disabled={pending === 0}
-                style={{ padding: '8px 20px', background: 'var(--lime)', border: 'none', borderRadius: 'var(--app-radius-pill)', color: 'var(--on-accent)', cursor: pending === 0 ? 'not-allowed' : 'pointer', fontWeight: 600, fontFamily: 'var(--f-sans)', fontSize: 14, opacity: pending === 0 ? 0.4 : 1 }}
+                style={{ padding: '8px 20px', background: 'var(--lime)', border: 'none', borderRadius: 'var(--app-radius-pill)', color: 'var(--on-accent)', cursor: pending === 0 ? 'not-allowed' : 'pointer', fontWeight: 600, fontFamily: 'var(--f-sans)', fontSize: 15, opacity: pending === 0 ? 0.4 : 1 }}
               >
                 Send Follow-Ups
               </button>
@@ -154,14 +154,14 @@ export default function PowerFollowUpOverlay({ onClose }) {
               ].map(({ label, value, color }) => (
                 <div key={label} style={{ background: 'var(--surface-2)', borderRadius: 'var(--r)', padding: 16, textAlign: 'center', border: '1px solid var(--line)' }}>
                   <div style={{ color, fontFamily: 'var(--f-mono)', fontSize: 32, fontWeight: 500 }}>{value}</div>
-                  <div style={{ color: 'var(--text-3)', fontSize: 12, fontFamily: 'var(--f-mono)', letterSpacing: '0.1em' }}>{label}</div>
+                  <div style={{ color: 'var(--text-3)', fontSize: 13, fontFamily: 'var(--f-mono)', letterSpacing: '0.1em' }}>{label}</div>
                 </div>
               ))}
             </div>
 
             {phase === 'running' && total > 0 && (
               <div style={{ marginBottom: 12 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-3)', fontSize: 12, fontFamily: 'var(--f-mono)', marginBottom: 4 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-3)', fontSize: 13, fontFamily: 'var(--f-mono)', marginBottom: 4 }}>
                   <span>Progress</span>
                   <span>{stats.sent + stats.failed}/{total}</span>
                 </div>
@@ -171,7 +171,7 @@ export default function PowerFollowUpOverlay({ onClose }) {
               </div>
             )}
 
-            <div ref={feedRef} style={{ height: 180, overflowY: 'auto', background: 'var(--bg)', borderRadius: 'var(--r)', padding: 12, fontSize: 12, fontFamily: 'var(--f-mono)' }}>
+            <div ref={feedRef} style={{ height: 180, overflowY: 'auto', background: 'var(--bg)', borderRadius: 'var(--r)', padding: 12, fontSize: 13, fontFamily: 'var(--f-mono)' }}>
               {feed.map((f, i) => (
                 <div key={i} style={{ color: f.type === 'success' ? 'var(--ok)' : f.type === 'error' ? 'var(--bad)' : 'var(--text-3)', marginBottom: 2 }}>
                   <span style={{ color: 'var(--text-4)' }}>[{f.time}]</span> {f.msg}
@@ -184,9 +184,9 @@ export default function PowerFollowUpOverlay({ onClose }) {
               <div style={{ textAlign: 'center', marginTop: 16 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--ok)', marginBottom: 12 }}>
                   <CheckCircle size={16} />
-                  <span style={{ fontWeight: 600, fontSize: 14, fontFamily: 'var(--f-sans)' }}>Done — {stats.sent} follow-ups sent</span>
+                  <span style={{ fontWeight: 600, fontSize: 15, fontFamily: 'var(--f-sans)' }}>Done — {stats.sent} follow-ups sent</span>
                 </div>
-                <button onClick={onClose} style={{ padding: '8px 24px', background: 'var(--surface-2)', border: '1px solid var(--line)', borderRadius: 'var(--app-radius-pill)', color: 'var(--text)', cursor: 'pointer', fontFamily: 'var(--f-sans)', fontSize: 14 }}>
+                <button onClick={onClose} style={{ padding: '8px 24px', background: 'var(--surface-2)', border: '1px solid var(--line)', borderRadius: 'var(--app-radius-pill)', color: 'var(--text)', cursor: 'pointer', fontFamily: 'var(--f-sans)', fontSize: 15 }}>
                   Close
                 </button>
               </div>

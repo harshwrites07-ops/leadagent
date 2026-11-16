@@ -32,12 +32,12 @@ export default function Input({
         {...rest}
       />
       {error && (
-        <span role="alert" style={{ fontSize: 12, color: 'var(--bad)', fontFamily: 'var(--f-mono)' }}>
+        <span role="alert" style={{ fontSize: 13, color: 'var(--bad)', fontFamily: 'var(--f-mono)' }}>
           {error}
         </span>
       )}
       {!error && hint && (
-        <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{hint}</span>
+        <span style={{ fontSize: 13, color: 'var(--text-3)' }}>{hint}</span>
       )}
     </div>
   );

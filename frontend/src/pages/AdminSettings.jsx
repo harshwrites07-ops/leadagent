@@ -12,11 +12,11 @@ import ConfirmModal from '../components/ui/ConfirmModal';
 const inputSt = {
   background: 'var(--bg-elevated)', border: '1px solid var(--border-default)',
   borderRadius: 6, padding: '8px 12px', color: 'var(--text-primary)',
-  fontSize: 14, fontFamily: 'var(--font-body)', outline: 'none',
+  fontSize: 15, fontFamily: 'var(--font-body)', outline: 'none',
   width: '100%', boxSizing: 'border-box',
 };
 const labelSt = {
-  fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600,
+  fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600,
  color: 'var(--text-muted)',
   display: 'block', marginBottom: 6,
 };
@@ -25,7 +25,7 @@ function TestButton({ onClick, status }) {
   return (
     <button onClick={onClick} style={{
       display: 'flex', alignItems: 'center', gap: 5,
-      padding: '7px 14px', borderRadius: 6, cursor: 'pointer', fontSize: 12, flexShrink: 0,
+      padding: '7px 14px', borderRadius: 6, cursor: 'pointer', fontSize: 13, flexShrink: 0,
       background: 'transparent', border: '1px solid var(--border-default)',
       color: status === 'ok' ? 'var(--ok)' : status === 'error' ? 'var(--bad)' : 'var(--text-secondary)',
     }}>
@@ -65,7 +65,7 @@ function TagInput({ values = [], onChange, placeholder }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         {values.map(v => (
-          <span key={v} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 99, fontSize: 12, color: 'var(--text-secondary)' }}>
+          <span key={v} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 99, fontSize: 13, color: 'var(--text-secondary)' }}>
             {v}
             <button onClick={() => onChange(values.filter(x => x !== v))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 0, display: 'flex' }}><X size={9} /></button>
           </span>
@@ -95,7 +95,7 @@ function Section({ icon: Icon, title, children, defaultOpen = true }) {
         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Icon size={15} style={{ color: 'var(--accent-primary)' }} />
-          <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 14 }}>{title}</span>
+          <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 15 }}>{title}</span>
         </div>
         {open ? <ChevronUp size={14} style={{ color: 'var(--text-muted)' }} /> : <ChevronDown size={14} style={{ color: 'var(--text-muted)' }} />}
       </button>
@@ -109,7 +109,7 @@ function ToggleGroup({ options, value, onChange }) {
     <div style={{ display: 'flex', gap: 4, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 7, padding: 3, width: 'fit-content' }}>
       {options.map(opt => (
         <button key={opt.value} onClick={() => onChange(opt.value)} style={{
-          padding: '6px 16px', borderRadius: 5, fontSize: 12, fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s', border: 'none',
+          padding: '6px 16px', borderRadius: 5, fontSize: 13, fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s', border: 'none',
           ...(value === opt.value
             ? { background: 'rgba(var(--lime-rgb),0.1)', color: 'var(--accent-primary)', outline: '1px solid rgba(var(--lime-rgb),0.2)' }
             : { background: 'transparent', color: 'var(--text-muted)' }),
@@ -225,7 +225,7 @@ export default function AdminSettings() {
       <div style={{ maxWidth: 400, margin: '80px auto', textAlign: 'center' }}>
         <Shield size={40} style={{ color: 'var(--text-muted)', marginBottom: 16 }} />
         <h2 style={{ color: 'var(--text-primary)', marginBottom: 8 }}>Admin Access Required</h2>
-        <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>This page is only accessible to administrators.</p>
+        <p style={{ color: 'var(--text-muted)', fontSize: 15 }}>This page is only accessible to administrators.</p>
       </div>
     );
   }
@@ -237,12 +237,12 @@ export default function AdminSettings() {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <h1 style={{ fontFamily: 'var(--font-heading)', fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.03em', margin: 0 }}>Admin Settings</h1>
-            <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 4, background: 'rgba(var(--lime-rgb),0.1)', color: 'var(--accent-primary)', fontFamily: 'var(--font-mono)', border: '1px solid rgba(var(--lime-rgb),0.2)' }}>ADMIN</span>
+            <span style={{ fontSize: 13, padding: '2px 8px', borderRadius: 4, background: 'rgba(var(--lime-rgb),0.1)', color: 'var(--accent-primary)', fontFamily: 'var(--font-mono)', border: '1px solid rgba(var(--lime-rgb),0.2)' }}>ADMIN</span>
           </div>
-          <p style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', marginTop: 4, letterSpacing: '0.1em' }}>SYSTEM CONFIGURATION — NOT VISIBLE TO USERS</p>
+          <p style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-muted)', marginTop: 4, letterSpacing: '0.1em' }}>SYSTEM CONFIGURATION — NOT VISIBLE TO USERS</p>
         </div>
         {dirty && (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--warn)', background: 'rgba(var(--warn-rgb),0.1)', padding: '4px 12px', borderRadius: 99, border: '1px solid rgba(var(--warn-rgb),0.2)', fontFamily: 'var(--font-mono)' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--warn)', background: 'rgba(var(--warn-rgb),0.1)', padding: '4px 12px', borderRadius: 99, border: '1px solid rgba(var(--warn-rgb),0.2)', fontFamily: 'var(--font-mono)' }}>
             <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--warn)' }} />
             UNSAVED CHANGES
           </span>
@@ -258,7 +258,7 @@ export default function AdminSettings() {
               <div style={{ flex: 1 }}><PasswordInput value={local.youtube_api_key || ''} onChange={e => set('youtube_api_key', e.target.value)} placeholder="AIzaSy..." /></div>
               <TestButton status={testStatus.youtube} onClick={() => testApi('youtube', { key: local.youtube_api_key })} />
             </div>
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Get from Google Cloud Console → YouTube Data API v3</p>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Get from Google Cloud Console → YouTube Data API v3</p>
           </div>
           <div>
             <label style={labelSt}>Google Gemini API Key (pitch generation)</label>
@@ -291,17 +291,17 @@ export default function AdminSettings() {
       {/* SMTP Inboxes (fallback) */}
       <Section icon={Mail} title="SMTP Inboxes (Fallback)">
         <div style={gap}>
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
             Used when a user hasn't connected Gmail. Each inbox sends up to 150 emails/day.
           </p>
           <div>
             <label style={{ ...labelSt, marginBottom: 8 }}>Configured Inboxes ({inboxes.length})</label>
-            {inboxes.length === 0 && <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>No inboxes configured.</p>}
+            {inboxes.length === 0 && <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No inboxes configured.</p>}
             {inboxes.map(inbox => (
               <div key={inbox.email} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'var(--bg-elevated)', borderRadius: 6, marginBottom: 6 }}>
                 <div style={{ flex: 1 }}>
-                  <span style={{ fontSize: 14, color: 'var(--text-primary)' }}>{inbox.email}</span>
-                  <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-muted)' }}>{inbox.host}:{inbox.port}</span>
+                  <span style={{ fontSize: 15, color: 'var(--text-primary)' }}>{inbox.email}</span>
+                  <span style={{ marginLeft: 8, fontSize: 13, color: 'var(--text-muted)' }}>{inbox.host}:{inbox.port}</span>
                 </div>
                 <button onClick={() => removeInbox(inbox.email)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--bad)', padding: '4px' }}><X size={13} /></button>
               </div>
@@ -309,7 +309,7 @@ export default function AdminSettings() {
           </div>
 
           {!showAddInbox ? (
-            <button onClick={() => setShowAddInbox(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 6, background: 'transparent', border: '1px solid var(--border-default)', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer' }}>
+            <button onClick={() => setShowAddInbox(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 6, background: 'transparent', border: '1px solid var(--border-default)', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer' }}>
               <Plus size={12} /> Add Inbox
             </button>
           ) : (
@@ -324,10 +324,10 @@ export default function AdminSettings() {
               </div>
               <div><label style={labelSt}>App Password</label><PasswordInput value={newInbox.pass} onChange={e => setNewInbox(p => ({ ...p, pass: e.target.value }))} /></div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={addInbox} disabled={addingInbox} style={{ flex: 1, padding: '8px', borderRadius: 6, background: 'var(--lime)', border: 'none', color: 'var(--on-accent)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                <button onClick={addInbox} disabled={addingInbox} style={{ flex: 1, padding: '8px', borderRadius: 6, background: 'var(--lime)', border: 'none', color: 'var(--on-accent)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
                   {addingInbox ? 'Testing & Saving...' : 'Add Inbox'}
                 </button>
-                <button onClick={() => setShowAddInbox(false)} style={{ padding: '8px 14px', borderRadius: 6, background: 'transparent', border: '1px solid var(--border-default)', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer' }}>
+                <button onClick={() => setShowAddInbox(false)} style={{ padding: '8px 14px', borderRadius: 6, background: 'transparent', border: '1px solid var(--border-default)', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer' }}>
                   Cancel
                 </button>
               </div>
@@ -339,7 +339,7 @@ export default function AdminSettings() {
               <label style={labelSt}>Daily Sending Limit (per user, no Gmail)</label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <input type="range" min="10" max="500" step="10" value={local.daily_send_limit || 150} onChange={e => set('daily_send_limit', e.target.value)} style={{ flex: 1, accentColor: 'var(--coral)' }} />
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--text-primary)', minWidth: 32 }}>{local.daily_send_limit || 150}</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 15, color: 'var(--text-primary)', minWidth: 32 }}>{local.daily_send_limit || 150}</span>
               </div>
             </div>
             <div><label style={labelSt}>Follow-up Delay (days)</label><input style={inputSt} type="number" min="1" value={local.followup_delay_days || 3} onChange={e => set('followup_delay_days', e.target.value)} /></div>
@@ -373,12 +373,12 @@ export default function AdminSettings() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
               {caseStudies.map((cs, i) => (
                 <div key={i} style={{ display: 'flex', gap: 8 }}>
-                  <input style={{ ...inputSt, flex: 1, fontSize: 12 }} value={cs} onChange={e => { const arr = [...caseStudies]; arr[i] = e.target.value; set('case_studies', arr); }} placeholder="e.g. Helped FitnessGuru grow from 2K to 50K views in 60 days" />
+                  <input style={{ ...inputSt, flex: 1, fontSize: 13 }} value={cs} onChange={e => { const arr = [...caseStudies]; arr[i] = e.target.value; set('case_studies', arr); }} placeholder="e.g. Helped FitnessGuru grow from 2K to 50K views in 60 days" />
                   <button onClick={() => set('case_studies', caseStudies.filter((_, j) => j !== i))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--bad)', padding: '0 4px' }}><X size={13} /></button>
                 </div>
               ))}
             </div>
-            <button onClick={() => set('case_studies', [...caseStudies, ''])} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 6, cursor: 'pointer', background: 'transparent', border: '1px solid var(--border-default)', color: 'var(--text-muted)', fontSize: 12 }}>
+            <button onClick={() => set('case_studies', [...caseStudies, ''])} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 6, cursor: 'pointer', background: 'transparent', border: '1px solid var(--border-default)', color: 'var(--text-muted)', fontSize: 13 }}>
               <Plus size={11} /> Add Case Study
             </button>
           </div>
@@ -416,8 +416,8 @@ export default function AdminSettings() {
           ].map(({ key, label, desc }) => (
             <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 16, borderBottom: '1px solid var(--border-subtle)' }}>
               <div>
-                <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)', marginBottom: 2 }}>{label}</p>
-                <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>{desc}</p>
+                <p style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-primary)', marginBottom: 2 }}>{label}</p>
+                <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>{desc}</p>
               </div>
               <Toggle checked={local[key] === 'true' || local[key] === true} onChange={() => set(key, local[key] === 'true' || local[key] === true ? 'false' : 'true')} />
             </div>
@@ -435,7 +435,7 @@ export default function AdminSettings() {
           background: dirty ? 'var(--lime)' : 'var(--bg-elevated)',
           color: dirty ? 'var(--on-accent)' : 'var(--text-muted)',
           border: dirty ? 'none' : '1px solid var(--border-default)',
-          fontSize: 14, fontWeight: 600, boxShadow: dirty ? '0 4px 16px rgba(var(--lime-rgb),0.3)' : 'none',
+          fontSize: 15, fontWeight: 600, boxShadow: dirty ? '0 4px 16px rgba(var(--lime-rgb),0.3)' : 'none',
           transition: 'all 0.2s',
         }}>
           {saving ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Saving...</> : <><Save size={14} /> Save Settings</>}
