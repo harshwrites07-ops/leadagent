@@ -71,7 +71,7 @@ const styles = {
   errorBox: { background: 'rgba(var(--app-danger-rgb),0.12)', border: '1px solid rgba(var(--app-danger-rgb),0.3)', borderRadius: 8, padding: '10px 12px', fontSize: 14, color: 'var(--bad)', marginBottom: 16, textAlign: 'left' },
   successBox: { display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--ok-rgb),0.1)', border: '1px solid rgba(var(--ok-rgb),0.3)', borderRadius: 8, padding: '10px 12px', fontSize: 14, color: 'var(--ok)', marginBottom: 16 },
   steps: { background: 'var(--bg-card)', borderRadius: 10, padding: '14px 16px', marginBottom: 20, textAlign: 'left' },
-  step: { fontSize: 13, color: 'var(--text-secondary)', padding: '4px 0', lineHeight: 1.5 },
+  step: { fontSize: 12, color: 'var(--text-secondary)', padding: '4px 0', lineHeight: 1.5 },
   resendBtn: { width: '100%', padding: '10px', background: 'none', border: '1px solid var(--border-strong)', borderRadius: 8, color: 'var(--text-secondary)', fontSize: 14, fontWeight: 600, cursor: 'pointer', marginBottom: 20, fontFamily: 'var(--font-body)' },
   footer: { fontSize: 14, color: 'var(--text-muted)', margin: 0 },
   link: { color: 'var(--accent-primary)', textDecoration: 'none', fontWeight: 600 },

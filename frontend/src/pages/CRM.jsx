@@ -210,7 +210,7 @@ export default function CRM() {
                     style={{ minHeight: 60 }}
                   >
                     {col.leads.length === 0 && isDropTarget && (
-                      <div style={{ border: '1px dashed var(--lime-border)', borderRadius: 8, padding: '14px', textAlign: 'center', color: 'var(--lime)', fontSize: 12.5 }}>
+                      <div style={{ border: '1px dashed var(--lime-border)', borderRadius: 8, padding: '14px', textAlign: 'center', color: 'var(--lime)', fontSize: 12 }}>
                         Drop to move here
                       </div>
                     )}
@@ -427,13 +427,13 @@ export default function CRM() {
               {selected.thumbnail_url ? (
                 <img src={selected.thumbnail_url} alt="" style={{ width: 44, height: 44, minWidth: 44, borderRadius: '50%', objectFit: 'cover' }} />
               ) : (
-                <span className="ava" style={{ fontSize: 15, width: 44, height: 44, minWidth: 44, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-3)', color: 'var(--on-accent)' }}>
+                <span className="ava" style={{ fontSize: 14, width: 44, height: 44, minWidth: 44, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-3)', color: 'var(--on-accent)' }}>
                   {(selected.channel_name || '?')[0].toUpperCase()}
                 </span>
               )}
               <div>
                 <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: '-0.01em' }}>{selected.channel_name}</div>
-                <div className="mono muted" style={{ fontSize: 12.5 }}>
+                <div className="mono muted" style={{ fontSize: 12 }}>
                   {selected.channel_handle || ''} · {formatNumber(selected.subscriber_count ?? 0)}
                 </div>
                 <div className="row" style={{ gap: 10, marginTop: 6 }}>
@@ -456,7 +456,7 @@ export default function CRM() {
                 className="input"
                 value={selected.crm_stage || selected.stage || 'new_lead'}
                 onChange={e => handleMoveStage(selected.id, e.target.value)}
-                style={{ fontSize: 13 }}
+                style={{ fontSize: 12 }}
               >
                 {STAGES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
               </select>
@@ -482,7 +482,7 @@ export default function CRM() {
                   <>
                     <div className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>Timeline</div>
                     {leadHistory.length === 0 ? (
-                      <div className="muted" style={{ fontSize: 13 }}>Nothing yet — activity shows up as soon as you start sending.</div>
+                      <div className="muted" style={{ fontSize: 12 }}>Nothing yet — activity shows up as soon as you start sending.</div>
                     ) : leadHistory.map((e, i) => (
                       <motion.div
                         key={i}
@@ -496,7 +496,7 @@ export default function CRM() {
                           width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
                           background: e.type === 'reply' ? 'var(--ok)' : e.type === 'open' ? 'var(--lime)' : 'var(--text-4)',
                         }} />
-                        <div style={{ flex: 1, fontSize: 13 }}>{e.description || e.event || '—'}</div>
+                        <div style={{ flex: 1, fontSize: 12 }}>{e.description || e.event || '—'}</div>
                         <span className="mono muted" style={{ fontSize: 12 }}>{formatDate(e.created_at || e.timestamp)}</span>
                       </motion.div>
                     ))}
@@ -516,7 +516,7 @@ export default function CRM() {
                       </>
                     ) : (
                       <div style={{ textAlign: 'center', padding: '24px 0' }}>
-                        <div className="muted" style={{ fontSize: 13, marginBottom: 10 }}>No pitch written yet.</div>
+                        <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>No pitch written yet.</div>
                         <button className="btn btn--ghost btn--sm" onClick={() => navigate(`/pitch?lead=${selected.id}`)}>
                           Write pitch
                         </button>
@@ -533,7 +533,7 @@ export default function CRM() {
                       placeholder="Add a note..."
                       value={newNote}
                       onChange={e => setNewNote(e.target.value)}
-                      style={{ fontFamily: 'var(--f-sans)', fontSize: 13, resize: 'vertical', width: '100%', boxSizing: 'border-box', marginBottom: 8 }}
+                      style={{ fontFamily: 'var(--f-sans)', fontSize: 12, resize: 'vertical', width: '100%', boxSizing: 'border-box', marginBottom: 8 }}
                     />
                     <button className="btn btn--ghost btn--sm" onClick={handleAddNote}>
                       Save note

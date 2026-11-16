@@ -70,11 +70,11 @@ function ResultDossier({ result, navigate, motionIndex = 0 }) {
         </div>
 
         <div className="row" style={{ gap: 14, marginBottom: 6, alignItems: 'center' }}>
-          <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 13, fontWeight: 500, color: scoreColor }}>
+          <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, fontWeight: 500, color: scoreColor }}>
             {scoreNum >= 90 ? 'A+' : scoreNum >= 80 ? 'A' : 'B'} score · {scoreNum}
           </span>
           {channel.temperature && (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-2)' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-2)' }}>
               <span className="dot" style={{ background: tempDot }} />
               {channel.temperature}
             </span>
@@ -82,9 +82,9 @@ function ResultDossier({ result, navigate, motionIndex = 0 }) {
         </div>
 
         <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: '-0.01em' }}>{channel.channel_name}</div>
-        <div className="mono muted" style={{ fontSize: 12.5 }}>{channel.channel_handle || ''}</div>
+        <div className="mono muted" style={{ fontSize: 12 }}>{channel.channel_handle || ''}</div>
         {channel.description && (
-          <div className="muted" style={{ fontSize: 13, lineHeight: 1.55, marginTop: 10 }}>
+          <div className="muted" style={{ fontSize: 12, lineHeight: 1.55, marginTop: 10 }}>
             {channel.description.slice(0, 160)}
           </div>
         )}
@@ -109,7 +109,7 @@ function ResultDossier({ result, navigate, motionIndex = 0 }) {
               }}
             >
               <div style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-4)', marginBottom: 4 }}>{m.l}</div>
-              <div style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 15, color: 'var(--text)' }}>{m.v}</div>
+              <div style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 14, color: 'var(--text)' }}>{m.v}</div>
             </motion.div>
           ))}
         </div>
@@ -117,7 +117,7 @@ function ResultDossier({ result, navigate, motionIndex = 0 }) {
         {channel.email && (
           <>
             <div className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.06em', marginTop: 18, marginBottom: 8 }}>Contact</div>
-            <div style={{ padding: 10, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 8, fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <div style={{ padding: 10, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 8, fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
               <span>{channel.email}</span>
               <span className="dot" style={{ background: 'var(--ok)' }} />
             </div>
@@ -182,7 +182,7 @@ function ResultDossier({ result, navigate, motionIndex = 0 }) {
                   animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
                   transition={{ duration: 0.25, ease: [0.16,1,0.3,1] }}
-                  style={{ fontSize: 13, color: 'var(--text-2)', whiteSpace: 'pre-wrap', fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', lineHeight: 1.7, background: 'var(--bg-2)', borderRadius: 'var(--r)', padding: '12px 14px', border: '1px solid var(--line)', marginTop: 8, overflow: 'hidden' }}
+                  style={{ fontSize: 12, color: 'var(--text-2)', whiteSpace: 'pre-wrap', fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', lineHeight: 1.7, background: 'var(--bg-2)', borderRadius: 'var(--r)', padding: '12px 14px', border: '1px solid var(--line)', marginTop: 8, overflow: 'hidden' }}
                 >
                   {deep_study}
                 </motion.pre>
@@ -204,7 +204,7 @@ function ResultDossier({ result, navigate, motionIndex = 0 }) {
                 className="angle"
               >
                 <div className="angle__head">
-                  <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 13, color: 'var(--text-3)' }}>{95 - i * 8}/100</span>
+                  <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-3)' }}>{95 - i * 8}/100</span>
                   <span style={{ fontSize: 14, fontWeight: 500, flex: 1 }}>{s}</span>
                   {i === 0 && <span style={{ fontSize: 12, color: 'var(--lime)' }}>Recommended</span>}
                   <CopyButton text={s} />
@@ -248,7 +248,7 @@ function ResultDossier({ result, navigate, motionIndex = 0 }) {
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ delay: i * 0.05 }}
                   className="chan"
-                  style={{ padding: '4px 9px', fontSize: 12.5 }}
+                  style={{ padding: '4px 9px', fontSize: 12 }}
                 >
                   {typeof p === 'object' ? p.label : p}
                 </motion.span>
@@ -391,8 +391,8 @@ export default function ChannelAnalyzer() {
         <button className="btn btn--ghost btn--sm" style={{ whiteSpace: 'nowrap' }} onClick={() => navigate('/leads')}>
           Back to Lead Finder
         </button>
-        <span className="muted" style={{ fontSize: 13 }}>·</span>
-        <span className="mono muted" style={{ fontSize: 12.5, whiteSpace: 'nowrap' }}>Channel Analyzer · AI-powered dossier</span>
+        <span className="muted" style={{ fontSize: 12 }}>·</span>
+        <span className="mono muted" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>Channel Analyzer · AI-powered dossier</span>
         <div style={{ flex: 1 }} />
         <AnimatePresence>
           {results.length > 0 && (
@@ -486,7 +486,7 @@ export default function ChannelAnalyzer() {
                     placeholder={'https://youtube.com/@MrBeast\nhttps://youtube.com/@mkbhd\n@veritasium'}
                     value={pasteText}
                     onChange={e => setPasteText(e.target.value)}
-                    style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 13, lineHeight: 1.7, resize: 'vertical', width: '100%', boxSizing: 'border-box' }}
+                    style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, lineHeight: 1.7, resize: 'vertical', width: '100%', boxSizing: 'border-box' }}
                   />
                   <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>{getUrlList().length} channels detected</div>
                 </motion.div>
@@ -562,7 +562,7 @@ export default function ChannelAnalyzer() {
                 </div>
               </div>
             )}
-            <div className="muted" style={{ fontSize: 12.5, marginTop: 8 }}>This takes 5–15 seconds per channel</div>
+            <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>This takes 5–15 seconds per channel</div>
           </motion.div>
         )}
       </AnimatePresence>

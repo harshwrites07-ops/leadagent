@@ -206,12 +206,12 @@ function MarcusDemo() {
         {/* right: the email being written */}
         <div style={{ padding: 'var(--sp-4)', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
           <div className="lp-demo__label">DRAFT · sequence 1 of 4</div>
-          <div style={{ fontSize: 15, fontWeight: 500, minHeight: 22, color: 'var(--text)', letterSpacing: '-0.005em' }}>
+          <div style={{ fontSize: 14, fontWeight: 500, minHeight: 22, color: 'var(--text)', letterSpacing: '-0.005em' }}>
             {SUBJECT.slice(0, subjChars)}
             {subjChars > 0 && subjChars < SUBJECT.length && <span className="lp-caret" />}
           </div>
           <div style={{
-            marginTop: 'var(--sp-3)', fontSize: 13, lineHeight: 1.7, color: 'var(--text-2)',
+            marginTop: 'var(--sp-3)', fontSize: 12, lineHeight: 1.7, color: 'var(--text-2)',
             whiteSpace: 'pre-wrap', flex: 1, minHeight: 208,
           }}>
             {BODY.slice(0, bodyChars)}
@@ -239,7 +239,7 @@ function VisualFind() {
       {rows.map((r, i) => (
         <div key={r.handle} style={{
           display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
-          borderTop: i === 0 ? 'none' : '1px solid var(--line)', fontSize: 13,
+          borderTop: i === 0 ? 'none' : '1px solid var(--line)', fontSize: 12,
         }}>
           <span className="ava" style={{ background: i === 0 ? 'var(--lime)' : 'var(--surface-3)', color: i === 0 ? 'var(--on-accent)' : 'var(--text-2)' }}>
             {r.name.split(' ').map(p => p[0]).join('')}
@@ -270,7 +270,7 @@ function VisualWrite() {
           display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', marginBottom: 8,
           border: '1px solid', borderColor: v.top ? 'var(--lime-border)' : 'var(--line)',
           background: v.top ? 'var(--lime-soft)' : 'var(--bg-2)', borderRadius: 'var(--r)',
-          fontSize: 13, color: v.top ? 'var(--text)' : 'var(--text-2)',
+          fontSize: 12, color: v.top ? 'var(--text)' : 'var(--text-2)',
         }}>
           <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.s}</span>
           <span style={{ marginLeft: 'auto', fontFamily: 'var(--f-mono)', fontSize: 12, color: v.top ? 'var(--lime)' : 'var(--text-3)', flexShrink: 0 }}>{v.score}</span>
@@ -295,7 +295,7 @@ function VisualSend() {
       <div className="lp-demo__label">MAILBOXES · sending window 9:40–11:20 AM recipient-local</div>
       {boxes.map(b => (
         <div key={b.email} style={{ padding: '9px 0', borderBottom: '1px solid var(--line)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, marginBottom: 6 }}>
             <span style={{ fontFamily: 'var(--f-mono)', color: 'var(--text-2)' }}>{b.email}</span>
             <span style={{ marginLeft: 'auto', fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-3)' }}>{b.today}/{b.cap} today</span>
           </div>
@@ -318,15 +318,15 @@ function VisualClose() {
         borderLeft: '3px solid var(--coral)', background: 'var(--coral-soft)',
         borderRadius: 'var(--r-sm)', padding: '10px 12px', marginBottom: 8,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 500 }}>
           Tara Chen <span className="badge badge--coral" style={{ marginLeft: 'auto' }}><Flame size={10} /> interested</span>
         </div>
-        <div style={{ fontSize: 13, color: 'var(--text-2)', marginTop: 4 }}>
+        <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 4 }}>
           "Okay this is timely. What's your rate for 2 videos/week?"
         </div>
         <div style={{
           marginTop: 8, padding: '8px 10px', background: 'var(--surface)', borderRadius: 'var(--r-sm)',
-          border: '1px solid var(--line)', fontSize: 12.5, color: 'var(--text-2)',
+          border: '1px solid var(--line)', fontSize: 12, color: 'var(--text-2)',
         }}>
           <span style={{ fontFamily: 'var(--f-mono)', fontSize: 12, letterSpacing: '.08em', color: 'var(--lime)', display: 'block', marginBottom: 3 }}>MARCUS SUGGESTS</span>
           Rate anchored to her view-count math, call link, 48h window…
@@ -336,7 +336,7 @@ function VisualClose() {
         { n: 'Dev Patel', s: 'Sent → Opened 3×', c: 'var(--lime)' },
         { n: 'Mia Torres', s: 'Call booked · Thu 2 PM', c: 'var(--ok)' },
       ].map(r => (
-        <div key={r.n} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 4px', fontSize: 13, borderTop: '1px solid var(--line)' }}>
+        <div key={r.n} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 4px', fontSize: 12, borderTop: '1px solid var(--line)' }}>
           <span className="dot" style={{ color: r.c }} />
           <span style={{ color: 'var(--text)' }}>{r.n}</span>
           <span style={{ marginLeft: 'auto', fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-3)' }}>{r.s}</span>
@@ -776,7 +776,7 @@ export default function Landing() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
                   <span className="ava" style={{ background: 'var(--surface-3)', color: 'var(--text-2)' }}>{t.name[0]}</span>
                   <div>
-                    <div style={{ fontSize: 13, fontWeight: 500 }}>{t.name}</div>
+                    <div style={{ fontSize: 12, fontWeight: 500 }}>{t.name}</div>
                     <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-3)' }}>{t.role}</div>
                   </div>
                 </div>
@@ -816,7 +816,7 @@ export default function Landing() {
                 </span>
                 <span style={{ fontSize: 14, color: 'var(--text-3)' }}>/mo</span>
               </div>
-              <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.5, marginBottom: 'var(--sp-5)' }}>{plan.desc}</p>
+              <p style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.5, marginBottom: 'var(--sp-5)' }}>{plan.desc}</p>
               <button
                 onClick={() => navigate('/signup')}
                 className={plan.featured ? 'lp-cta-primary' : 'lp-cta-ghost'}
@@ -826,7 +826,7 @@ export default function Landing() {
               </button>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)' }}>
                 {plan.features.map(f => (
-                  <div key={f} style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', fontSize: 13, color: 'var(--text-2)' }}>
+                  <div key={f} style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', fontSize: 12, color: 'var(--text-2)' }}>
                     <Check size={12} style={{ color: 'var(--lime)', flexShrink: 0 }} /> {f}
                   </div>
                 ))}
@@ -883,7 +883,7 @@ export default function Landing() {
         </div>
         <div style={{ display: 'flex', gap: 'var(--sp-6)' }}>
           {[['Privacy', '/privacy'], ['Terms', '/terms']].map(([label, href]) => (
-            <a key={label} href={href} style={{ fontSize: 13, color: 'var(--text-3)', transition: 'color 150ms' }}
+            <a key={label} href={href} style={{ fontSize: 12, color: 'var(--text-3)', transition: 'color 150ms' }}
               onMouseEnter={e => { e.target.style.color = 'var(--text)'; }}
               onMouseLeave={e => { e.target.style.color = 'var(--text-3)'; }}
             >{label}</a>

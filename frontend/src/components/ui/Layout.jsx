@@ -113,7 +113,7 @@ export default function Layout({ children }) {
           </svg>
         </div>
         <div>
-          <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.3px', color: 'var(--text)', lineHeight: 1.2 }}>Quelro</div>
+          <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: '-0.3px', color: 'var(--text)', lineHeight: 1.2 }}>Quelro</div>
           <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--text-4)', fontFamily: 'var(--f-mono)' }}>OUTREACH OS</div>
         </div>
         {onClose && (
@@ -198,7 +198,7 @@ export default function Layout({ children }) {
           style={{
             width: '100%', display: 'flex', alignItems: 'center', gap: 8,
             padding: '7px 2px', background: 'none', border: 'none',
-            color: 'var(--lime)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            color: 'var(--lime)', fontSize: 12, fontWeight: 600, cursor: 'pointer',
           }}
         >
           Ask Marcus
@@ -212,7 +212,7 @@ export default function Layout({ children }) {
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
             <span style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-4)' }}>Sends this month</span>
           </div>
-          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 13, color: 'var(--text-2)', marginBottom: 6 }}>
+          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-2)', marginBottom: 6 }}>
             {dashboardStats.emails_month.toLocaleString()}
             {settings?.daily_email_limit ? (
               <span style={{ color: 'var(--text-4)' }}> / {(settings.daily_email_limit * 30).toLocaleString()}</span>
@@ -241,7 +241,7 @@ export default function Layout({ children }) {
             {displayName[0]?.toUpperCase() || 'U'}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName}</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName}</div>
             <div style={{ fontSize: 12, color: 'var(--text-4)', fontFamily: 'var(--f-mono)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{userPlan}</div>
           </div>
           <button
@@ -353,7 +353,7 @@ export default function Layout({ children }) {
                 <path d="M8.5 1L3 7.5H7L5.5 13L11 6.5H7L8.5 1Z" fill="var(--on-accent)" strokeLinejoin="round"/>
               </svg>
             </div>
-            <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Quelro</span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>Quelro</span>
           </div>
         )}
 
@@ -375,7 +375,7 @@ export default function Layout({ children }) {
         {/* Right actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginLeft: 'auto' }}>
           {!isMobile && (
-            <a href="#" style={{ fontSize: 13, color: 'var(--text-3)', fontWeight: 500 }}>Help</a>
+            <a href="#" style={{ fontSize: 12, color: 'var(--text-3)', fontWeight: 500 }}>Help</a>
           )}
 
           <ThemeToggle theme={theme} onToggle={toggleTheme} />
@@ -383,7 +383,7 @@ export default function Layout({ children }) {
           <button onClick={() => window.dispatchEvent(new CustomEvent('jack:open'))} style={{
             display: 'flex', alignItems: 'center', gap: 6,
             padding: '0 10px', height: 32, borderRadius: 8,
-            color: 'var(--text-2)', fontSize: 13, fontWeight: 600,
+            color: 'var(--text-2)', fontSize: 12, fontWeight: 600,
             cursor: 'pointer', background: 'var(--surface)',
             border: '1px solid var(--line-2)', transition: 'all 120ms',
             whiteSpace: 'nowrap',
@@ -477,7 +477,7 @@ export default function Layout({ children }) {
                           color: active ? 'var(--lime)' : 'var(--text-2)',
                         }}
                       >
-                        <span style={{ fontSize: 13, fontWeight: active ? 600 : 400 }}>{label}</span>
+                        <span style={{ fontSize: 12, fontWeight: active ? 600 : 400 }}>{label}</span>
                       </NavLink>
                     );
                   })}

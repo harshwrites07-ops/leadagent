@@ -25,7 +25,7 @@ function TestButton({ onClick, status }) {
   return (
     <button onClick={onClick} style={{
       display: 'flex', alignItems: 'center', gap: 5,
-      padding: '7px 14px', borderRadius: 6, cursor: 'pointer', fontSize: 13, flexShrink: 0,
+      padding: '7px 14px', borderRadius: 6, cursor: 'pointer', fontSize: 12, flexShrink: 0,
       background: 'transparent', border: '1px solid var(--border-default)',
       color: status === 'ok' ? 'var(--ok)' : status === 'error' ? 'var(--bad)' : 'var(--text-secondary)',
     }}>
@@ -109,7 +109,7 @@ function ToggleGroup({ options, value, onChange }) {
     <div style={{ display: 'flex', gap: 4, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 7, padding: 3, width: 'fit-content' }}>
       {options.map(opt => (
         <button key={opt.value} onClick={() => onChange(opt.value)} style={{
-          padding: '6px 16px', borderRadius: 5, fontSize: 13, fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s', border: 'none',
+          padding: '6px 16px', borderRadius: 5, fontSize: 12, fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s', border: 'none',
           ...(value === opt.value
             ? { background: 'rgba(var(--lime-rgb),0.1)', color: 'var(--accent-primary)', outline: '1px solid rgba(var(--lime-rgb),0.2)' }
             : { background: 'transparent', color: 'var(--text-muted)' }),
@@ -291,12 +291,12 @@ export default function AdminSettings() {
       {/* SMTP Inboxes (fallback) */}
       <Section icon={Mail} title="SMTP Inboxes (Fallback)">
         <div style={gap}>
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
             Used when a user hasn't connected Gmail. Each inbox sends up to 150 emails/day.
           </p>
           <div>
             <label style={{ ...labelSt, marginBottom: 8 }}>Configured Inboxes ({inboxes.length})</label>
-            {inboxes.length === 0 && <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No inboxes configured.</p>}
+            {inboxes.length === 0 && <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>No inboxes configured.</p>}
             {inboxes.map(inbox => (
               <div key={inbox.email} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'var(--bg-elevated)', borderRadius: 6, marginBottom: 6 }}>
                 <div style={{ flex: 1 }}>
@@ -309,7 +309,7 @@ export default function AdminSettings() {
           </div>
 
           {!showAddInbox ? (
-            <button onClick={() => setShowAddInbox(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 6, background: 'transparent', border: '1px solid var(--border-default)', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer' }}>
+            <button onClick={() => setShowAddInbox(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 6, background: 'transparent', border: '1px solid var(--border-default)', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer' }}>
               <Plus size={12} /> Add Inbox
             </button>
           ) : (
@@ -324,10 +324,10 @@ export default function AdminSettings() {
               </div>
               <div><label style={labelSt}>App Password</label><PasswordInput value={newInbox.pass} onChange={e => setNewInbox(p => ({ ...p, pass: e.target.value }))} /></div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={addInbox} disabled={addingInbox} style={{ flex: 1, padding: '8px', borderRadius: 6, background: 'var(--lime)', border: 'none', color: 'var(--on-accent)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                <button onClick={addInbox} disabled={addingInbox} style={{ flex: 1, padding: '8px', borderRadius: 6, background: 'var(--lime)', border: 'none', color: 'var(--on-accent)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                   {addingInbox ? 'Testing & Saving...' : 'Add Inbox'}
                 </button>
-                <button onClick={() => setShowAddInbox(false)} style={{ padding: '8px 14px', borderRadius: 6, background: 'transparent', border: '1px solid var(--border-default)', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer' }}>
+                <button onClick={() => setShowAddInbox(false)} style={{ padding: '8px 14px', borderRadius: 6, background: 'transparent', border: '1px solid var(--border-default)', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer' }}>
                   Cancel
                 </button>
               </div>
@@ -373,7 +373,7 @@ export default function AdminSettings() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
               {caseStudies.map((cs, i) => (
                 <div key={i} style={{ display: 'flex', gap: 8 }}>
-                  <input style={{ ...inputSt, flex: 1, fontSize: 13 }} value={cs} onChange={e => { const arr = [...caseStudies]; arr[i] = e.target.value; set('case_studies', arr); }} placeholder="e.g. Helped FitnessGuru grow from 2K to 50K views in 60 days" />
+                  <input style={{ ...inputSt, flex: 1, fontSize: 12 }} value={cs} onChange={e => { const arr = [...caseStudies]; arr[i] = e.target.value; set('case_studies', arr); }} placeholder="e.g. Helped FitnessGuru grow from 2K to 50K views in 60 days" />
                   <button onClick={() => set('case_studies', caseStudies.filter((_, j) => j !== i))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--bad)', padding: '0 4px' }}><X size={13} /></button>
                 </div>
               ))}

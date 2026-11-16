@@ -68,14 +68,14 @@ function AngleCard({ angle, selected, onSelect }) {
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-        <span style={{ fontFamily: 'var(--f-sans)', fontSize: 13, fontWeight: 600, color: isSelected ? 'var(--lime)' : 'var(--text-2)' }}>
+        <span style={{ fontFamily: 'var(--f-sans)', fontSize: 12, fontWeight: 600, color: isSelected ? 'var(--lime)' : 'var(--text-2)' }}>
           {angle.angle_name}
         </span>
         {isSelected && <CheckCircle size={13} style={{ color: 'var(--lime)' }} />}
       </div>
       <div style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>{angle.description}</div>
       <div style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-4)', marginBottom: 8 }}>SUBJECT: {angle.subject}</div>
-      <div style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6, whiteSpace: 'pre-wrap', fontFamily: 'var(--f-sans)', borderTop: '1px solid var(--line)', paddingTop: 8 }}>
+      <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6, whiteSpace: 'pre-wrap', fontFamily: 'var(--f-sans)', borderTop: '1px solid var(--line)', paddingTop: 8 }}>
         {angle.full_email}
       </div>
     </motion.div>
@@ -308,7 +308,7 @@ function CreateModal({ onClose, onCreate }) {
         <input className="input" style={{ marginBottom: 18 }} placeholder="e.g. Helped a finance creator go from 2% to 5% CTR in 6 weeks" value={form.credentials} onChange={e => set('credentials', e.target.value)} />
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 20 }}>
           <input type="checkbox" checked={form.ab_test_enabled} onChange={e => set('ab_test_enabled', e.target.checked)} />
-          <span style={{ fontSize: 13, color: 'var(--text-2)', fontFamily: 'var(--f-sans)' }}>Enable A/B test (split leads between two angles)</span>
+          <span style={{ fontSize: 12, color: 'var(--text-2)', fontFamily: 'var(--f-sans)' }}>Enable A/B test (split leads between two angles)</span>
         </label>
         {form.ab_test_enabled && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 18 }}>
@@ -440,7 +440,7 @@ function CampaignCard({ campaign, onSelect }) {
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
         <div>
-          <div style={{ fontFamily: 'var(--f-sans)', fontWeight: 600, fontSize: 15, color: 'var(--text)', marginBottom: 3 }}>{campaign.name}</div>
+          <div style={{ fontFamily: 'var(--f-sans)', fontWeight: 600, fontSize: 14, color: 'var(--text)', marginBottom: 3 }}>{campaign.name}</div>
           <div style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-4)' }}>
             {campaign.niche ? `#${campaign.niche} · ` : ''}{campaign.service_type || 'video editing'}
             {campaign.ab_test_enabled ? ' · A/B TEST' : ''}
@@ -613,7 +613,7 @@ function CampaignDetail({ campaign: initialCampaign, onBack }) {
           transition={{ duration: 0.2 }}
         >
           {loading ? (
-            <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-4)', fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 13 }}>Loading leads…</div>
+            <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-4)', fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12 }}>Loading leads…</div>
           ) : displayed.length === 0 ? (
             <div className="empty">
               <div className="empty__title">{leads.length === 0 ? 'No leads yet' : `No ${tab} leads`}</div>
@@ -716,7 +716,7 @@ export default function Campaigns() {
       <AnimatePresence mode="wait">
         {loading ? (
           <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            style={{ textAlign: 'center', padding: 60, color: 'var(--text-4)', fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 13 }}>
+            style={{ textAlign: 'center', padding: 60, color: 'var(--text-4)', fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12 }}>
             Loading campaigns…
           </motion.div>
         ) : campaigns.length === 0 ? (

@@ -143,7 +143,7 @@ export default function Admin() {
         }}>
           <span style={{ fontWeight: 700, fontSize: 14 }}>⚠ Scraper(s) degraded (last 24h):</span>
           {scraperHealth.scrapers.filter(s => s.degraded).map(s => (
-            <span key={s.scraper} className="mono" style={{ fontSize: 13 }}>
+            <span key={s.scraper} className="mono" style={{ fontSize: 12 }}>
               {s.scraper} ({s.success_rate}% success, {s.attempted} attempted)
             </span>
           ))}
@@ -177,7 +177,7 @@ export default function Admin() {
                 {isSeeding ? '● RUNNING' : '○ IDLE'}
               </span>
             </div>
-            <div className="t-mono t-muted" style={{ fontSize: 13 }}>
+            <div className="t-mono t-muted" style={{ fontSize: 12 }}>
               {seederInfo ? (
                 <>
                   DB: <b style={{ color: 'var(--text-2)' }}>{seederInfo.withEmail?.toLocaleString()}</b> leads with email
@@ -235,7 +235,7 @@ export default function Admin() {
                     <tr>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <span className="ava ava--lg" style={{ background: 'var(--surface-3)', color: 'var(--text-2)', fontSize: 15 }}>
+                          <span className="ava ava--lg" style={{ background: 'var(--surface-3)', color: 'var(--text-2)', fontSize: 14 }}>
                             {(u.full_name || u.email || '?')[0].toUpperCase()}
                           </span>
                           <div>
@@ -302,7 +302,7 @@ export default function Admin() {
                                     type="number" placeholder={`Plan default`}
                                     value={edits[key] !== undefined ? edits[key] : (val ?? '')}
                                     onChange={e => editLimit(u.id, key, e.target.value)}
-                                    className="input" style={{ width: 130, padding: '6px 10px', fontSize: 13 }}
+                                    className="input" style={{ width: 130, padding: '6px 10px', fontSize: 12 }}
                                   />
                                 </div>
                               ))}

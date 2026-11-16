@@ -6,133 +6,124 @@
    The 12 hex values below are the whole palette — do not add new
    chromatic colors; derive soft/border/glow tints from these only.
    ═══════════════════════════════════════════════════════════ */
+/* Values below are Clay's app design tokens (--color-bg-*, --color-content-*, --color-border-*),
+   read from app.clay.com. Dark is the default; light is applied with <html data-theme="light">. */
 :root {
   /* ── Backgrounds ── */
-  --app-bg:         #1b1a18;
-  --app-surface-1:  #232220;  /* surface / card / input fill */
-  --app-surface-2:  #2b2a27;
-  --app-danger:     #e94d68;
+  --app-bg:         #16181f;   /* bg-primary: page, sidebar, top bar */
+  --app-surface-1:  #282c35;   /* bg-secondary: cards, panels */
+  --app-surface-2:  #3c414d;   /* bg-tertiary / raised-hover */
+  --app-raised:     #282c35;   /* bg-raised: secondary buttons, popovers */
 
-  /* ── Text — white at fixed opacity tiers, no gray hex values ── */
-  --app-text-primary:   #fefdfb;
-  --app-text-secondary: rgba(254, 253, 251, 0.84);
-  --app-text-soft:      rgba(254, 253, 251, 0.84);
-  --app-text-muted:     rgba(254, 253, 251, 0.66);
-  --app-text-ghost:     rgba(254, 253, 251, 0.54);
-  --app-text-faint:     rgba(254, 253, 251, 0.46);
-  /* Content tone — email/draft body text only, never UI chrome. */
-  --app-text-content:   rgba(254, 253, 251, 0.88);
+  /* ── Text ── */
+  --app-text-primary:   #ffffff;   /* content-primary */
+  --app-text-secondary: #eff1f3;   /* content-secondary */
+  --app-text-soft:      #eff1f3;
+  --app-text-muted:     #e6e8ec;   /* content-tertiary */
+  --app-text-ghost:     #bfc4cd;   /* icon-subtle */
+  --app-text-faint:     #979da9;   /* content-placeholder */
+  --app-text-content:   #eff1f3;
 
-  /* ── Accent — champagne, the only chromatic accent, used sparingly:
-     one primary button per screen, active nav text, active tab
-     underline, progress fill, intent scores ≥90. ── */
-  --app-accent:         #f4f3f0;
-  --app-accent-hover:   #ffffff;
-  --app-accent-pressed: #d1cdc7;
-  --app-warning:        #fcbe11;
-  --app-success:        #84e7a5;
+  /* ── Accent: Clay's action blue ── */
+  --app-accent:         #3ea2fd;   /* bg-action-inverse */
+  --app-accent-hover:   #0382f7;
+  --app-accent-pressed: #0667d9;
+  --app-selected-text:  #b8ddff;   /* content-selected (active nav, links) */
+  --app-warning:        #ffa775;   /* bg-warning-inverse */
+  --app-success:        #3ece82;   /* bg-success-inverse */
+  --app-danger:         #ff7d90;   /* bg-danger-inverse */
 
-  /* Alpha tints derived from --app-accent / --app-warning / --app-danger for
-     soft fills, borders, and glows (badges, focus glows, hero gradients).
-     Not new base colors — computed tints of the sanctioned tokens above. */
-  --app-accent-soft:    rgba(244, 243, 240, 0.12);
-  --app-accent-border:  rgba(244, 243, 240, 0.32);
-  --app-accent-glow:    rgba(244, 243, 240, 0.35);
-  --app-accent-rgb:     244, 243, 240;
-  --app-warning-soft:   rgba(252, 190, 17, 0.14);
-  --app-warning-border: rgba(252, 190, 17, 0.38);
-  --app-warning-rgb:    252, 190, 17;
-  --app-danger-soft:    rgba(233, 77, 104, 0.14);
-  --app-danger-border:  rgba(233, 77, 104, 0.38);
-  --app-danger-rgb:     233, 77, 104;
-  --app-success-soft:   rgba(132, 231, 165, 0.14);
-  --app-success-border: rgba(132, 231, 165, 0.38);
-  --app-success-rgb:    132, 231, 165;
+  --app-accent-soft:    #001e4b;   /* bg-selected */
+  --app-accent-border:  #81c2ff;   /* border-action */
+  --app-accent-glow:    #b8ddff;   /* outline-focus-ring */
+  --app-accent-rgb:     62, 162, 253;
+  --app-warning-soft:   #431407;
+  --app-warning-border: #fdd4b7;
+  --app-warning-rgb:    255, 167, 117;
+  --app-danger-soft:    #450417;
+  --app-danger-border:  #fecdd3;
+  --app-danger-rgb:     255, 125, 144;
+  --app-success-soft:   #002414;
+  --app-success-border: #bcf4ca;
+  --app-success-rgb:    62, 206, 130;
 
-  /* Borders — hairline only, no drop shadows anywhere. Single tier plus
-     its hover state (both driven by opacity on white, not a new hex). */
-  --app-divider:      rgba(254, 253, 251, 0.10);
-  --app-border:       rgba(254, 253, 251, 0.10);
-  --app-border-hover: rgba(254, 253, 251, 0.20);
-  --app-border-soft:  rgba(254, 253, 251, 0.10);
+  /* ── Borders ── */
+  --app-divider:      #ffffff26;   /* border-secondary */
+  --app-border:       #ffffff33;   /* border-primary */
+  --app-border-hover: #ffffff4d;   /* border-primary-hover */
+  --app-border-soft:  #ffffff1a;   /* border-tertiary (table rows) */
 
-  /* ── Border radius ── */
-  --app-radius-sm:   8px;    /* buttons / inputs */
-  --app-radius-md:   8px;    /* buttons / inputs */
-  --app-radius-lg:   12px;   /* cards (10-14px range) */
-  --app-radius-pill: 9999px; /* pills only — avoid on stat/status containers */
+  /* ── Radius (Clay): buttons/inputs 4, nav items 6, cards 8, pills only for badges ── */
+  --app-radius-sm:   4px;
+  --app-radius-md:   6px;
+  --app-radius-lg:   8px;
+  --app-radius-pill: 9999px;
 
   /* ── Spacing (8px base grid) ── */
-  --app-space-tight: 6px;  /* icon gaps, tight badge padding only */
-  --app-space-1:     8px;  /* base unit — default */
+  --app-space-tight: 6px;
+  --app-space-1:     8px;
   --app-space-2:     16px;
   --app-space-3:     24px;
   --app-space-4:     32px;
 
-  /* ── Shadows — no drop shadows anywhere per spec. Elevation is conveyed
-     by the hairline border alone; focus state brightens the border
-     rather than adding a glow. Kept as tokens (rather than deleted) so
-     every consuming selector still resolves, just to nothing. ── */
-  --app-shadow-card:  none;
-  --app-shadow-modal: none;
-  --app-shadow-focus: none;
+  /* ── Shadows (Clay cards) ── */
+  --app-shadow-card:  0 1px 3px 0 rgba(0,0,0,.1), 0 1px 2px -1px rgba(0,0,0,.1);
+  --app-shadow-modal: 0 10px 15px -3px rgba(0,0,0,.2), 0 4px 6px -4px rgba(0,0,0,.2);
+  --app-shadow-focus: 0 0 0 2px #b8ddff;
 
-  /* ── Typography — General Sans for UI text, Inter fallback. Numbers,
-     metrics, counts, timestamps, and badges use --f-mono (JetBrains
-     Mono), defined in index.css. ── */
-  --app-font-heading: 'Inter', 'Segoe UI', Roboto, ui-sans-serif, system-ui, sans-serif;
-  --app-font-body:    'Inter', 'Segoe UI', Roboto, ui-sans-serif, system-ui, sans-serif;
+  /* ── Typography: Inter, as in the Clay app ── */
+  --app-font-heading: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --app-font-body:    'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color-scheme: dark;
 }
 
-
 /* ═══════════════════════════════════════════════════════════
-   LIGHT THEME — warm "oat" neutrals + ink text. Toggled with
-   <html data-theme="light">. Dark (above) is the default.
-   Every component reads these tokens, so nothing else changes.
+   LIGHT THEME — Clay's light values. <html data-theme="light">
    ═══════════════════════════════════════════════════════════ */
 :root[data-theme="light"] {
-  --app-bg:         #fefdfb;
-  --app-surface-1:  #ffffff;
-  --app-surface-2:  #f4f3f0;
+  --app-bg:         #ffffff;
+  --app-surface-1:  #f7f8f9;
+  --app-surface-2:  #eff1f3;
+  --app-raised:     #ffffff;
 
-  --app-text-primary:   #1b1a18;
-  --app-text-secondary: #55534e;
-  --app-text-soft:      #55534e;
-  --app-text-muted:     #6b6862;
-  --app-text-ghost:     #85817a;
-  --app-text-faint:     #9f9b93;
-  --app-text-content:   #3c3a36;
+  --app-text-primary:   #000000;
+  --app-text-secondary: #3c414d;
+  --app-text-soft:      #3c414d;
+  --app-text-muted:     #525a69;
+  --app-text-ghost:     #979da9;
+  --app-text-faint:     #bfc4cd;
+  --app-text-content:   #3c414d;
 
-  --app-accent:         #1b1a18;
-  --app-accent-hover:   #000000;
-  --app-accent-pressed: #000000;
-  --app-warning:        #d08a11;
+  --app-accent:         #0382f7;
+  --app-accent-hover:   #0667d9;
+  --app-accent-pressed: #0053b5;
+  --app-selected-text:  #0053b5;
+  --app-warning:        #e56e2c;
   --app-success:        #078a52;
   --app-danger:         #dd2c53;
 
-  --app-accent-soft:    rgba(27, 26, 24, 0.06);
-  --app-accent-border:  rgba(27, 26, 24, 0.24);
-  --app-accent-glow:    rgba(27, 26, 24, 0.12);
-  --app-accent-rgb:     27, 26, 24;
-  --app-warning-soft:   rgba(208, 138, 17, 0.14);
-  --app-warning-border: rgba(208, 138, 17, 0.40);
-  --app-warning-rgb:    208, 138, 17;
-  --app-danger-soft:    rgba(221, 44, 83, 0.10);
-  --app-danger-border:  rgba(221, 44, 83, 0.36);
+  --app-accent-soft:    #d7ebfe;
+  --app-accent-border:  #3ea2fd;
+  --app-accent-glow:    #b8ddff;
+  --app-accent-rgb:     3, 130, 247;
+  --app-warning-soft:   #fff3ed;
+  --app-warning-border: #f58c50;
+  --app-warning-rgb:    229, 110, 44;
+  --app-danger-soft:    #fff1f2;
+  --app-danger-border:  #e94d68;
   --app-danger-rgb:     221, 44, 83;
-  --app-success-soft:   rgba(7, 138, 82, 0.12);
-  --app-success-border: rgba(7, 138, 82, 0.36);
+  --app-success-soft:   #eefff1;
+  --app-success-border: #0dac65;
   --app-success-rgb:    7, 138, 82;
 
-  --app-divider:      #e0dedc;
-  --app-border:       #e0dedc;
-  --app-border-hover: #d1cdc7;
-  --app-border-soft:  #eee9df;
+  --app-divider:      #e6e8ec;
+  --app-border:       #d6d9df;
+  --app-border-hover: #bfc4cd;
+  --app-border-soft:  #eff1f3;
 
-  --on-accent: #fefdfb;
+  --on-accent: #ffffff;
   color-scheme: light;
 }
-:root:not([data-theme="light"]) { color-scheme: dark; }
 
 /* ═══════════════════════════════════════════════════════════
    TYPE SCALE — the only 9 text styles used in the app.
@@ -140,7 +131,7 @@
    ═══════════════════════════════════════════════════════════ */
 .type-h1 {
   font-family: var(--app-font-heading);
-  font-size: 26px;
+  font-size: 22px;
   font-weight: 700;
   line-height: 1.27;
   letter-spacing: -0.55px;
@@ -162,36 +153,36 @@
 .type-body {
   font-family: var(--app-font-body);
   font-size: 16px;
-  font-weight: 450;
+  font-weight: 400;
   line-height: 1.55;
 }
 .type-body-sm {
   font-family: var(--app-font-body);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 500;
   line-height: 1.43;
 }
 .type-body-14 {
   font-family: var(--app-font-heading);
-  font-size: 15px;
-  font-weight: 450;
+  font-size: 14px;
+  font-weight: 400;
   line-height: 1.43;
 }
 .type-button {
   font-family: var(--app-font-body);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   line-height: 1.33;
 }
 .type-button-12 {
   font-family: var(--app-font-body);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   line-height: 1.67;
 }
 .type-body-12 {
   font-family: var(--app-font-heading);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   line-height: 1.33;
 }

@@ -134,7 +134,7 @@ export default function Onboarding() {
           animate={{ opacity: 1 }}
           transition={{ delay: 0.4 }}
           className="muted"
-          style={{ fontSize: 15, lineHeight: 1.7, marginBottom: 32 }}
+          style={{ fontSize: 14, lineHeight: 1.7, marginBottom: 32 }}
         >
           We've built your unique voice profile. Every email will sound exactly like you.
         </motion.p>
@@ -219,22 +219,22 @@ export default function Onboarding() {
             {step === 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6, color: 'var(--text-2)' }}>What's your name?</label>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: 'var(--text-2)' }}>What's your name?</label>
                   <input className="input" value={form.full_name} onChange={e => set('full_name', e.target.value)} placeholder="Your full name" />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6, color: 'var(--text-2)' }}>What do you sell to YouTube creators?</label>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: 'var(--text-2)' }}>What do you sell to YouTube creators?</label>
                   <input className="input" value={form.service_type} onChange={e => set('service_type', e.target.value)}
                     placeholder="e.g. video editing, thumbnail design, sponsorships, software, coaching..." />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6, color: 'var(--text-2)' }}>What's the ONE thing you're known for?</label>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: 'var(--text-2)' }}>What's the ONE thing you're known for?</label>
                   <input className="input" value={form.angle} onChange={e => set('angle', e.target.value)}
                     placeholder="e.g. pacing / cutting dead space, retention hooks, story structure — not 'full-service editing'" />
                   <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>Be specific. A single sharp specialty gets more replies than a generic pitch.</p>
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 4, color: 'var(--text-2)' }}>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4, color: 'var(--text-2)' }}>
                     Describe yourself in one sentence.
                     <span className="muted" style={{ fontWeight: 400, marginLeft: 6 }}>{form.one_liner.length}/150</span>
                   </label>
@@ -242,7 +242,7 @@ export default function Onboarding() {
                     style={{ resize: 'none' }} placeholder="e.g. I help finance creators look as professional as their ideas deserve" />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 10, color: 'var(--text-2)' }}>How long have you been doing this?</label>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 10, color: 'var(--text-2)' }}>How long have you been doing this?</label>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {EXPERIENCE.map(([val, label]) => (
                       <motion.label
@@ -262,7 +262,7 @@ export default function Onboarding() {
             {step === 1 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 4, color: 'var(--text-2)' }}>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4, color: 'var(--text-2)' }}>
                     What's your single best result for a client?
                     <span className="muted" style={{ fontWeight: 400, marginLeft: 6 }}>{form.best_result.length}/300</span>
                   </label>
@@ -270,13 +270,13 @@ export default function Onboarding() {
                     placeholder={'Be specific. Numbers work best.\ne.g. Helped a fitness channel increase watch time by 60% in 30 days\nNo results yet? Tell us what result you WANT to achieve.'} />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6, color: 'var(--text-2)' }}>What free, no-strings offer can you make on the first email?</label>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: 'var(--text-2)' }}>What free, no-strings offer can you make on the first email?</label>
                   <input className="input" value={form.weightless_ask} onChange={e => set('weightless_ask', e.target.value)}
                     placeholder="e.g. a free re-edit of your first 90 seconds" />
                   <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>Zero commitment, no call required — this is what makes the first email easy to say yes to.</p>
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 10, color: 'var(--text-2)' }}>Which YouTube niches do you love working with?</label>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 10, color: 'var(--text-2)' }}>Which YouTube niches do you love working with?</label>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                     {NICHES.map(n => (
                       <motion.button
@@ -285,7 +285,7 @@ export default function Onboarding() {
                         whileHover={{ scale: 1.04 }}
                         whileTap={{ scale: 0.97 }}
                         onClick={() => toggleChip('target_niches', n)}
-                        style={{ padding: '6px 14px', borderRadius: 99, fontSize: 13, cursor: 'pointer', border: `1px solid ${form.target_niches.includes(n) ? 'var(--lime-border)' : 'var(--line)'}`, background: form.target_niches.includes(n) ? 'var(--lime-soft)' : 'var(--surface-2)', color: form.target_niches.includes(n) ? 'var(--lime)' : 'var(--text-2)', fontWeight: form.target_niches.includes(n) ? 600 : 400, transition: 'all .15s' }}
+                        style={{ padding: '6px 14px', borderRadius: 99, fontSize: 12, cursor: 'pointer', border: `1px solid ${form.target_niches.includes(n) ? 'var(--lime-border)' : 'var(--line)'}`, background: form.target_niches.includes(n) ? 'var(--lime-soft)' : 'var(--surface-2)', color: form.target_niches.includes(n) ? 'var(--lime)' : 'var(--text-2)', fontWeight: form.target_niches.includes(n) ? 600 : 400, transition: 'all .15s' }}
                       >
                         {n}
                       </motion.button>
@@ -293,7 +293,7 @@ export default function Onboarding() {
                   </div>
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6, color: 'var(--text-2)' }}>What's your typical pricing?</label>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: 'var(--text-2)' }}>What's your typical pricing?</label>
                   <select className="input" value={form.pricing_range} onChange={e => set('pricing_range', e.target.value)}>
                     <option value="">Select a range...</option>
                     {PRICING.map(p => <option key={p} value={p}>{p}</option>)}
@@ -306,7 +306,7 @@ export default function Onboarding() {
             {step === 2 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 10, color: 'var(--text-2)' }}>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 10, color: 'var(--text-2)' }}>
                     How would your best friend describe you?
                     <span className="muted" style={{ fontWeight: 400, marginLeft: 6 }}>Pick up to 3</span>
                   </label>
@@ -318,7 +318,7 @@ export default function Onboarding() {
                         whileHover={{ scale: 1.04 }}
                         whileTap={{ scale: 0.97 }}
                         onClick={() => toggleChip('personality_traits', t, 3)}
-                        style={{ padding: '7px 14px', borderRadius: 99, fontSize: 13, cursor: 'pointer', border: `1px solid ${form.personality_traits.includes(t) ? 'var(--lime-border)' : 'var(--line)'}`, background: form.personality_traits.includes(t) ? 'var(--lime-soft)' : 'var(--surface-2)', color: form.personality_traits.includes(t) ? 'var(--lime)' : 'var(--text-2)', fontWeight: form.personality_traits.includes(t) ? 600 : 400, transition: 'all .15s' }}
+                        style={{ padding: '7px 14px', borderRadius: 99, fontSize: 12, cursor: 'pointer', border: `1px solid ${form.personality_traits.includes(t) ? 'var(--lime-border)' : 'var(--line)'}`, background: form.personality_traits.includes(t) ? 'var(--lime-soft)' : 'var(--surface-2)', color: form.personality_traits.includes(t) ? 'var(--lime)' : 'var(--text-2)', fontWeight: form.personality_traits.includes(t) ? 600 : 400, transition: 'all .15s' }}
                       >
                         {t}
                       </motion.button>
@@ -326,7 +326,7 @@ export default function Onboarding() {
                   </div>
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 10, color: 'var(--text-2)' }}>What's your main outreach goal?</label>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 10, color: 'var(--text-2)' }}>What's your main outreach goal?</label>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {GOALS.map(([val, label]) => (
                       <motion.label
@@ -346,7 +346,7 @@ export default function Onboarding() {
             {step === 3 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 4, color: 'var(--text-2)' }}>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4, color: 'var(--text-2)' }}>
                     Why did you start doing this?
                     <span className="muted" style={{ fontWeight: 400, marginLeft: 6 }}>{form.origin_story.length}/300</span>
                   </label>
@@ -354,7 +354,7 @@ export default function Onboarding() {
                     placeholder={'Keep it real and short.\ne.g. Started editing videos to pay for college. Now I help creators tell better stories.\nOR: Built a sponsorship agency because I saw creators leaving massive deals on the table.'} />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 4, color: 'var(--text-2)' }}>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4, color: 'var(--text-2)' }}>
                     What makes you different from everyone else who does what you do?
                     <span className="muted" style={{ fontWeight: 400, marginLeft: 6 }}>{form.unique_difference.length}/300</span>
                   </label>
@@ -367,7 +367,7 @@ export default function Onboarding() {
                       initial={{ opacity: 0, y: -8 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0 }}
-                      style={{ padding: '10px 14px', background: 'rgba(255,80,80,0.08)', border: '1px solid rgba(255,80,80,0.2)', borderRadius: 8, fontSize: 13, color: 'var(--coral)' }}
+                      style={{ padding: '10px 14px', background: 'rgba(255,80,80,0.08)', border: '1px solid rgba(255,80,80,0.2)', borderRadius: 8, fontSize: 12, color: 'var(--coral)' }}
                     >
                       {error}
                     </motion.div>

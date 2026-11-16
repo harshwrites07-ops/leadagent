@@ -223,7 +223,7 @@ function ConversationView({ reply, onBack, onReplySent }) {
             className="flex-shrink-0 p-3 rounded-xl transition-colors"
             style={{ background: showSuggestion ? 'var(--lime)' : 'var(--surface-2)', border: '1px solid var(--lime-border)', color: showSuggestion ? 'var(--on-accent)' : 'var(--lime)', opacity: loadingSuggestion ? 0.5 : 1 }}
           >
-            <span style={{ fontSize: 15 }}>{loadingSuggestion ? '…' : '✦'}</span>
+            <span style={{ fontSize: 14 }}>{loadingSuggestion ? '…' : '✦'}</span>
           </button>
           <button
             onClick={sendReply}

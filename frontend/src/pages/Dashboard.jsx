@@ -105,7 +105,7 @@ export default function Dashboard() {
             <span style={{ fontWeight: 700, fontSize: 14 }}>
               {hotAlerts.length} new HOT lead{hotAlerts.length !== 1 ? 's' : ''} matched your niche
             </span>
-            <span className="mono" style={{ fontSize: 12.5, opacity: 0.85 }}>
+            <span className="mono" style={{ fontSize: 12, opacity: 0.85 }}>
               {hotAlerts.slice(0, 3).map(a => a.channel_name).join(', ')}{hotAlerts.length > 3 ? ` +${hotAlerts.length - 3} more` : ''}
             </span>
           </div>
@@ -158,10 +158,10 @@ export default function Dashboard() {
                   <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, fontWeight: 500, color: 'var(--ok)' }}>{stat.delta} {stat.deltaSub}</span>
                 )}
                 {!stat.delta && stat.sub && (
-                  <span style={{ fontSize: 12.5, color: 'var(--text-4)' }}>{stat.sub}</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-4)' }}>{stat.sub}</span>
                 )}
                 {stat.delta && stat.sub && (
-                  <span style={{ fontSize: 12.5, color: 'var(--text-4)' }}>· {stat.sub}</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-4)' }}>· {stat.sub}</span>
                 )}
               </div>
             </motion.div>
@@ -172,7 +172,7 @@ export default function Dashboard() {
       {/* Leads table */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
-          <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--text)' }}>Leads</h2>
+          <h2 style={{ margin: 0, fontSize: 14, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--text)' }}>Leads</h2>
           <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-4)' }}>{formatNumber(leadsTotal)} total</span>
           <div style={{ flex: 1 }} />
           <div style={{ display: 'flex', gap: 6 }}>
@@ -183,7 +183,7 @@ export default function Dashboard() {
                   key={f}
                   onClick={() => setFilter(f)}
                   style={{
-                    fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
+                    fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
                     color: on ? 'var(--text)' : 'var(--text-4)',
                     background: on ? 'var(--surface-2)' : 'transparent',
                     border: `1px solid ${on ? 'var(--line-3)' : 'var(--line)'}`,
@@ -240,25 +240,25 @@ export default function Dashboard() {
                           fontSize: 12, fontWeight: 600, color: 'var(--text-2)',
                         }}>{initials}</div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
-                          <span style={{ fontSize: 13.5, fontWeight: 500, letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--text)' }}>
+                          <span style={{ fontSize: 14, fontWeight: 500, letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--text)' }}>
                             {lead.channel_name || 'Unknown'}
                           </span>
                           <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-4)' }}>{lead.channel_handle || ''}</span>
                         </div>
                       </div>
-                      <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 13, color: 'var(--text-2)', textAlign: 'right' }}>
+                      <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-2)', textAlign: 'right' }}>
                         {formatNumber(lead.subscriber_count ?? 0)}
                       </span>
                       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                        <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 13, fontWeight: 500, color: (lead.lead_score ?? 0) >= 70 ? 'var(--lime)' : 'var(--text-3)' }}>
+                        <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, fontWeight: 500, color: (lead.lead_score ?? 0) >= 70 ? 'var(--lime)' : 'var(--text-3)' }}>
                           {lead.lead_score ?? 0}
                         </span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{ width: 6, height: 6, flexShrink: 0, borderRadius: '50%', background: meta.dot, display: 'inline-block' }} />
-                        <span style={{ fontSize: 13, color: 'var(--text-2)', letterSpacing: '-0.01em' }}>{meta.label}</span>
+                        <span style={{ fontSize: 12, color: 'var(--text-2)', letterSpacing: '-0.01em' }}>{meta.label}</span>
                       </div>
-                      <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 13, color: 'var(--text-4)', textAlign: 'right' }}>
+                      <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--text-4)', textAlign: 'right' }}>
                         {lead.last_email_date ? formatDate(lead.last_email_date) : '—'}
                       </span>
                     </div>

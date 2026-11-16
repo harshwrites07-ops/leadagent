@@ -31,7 +31,7 @@ const DEFAULT_SUBREDDITS = [
 function ScorePill({ score }) {
   const color = score >= 90 ? 'var(--lime)' : 'var(--text-3)';
   return (
-    <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 13, fontWeight: 500, color }}>
+    <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, fontWeight: 500, color }}>
       {score}
     </span>
   );
@@ -421,11 +421,11 @@ export default function LeadFinder() {
                       style={{ width: 100, fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', textAlign: 'center' }}
                       disabled={pmRunning}
                     />
-                    <span className="muted" style={{ fontSize: 13 }}>
+                    <span className="muted" style={{ fontSize: 12 }}>
                       leads with an email found · max {(PLAN_RUN_LIMITS[user?.plan || 'free'] ?? 100).toLocaleString()} on {user?.plan || 'free'} plan
                     </span>
                   </div>
-                  <div className="muted" style={{ fontSize: 12.5, marginTop: 6, lineHeight: 1.5 }}>
+                  <div className="muted" style={{ fontSize: 12, marginTop: 6, lineHeight: 1.5 }}>
                     We'll keep searching until we find exactly <strong style={{ color: 'var(--lime)' }}>{pmTargetCount}</strong> leads with an email found.
                   </div>
                 </div>
@@ -491,7 +491,7 @@ export default function LeadFinder() {
                       </div>
 
                       {/* Status line */}
-                      <div style={{ fontSize: 13, color: 'var(--text-3)' }}>
+                      <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
                         {pmDone ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                             <span>
@@ -556,7 +556,7 @@ export default function LeadFinder() {
                   <div className="row" style={{ justifyContent: 'space-between' }}>
                     <label className="row" style={{ gap: 8, cursor: 'pointer' }}>
                       <input type="checkbox" checked={ytForm.emailOnly} onChange={e => setYtForm(f => ({ ...f, emailOnly: e.target.checked }))} />
-                      <span style={{ fontSize: 13 }}>Email required</span>
+                      <span style={{ fontSize: 12 }}>Email required</span>
                     </label>
                     <motion.button
                       whileHover={{ scale: 1.02 }}
@@ -585,7 +585,7 @@ export default function LeadFinder() {
                       <span className="dot" style={{ background: 'var(--warn)', flexShrink: 0 }} />
                       <div style={{ flex: 1 }}>
                         <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>YouTube API quota reached for today</div>
-                        <div className="muted" style={{ fontSize: 13 }}>Daily limit resets at midnight Pacific Time. Add more API keys in Settings to continue.</div>
+                        <div className="muted" style={{ fontSize: 12 }}>Daily limit resets at midnight Pacific Time. Add more API keys in Settings to continue.</div>
                       </div>
                       <button className="btn btn--ghost btn--sm" onClick={() => navigate('/settings')}>Add API Key</button>
                     </div>
@@ -647,13 +647,13 @@ export default function LeadFinder() {
                         <tbody>
                           {csvRows.slice(0, 50).map((r, i) => (
                             <tr key={i}>
-                              <td style={{ fontSize: 13 }}>{r.channel_name || '—'}</td>
+                              <td style={{ fontSize: 12 }}>{r.channel_name || '—'}</td>
                               <td className="mono" style={{ fontSize: 12, color: r.email ? 'var(--ok)' : 'var(--text-3)' }}>{r.email || '—'}</td>
-                              <td className="num" style={{ fontSize: 13 }}>{r.subscriber_count ? r.subscriber_count.toLocaleString() : '—'}</td>
-                              <td style={{ fontSize: 13 }}>{r.niche || '—'}</td>
+                              <td className="num" style={{ fontSize: 12 }}>{r.subscriber_count ? r.subscriber_count.toLocaleString() : '—'}</td>
+                              <td style={{ fontSize: 12 }}>{r.niche || '—'}</td>
                             </tr>
                           ))}
-                          {csvRows.length > 50 && <tr><td colSpan={4} className="muted" style={{ textAlign: 'center', fontSize: 13 }}>+{csvRows.length - 50} more</td></tr>}
+                          {csvRows.length > 50 && <tr><td colSpan={4} className="muted" style={{ textAlign: 'center', fontSize: 12 }}>+{csvRows.length - 50} more</td></tr>}
                         </tbody>
                       </table>
                     </div>
@@ -681,7 +681,7 @@ export default function LeadFinder() {
                       <span className="dot" style={{ background: 'var(--ok)' }} />
                       Import complete — {csvDone?.added} leads added to CRM
                     </div>
-                    <div className="muted" style={{ fontSize: 13 }}>{csvDone?.skipped} skipped (duplicates or missing name)</div>
+                    <div className="muted" style={{ fontSize: 12 }}>{csvDone?.skipped} skipped (duplicates or missing name)</div>
                     <button className="btn btn--ghost btn--sm" style={{ marginTop: 8 }} onClick={() => { setCsvRows([]); setCsvFile(null); setCsvDone(null); }}>
                       Import another file
                     </button>
@@ -779,13 +779,13 @@ export default function LeadFinder() {
                         </div>
                       </td>
                       <td>
-                        <span style={{ fontSize: 13, color: 'var(--text-2)' }}>
+                        <span style={{ fontSize: 12, color: 'var(--text-2)' }}>
                           {lead.niche || 'General'}
                         </span>
                       </td>
                       <td className="num">{formatNumber(lead.subscriber_count ?? 0)}</td>
                       <td className="num" style={{ color: 'var(--lime)' }}>{lead.cpm ? `$${lead.cpm}` : '—'}</td>
-                      <td className="muted" style={{ fontSize: 12.5 }}>{lead.days_since_upload ? `${lead.days_since_upload}d ago` : '—'}</td>
+                      <td className="muted" style={{ fontSize: 12 }}>{lead.days_since_upload ? `${lead.days_since_upload}d ago` : '—'}</td>
                       <td className="mono" style={{ color: lead.email ? 'var(--ok)' : 'var(--text-3)', fontSize: 14 }}>
                         {lead.email ? '✓' : '–'}
                       </td>

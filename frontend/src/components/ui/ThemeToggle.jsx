@@ -40,7 +40,7 @@ export default function ThemeToggle({ theme, onToggle }) {
       aria-label={isLight ? 'Switch to dark mode' : 'Switch to light mode'}
       title={isLight ? 'Dark mode' : 'Light mode'}
       style={{
-        width: 32, height: 32, borderRadius: 8, display: 'grid', placeItems: 'center',
+        width: 32, height: 32, borderRadius: 4, display: 'grid', placeItems: 'center',
         cursor: 'pointer', background: 'var(--surface)', border: '1px solid var(--line-2)',
         color: 'var(--text-2)', transition: 'all 120ms', flexShrink: 0,
       }}

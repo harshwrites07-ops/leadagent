@@ -339,7 +339,7 @@ export default function QualityLeads() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             className="card"
-            style={{ borderColor: 'var(--lime)', marginBottom: 16, padding: '10px 16px', color: 'var(--lime)', fontFamily: 'var(--f-mono)', fontSize: 13 }}
+            style={{ borderColor: 'var(--lime)', marginBottom: 16, padding: '10px 16px', color: 'var(--lime)', fontFamily: 'var(--f-mono)', fontSize: 12 }}
           >
             {msg}
           </motion.div>
@@ -507,7 +507,7 @@ export default function QualityLeads() {
                       }}
                     >
                       <div style={{ fontSize: 20, marginBottom: 8 }}>{icon}</div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: active ? 'var(--text)' : 'var(--text-3)', marginBottom: 4, lineHeight: 1.3 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: active ? 'var(--text)' : 'var(--text-3)', marginBottom: 4, lineHeight: 1.3 }}>
                         {label}
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--text-4)', marginBottom: 10, lineHeight: 1.5 }}>
@@ -542,7 +542,7 @@ export default function QualityLeads() {
                   <div className="t-mono t-muted" style={{ fontSize: 12, marginBottom: 14, textTransform: 'uppercase', letterSpacing: '0.1em' }}>HOT Leads by Niche</div>
                   <div className="grid g-2">
                     {stats.by_niche.slice(0, 10).map(n => (
-                      <div key={n.niche} className="t-mono" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                      <div key={n.niche} className="t-mono" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
                         <span className="t-muted" style={{ textTransform: 'capitalize' }}>{n.niche}</span>
                         <span className="t-lime" style={{ fontWeight: 700 }}>{fmt(n.count)}</span>
                       </div>
@@ -604,7 +604,7 @@ export default function QualityLeads() {
                     {t.toUpperCase()}
                   </button>
                 ))}
-                <span className="t-mono" style={{ fontSize: 13, color: 'var(--text-2)' }}>{fmt(leadsTotal)} leads</span>
+                <span className="t-mono" style={{ fontSize: 12, color: 'var(--text-2)' }}>{fmt(leadsTotal)} leads</span>
                 <select value={nicheFilter} onChange={e => { setNicheFilter(e.target.value); setLeadsPage(1); }}
                   className="input" style={{ height: 28, padding: '0 8px', fontSize: 12, width: 'auto' }}>
                   <option value="">All niches</option>
@@ -730,11 +730,11 @@ export default function QualityLeads() {
                     className="card"
                     style={{ padding: 20 }}
                   >
-                    <div className="t-mono t-lime" style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>
+                    <div className="t-mono t-lime" style={{ fontSize: 12, fontWeight: 700, marginBottom: 12 }}>
                       Calibration Result — {fmt(calibResult.total)} leads tested
                     </div>
                     {calibResult.error
-                      ? <div className="t-coral t-mono" style={{ fontSize: 13 }}>{calibResult.error}</div>
+                      ? <div className="t-coral t-mono" style={{ fontSize: 12 }}>{calibResult.error}</div>
                       : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                           {Object.entries(calibResult.results || {}).map(([name, r]) => (
@@ -772,7 +772,7 @@ export default function QualityLeads() {
                     className="card"
                     style={{ padding: 20 }}
                   >
-                    <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)', marginBottom: 12 }}>
+                    <div style={{ fontWeight: 700, fontSize: 12, color: 'var(--text)', marginBottom: 12 }}>
                       {popResult.dry_run ? 'Dry Run Result' : 'Population Complete'}
                     </div>
                     <div className="grid g-4">
@@ -878,7 +878,7 @@ export default function QualityLeads() {
 
               <div style={{ overflowY: 'auto', flex: 1, marginTop: 12 }}>
                 {signalDrill.loading ? (
-                  <div className="t-mono t-muted" style={{ padding: '24px 0', textAlign: 'center', fontSize: 13 }}>Loading matched leads…</div>
+                  <div className="t-mono t-muted" style={{ padding: '24px 0', textAlign: 'center', fontSize: 12 }}>Loading matched leads…</div>
                 ) : signalDrill.leads.length === 0 ? (
                   <div className="empty">
                     <div className="empty__title">No leads matched yet</div>

@@ -47,7 +47,7 @@ export default function SpamMonitorPanel({ onClose }) {
         <div style={{ display: 'flex', alignItems: 'center', padding: '18px 20px', borderBottom: '1px solid var(--line)', gap: 12, flexShrink: 0 }}>
           <Icon name="shield" size={18} style={{ color: 'var(--warn)', flexShrink: 0 }} />
           <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 600, fontSize: 15 }}>Spam Monitor</div>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>Spam Monitor</div>
             <div className="muted" style={{ fontSize: 12 }}>Inbox health &amp; delivery tracking</div>
           </div>
           <button className="btn btn--ghost btn--sm" onClick={load} title="Refresh">
@@ -66,7 +66,7 @@ export default function SpamMonitorPanel({ onClose }) {
             { key: 'bounces',       label: `Bounces (${totalBouncebacks + (data?.recentBounces?.length || 0)})` },
           ].map(t => (
             <div key={t.key} className={`tab ${tab === t.key ? 'is-active' : ''}`} onClick={() => setTab(t.key)}
-              style={{ fontSize: 13 }}>
+              style={{ fontSize: 12 }}>
               {t.label}
             </div>
           ))}
@@ -92,8 +92,8 @@ export default function SpamMonitorPanel({ onClose }) {
               <div style={{ padding: '12px 16px', borderRadius: 'var(--r)', border: `1px solid ${riskColor}40`, background: `${riskColor}10`, display: 'flex', alignItems: 'center', gap: 12 }}>
                 <Icon name="shield" size={24} style={{ color: riskColor, flexShrink: 0 }} />
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700, fontSize: 15, color: riskColor }}>{riskLabel}</div>
-                  <div className="muted" style={{ fontSize: 13 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: riskColor }}>{riskLabel}</div>
+                  <div className="muted" style={{ fontSize: 12 }}>
                     {data.overallBounceRate}% bounce rate · {data.likelySpam?.length || 0} emails likely in spam
                     {totalBouncebacks > 0 && ` · ${totalBouncebacks} delivery failures`}
                   </div>
@@ -105,15 +105,15 @@ export default function SpamMonitorPanel({ onClose }) {
                 <div className="card" style={{ background: 'var(--surface-2)', borderColor: 'var(--warn)' }}>
                   <div className="row" style={{ gap: 8, marginBottom: 8 }}>
                     <Icon name="warn" size={14} style={{ color: 'var(--warn)' }} />
-                    <span style={{ fontSize: 13, color: 'var(--warn)', fontWeight: 600 }}>IMAP Findings</span>
+                    <span style={{ fontSize: 12, color: 'var(--warn)', fontWeight: 600 }}>IMAP Findings</span>
                   </div>
                   {totalBouncebacks > 0 && (
-                    <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 4 }}>
+                    <div style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 4 }}>
                       <strong style={{ color: 'var(--bad)' }}>{totalBouncebacks}</strong> Mailer-Daemon bounce-back emails detected — blocked or spam-filtered by recipients.
                     </div>
                   )}
                   {totalSpamFolder > 0 && (
-                    <div style={{ fontSize: 13, color: 'var(--text-2)' }}>
+                    <div style={{ fontSize: 12, color: 'var(--text-2)' }}>
                       <strong style={{ color: 'var(--warn)' }}>{totalSpamFolder}</strong> items in your Gmail Spam folder.
                     </div>
                   )}
@@ -131,11 +131,11 @@ export default function SpamMonitorPanel({ onClose }) {
                       <div key={inbox.email} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'var(--surface-2)', border: '1px solid var(--line)', borderRadius: 'var(--r)' }}>
                         <span style={{ width: 8, height: 8, borderRadius: '50%', background: hc, flexShrink: 0 }} />
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inbox.email}</div>
+                          <div style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inbox.email}</div>
                           <div className="muted" style={{ fontSize: 12 }}>{inbox.sentCount} sent · {inbox.openedCount} opened · {inbox.bouncedCount} bounced</div>
                         </div>
                         <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: hc }}>{inbox.openRate}% open</div>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: hc }}>{inbox.openRate}% open</div>
                           <div className="muted" style={{ fontSize: 12 }}>{inbox.bounceRate}% bounce</div>
                         </div>
                         {imapData?.bounceEmails?.length > 0 && (
@@ -152,7 +152,7 @@ export default function SpamMonitorPanel({ onClose }) {
               {/* Tips */}
               <div className="card" style={{ background: 'var(--surface-2)' }}>
                 <div className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>Tips to stay out of spam</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, color: 'var(--text-2)' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, color: 'var(--text-2)' }}>
                   {[
                     ['ok',   'Keep bounce rate below 2% — remove bad emails immediately'],
                     ['ok',   'Send max 150/day per inbox — never blast in bulk'],
@@ -181,7 +181,7 @@ export default function SpamMonitorPanel({ onClose }) {
                 </div>
               ) : data.likelySpam.map((e, i) => (
                 <div key={i} style={{ padding: '10px 14px', background: 'var(--surface-2)', border: '1px solid var(--line)', borderRadius: 'var(--r)' }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 2 }}>{e.subject || e.to_email}</div>
+                  <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 2 }}>{e.subject || e.to_email}</div>
                   <div className="muted" style={{ fontSize: 12 }}>{e.to_email} · {e.reason || 'High spam score'}</div>
                 </div>
               ))}
@@ -195,7 +195,7 @@ export default function SpamMonitorPanel({ onClose }) {
                 </div>
               ) : data.recentBounces?.map((b, i) => (
                 <div key={i} style={{ padding: '10px 14px', background: 'rgba(255,68,68,.06)', border: '1px solid rgba(255,68,68,.2)', borderRadius: 'var(--r)' }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--bad)', marginBottom: 2 }}>{b.email || b.to_email}</div>
+                  <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--bad)', marginBottom: 2 }}>{b.email || b.to_email}</div>
                   <div className="muted" style={{ fontSize: 12 }}>{b.reason || 'Delivery failure'} · {formatDate(b.bounced_at || b.created_at)}</div>
                 </div>
               ))}

@@ -37,9 +37,9 @@ export default {
         },
       },
       fontSize: {
-        xs:   ['13px', { lineHeight: '1.5' }],
-        sm:   ['15px', { lineHeight: '1.55' }],
-        base: ['16px', { lineHeight: '1.6' }],
+        xs:   ['12px', { lineHeight: '16px' }],
+        sm:   ['14px', { lineHeight: '20px' }],
+        base: ['16px', { lineHeight: '24px' }],
       },
       fontFamily: {
         sans:    ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],

@@ -29,7 +29,7 @@ function renderText(text) {
   return text.split('\n').map((line, i) => {
     if (!line.trim()) return <br key={i} />;
     if (line.startsWith('## ')) {
-      return <p key={i} style={{ fontWeight: 700, color: 'var(--text)', margin: '6px 0 2px', fontSize: 13 }}>{line.slice(3)}</p>;
+      return <p key={i} style={{ fontWeight: 700, color: 'var(--text)', margin: '6px 0 2px', fontSize: 12 }}>{line.slice(3)}</p>;
     }
     const parts = line.split(/(\*\*[^*]+\*\*)/g);
     return (
@@ -57,7 +57,7 @@ function Message({ msg }) {
         {isUser ? <User size={12} color="var(--text-2)" /> : <Bot size={12} color="var(--on-accent)" />}
       </div>
       <div style={{
-        maxWidth: '82%', borderRadius: 14, padding: '8px 12px', fontSize: 13,
+        maxWidth: '82%', borderRadius: 14, padding: '8px 12px', fontSize: 12,
         background: isUser ? 'var(--coral)' : 'var(--surface)',
         color: isUser ? 'var(--on-accent)' : 'var(--text-2)',
         borderTopRightRadius: isUser ? 4 : 14,
@@ -499,7 +499,7 @@ export default function AssistantChat() {
                 disabled={loading || listening}
                 style={{
                   flex: 1, background: 'var(--surface)', border: '1px solid var(--line-2)', borderRadius: 10,
-                  padding: '8px 12px', color: 'var(--text)', fontSize: 13, outline: 'none', fontFamily: 'inherit',
+                  padding: '8px 12px', color: 'var(--text)', fontSize: 12, outline: 'none', fontFamily: 'inherit',
                   borderColor: listening ? 'rgba(var(--ok-rgb),0.4)' : 'var(--line-2)',
                 }}
                 onFocus={e => { if (!listening) e.target.style.borderColor = 'rgba(var(--lime-rgb),0.5)'; }}

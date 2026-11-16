@@ -47,7 +47,7 @@ export default function TrialBanner() {
             borderRadius: 7,
             padding: '5px 14px',
             fontWeight: 700,
-            fontSize: 13,
+            fontSize: 12,
             cursor: 'pointer',
             fontFamily: 'var(--f-sans)',
             letterSpacing: '0.02em',

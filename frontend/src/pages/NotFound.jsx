@@ -27,7 +27,7 @@ export default function NotFound() {
         color: 'var(--text)', margin: '0 0 12px',
       }}>Page not found.</h1>
 
-      <p style={{ color: 'var(--text-2)', fontSize: 15, margin: '0 0 32px', maxWidth: 360 }}>
+      <p style={{ color: 'var(--text-2)', fontSize: 14, margin: '0 0 32px', maxWidth: 360 }}>
         The page you're looking for doesn't exist or has been moved.
       </p>
 

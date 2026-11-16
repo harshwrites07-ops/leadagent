@@ -172,7 +172,7 @@ export default function Analytics() {
                 >
                   <span style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.09em', color: 'var(--text-4)', fontWeight: 500, whiteSpace: 'nowrap' }}>{stat.label}</span>
                   <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 34, fontWeight: 500, letterSpacing: '-0.03em', lineHeight: 1, color: stat.color }}>{stat.value}</span>
-                  <span style={{ fontSize: 12.5, color: 'var(--text-3)' }}>{stat.sub}</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{stat.sub}</span>
                   <div style={{ marginTop: 6 }}>
                     <Sparkline data={stat.spark} color={stat.color} height={36} />
                   </div>
@@ -235,12 +235,12 @@ export default function Analytics() {
                   {deliveredPct != null ? (
                     <span className="row" style={{ gap: 8 }}>
                       <span className={`dot ${deliveredPct >= 95 ? 'dot--ok' : 'dot--warn'}`} />
-                      <span style={{ fontSize: 13, color: deliveredPct >= 95 ? 'var(--ok)' : 'var(--warn)' }}>{deliveredPct >= 95 ? 'Healthy' : 'Watch closely'}</span>
+                      <span style={{ fontSize: 12, color: deliveredPct >= 95 ? 'var(--ok)' : 'var(--warn)' }}>{deliveredPct >= 95 ? 'Healthy' : 'Watch closely'}</span>
                     </span>
                   ) : (
                     <span className="row" style={{ gap: 8 }}>
                       <span className="dot dot--neutral" />
-                      <span style={{ fontSize: 13, color: 'var(--text-3)' }}>No data yet</span>
+                      <span style={{ fontSize: 12, color: 'var(--text-3)' }}>No data yet</span>
                     </span>
                   )}
                 </div>
@@ -251,7 +251,7 @@ export default function Analytics() {
                     </div>
                     <div>
                       <div style={{ fontSize: 14, marginBottom: 6 }}>Inbox placement</div>
-                      <div className="muted" style={{ fontSize: 13 }}>Across connected mailboxes over the last {dateRange}.</div>
+                      <div className="muted" style={{ fontSize: 12 }}>Across connected mailboxes over the last {dateRange}.</div>
                     </div>
                   </div>
                   {[
@@ -262,8 +262,8 @@ export default function Analytics() {
                     { l: 'Bounce rate', v: emailData?.bounce_rate != null ? `${emailData.bounce_rate}%` : '—', good: (emailData?.bounce_rate ?? 0) < 5 },
                   ].map((row, i) => (
                     <div key={i} className="row" style={{ justifyContent: 'space-between', padding: '8px 0', borderTop: i > 0 ? '1px dashed var(--line)' : 'none' }}>
-                      <span style={{ fontSize: 13, color: 'var(--text-2)' }}>{row.l}</span>
-                      <span className="mono" style={{ fontSize: 13, color: row.good ? 'var(--ok)' : 'var(--bad)' }}>{row.v}</span>
+                      <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{row.l}</span>
+                      <span className="mono" style={{ fontSize: 12, color: row.good ? 'var(--ok)' : 'var(--bad)' }}>{row.v}</span>
                     </div>
                   ))}
                 </div>
@@ -370,7 +370,7 @@ export default function Analytics() {
                 </div>
                 <div className="card__body" style={{ padding: 0 }}>
                   {subjects.length === 0 ? (
-                    <div className="muted" style={{ fontSize: 13, padding: '16px' }}>No subject data yet.</div>
+                    <div className="muted" style={{ fontSize: 12, padding: '16px' }}>No subject data yet.</div>
                   ) : subjects.slice(0, 5).map((r, i) => (
                     <motion.div
                       key={i}
@@ -379,7 +379,7 @@ export default function Analytics() {
                       transition={{ delay: i * 0.05 + 0.4 }}
                       style={{ padding: '12px 16px', borderBottom: i < Math.min(subjects.length, 5) - 1 ? '1px solid var(--line)' : 'none' }}
                     >
-                      <div style={{ fontSize: 13, marginBottom: 4 }}>{r.subject}</div>
+                      <div style={{ fontSize: 12, marginBottom: 4 }}>{r.subject}</div>
                       <div className="row" style={{ gap: 16 }}>
                         <span className="mono muted" style={{ fontSize: 12 }}>{r.sent} sent</span>
                         <span className="mono muted" style={{ fontSize: 12 }}>{r.open_rate?.toFixed(0) ?? '—'}% open</span>
@@ -402,7 +402,7 @@ export default function Analytics() {
                 </div>
                 <div className="card__body">
                   {niches.length === 0 ? (
-                    <div className="muted" style={{ fontSize: 13 }}>No niche data yet.</div>
+                    <div className="muted" style={{ fontSize: 12 }}>No niche data yet.</div>
                   ) : niches.slice(0, 7).map((row, i) => {
                     const color = NICHE_COLORS[row.niche] || 'var(--text-3)';
                     const pctVal = ((row.close_rate || row.reply_rate || 0) * 100);
@@ -411,9 +411,9 @@ export default function Analytics() {
                         <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
                           <span className="row" style={{ gap: 8 }}>
                             <span className="dot" style={{ background: color }} />
-                            <span style={{ fontSize: 13 }}>{row.niche}</span>
+                            <span style={{ fontSize: 12 }}>{row.niche}</span>
                           </span>
-                          <span className="mono" style={{ fontSize: 13 }}>{pctVal.toFixed(1)}%</span>
+                          <span className="mono" style={{ fontSize: 12 }}>{pctVal.toFixed(1)}%</span>
                         </div>
                         <div className="bar">
                           <motion.span

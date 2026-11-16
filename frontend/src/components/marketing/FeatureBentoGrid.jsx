@@ -22,8 +22,8 @@ function BentoCard({ title, description, children, span }) {
       }}
     >
       <div>
-        <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)', margin: 0 }}>{title}</h3>
-        <p style={{ fontSize: 13, color: 'var(--text-3)', lineHeight: 1.5, marginTop: 4, maxWidth: '92%' }}>
+        <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>{title}</h3>
+        <p style={{ fontSize: 12, color: 'var(--text-3)', lineHeight: 1.5, marginTop: 4, maxWidth: '92%' }}>
           {description}
         </p>
       </div>
