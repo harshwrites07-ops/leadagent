@@ -299,6 +299,30 @@ export default function LeadFinder() {
   const toggleSelected = id => setYtSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const isLoading = ytLoading;
 
+  const exportLatestLeads = async format => {
+    try {
+      const { data } = await api.get('/leads', { params: { limit: pmStatus.saved || 50, sort: 'created_at', order: 'desc' } });
+      const arr = Array.isArray(data.leads) ? data.leads : Array.isArray(data) ? data : [];
+      if (arr.length === 0) { toast.error('No leads to export yet'); return; }
+      const rows = arr.map(l => ({
+        'Channel': l.channel_name || '',
+        'Channel link': leadChannelUrl(l) || '',
+        'Handle': l.channel_handle || '',
+        'Niche': l.niche || '',
+        'Subscribers': l.subscriber_count ?? '',
+        'Email': l.email || '',
+        'Lead score': l.lead_score ?? '',
+      }));
+      const { default: XLSX } = await import('xlsx');
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Leads');
+      const day = new Date().toISOString().slice(0, 10);
+      XLSX.writeFile(wb, `quelro-leads-${day}.${format === 'csv' ? 'csv' : 'xlsx'}`, { bookType: format === 'csv' ? 'csv' : 'xlsx' });
+      toast.success(`${arr.length} leads exported`);
+    } catch { toast.error('Export failed — try again'); }
+  };
+
   const toggleNiche = id => {
     const n = new Set(selectedNiches);
     n.has(id) ? n.delete(id) : n.add(id);
@@ -501,6 +525,7 @@ export default function LeadFinder() {
                         {pmDone ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                             <span>
+                              {pmStatus.targetReached && <span className="pop" aria-hidden="true" style={{ marginRight: 6 }}>🎉</span>}
                               {pmStatus.targetReached
                                 ? `All ${pmStatus.targetCount} leads saved to CRM.`
                                 : pmStatus.quotaExhausted
@@ -525,6 +550,12 @@ export default function LeadFinder() {
                                 </button>
                                 <button className="btn btn--ghost btn--sm" onClick={() => navigate('/crm')}>
                                   Go to CRM
+                                </button>
+                                <button className="btn btn--sm" onClick={() => exportLatestLeads('xlsx')} title="Download these leads as an Excel file">
+                                  Export Excel
+                                </button>
+                                <button className="btn btn--sm" onClick={() => exportLatestLeads('csv')} title="Download these leads as a CSV file">
+                                  Export CSV
                                 </button>
                               </>
                             )}

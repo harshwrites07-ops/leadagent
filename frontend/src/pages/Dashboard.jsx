@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import PowerSendOverlay from '../components/ui/PowerSendOverlay';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 import api, { formatNumber } from '../utils/api';
 
 function useMobile() {
@@ -14,6 +15,7 @@ function useMobile() {
 export default function Dashboard() {
   const { dashboardStats, loadingDash, refreshDashboard } = useApp();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const isMobile = useMobile();
 
   const [showPowerOverlay, setShowPowerOverlay] = useState(false);
@@ -78,6 +80,18 @@ export default function Dashboard() {
   const newLeads = countStage('new_lead', 'studying');
   const pitchReady = countStage('pitch_ready');
   const repliedCount = countStage('replied');
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  const firstName = String(user?.full_name || user?.name || '').trim().split(' ')[0];
+  const greetingLine = loadingLeads
+    ? 'Loading your pipeline…'
+    : leadsTotal === 0
+      ? 'A fresh start. Find your first creators and let the pipeline fill up.'
+      : repliedCount > 0
+        ? `${plural(repliedCount, 'creator has', 'creators have')} replied. Go say hi.`
+        : pitchReady > 0
+          ? `${plural(pitchReady, 'pitch is', 'pitches are')} written and ready to send.`
+          : `You have ${plural(leadsTotal, 'lead', 'leads')} in your pipeline.`;
   const nextSteps = [];
   if (repliedCount > 0) nextSteps.push({ title: `${plural(repliedCount, 'reply is', 'replies are')} waiting`, desc: 'Answer them while they are warm', to: '/crm' });
   if (pitchReady > 0) nextSteps.push({ title: `Send ${plural(pitchReady, 'ready pitch', 'ready pitches')}`, desc: 'These leads already have a pitch written', to: '/email' });
@@ -108,9 +122,12 @@ export default function Dashboard() {
 
       {/* Header row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-        <h1 style={{ margin: 0, fontFamily: 'var(--f-heading)', fontSize: isMobile ? 20 : 22, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--text)', flex: 'none' }}>
-          Dashboard
-        </h1>
+        <div style={{ flex: 'none' }}>
+          <h1 style={{ margin: 0, fontFamily: 'var(--f-heading)', fontSize: isMobile ? 20 : 24, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>
+            {greeting}{firstName ? `, ${firstName}` : ''}
+          </h1>
+          <div style={{ fontSize: 14, color: 'var(--text-3)', marginTop: 4 }}>{greetingLine}</div>
+        </div>
         <div style={{ flex: 1 }} />
         <button className="btn" onClick={() => navigate('/leads')}>Import leads</button>
         <button className="btn" onClick={() => setShowPowerOverlay(true)}>Power Email</button>
@@ -127,7 +144,7 @@ export default function Dashboard() {
           {statDefs.map((stat, i) => (
             <motion.div
               key={stat.label}
-              className="card"
+              className="card card--lift"
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.35, delay: i * 0.05, ease: [0.16, 1, 0.3, 1] }}
