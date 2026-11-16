@@ -24,7 +24,6 @@ process.on('uncaughtException', (err) => {
 });
 process.on('unhandledRejection', (reason) => {
   console.error('[FATAL] Unhandled rejection:', reason?.message || reason);
-  process.exit(1);
 });
 
 const express = require('express');
