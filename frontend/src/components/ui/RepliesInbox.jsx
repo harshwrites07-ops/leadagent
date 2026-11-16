@@ -186,7 +186,7 @@ function ConversationView({ reply, onBack, onReplySent }) {
             >
               <div style={{ background: 'var(--lime-soft)', border: '1px solid var(--lime-border)', borderRadius: 12, padding: 12 }}>
                 <div className="flex items-center gap-2" style={{ marginBottom: 6 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.06em', color: 'var(--lime)', fontFamily: 'var(--f-mono)', textTransform: 'uppercase' }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--lime)', fontFamily: 'var(--f-mono)' }}>
                     ✦ Marcus suggests
                   </span>
                   {classification && CLASSIFICATION_LABELS[classification] && (

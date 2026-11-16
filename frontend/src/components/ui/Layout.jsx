@@ -114,7 +114,7 @@ export default function Layout({ children }) {
         </div>
         <div>
           <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: '-0.3px', color: 'var(--text)', lineHeight: 1.2 }}>Quelro</div>
-          <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--text-4)', fontFamily: 'var(--f-mono)' }}>OUTREACH OS</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-4)', fontFamily: 'var(--f-mono)' }}>OUTREACH OS</div>
         </div>
         {onClose && (
           <button onClick={onClose} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer', padding: 6, borderRadius: 6, display: 'flex' }}>
@@ -172,7 +172,7 @@ export default function Layout({ children }) {
             style={{ borderTop: '1px solid var(--line)', flexShrink: 0, overflow: 'hidden' }}
           >
             <div style={{ padding: '8px 8px 4px' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--text-4)', fontFamily: 'var(--f-mono)', padding: '0 4px', marginBottom: 4 }}>RUNNING</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-4)', fontFamily: 'var(--f-mono)', padding: '0 4px', marginBottom: 4 }}>Running</div>
               {backgroundTasks.map(task => (
                 <motion.div
                   key={task.id}
@@ -210,7 +210,7 @@ export default function Layout({ children }) {
       {dashboardStats?.emails_month != null && (
         <div style={{ padding: '10px 10px 0' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
-            <span style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-4)' }}>Sends this month</span>
+            <span style={{ fontSize: 12, color: 'var(--text-4)' }}>Sends this month</span>
           </div>
           <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-2)', marginBottom: 6 }}>
             {dashboardStats.emails_month.toLocaleString()}
@@ -242,7 +242,7 @@ export default function Layout({ children }) {
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName}</div>
-            <div style={{ fontSize: 12, color: 'var(--text-4)', fontFamily: 'var(--f-mono)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{userPlan}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-4)', fontFamily: 'var(--f-mono)' }}>{userPlan}</div>
           </div>
           <button
             onClick={handleLogout}
@@ -318,9 +318,7 @@ export default function Layout({ children }) {
         left: isMobile ? 0 : 'var(--sidebar-w)',
         right: 0,
         height: 'var(--topbar-h)',
-        background: 'rgba(10,10,12,0.92)',
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
+        background: 'var(--bg)',
         borderBottom: '1px solid var(--line)',
         display: 'flex', alignItems: 'center',
         padding: isMobile ? '0 12px' : '0 24px',

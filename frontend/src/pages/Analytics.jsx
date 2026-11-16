@@ -97,7 +97,7 @@ export default function Analytics() {
         className="page__head"
       >
         <div>
-          <div className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>
+          <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
             Last {dateRange}
           </div>
           <h1 className="page__title">Analytics — <em>the truth about your outreach.</em></h1>
@@ -170,7 +170,7 @@ export default function Analytics() {
                     borderRight: i === arr.length - 1 ? 'none' : '1px solid var(--line)',
                   }}
                 >
-                  <span style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.09em', color: 'var(--text-4)', fontWeight: 500, whiteSpace: 'nowrap' }}>{stat.label}</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-4)', fontWeight: 500, whiteSpace: 'nowrap' }}>{stat.label}</span>
                   <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 34, fontWeight: 500, letterSpacing: '-0.03em', lineHeight: 1, color: stat.color }}>{stat.value}</span>
                   <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{stat.sub}</span>
                   <div style={{ marginTop: 6 }}>

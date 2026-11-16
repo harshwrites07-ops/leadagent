@@ -91,7 +91,7 @@ export default function Dashboard() {
   const pageLeads = filteredLeads.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
   const maxPage = Math.max(0, Math.ceil(filteredLeads.length / PAGE_SIZE) - 1);
 
-  const avatarBgs = ['#1C1B18', '#191C1B', '#201C16', '#1A181D', '#171C1E', '#1E1A16'];
+  const avatarBgs = ['var(--surface-2)'];
 
   return (
     <div style={{ padding: isMobile ? '14px 14px 60px' : '28px 32px 40px', maxWidth: 1200, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 28 }}>
@@ -148,7 +148,7 @@ export default function Dashboard() {
                 borderRight: i === statDefs.length - 1 ? 'none' : '1px solid var(--line)',
               }}
             >
-              <span style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.09em', color: 'var(--text-4)', fontWeight: 500 }}>{stat.label}</span>
+              <span style={{ fontSize: 12, color: 'var(--text-4)', fontWeight: 500 }}>{stat.label}</span>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
                 <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: isMobile ? 26 : 34, fontWeight: 500, letterSpacing: '-0.03em', lineHeight: 1, color: 'var(--text)' }}>{stat.value}</span>
                 {stat.unit && <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 14, color: 'var(--text-4)' }}>{stat.unit}</span>}
@@ -202,11 +202,11 @@ export default function Dashboard() {
             <div style={{ minWidth: 720 }}>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px,2fr) 100px 80px 140px 120px', gap: 16, padding: '10px 20px', borderBottom: '1px solid var(--line)', alignItems: 'center' }}>
-                <span style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-4)', fontWeight: 500 }}>Channel</span>
-                <span style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-4)', fontWeight: 500, textAlign: 'right' }}>Subscribers</span>
-                <span style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-4)', fontWeight: 500, textAlign: 'right' }}>Intent</span>
-                <span style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-4)', fontWeight: 500 }}>Status</span>
-                <span style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-4)', fontWeight: 500, textAlign: 'right' }}>Last contacted</span>
+                <span style={{ fontSize: 12, color: 'var(--text-4)', fontWeight: 500 }}>Channel</span>
+                <span style={{ fontSize: 12, color: 'var(--text-4)', fontWeight: 500, textAlign: 'right' }}>Subscribers</span>
+                <span style={{ fontSize: 12, color: 'var(--text-4)', fontWeight: 500, textAlign: 'right' }}>Intent</span>
+                <span style={{ fontSize: 12, color: 'var(--text-4)', fontWeight: 500 }}>Status</span>
+                <span style={{ fontSize: 12, color: 'var(--text-4)', fontWeight: 500, textAlign: 'right' }}>Last contacted</span>
               </div>
 
               {loadingLeads ? (

@@ -316,7 +316,7 @@ export default function Settings() {
 
       <div className="page__head">
         <div>
-          <div className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>Workspace</div>
+          <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>Workspace</div>
           <h1 className="page__title">Settings</h1>
         </div>
         {dirty && (
@@ -759,7 +759,7 @@ export default function Settings() {
           {/* AI / Gemini key */}
           <div className="card">
             <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>
-              <div className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.08em' }}>AI Keys</div>
+              <div className="muted" style={{ fontSize: 12 }}>AI Keys</div>
             </div>
             <div className="card__body">
               <div className="row" style={{ gap: 10, marginBottom: 8 }}>
@@ -802,7 +802,7 @@ export default function Settings() {
           </div>
           <div className="card">
             <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>
-              <div className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.08em' }}>Email & Outreach</div>
+              <div className="muted" style={{ fontSize: 12 }}>Email & Outreach</div>
             </div>
             <div className="card__body" style={{ padding: 0 }}>
               {/* Gmail */}
@@ -854,7 +854,7 @@ export default function Settings() {
 
           <div className="card">
             <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>
-              <div className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.08em' }}>CRM & Productivity</div>
+              <div className="muted" style={{ fontSize: 12 }}>CRM & Productivity</div>
             </div>
             <div className="card__body" style={{ padding: 0 }}>
               {[
@@ -881,7 +881,7 @@ export default function Settings() {
 
           <div className="card">
             <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>
-              <div className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.08em' }}>Automation & Webhooks</div>
+              <div className="muted" style={{ fontSize: 12 }}>Automation & Webhooks</div>
             </div>
             <div className="card__body" style={{ padding: 0 }}>
               {[
@@ -965,7 +965,7 @@ export default function Settings() {
                   return (
                     <div key={i} style={{ padding: 14, background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 8 }}>
                       <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
-                        <span className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.06em' }}>{m.l}</span>
+                        <span className="muted" style={{ fontSize: 12 }}>{m.l}</span>
                         <span className="mono" style={{ fontSize: 12 }}>{m.v.toLocaleString()} / {m.max === Infinity ? '∞' : m.max.toLocaleString()}</span>
                       </div>
                       <div className="bar"><span style={{ width: `${pct}%`, background: m.c }} /></div>

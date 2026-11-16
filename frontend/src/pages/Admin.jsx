@@ -286,7 +286,7 @@ export default function Admin() {
                       <tr>
                         <td colSpan={6} style={{ padding: 0 }}>
                           <div style={{ background: 'rgba(0,0,0,0.2)', borderTop: '1px solid var(--line)', padding: '14px 16px 16px' }}>
-                            <div className="t-mono" style={{ fontSize: 12, letterSpacing: '0.1em', color: 'var(--text-2)', fontWeight: 700, marginBottom: 12, textTransform: 'uppercase' }}>
+                            <div className="t-mono" style={{ fontSize: 12, color: 'var(--text-2)', fontWeight: 700, marginBottom: 12 }}>
                               Custom Limits <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>(overrides plan defaults)</span>
                             </div>
                             <div className="row" style={{ flexWrap: 'wrap', alignItems: 'flex-end', gap: 12 }}>

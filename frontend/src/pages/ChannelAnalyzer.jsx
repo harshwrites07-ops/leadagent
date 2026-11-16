@@ -108,7 +108,7 @@ function ResultDossier({ result, navigate, motionIndex = 0 }) {
                 borderRight: (i % 3 !== 2 && i !== arr.length - 1) ? '1px solid var(--line)' : 'none',
               }}
             >
-              <div style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-4)', marginBottom: 4 }}>{m.l}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-4)', marginBottom: 4 }}>{m.l}</div>
               <div style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 14, color: 'var(--text)' }}>{m.v}</div>
             </motion.div>
           ))}
@@ -116,7 +116,7 @@ function ResultDossier({ result, navigate, motionIndex = 0 }) {
 
         {channel.email && (
           <>
-            <div className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.06em', marginTop: 18, marginBottom: 8 }}>Contact</div>
+            <div className="muted" style={{ fontSize: 12, marginTop: 18, marginBottom: 8 }}>Contact</div>
             <div style={{ padding: 10, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 8, fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
               <span>{channel.email}</span>
               <span className="dot" style={{ background: 'var(--ok)' }} />

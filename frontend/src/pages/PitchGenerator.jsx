@@ -858,7 +858,7 @@ export default function PitchGenerator() {
                   background: 'var(--surface)',
                 }}>
                   <span className="dot dot--lime dot--pulse" style={{ width: 6, height: 6 }} />
-                  <span style={{ fontFamily: 'var(--f-mono)', fontSize: 12, letterSpacing: '.08em', color: 'var(--text-3)', textTransform: 'uppercase' }}>
+                  <span style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-3)' }}>
                     Marcus is working
                   </span>
                   <span style={{ marginLeft: 'auto', fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-4)' }}>
@@ -1244,7 +1244,7 @@ export default function PitchGenerator() {
                                     return (
                                       <div key={name}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-                                          <span style={{ fontSize: 12, fontFamily: 'var(--f-mono)', textTransform: 'uppercase', color: 'var(--text-3)' }}>
+                                          <span style={{ fontSize: 12, fontFamily: 'var(--f-mono)', color: 'var(--text-3)' }}>
                                             {(name || '').replace(/_/g, ' ')}
                                           </span>
                                           <span style={{ fontSize: 12, fontFamily: 'var(--f-mono)', color: barColor }}>
@@ -1282,7 +1282,7 @@ export default function PitchGenerator() {
                         </div>
                       )}
 
-                      <div className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>
+                      <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
                         Subject {subjects.length > 1 ? `(${subjects.length} A/B variants)` : ''}
                       </div>
                       {subjects.length > 0 && (
@@ -1338,7 +1338,7 @@ export default function PitchGenerator() {
                             fontSize: 12, fontWeight: 700,
                             color: 'var(--text-4)', fontFamily: 'var(--f-mono)',
                             letterSpacing: '0.5px', marginBottom: 8,
-                            textTransform: 'uppercase',
+
                           }}>
                             Alternative Subject Lines
                           </div>
@@ -1369,7 +1369,7 @@ export default function PitchGenerator() {
                           animate={{ opacity: 1 }}
                           style={{ marginTop: 12, padding: 12, background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-sm)' }}
                         >
-                          <div className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>AI Feedback</div>
+                          <div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>AI Feedback</div>
                           <div style={{ fontSize: 12, color: 'var(--text-2)' }}>{pitch.pitch_feedback}</div>
                         </motion.div>
                       )}
@@ -1390,7 +1390,7 @@ export default function PitchGenerator() {
                               borderRight: i === 2 ? 'none' : '1px solid var(--line)',
                             }}
                           >
-                            <div style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--text-4)' }}>{m.l}</div>
+                            <div style={{ fontSize: 12, color: 'var(--text-4)' }}>{m.l}</div>
                             <div style={{ fontFamily: 'var(--f-mono)', fontSize: 18, fontWeight: 500, color: m.c, marginTop: 4 }}>{m.v}</div>
                           </motion.div>
                         ))}
@@ -1430,7 +1430,7 @@ export default function PitchGenerator() {
                   {/* Pre-send checklist */}
                   {checklist && (
                     <div style={{ padding: '12px 14px', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)', marginBottom: 4 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: checklist.canSend ? 'var(--lime)' : 'var(--bad)', marginBottom: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 700, color: checklist.canSend ? 'var(--lime)' : 'var(--bad)', marginBottom: 8 }}>
                         <span style={{ width: 6, height: 6, borderRadius: '50%', background: checklist.canSend ? 'var(--ok)' : 'var(--bad)', flexShrink: 0 }} />
                         {checklist.canSend ? 'Ready to send' : 'Issues found'}
                       </div>

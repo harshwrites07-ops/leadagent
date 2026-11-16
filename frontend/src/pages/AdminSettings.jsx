@@ -17,7 +17,7 @@ const inputSt = {
 };
 const labelSt = {
   fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600,
-  letterSpacing: '0.14em', color: 'var(--text-muted)', textTransform: 'uppercase',
+ color: 'var(--text-muted)',
   display: 'block', marginBottom: 6,
 };
 

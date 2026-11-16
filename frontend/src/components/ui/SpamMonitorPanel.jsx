@@ -122,7 +122,7 @@ export default function SpamMonitorPanel({ onClose }) {
 
               {/* Per-inbox health */}
               <div>
-                <div className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>Inbox health · last 30 days</div>
+                <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>Inbox health · last 30 days</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {data.perInbox?.map(inbox => {
                     const imapData = data.imapResults?.find(r => r.email === inbox.email);
@@ -151,7 +151,7 @@ export default function SpamMonitorPanel({ onClose }) {
 
               {/* Tips */}
               <div className="card" style={{ background: 'var(--surface-2)' }}>
-                <div className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>Tips to stay out of spam</div>
+                <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>Tips to stay out of spam</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, color: 'var(--text-2)' }}>
                   {[
                     ['ok',   'Keep bounce rate below 2% — remove bad emails immediately'],

@@ -202,7 +202,7 @@ export default function Onboarding() {
             transition={{ duration: 0.25, ease: [0.16,1,0.3,1] }}
             style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 16, padding: isMobile ? '20px 16px 20px' : '32px 32px 28px' }}
           >
-            <p style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--lime)', letterSpacing: '.14em', textTransform: 'uppercase', marginBottom: 8 }}>{STEPS[step]}</p>
+            <p style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 12, color: 'var(--lime)', marginBottom: 8 }}>{STEPS[step]}</p>
             <h2 style={{ fontFamily: 'var(--f-heading)', fontSize: 26, fontWeight: 800, marginBottom: 6, lineHeight: 1.2 }}>
               {step === 0 && 'First, tell us about yourself.'}
               {step === 1 && 'Tell us about your work.'}

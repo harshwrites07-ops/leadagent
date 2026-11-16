@@ -142,7 +142,7 @@ export default function CRM() {
         className="page__head"
       >
         <div>
-          <div className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8, fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums' }}>
+          <div className="muted" style={{ fontSize: 12, marginBottom: 8, fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums' }}>
             Pipeline · {leads.length} creators{totalValue > 0 ? ` · $${(totalValue / 1000).toFixed(1)}k open value` : ''}
           </div>
           <h1 className="page__title" style={{ whiteSpace: 'nowrap' }}>CRM — <em>drag a creator from cold to closed.</em></h1>
@@ -480,7 +480,7 @@ export default function CRM() {
               >
                 {detailTab === 'Timeline' && (
                   <>
-                    <div className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>Timeline</div>
+                    <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>Timeline</div>
                     {leadHistory.length === 0 ? (
                       <div className="muted" style={{ fontSize: 12 }}>Nothing yet — activity shows up as soon as you start sending.</div>
                     ) : leadHistory.map((e, i) => (

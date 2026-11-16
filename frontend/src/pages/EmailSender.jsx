@@ -273,7 +273,7 @@ export default function EmailSender() {
               borderRight: i === statDefs.length - 1 ? 'none' : '1px solid var(--line)',
             }}
           >
-            <span style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.09em', color: 'var(--text-4)', fontWeight: 500, whiteSpace: 'nowrap' }}>{stat.label}</span>
+            <span style={{ fontSize: 12, color: 'var(--text-4)', fontWeight: 500, whiteSpace: 'nowrap' }}>{stat.label}</span>
             <span style={{ fontFamily: 'var(--f-sans)', fontVariantNumeric: 'tabular-nums', fontSize: 32, fontWeight: 500, letterSpacing: '-0.03em', lineHeight: 1, color: 'var(--text)' }}>{stat.value}</span>
             <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{stat.sub}</span>
           </motion.div>
@@ -622,14 +622,14 @@ export default function EmailSender() {
               style={{ maxWidth: 540 }}
             >
               <div style={{ padding: '28px 32px 8px' }}>
-                <div className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 14 }}>Power send · about to launch</div>
+                <div className="muted" style={{ fontSize: 12, marginBottom: 14 }}>Power send · about to launch</div>
                 <h2 className="page__title" style={{ fontSize: 28 }}>
                   Send <em style={{ fontStyle: 'normal', color: 'var(--lime)' }}>{queueCount} emails</em> across <em style={{ fontStyle: 'normal' }}>your mailboxes?</em>
                 </h2>
               </div>
               <div style={{ padding: '20px 32px 24px' }}>
                 <div style={{ padding: 16, background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 10, marginBottom: 16 }}>
-                  <div className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>Send plan</div>
+                  <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>Send plan</div>
                   <div className="muted" style={{ fontSize: 12 }}>{queueCount} emails scheduled across active mailboxes · smart timing</div>
                 </div>
                 <div className="muted" style={{ fontSize: 12, marginBottom: 18, lineHeight: 1.55 }}>
@@ -729,7 +729,7 @@ export default function EmailSender() {
               style={{ maxWidth: 480 }}
             >
               <div style={{ padding: '28px 32px 8px' }}>
-                <div className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 14 }}>Auto Follow-up</div>
+                <div className="muted" style={{ fontSize: 12, marginBottom: 14 }}>Auto Follow-up</div>
                 <h2 className="page__title" style={{ fontSize: 22, marginBottom: 8 }}>
                   Set up <em style={{ fontStyle: 'normal' }}>automatic follow-ups</em>
                 </h2>
@@ -739,7 +739,7 @@ export default function EmailSender() {
               </div>
               <div style={{ padding: '20px 32px 28px', display: 'flex', flexDirection: 'column', gap: 18 }}>
                 <div>
-                  <div className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>Follow-up interval</div>
+                  <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>Follow-up interval</div>
                   <div style={{ display: 'flex', gap: 8 }}>
                     {[1, 2, 3, 5, 7].map(d => (
                       <button key={d} onClick={() => setFollowUpDays(d)} className={`btn btn--sm${followUpDays === d ? ' btn--primary' : ''}`} style={{ flex: 1, justifyContent: 'center' }}>
@@ -750,7 +750,7 @@ export default function EmailSender() {
                   <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>Send a follow-up every <strong style={{ color: 'var(--text)' }}>{followUpDays} day{followUpDays > 1 ? 's' : ''}</strong> to non-responders</div>
                 </div>
                 <div>
-                  <div className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>Max follow-ups per lead</div>
+                  <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>Max follow-ups per lead</div>
                   <div style={{ display: 'flex', gap: 8 }}>
                     {[1, 2, 3, 4].map(n => (
                       <button key={n} onClick={() => setFollowUpCount(n)} className={`btn btn--sm${followUpCount === n ? ' btn--primary' : ''}`} style={{ flex: 1, justifyContent: 'center' }}>

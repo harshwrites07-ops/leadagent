@@ -387,7 +387,7 @@ export default function LeadFinder() {
                   </div>
                 </div>
 
-                <div className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.06em', marginTop: 18, marginBottom: 8 }}>Pick niches</div>
+                <div className="muted" style={{ fontSize: 12, marginTop: 18, marginBottom: 8 }}>Pick niches</div>
                 <div className="pm__niches">
                   {NICHES.map((n, i) => (
                     <motion.button
@@ -544,7 +544,7 @@ export default function LeadFinder() {
                 style={{ marginBottom: 20 }}
               >
                 <form onSubmit={handleYtSearch}>
-                  <div className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 12 }}>Manual keyword search</div>
+                  <div className="muted" style={{ fontSize: 12, marginBottom: 12 }}>Manual keyword search</div>
                   <div className="grid" style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr', gap: 10, marginBottom: 12 }}>
                     <div className="field"><div className="field__label">Keyword *</div><input className="input" value={ytForm.keyword} onChange={e => setYtForm(f => ({ ...f, keyword: e.target.value }))} placeholder="e.g. business automation" required /></div>
                     <div className="field"><div className="field__label">Min Subs</div><input className="input" type="number" value={ytForm.min_subs} onChange={e => setYtForm(f => ({ ...f, min_subs: Number(e.target.value) }))} /></div>

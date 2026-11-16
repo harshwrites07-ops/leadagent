@@ -67,8 +67,8 @@ function ValidationBucket({ label, data }) {
   return (
     <div className="card" style={{ padding: '14px 18px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <span className="t-mono" style={{ fontSize: 12, color: 'var(--text-2)', textTransform: 'uppercase' }}>{label}</span>
-        <span className="t-mono" style={{ fontSize: 12, color: statusColor, textTransform: 'uppercase' }}>{data.status?.replace(/_/g, ' ')}</span>
+        <span className="t-mono" style={{ fontSize: 12, color: 'var(--text-2)' }}>{label}</span>
+        <span className="t-mono" style={{ fontSize: 12, color: statusColor }}>{data.status?.replace(/_/g, ' ')}</span>
       </div>
       <div style={{ display: 'flex', gap: 16 }}>
         <div>
@@ -381,7 +381,7 @@ export default function QualityLeads() {
                   className="card"
                   style={{ padding: 20 }}
                 >
-                  <div className="t-mono t-muted" style={{ fontSize: 12, marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                  <div className="t-mono t-muted" style={{ fontSize: 12, marginBottom: 12 }}>
                     Proxy Score Distribution — {fmt(dist.total_scored)} scored of {fmt(dist.total_master)} total
                   </div>
                   <TierBar hot_pct={dist.hot_pct} warm_pct={dist.warm_pct} cold_pct={dist.cold_pct} />
@@ -539,7 +539,7 @@ export default function QualityLeads() {
                   className="card"
                   style={{ padding: 20 }}
                 >
-                  <div className="t-mono t-muted" style={{ fontSize: 12, marginBottom: 14, textTransform: 'uppercase', letterSpacing: '0.1em' }}>HOT Leads by Niche</div>
+                  <div className="t-mono t-muted" style={{ fontSize: 12, marginBottom: 14 }}>HOT Leads by Niche</div>
                   <div className="grid g-2">
                     {stats.by_niche.slice(0, 10).map(n => (
                       <div key={n.niche} className="t-mono" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
@@ -553,7 +553,7 @@ export default function QualityLeads() {
 
               {validation && (
                 <div>
-                  <div className="t-mono t-muted" style={{ fontSize: 12, marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Algorithm Validation (reply rate vs target)</div>
+                  <div className="t-mono t-muted" style={{ fontSize: 12, marginBottom: 12 }}>Algorithm Validation (reply rate vs target)</div>
                   <div className="grid g-3">
                     <ValidationBucket label="HOT (target 60%)"  data={validation.hot} />
                     <ValidationBucket label="WARM (target 30%)" data={validation.warm} />
@@ -570,7 +570,7 @@ export default function QualityLeads() {
                   className="card"
                   style={{ padding: 20 }}
                 >
-                  <div className="t-mono t-muted" style={{ fontSize: 12, marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Daily HOT Lead Growth (last 7 days)</div>
+                  <div className="t-mono t-muted" style={{ fontSize: 12, marginBottom: 12 }}>Daily HOT Lead Growth (last 7 days)</div>
                   <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', height: 60 }}>
                     {stats.daily_growth.map((d, i) => {
                       const max = Math.max(...stats.daily_growth.map(x => x.added), 1);
@@ -680,7 +680,7 @@ export default function QualityLeads() {
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: i * 0.04, duration: 0.3 }}
                       >
-                        <td className="mono" style={{ textTransform: 'uppercase', fontSize: 12 }}>{s.source}</td>
+                        <td className="mono" style={{ fontSize: 12 }}>{s.source}</td>
                         <td>r/{s.subreddit}</td>
                         <td>
                           <a href={s.post_url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text)', textDecoration: 'none' }}>
